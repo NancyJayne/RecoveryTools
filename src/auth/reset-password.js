@@ -21,7 +21,7 @@ export async function requestPasswordReset(email, buttonEl) {
 
     const token = await executeRecaptcha("reset_password");
 
-    const sendReset = httpsCallable(functions, "sendPasswordReset");
+    const sendReset = httpsCallable(functions, "PasswordReset");
     const result = await sendReset({ email, token });
 
     if (result?.data?.success) {

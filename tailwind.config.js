@@ -6,6 +6,7 @@ export default {
     "./admin/**/*.{html,js}",
     "./src/**/*.{html,js}",
   ],
+  safelist: ['mobile-nav', 'mobile-nav-open'],
   theme: {
     extend: {
       colors: {
@@ -26,6 +27,24 @@ export default {
       },
       boxShadow: {
         soft: "0 2px 10px rgba(0, 0, 0, 0.08)",
+      },
+      transitionProperty: {
+        height: "height",
+        spacing: "margin, padding",
+      },
+      keyframes: {
+        slideIn: {
+          "0%": { transform: "translateX(100%)" },
+          "100%": { transform: "translateX(0)" },
+        },
+        slideOut: {
+          "0%": { transform: "translateX(0)" },
+          "100%": { transform: "translateX(100%)" },
+        },
+      },
+      animation: {
+        "slide-in": "slideIn 0.3s ease-out forwards",
+        "slide-out": "slideOut 0.3s ease-in forwards",
       },
     },
   },

@@ -101,53 +101,66 @@
 
 <body>
 
-  <header class="flex items-center justify-between px-6 py-4 bg-gray-900 text-white relative">
+<!-- Responsive Sticky Header -->
+<header class="sticky top-0 z-50 bg-gray-900 text-white shadow-md">
+  <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
     <!-- Logo -->
     <div class="text-xl font-bold tracking-wide">
       <a href="/" data-tab="homeSection" class="tab-link">Recovery Tools</a>
     </div>
 
-    <!-- Mobile Nav Toggle -->
-    <button id="mobileMenuToggle" class="md:hidden text-white text-2xl focus:outline-none">
+    <!-- Mobile Toggle -->
+    <button id="mobileMenuToggle" class="md:hidden text-2xl focus:outline-none" aria-label="Toggle Navigation">
       ☰
     </button>
 
-    <!-- Navigation -->
-    <nav id="mainNav" class="hidden md:flex space-x-6">
-      <a href="/" data-tab="homeSection" class="tab-link" aria-label="home">Home</a>
-      <a href="/shop" data-tab="shopSection" class="tab-link" aria-label="shop">Shop</a>
-      <a href="/programs" data-tab="programsSection" class="tab-link" aria-label="programs">Programs</a>
-      <a href="/anato-me" data-tab="anato-meSection" class="tab-link" aria-label="anato-me">Anato-me</a>
-      <a href="/workshops" data-tab="workshopsSection" class="tab-link" aria-label="workshops">Workshops</a>
-      <a href="/courses" data-tab="coursesSection" Class="tab-link" aria-label="courses">Courses</a>
+    <!-- Desktop Navigation -->
+    <nav id="mainNav" class="hidden md:flex space-x-6 items-center">
+      <a href="/" data-tab="homeSection" class="tab-link hover:text-[#63d6b2]">Home</a>
+      <a href="/shop" data-tab="shopSection" class="tab-link hover:text-[#63d6b2]">Shop</a>
+      <a href="/programs" data-tab="programsSection" class="tab-link hover:text-[#63d6b2]">Programs</a>
+      <a href="/anato-me" data-tab="anato-meSection" class="tab-link hover:text-[#63d6b2]">Anato-me</a>
+      <a href="/workshops" data-tab="workshopsSection" class="tab-link hover:text-[#63d6b2]">Workshops</a>
+      <a href="/courses" data-tab="coursesSection" class="tab-link hover:text-[#63d6b2]">Courses</a>
     </nav>
 
     <!-- Auth + Cart Controls -->
     <div class="flex items-center space-x-4">
-      <!-- Login/Signup Buttons -->
-<div id="authButtons" class="flex items-center space-x-3">
-  <button data-auth="login" class="auth-link hover:underline text-white" aria-label="Login" type="button">
-    Login
-  </button>
-  <button data-auth="signup" class="auth-link bg-[#407471] text-white px-4 py-2 rounded font-semibold" aria-label="Sign Up" type="button">
-    Sign Up
-  </button>
-</div>
+      <!-- Login/Signup -->
+      <div id="authButtons" class="flex items-center space-x-3">
+        <button data-auth="login" class="auth-link hover:underline" aria-label="Login" type="button">
+          Login
+        </button>
+        <button data-auth="signup" class="auth-link bg-[#407471] text-white px-4 py-2 rounded font-semibold" aria-label="Sign Up" type="button">
+          Sign Up
+        </button>
+      </div>
 
-      <!-- Profile Avatar -->
+      <!-- Avatar -->
       <div id="profileAvatarWrapper" class="hidden relative">
-        <a href="/profile" data-tab="profileSection" class="tab-link" aria-label="profile">
+        <a href="/profile" data-tab="profileSection" class="tab-link" aria-label="Profile">
           <img id="headerAvatar" src="" alt="User Avatar" class="h-10 w-10 rounded-full border-2 border-white object-cover">
         </a>
       </div>
 
-      <!-- Cart Button -->
-<button id="openCartBtn" type="button" class="relative ml-2" aria-label="Open Cart">
-  🛒
-  <span id="cartCount" class="absolute top-0 right-0 bg-green-500 text-white text-xs rounded-full px-2">0</span>
-</button>
+      <!-- Cart -->
+      <button id="openCartBtn" type="button" class="relative" aria-label="Open Cart">
+        🛒
+        <span id="cartCount" class="absolute top-0 right-0 bg-green-500 text-white text-xs rounded-full px-2">0</span>
+      </button>
     </div>
-  </header>
+  </div>
+
+  <!-- Mobile Nav (Slide-down) -->
+  <div id="mobileNav" class="mobile-nav">
+    <a href="/" data-tab="homeSection" class="tab-link hover:text-[#63d6b2]">Home</a>
+    <a href="/shop" data-tab="shopSection" class="tab-link hover:text-[#63d6b2]">Shop</a>
+    <a href="/programs" data-tab="programsSection" class="tab-link hover:text-[#63d6b2]">Programs</a>
+    <a href="/anato-me" data-tab="anato-meSection" class="tab-link hover:text-[#63d6b2]">Anato-me</a>
+    <a href="/workshops" data-tab="workshopsSection" class="tab-link hover:text-[#63d6b2]">Workshops</a>
+    <a href="/courses" data-tab="coursesSection" class="tab-link hover:text-[#63d6b2]">Courses</a>
+  </div>
+</header>
 
   <!-- Content Sections -->
   <main class="p-6">
@@ -822,7 +835,7 @@
       <div>
         <label for="editWorkshopImage" class="block font-medium">Change Image</label>
         <input id="editWorkshopImage" type="file" accept="image/*" class="input w-full bg-gray-800 px-3 py-2 rounded" />
-        <img id="editWorkshopPreview" src="https://firebasestorage.googleapis.com/v0/b/recovery-tools.appspot.com/o/videos%2FImages%2Fworkshop.image.png?alt=media" alt="Preview" class="mt-2 rounded shadow max-h-40 object-cover" />
+        <img id="editWorkshopPreview" src="https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2Fworkshop.image.png?alt=media&token=6060b072-57a7-4df9-bd97-6a1283d5efb1" alt="Preview" class="mt-2 rounded shadow max-h-40 object-cover" />
       </div>
 
       <div class="flex justify-end gap-3 mt-6">

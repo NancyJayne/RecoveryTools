@@ -7,15 +7,9 @@
   .toast {
     @apply fixed bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded shadow-lg z-50 text-white text-sm transition-opacity duration-300;
   }
-  .toast-success {
-    @apply bg-green-600;
-  }
-  .toast-error {
-    @apply bg-red-600;
-  }
-  .toast-info {
-    @apply bg-gray-800;
-  }
+  .toast-success { @apply bg-green-600; }
+  .toast-error { @apply bg-red-600; }
+  .toast-info { @apply bg-gray-800; }
 
   .tab-content {
     @apply opacity-0 pointer-events-none transition-opacity duration-500;
@@ -31,26 +25,45 @@
     @apply bg-[#407471] text-white;
   }
 
-    .input {
+  .input {
     @apply w-full px-3 py-2 rounded bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500;
   }
 
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
+  .animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
 
   @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
   }
 
-  .order-card.status-shipped {
-    border-left: 4px solid #10b981;
+  .order-card.status-shipped { border-left: 4px solid #10b981; }
+  .workshop-card.status-approved { border-left: 4px solid #22c55e; }
+  .workshop-card.status-pending { border-left: 4px solid #f59e0b; }
+
+  .navbar {
+    @apply sticky top-0 z-40 bg-gray-900 text-white shadow transition-all duration-300;
   }
-  .workshop-card.status-approved {
-    border-left: 4px solid #22c55e;
+
+  .navbar.scrolled {
+    @apply bg-black shadow-lg;
   }
-  .workshop-card.status-pending {
-    border-left: 4px solid #f59e0b;
+
+  /* ✅ Merged Mobile Nav Styles */
+    .mobile-nav {
+    @apply md:hidden flex-col px-4 pb-4 space-y-2 bg-gray-900 text-white overflow-hidden max-h-0 transition-all duration-300 ease-in-out;
+  }
+
+  .mobile-nav.mobile-nav-open {
+  @apply max-h-[500px] overflow-y-auto;
+ }
+
+  .mobile-nav a {
+    @apply block py-3 px-6 border-b border-gray-700 hover:bg-[#305a56];
+  }
+
+  .mobile-nav-toggle {
+    @apply md:hidden text-2xl p-2 rounded;
   }
 }

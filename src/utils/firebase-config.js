@@ -7,10 +7,21 @@ import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
-// Global variables
+// Global Firebase instances
 let app, auth, db, functions, storage;
-let appCheckInitialized = false; // ✅ Prevent double App Check init
+let appCheckInitialized = false;
 
+// 🔑 Stripe key export
+export const STRIPE_PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+
+// 🔐 reCAPTCHA site key getter
+export function getRecaptchaSiteKey() {
+  const key = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+  if (!key) console.warn("⚠️ Missing VITE_RECAPTCHA_SITE_KEY in .env");
+  return key || "missing-key";
+}
+
+// ✅ Firebase initialization function
 export async function initFirebase() {
   if (!app) {
     const firebaseConfig = {
@@ -23,37 +34,39 @@ export async function initFirebase() {
       measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
     };
 
-    // Initialize Firebase
+    // 🚀 Initialize Firebase core
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
     functions = getFunctions(app, "australia-southeast1");
     storage = getStorage(app);
 
-    // ✅ Initialize App Check (only once)
+    // 🔒 Initialize App Check
     if (!appCheckInitialized) {
+      const isLocalhost = ["localhost", "127.0.0.1"].includes(location.hostname);
       const debugToken = import.meta.env.VITE_APPCHECK_DEBUG_TOKEN;
-      if (debugToken && ["localhost", "127.0.0.1"].includes(location.hostname)) {
+
+      if (isLocalhost && debugToken) {
         self.FIREBASE_APPCHECK_DEBUG_TOKEN = debugToken;
         console.log("🧪 Using App Check debug token.");
       }
 
       const siteKey = getRecaptchaSiteKey();
-      if (siteKey) {
-        console.log("📛 Using siteKey for App Check:", siteKey);
+      if (siteKey && siteKey !== "missing-key") {
         initializeAppCheck(app, {
           provider: new ReCaptchaV3Provider(siteKey),
           isTokenAutoRefreshEnabled: true,
         });
+        console.log("🔐 App Check initialized with reCAPTCHA v3.");
         appCheckInitialized = true;
       } else {
-        console.warn("⚠️ App Check site key is missing. App Check will not be initialized.");
+        console.warn("⚠️ App Check was not initialized. Site key missing.");
       }
     }
 
-    // ✅ Connect to emulators in dev environment
+    // 🛠 Connect to emulators in development
     if (["localhost", "127.0.0.1"].includes(location.hostname)) {
-      console.log("✅ Connecting Firebase SDK to emulators...");
+      console.log("⚙️ Connecting Firebase SDKs to local emulators...");
       connectAuthEmulator(auth, "http://127.0.0.1:9100");
       connectFirestoreEmulator(db, "127.0.0.1", 8080);
       connectFunctionsEmulator(functions, "127.0.0.1", 5001);
@@ -64,15 +77,5 @@ export async function initFirebase() {
   return { app, auth, db, functions, storage };
 }
 
-// 🔑 Stripe key export
-export const STRIPE_PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-
-// Optional named exports for ease of use
+// 🧩 Export initialized instances for shared use
 export { app, auth, db, functions, storage };
-
-// ✅ reCAPTCHA site key with fallback and warning
-export function getRecaptchaSiteKey() {
-  const key = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
-  if (!key) console.warn("⚠️ Missing VITE_RECAPTCHA_SITE_KEY in .env");
-  return key || "dummy-key";
-}

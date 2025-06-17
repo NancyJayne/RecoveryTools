@@ -26,9 +26,39 @@ function setupRouterLinks() {
 
         history.pushState({}, "", href);
         loadModuleByPath(href, userRole);
+
+        // Close mobile menu after click
+        const mobileNav = document.getElementById("mobileNav");
+        if (mobileNav && mobileNav.classList.contains("mobile-nav-open")) {
+          mobileNav.classList.remove("mobile-nav-open");
+        }
       }
     }
   });
+}
+
+function setupStickyNavbarScrollHandler() {
+  const header = document.querySelector("header");
+  if (!header) return;
+
+  window.addEventListener("scroll", () => {
+    if (window.scrollY > 10) {
+      header.classList.add("scrolled");
+    } else {
+      header.classList.remove("scrolled");
+    }
+  });
+}
+
+function setupMobileMenuToggle() {
+  const toggleBtn = document.getElementById("mobileMenuToggle");
+  const mobileNav = document.getElementById("mobileNav");
+
+  if (toggleBtn && mobileNav) {
+    toggleBtn.addEventListener("click", () => {
+      mobileNav.classList.toggle("mobile-nav-open");
+    });
+  }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -41,6 +71,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   setupRouterLinks();
+  setupStickyNavbarScrollHandler();
+  setupMobileMenuToggle();
 
   const cleanPath = window.location.pathname.split("?")[0].split("#")[0] || "/";
 
