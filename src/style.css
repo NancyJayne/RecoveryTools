@@ -1,0 +1,56 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .toast {
+    @apply fixed bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded shadow-lg z-50 text-white text-sm transition-opacity duration-300;
+  }
+  .toast-success {
+    @apply bg-green-600;
+  }
+  .toast-error {
+    @apply bg-red-600;
+  }
+  .toast-info {
+    @apply bg-gray-800;
+  }
+
+  .tab-content {
+    @apply opacity-0 pointer-events-none transition-opacity duration-500;
+  }
+  .tab-content.active {
+    @apply opacity-100 pointer-events-auto;
+  }
+
+  .profile-tab-btn {
+    @apply text-left w-full bg-gray-700 text-white px-4 py-2 rounded hover:bg-[#305a56];
+  }
+  .profile-tab-btn.active {
+    @apply bg-[#407471] text-white;
+  }
+
+    .input {
+    @apply w-full px-3 py-2 rounded bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500;
+  }
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .order-card.status-shipped {
+    border-left: 4px solid #10b981;
+  }
+  .workshop-card.status-approved {
+    border-left: 4px solid #22c55e;
+  }
+  .workshop-card.status-pending {
+    border-left: 4px solid #f59e0b;
+  }
+}

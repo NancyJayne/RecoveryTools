@@ -1,0 +1,31 @@
+{
+  "settings/shop": {
+    "fields": {
+      "gstRate": { "doubleValue": 0.1 },
+      "includeGST": { "booleanValue": true },
+      "shippingZones": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "region": { "stringValue": "AU" },
+                  "rate": { "doubleValue": 12 },
+                  "label": { "stringValue": "Standard AU Shipping" },
+                  "currency": { "stringValue": "AUD" },
+                  "default": { "booleanValue": true }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "freeShippingMin": { "doubleValue": 150 },
+      "handlingDays": { "integerValue": 3 },
+      "returnDays": { "integerValue": 30 },
+      "allowReturns": { "booleanValue": true },
+      "returnInstructions": { "stringValue": "Please contact us via email for returns." },
+      "shippingPolicy": { "stringValue": "Free shipping on orders over $150." }
+    }
+  }
+}

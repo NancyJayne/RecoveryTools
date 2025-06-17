@@ -1,0 +1,151 @@
+// ✅ Firestore Rules Update – Add public access to visible workshops
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 🔐 User Profiles
+    match /users/{userId} {
+      allow read: if request.auth.uid == userId;
+      allow update: if request.auth.uid == userId &&
+        request.resource.data.keys().hasOnly(['name', 'phone', 'address', 'photoURL']);
+
+      allow write: if request.auth.token.therapist == true;
+    }
+
+    // 📬 Contact Form
+    match /contactSubmissions/{submissionId} {
+      allow create: if true;
+      allow read, update, delete: if request.auth.token.admin == true;
+    }
+    match /contactMessages/{msgId} {
+      allow read, write: if false; // only allow server-side writes
+    }
+
+    // 🛍️ Products
+    match /products/{productId} {
+      allow list: if true;
+      allow get: if resource.data.visible == true
+                  || request.auth.token.admin == true
+                  || request.auth.uid == resource.data.creatorId;
+      allow update, delete: if request.auth.token.admin == true
+                            || request.auth.uid == resource.data.creatorId;
+      allow create: if request.auth.token.admin == true
+                    || request.auth.token.therapist == true
+                    || request.auth.token.affiliate == true;
+
+      // ✍️ Product Reviews
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if request.auth != null &&
+                      request.resource.data.timestamp > request.time - duration.value(1, "minutes");
+      }
+    }
+    match /products/{productId}/reviews/{reviewId} {
+  allow read: if resource.data.visible == true || request.auth.token.admin == true;
+  allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+  allow update, delete: if false;
+}
+
+
+    // ⚙️ Settings
+    match /settings/{docId} {
+      allow read: if true;
+    }
+
+    // 🧾 Orders
+    match /orders/{orderId} {
+      allow create: if request.auth != null;
+      allow read: if request.auth.token.admin == true
+                   || request.auth.uid == resource.data.userId;
+      allow update: if request.auth.token.admin == true;
+    }
+
+    // 💪 Programs
+    match /programs/{programId} {
+      allow read: if resource.data.visible == true || request.auth != null;
+      allow write: if request.auth.token.therapist == true || request.auth.token.admin == true;
+    }
+
+    // 🎓 Courses
+    match /courses/{courseId} {
+      allow read: if resource.data.visible == true || request.auth != null;
+      allow write: if request.auth.token.therapist == true || request.auth.token.admin == true;
+    }
+
+    // 🧠 Anato-Me Stories
+    match /anatoMe/{storyId} {
+      allow read: if true;
+      allow write: if request.auth.token.admin == true;
+
+      // 💬 Comments
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if request.auth != null &&
+                      request.resource.data.timestamp > request.time - duration.value(1, "minutes");
+        allow delete: if request.auth.token.admin == true;
+      }
+    }
+
+    // 📅 Workshops – ✅ Added public read + list for visible workshops
+    match /workshops/{workshopId} {
+      allow read, list: if resource.data.visible == true;
+      allow write: if request.auth.token.admin == true || request.auth.token.therapist == true;
+    }
+
+    // 📅 Appointments
+    match /appointments/{appointmentId} {
+      allow read, write: if request.auth.token.therapist == true || request.auth.token.admin == true;
+    }
+
+    // 🧠 Q&A
+    match /questions/{questionId} {
+      allow read: if true;
+      allow create: if request.auth != null &&
+                    request.resource.data.timestamp > request.time - duration.value(1, "minutes");
+      allow update: if request.auth.token.therapist == true;
+    }
+
+    // 🏅 Badges + Logs
+    match /badges/{userId} {
+      allow read: if request.auth.uid == userId;
+      allow write: if request.auth.token.admin == true;
+    }
+
+    match /logs/{logId} {
+      allow read, write: if request.auth.token.admin == true;
+    }
+
+    // 🧑‍⚕️ Admin & Therapist Panels
+    match /admin/{docId} {
+      allow read, write: if request.auth.token.admin == true;
+    }
+
+    match /clinicalCompanion/{docId} {
+      allow read, write: if request.auth.token.therapist == true;
+    }
+
+    match /patients/{id} {
+      allow read, write: if request.auth.token.therapist == true;
+    }
+
+    match /affiliates/{docId} {
+      allow read, write: if request.auth.token.affiliate == true;
+    }
+
+    // 🌱 Referrals
+    match /referrals/{refId} {
+      allow create: if request.auth != null || request.time != null;
+      allow read: if request.auth.token.affiliate == true || request.auth.token.admin == true;
+    }
+
+    match /affiliatePayouts/{payoutId} {
+      allow read: if request.auth.uid == resource.data.uid || request.auth.token.admin == true;
+      allow write: if false;
+    }
+
+    // 🚫 Catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

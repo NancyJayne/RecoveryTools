@@ -1,0 +1,31 @@
+{
+  "name": "recovery-tools-frontend",
+  "type": "module",
+  "description": "Frontend for Recovery Tools platform using Vite, Firebase, and TailwindCSS",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "watch:css": "tailwindcss -i ./src/style.css -o ./public/output.css --watch",
+    "build:css": "tailwindcss -i ./src/style.css -o ./public/output.css --minify",
+    "build": "npm run build:css && vite build",
+    "preview": "vite preview",
+    "seed:all": "node functions/scripts/seedAll.js",
+    "emulators": "firebase emulators:start",
+    "check:imports": "node scripts/verify-imports.js"
+  },
+  "dependencies": {
+    "@google-cloud/recaptcha-enterprise": "^6.2.0",
+    "axios": "^1.6.0",
+    "chalk": "^5.4.1",
+    "firebase": "^11.6.1",
+    "luxon": "^3.6.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.28.0",
+    "autoprefixer": "^10.4.17",
+    "eslint-plugin-n": "^17.18.0",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.1",
+    "vite": "^6.3.5"
+  }
+}
