@@ -1,4 +1,4 @@
-import{J as S,t as T,a6 as $,I as L,E as D,aa as B,ac as y,ab as F,a8 as k,ai as I,aj as M}from"./index-C19OQbm5.js";async function H(e){const t=document.getElementById("reviews");t.innerHTML='<h4 class="text-lg font-semibold mb-2">Reviews</h4>';try{const n=S(T($,`products/${e}/reviews`),L("timestamp","desc")),a=await D(n);if(a.empty){t.innerHTML+=`
+import{J as S,t as T,a6 as $,I as L,E as D,aa as B,ac as y,ab as F,a8 as k,ai as I,aj as M}from"./index-5KMkTDqe.js";async function H(e){const t=document.getElementById("reviews");t.innerHTML='<h4 class="text-lg font-semibold mb-2">Reviews</h4>';try{const n=S(T($,`products/${e}/reviews`),L("timestamp","desc")),a=await D(n);if(a.empty){t.innerHTML+=`
         <p class="italic text-gray-500">No reviews yet. Be the first to leave one below!</p>
       `;return}a.forEach(s=>{const{userName:i,comment:o,rating:r}=s.data(),c=document.createElement("div");c.className="mb-4",c.innerHTML=`
         <p class="font-bold">${i||"Anonymous"}</p>

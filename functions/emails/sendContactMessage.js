@@ -29,9 +29,9 @@ function escapeHTML(str) {
 }
 
 const sendContactMessageHandler = async (data) => {
-  const { name, email, message, recaptchaToken } = data || {};
+  const { name, email, message, token } = data || {};
 
-  if (!name || !email || !message || !recaptchaToken) {
+  if (!name || !email || !message || !token) {
     throw new HttpsError("invalid-argument", "Missing required fields.");
   }
 
@@ -53,7 +53,7 @@ const sendContactMessageHandler = async (data) => {
   const verifyRes = await fetch("https://www.google.com/recaptcha/api/siteverify", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `secret=${recaptchaKey}&response=${recaptchaToken}`,
+    body: `secret=${recaptchaKey}&response=${token}`,
   });
 
   const verifyData = await verifyRes.json();

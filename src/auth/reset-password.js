@@ -19,10 +19,10 @@ export async function requestPasswordReset(email, buttonEl) {
       buttonEl.textContent = "Sending...";
     }
 
-    await executeRecaptcha("reset_password"); // This now includes verification
+    const token = await executeRecaptcha("reset_password");
 
     const sendReset = httpsCallable(functions, "sendPasswordReset");
-    const result = await sendReset({ email });
+    const result = await sendReset({ email, token });
 
     if (result?.data?.success) {
       showToast("✅ Reset link sent to your email.", "success");

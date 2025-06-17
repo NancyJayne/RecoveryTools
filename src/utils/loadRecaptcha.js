@@ -5,9 +5,26 @@ export async function loadRecaptchaScript(siteKey) {
     return;
   }
 
-  if (document.querySelector("#recaptchaScript")) {
+  const existingScript = document.querySelector("#recaptchaScript");
+  if (existingScript) {
     console.log("ℹ️ reCAPTCHA script already loaded.");
-    return;
+
+    if (window.grecaptcha) {
+      // grecaptcha is ready or will call the callback when ready
+      return new Promise((resolve) => window.grecaptcha.ready(resolve));
+    }
+
+    // Script element exists but grecaptcha not yet available
+    return new Promise((resolve, reject) => {
+      existingScript.addEventListener("load", () => {
+        if (window.grecaptcha) {
+          window.grecaptcha.ready(resolve);
+        } else {
+          reject(new Error("reCAPTCHA failed to load"));
+        }
+      });
+      existingScript.addEventListener("error", reject);
+    });
   }
 
   console.log("🌀 Injecting reCAPTCHA script with siteKey:", siteKey);
