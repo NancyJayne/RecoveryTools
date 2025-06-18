@@ -71,7 +71,7 @@ function updateMetadata(tab) {
 
 function handleSectionFromURL() {
   const sectionMatch = location.pathname.match(/\/(\w+)(?:\?.*)?$/);
-  const section = sectionMatch?.[1] || "homeSection";
+  const section = sectionMatch?.[1] || "home";
   showTabContent(section + "Section");
   updateMetadata(section + "Section");
 }
