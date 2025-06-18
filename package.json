@@ -5,15 +5,15 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "watch:css": "tailwindcss -i ./src/style.css -o ./public/output.css --watch",
-    "build:css": "tailwindcss -i ./src/style.css -o ./public/output.css --minify",
+    "watch:css": "npx tailwindcss -i ./src/style.css -o ./public/output.css --watch",
+    "build:css": "npx tailwindcss -i ./src/style.css -o ./public/output.css --minify",
     "build": "npm run build:css && vite build",
     "preview": "vite preview",
     "seed:all": "node functions/scripts/seedAll.js",
     "emulators": "firebase emulators:start",
     "check:imports": "node scripts/verify-imports.js"
-
   },
+
   "dependencies": {
     "@google-cloud/recaptcha-enterprise": "^6.2.0",
     "axios": "^1.6.0",
