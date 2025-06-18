@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "watch:css": "npx tailwindcss -i ./src/style.css -o ./public/output.css --watch",
-    "build:css": "npx tailwindcss -i ./src/style.css -o ./public/output.css --minify",
+    "watch:css": "npx --yes tailwindcss -i ./src/style.css -o ./public/output.css --watch",
+    "build:css": "npx --yes tailwindcss -i ./src/style.css -o ./public/output.css --minify",
     "build": "npm run build:css && vite build",
     "preview": "vite preview",
     "seed:all": "node functions/scripts/seedAll.js",
