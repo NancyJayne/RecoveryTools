@@ -34,3 +34,5 @@ export function initAffiliateSignup() {
     showRegisterSection();
   });
 }
+
+export default initAffiliateSignup;
