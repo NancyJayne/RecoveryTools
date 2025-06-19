@@ -11,6 +11,9 @@ export function initHomepage() {
   renderFeaturedTools();
 }
 
+// Provide default export so dynamic imports auto-run initialization
+export default initHomepage;
+
 function setupShopNowCTA() {
   const shopCTA = document.getElementById("shopNowBtn");
   if (shopCTA) {
@@ -28,10 +31,10 @@ function setupAffiliateCTA() {
   const affiliateBtn = document.getElementById("ctaAffiliateBtn");
   if (affiliateBtn) {
     affiliateBtn.addEventListener("click", async () => {
-      history.pushState({}, "", "/contact");
-      showTabContent("contactSection");
-      const { initContactPage } = await import("./contact.js");
-      initContactPage?.();
+      history.pushState({}, "", "/affiliateSignup");
+      showTabContent("affiliateWhySection");
+      const { initAffiliateSignup } = await import("../affiliate/affiliate-signup.js");
+      initAffiliateSignup?.();
     });
   }
 }

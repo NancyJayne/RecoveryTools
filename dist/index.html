@@ -60,11 +60,11 @@
       flex: 1;
     }
   </style>
-  <script type="module" crossorigin src="/assets/index-D6059__R.js"></script>
+  <script type="module" crossorigin src="/assets/index-BpRdAayD.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-B2Jmo72E.css">
 </head>
 
-<body>
+<body class="min-h-screen flex flex-col">
 
 <!-- Responsive Sticky Header -->
 <header class="sticky top-0 z-50 bg-gray-900 text-white shadow-md">
@@ -128,7 +128,7 @@
 </header>
 
   <!-- Content Sections -->
-  <main class="p-6">
+  <main class="flex-1 p-6">
      
       <!-- Home Content (Canva Homepage Recreation) -->
       <section id="homeSection" class="tab-content">
@@ -203,17 +203,17 @@
       <h2 class="text-2xl font-semibold mb-6">About Our Products</h2>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div class="bg-gray-900 p-4 rounded shadow">
-          <img src="https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FRecovery%20Tools%20photo%201.jpg?alt=media&token=30bba70d-1be0-48db-b53f-77f1c9c8023b" class="rounded mb-4">
+          <img src="https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FRecovery%20Tools%20photo%201.jpg?alt=media&token=30bba70d-1be0-48db-b53f-77f1c9c8023b" class="w-full h-48 object-cover rounded mb-4">
           <h3 class="font-bold mb-2">Supporting Your Recovery</h3>
           <p class="text-sm text-gray-400">We provide the tools and help you learn the best practices for using them.</p>
         </div>
         <div class="bg-gray-900 p-4 rounded shadow">
-          <img src="https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FRecovery%20Tools%20photo%202.jpg?alt=media&token=970cc497-f588-44ca-8ea4-ae9b0eca5444" class="rounded mb-4">
+          <img src="https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FRecovery%20Tools%20photo%202.jpg?alt=media&token=970cc497-f588-44ca-8ea4-ae9b0eca5444" class="w-full h-48 object-cover rounded mb-4">
           <h3 class="font-bold mb-2">Support Others In Pain</h3>
           <p class="text-sm text-gray-400">A portion of every purchase supports people in pain through donations.</p>
         </div>
         <div class="bg-gray-900 p-4 rounded shadow">
-          <img src="https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FRecovery%20Tools%20photo%203.jpg?alt=media&token=8357fa71-e3bc-4943-b60b-2f21d3c7dbd4" class="rounded mb-4">
+          <img src="https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FRecovery%20Tools%20photo%203.jpg?alt=media&token=8357fa71-e3bc-4943-b60b-2f21d3c7dbd4" class="w-full h-48 object-cover rounded mb-4">
           <h3 class="font-bold mb-2">Support Businesses</h3>
           <p class="text-sm text-gray-400">Our affiliate program helps fellow therapists and small businesses thrive.</p>
         </div>
@@ -999,7 +999,10 @@
         </div>
       
         $1
-      
+        <div id="globalOrdersGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <!-- Order cards will be dynamically injected here -->
+        </div>
+      </div>
 
       <script>
         // Optional: inject dropdown instead of hardcoded "Shipped"
@@ -1434,13 +1437,13 @@
   </main>
 
 <!-- Footer -->
-<footer class="bg-[#0a1317] py-8 border-t border-gray-700 text-white text-sm">
+<footer class="mt-auto bg-[#0a1317] py-8 border-t border-gray-700 text-white text-sm">
   <div class="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
 
     <div class="flex items-center space-x-3">
       <img src="https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FRecoveryToolsLogo.png?alt=media&token=ef83d768-30db-4889-a550-188f49b1ba2d"
            alt="Recovery Tools Logo"
-           class="h-9 w-9 rounded-full border border-[#407471]">
+           class="h-6 w-6 rounded-full border border-[#407471]">
       <span class="text-base font-semibold tracking-wide">Recovery Tools</span>
     </div>
 
