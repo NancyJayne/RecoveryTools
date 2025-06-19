@@ -14,10 +14,12 @@ export function initHomepage() {
 function setupShopNowCTA() {
   const shopCTA = document.getElementById("shopNowBtn");
   if (shopCTA) {
-    shopCTA.addEventListener("click", (e) => {
+    shopCTA.addEventListener("click", async (e) => {
       e.preventDefault();
       history.pushState({}, "", "/shop");
       showTabContent("shopSection");
+      const { initShopPage } = await import("../shop/shop-page.js");
+      initShopPage?.();
     });
   }
 }
@@ -25,9 +27,11 @@ function setupShopNowCTA() {
 function setupAffiliateCTA() {
   const affiliateBtn = document.getElementById("ctaAffiliateBtn");
   if (affiliateBtn) {
-    affiliateBtn.addEventListener("click", () => {
+    affiliateBtn.addEventListener("click", async () => {
       history.pushState({}, "", "/contact");
       showTabContent("contactSection");
+      const { initContactPage } = await import("./contact.js");
+      initContactPage?.();
     });
   }
 }
@@ -35,9 +39,11 @@ function setupAffiliateCTA() {
 function setupBackToShopBtn() {
   const backToShopBtn = document.getElementById("backToShopBtn");
   if (backToShopBtn) {
-    backToShopBtn.addEventListener("click", () => {
+    backToShopBtn.addEventListener("click", async () => {
       history.pushState({}, "", "/shop");
       showTabContent("shopSection");
+      const { initShopPage } = await import("../shop/shop-page.js");
+      initShopPage?.();
     });
   }
 }

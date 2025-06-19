@@ -127,6 +127,14 @@ export async function setupProfilePage() {
 
   setupProfileFormHandlers();
 
+    const affiliateSignupBtn = document.getElementById("affiliateSignup");
+  if (affiliateSignupBtn) {
+    affiliateSignupBtn.addEventListener("click", async () => {
+      history.pushState({}, "", "/affiliateSignup");
+      const { initAffiliateSignup } = await import("../affiliate/affiliate-signup.js");
+      initAffiliateSignup?.();
+    });
+  }
   // Auto-open if linked via hash
   if (window.location.hash === "#profileSection") {
     profileSection?.classList.remove("hidden");
