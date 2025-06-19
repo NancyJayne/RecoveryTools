@@ -70,10 +70,10 @@ function updateMetadata(tab) {
 }
 
 function handleSectionFromURL() {
-  const sectionMatch = location.pathname.match(/\/(\w+)(?:\?.*)?$/);
-  const section = sectionMatch?.[1] || "homeSection";
-  showTabContent(section + "Section");
-  updateMetadata(section + "Section");
+  const pathSegment = window.location.pathname.split("/").filter(Boolean)[0];
+  const sectionId = pathSegment ? `${pathSegment}Section` : "homeSection";
+  showTabContent(sectionId);
+  updateMetadata(sectionId);
 }
 
 document.addEventListener("DOMContentLoaded", async () => {

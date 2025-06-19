@@ -63,7 +63,9 @@ export function scrollToElement(selector) {
 
 export function showTabContent(id) {
   document.querySelectorAll(".tab-content").forEach((el) => {
-    el.classList.toggle("active", el.id === id);
+    const isTarget = el.id === id;
+    el.classList.toggle("hidden", !isTarget);
+    el.classList.toggle("active", isTarget);
   });
 }
 

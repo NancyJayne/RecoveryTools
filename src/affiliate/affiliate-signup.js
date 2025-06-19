@@ -1,26 +1,36 @@
-// ./affiliate/affiliate-signup.js – Placeholder setup for Affiliate Signup Page
+// ./affiliate/affiliate-signup.js – Handles Affiliate signup CTA and form display
 
 export function initAffiliateSignup() {
-  const section = document.getElementById("affiliateSignupSection");
-  if (!section) return;
+  const whySection = document.getElementById("affiliateWhySection");
+  const registerSection = document.getElementById("affiliateRegisterSection");
 
-  section.classList.remove("hidden");
-  section.scrollIntoView({ behavior: "smooth" });
+  if (!whySection) return;
 
-  section.innerHTML = `
-    <div class="max-w-2xl mx-auto text-center mt-12">
-      <h2 class="text-2xl font-bold text-white mb-4">Become an Affiliate</h2>
-      <p class="text-gray-300 mb-6">
-        Help us spread recovery education and earn commissions when people sign up through your link.
-        This section is currently being built – more details coming soon.
-      </p>
-      <a
-        href="/"
-        class="inline-block bg-[#407471] text-white px-4 py-2 rounded hover:bg-[#305c56] transition"
-      >
-        Back to Home
-      </a>
-    </div>
-  `;
+  // Show the informational "Why Join" section by default
+  whySection.classList.add("active");
+  whySection.classList.remove("hidden");
+  whySection.scrollIntoView({ behavior: "smooth" });
+
+  const showRegisterSection = async () => {
+    if (!registerSection) return;
+    registerSection.classList.remove("hidden");
+    registerSection.classList.add("active");
+    whySection.classList.add("hidden");
+    whySection.classList.remove("active");
+
+    const { initAffiliateRegisterForm } = await import("./affiliate-registration.js");
+    initAffiliateRegisterForm?.();
+  };
+
+  const url = new URL(window.location.href);
+  if (url.hash === "#register" || url.searchParams.has("register")) {
+    showRegisterSection();
+  }
+
+  const startBtn = document.getElementById("startAffiliateBtn");
+  startBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    history.pushState({}, "", "#register");
+    showRegisterSection();
+  });
 }
-
