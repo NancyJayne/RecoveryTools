@@ -18,7 +18,7 @@ export const STRIPE_PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KE
 export function getRecaptchaSiteKey() {
   const key = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
   if (!key) console.warn("⚠️ Missing VITE_RECAPTCHA_SITE_KEY in .env");
-  return key || "missing-key";
+  return key || undefined; // return undefined when key is missing
 }
 
 // ✅ Firebase initialization function
@@ -52,7 +52,7 @@ export async function initFirebase() {
       }
 
       const siteKey = getRecaptchaSiteKey();
-      if (siteKey && siteKey !== "missing-key") {
+       if (siteKey) {
         initializeAppCheck(app, {
           provider: new ReCaptchaV3Provider(siteKey),
           isTokenAutoRefreshEnabled: true,

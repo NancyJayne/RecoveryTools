@@ -13,7 +13,6 @@
     "emulators": "firebase emulators:start",
     "check:imports": "node scripts/verify-imports.js"
   },
-
   "dependencies": {
     "@google-cloud/recaptcha-enterprise": "^6.2.0",
     "axios": "^1.6.0",

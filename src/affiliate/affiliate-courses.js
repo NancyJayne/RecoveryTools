@@ -240,7 +240,7 @@ export function openEditCourseModal(course) {
     saleEl.dataset.original = String(!!course.onSale);
   }
 
-  const previewEl = document.getElementById("editCourseImagePreview");
+  const previewEl = document.getElementById("editCoursePreview");
   if (previewEl && course.image) {
     previewEl.src = course.image;
   }
