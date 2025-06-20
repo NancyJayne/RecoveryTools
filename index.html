@@ -38,44 +38,6 @@
   <!-- Stripe.js -->
   <script src="https://js.stripe.com/v3/"></script>
 
-  <!-- Firebase Config + Emulator Setup -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { getFirestore, connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import { getFunctions, connectFunctionsEmulator } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
-    import { getStorage, connectStorageEmulator } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyC0h931cp8FLhYrL1JuMR59RXoD30SJPPo",
-      authDomain: "recovery-tools.firebaseapp.com",
-      projectId: "recovery-tools",
-      storageBucket: "recovery-tools.appspot.com",
-      messagingSenderId: "649404360426",
-      appId: "1:649404360426:web:04a5f1d2c40788278e1993",
-      measurementId: "G-ZZ55WJ2QV1"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    const functions = getFunctions(app, "australia-southeast1");
-    const storage = getStorage(app);
-
-    window.auth = auth;
-    window.db = db;
-    window.functions = functions;
-    window.storage = storage;
-
-    const isLocalhost = ["localhost", "127.0.0.1"].includes(location.hostname);
-    if (isLocalhost) {
-      connectAuthEmulator(auth, "http://127.0.0.1:9100");
-      connectFirestoreEmulator(db, "127.0.0.1", 8080);
-      connectFunctionsEmulator(functions, "127.0.0.1", 5001);
-      connectStorageEmulator(storage, "127.0.0.1", 9199);
-    }
-  </script>
-
   <!-- JSPDF (for receipts if needed) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 

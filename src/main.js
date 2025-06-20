@@ -1,7 +1,7 @@
 // main.js – Core App Init for Recovery Tools
 
 import "./style.css";
-import { initFirebase, getRecaptchaSiteKey } from "./utils/firebase-config.js";
+import { initFirebase, getRecaptchaSiteKey, auth } from "./utils/firebase-config.js";
 import { setupAuthState, validateTokenFromURL } from "./auth/user-auth.js";
 import { setupAuthModal } from "./auth/auth-modal.js";
 import { getUserRole, setupRoleUI } from "./auth/user-roles.js";
@@ -81,7 +81,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await setupAuthState();
   const role = await getUserRole();
 
-  if (window.auth?.currentUser) setupRoleUI(window.auth.currentUser);
+ if (auth?.currentUser) setupRoleUI(auth.currentUser);
 
   handleSectionFromURL();
   setupAuthModal();
