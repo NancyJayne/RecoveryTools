@@ -34,12 +34,17 @@ export async function initFirebase() {
       measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
     };
 
-    // 🚀 Initialize Firebase core
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-    functions = getFunctions(app, "australia-southeast1");
-    storage = getStorage(app);
+    try {
+      // 🚀 Initialize Firebase core
+      app = initializeApp(firebaseConfig);
+      auth = getAuth(app);
+      db = getFirestore(app);
+      functions = getFunctions(app, "australia-southeast1");
+      storage = getStorage(app);
+    } catch (err) {
+      console.error("Failed to initialize Firebase:", err);
+      return { app, auth, db, functions, storage };
+    }
 
     // 🔒 Initialize App Check
     if (!appCheckInitialized) {

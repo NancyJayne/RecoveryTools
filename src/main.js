@@ -77,8 +77,13 @@ function handleSectionFromURL() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  await initFirebase();
-  await setupAuthState();
+  try {
+    await initFirebase();
+    await setupAuthState();
+  } catch (err) {
+    console.error("App initialization failed:", err);
+  }
+
   const role = await getUserRole();
 
  if (auth?.currentUser) setupRoleUI(auth.currentUser);
