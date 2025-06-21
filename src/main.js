@@ -18,6 +18,8 @@ if (siteKey) loadRecaptchaScript(siteKey);
 
 window.showToast = showToast;
 window.scrollToElement = scrollToElement;
+// Make main height adjustment utility globally available
+window.adjustMainHeight = adjustMainHeight;
 
 const adjustMainHeight = debounce(() => {
   const header = document.querySelector("header");

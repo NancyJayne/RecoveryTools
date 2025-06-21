@@ -67,6 +67,10 @@ export function showTabContent(id) {
     el.classList.toggle("hidden", !isTarget);
     el.classList.toggle("active", isTarget);
   });
+    // Recalculate layout so footer stays at the bottom
+  if (typeof window.adjustMainHeight === "function") {
+    window.adjustMainHeight();
+  }
 }
 
 export function showSection(id) {

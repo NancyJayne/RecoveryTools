@@ -9,7 +9,7 @@ import { unlockCourseContent, refreshProfileCourses } from "../profile/profile-u
 
 // 🔄 Initialize auth state and handle user presence
 export async function setupAuthState() {
-    if (!auth) {
+  if (!auth) {
     console.warn("⚠️ Auth instance unavailable. Firebase may not be initialized.");
     return;
   }
