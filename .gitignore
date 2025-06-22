@@ -7,6 +7,10 @@ dist/
 public/output.css 
 
 firebase-debug.log
+firestore-debug.log
+.node_repl_history
+emulator-data/
+firebase-export-*
 .firebaserc
 .firebase/
 
