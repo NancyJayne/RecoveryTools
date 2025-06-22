@@ -1,5 +1,6 @@
 // ✅ app-entry.js – Updated to handle /signup and /reset as modal flows with safeImport logic
 
+// Exported helpers for main initialization
 import { initFirebase } from "./utils/firebase-config.js";
 import { setupAuthState } from "./auth/user-auth.js";
 import { getUserRole } from "./auth/user-roles.js";
@@ -11,7 +12,7 @@ import("./content/homepage.js");
 
 let userRole = null;
 
-function setupRouterLinks() {
+export function setupRouterLinks() {
   document.body.addEventListener("click", (e) => {
     const link = e.target.closest("a.router-link");
     if (link) {
@@ -37,7 +38,7 @@ function setupRouterLinks() {
   });
 }
 
-function setupStickyNavbarScrollHandler() {
+export function setupStickyNavbarScrollHandler() {
   const header = document.querySelector("header");
   if (!header) return;
 
@@ -50,7 +51,7 @@ function setupStickyNavbarScrollHandler() {
   });
 }
 
-function setupMobileMenuToggle() {
+export function setupMobileMenuToggle() {
   const toggleBtn = document.getElementById("mobileMenuToggle");
   const mobileNav = document.getElementById("mobileNav");
 
@@ -61,7 +62,7 @@ function setupMobileMenuToggle() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
+export async function initAppEntry() {
   await initFirebase();
   await setupAuthState();
   userRole = await getUserRole();
@@ -74,7 +75,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupStickyNavbarScrollHandler();
   setupMobileMenuToggle();
 
-  const cleanPath = window.location.pathname.split("?")[0].split("#")[0] || "/";
+  const cleanPath = window.location.pathname.split("?", 1)[0].split("#", 1)[0] || "/";
 
   // Handle direct links to auth modal paths
   if (cleanPath === "/signup") return showAuthModal("signup");
@@ -82,7 +83,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (cleanPath === "/reset") return showResetPasswordForm();
 
   loadModuleByPath(cleanPath, userRole);
-});
+}
 
 export async function loadModuleByPath(path, role) {
   const safeImport = async (importFn, label) => {

@@ -1,8 +1,8 @@
 // main.js – Core App Init for Recovery Tools
 
 import "./style.css";
-import { initFirebase, getRecaptchaSiteKey, auth } from "./utils/firebase-config.js";
-import { setupAuthState, validateTokenFromURL } from "./auth/user-auth.js";
+import { getRecaptchaSiteKey, auth } from "./utils/firebase-config.js";
+import { validateTokenFromURL } from "./auth/user-auth.js";
 import { setupAuthModal } from "./auth/auth-modal.js";
 import { getUserRole, setupRoleUI } from "./auth/user-roles.js";
 import { handleReferralFromURL } from "./affiliate/affiliate-referrals.js";
@@ -11,6 +11,7 @@ import { logClientError } from "./utils/logClientError.js";
 import { setupNavMenuToggle, scrollToElement, showToast, debounce, showTabContent } from "./utils/utils.js";
 import { observeAdminPanel } from "./utils/observe-admin-panels.js";
 import { loadRecaptchaScript } from "./utils/loadRecaptcha.js";
+import { initAppEntry, loadModuleByPath, setupRouterLinks, setupStickyNavbarScrollHandler, setupMobileMenuToggle } from "./app-entry.js";
 
 const siteKey = getRecaptchaSiteKey();
 if (siteKey) loadRecaptchaScript(siteKey);
@@ -80,15 +81,15 @@ function handleSectionFromURL() {
 
 document.addEventListener("DOMContentLoaded", async () => {
   try {
-    await initFirebase();
-    await setupAuthState();
+    await initAppEntry();
+
   } catch (err) {
     console.error("App initialization failed:", err);
   }
 
   const role = await getUserRole();
 
- if (auth?.currentUser) setupRoleUI(auth.currentUser);
+  if (auth?.currentUser) setupRoleUI(auth.currentUser);
 
   handleSectionFromURL();
   setupAuthModal();
@@ -97,11 +98,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   handleReferralFromURL();
   adjustMainHeight();
   setupNavMenuToggle();
+  setupRouterLinks();
+  setupStickyNavbarScrollHandler();
+  setupMobileMenuToggle();
 
   const cleanPath = window.location.pathname.split("?")[0].split("#")[0];
-  import("./app-entry.js").then((m) => {
-    m.loadModuleByPath(cleanPath, role);
-  });
+  loadModuleByPath(cleanPath, role);
 
   window.logClientError = logClientError;
 
