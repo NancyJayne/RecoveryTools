@@ -3,6 +3,10 @@
   "type": "module",
   "description": "Frontend for Recovery Tools platform using Vite, Firebase, and TailwindCSS",
   "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": "22"
+  },
   "scripts": {
     "dev": "node ./node_modules/vite/bin/vite.js",
     "watch:css": "node ./node_modules/tailwindcss/lib/cli.js -i ./src/style.css -o ./public/output.css --watch",
