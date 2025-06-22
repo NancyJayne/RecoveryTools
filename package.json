@@ -15,7 +15,8 @@
     "preview": "node ./node_modules/vite/bin/vite.js preview",
     "seed:all": "node functions/scripts/seedAll.js",
     "emulators": "firebase emulators:start",
-    "check:imports": "node scripts/verify-imports.js"
+    "check:imports": "node scripts/verify-imports.js",
+    "lint": "node ./node_modules/@eslint/core/bin/eslint.js ."
   },
   "dependencies": {
     "@google-cloud/recaptcha-enterprise": "^6.2.0",

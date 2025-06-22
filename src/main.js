@@ -4,14 +4,14 @@ import "./style.css";
 import { getRecaptchaSiteKey, auth } from "./utils/firebase-config.js";
 import { validateTokenFromURL } from "./auth/user-auth.js";
 import { setupAuthModal } from "./auth/auth-modal.js";
-import { getUserRole, setupRoleUI } from "./auth/user-roles.js";
+import { setupRoleUI } from "./auth/user-roles.js";
 import { handleReferralFromURL } from "./affiliate/affiliate-referrals.js";
 import { updateCartCount } from "./shop/shop-cart.js";
 import { logClientError } from "./utils/logClientError.js";
 import { setupNavMenuToggle, scrollToElement, showToast, debounce, showTabContent } from "./utils/utils.js";
 import { observeAdminPanel } from "./utils/observe-admin-panels.js";
 import { loadRecaptchaScript } from "./utils/loadRecaptcha.js";
-import { initAppEntry, loadModuleByPath, setupRouterLinks, setupStickyNavbarScrollHandler, setupMobileMenuToggle } from "./app-entry.js";
+import { initAppEntry } from "./app-entry.js";
 
 const siteKey = getRecaptchaSiteKey();
 if (siteKey) loadRecaptchaScript(siteKey);
@@ -19,9 +19,7 @@ if (siteKey) loadRecaptchaScript(siteKey);
 
 window.showToast = showToast;
 window.scrollToElement = scrollToElement;
-// Make main height adjustment utility globally available
-window.adjustMainHeight = adjustMainHeight;
-
+// Utility for resizing main content area
 const adjustMainHeight = debounce(() => {
   const header = document.querySelector("header");
   const footer = document.querySelector("footer");
@@ -31,6 +29,9 @@ const adjustMainHeight = debounce(() => {
   const footerHeight = footer.offsetHeight;
   main.style.minHeight = `calc(100vh - ${headerHeight + footerHeight}px)`;
 }, 150);
+
+// Make main height adjustment utility globally available
+window.adjustMainHeight = adjustMainHeight;
 
 function scrollToTop() {
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -82,12 +83,9 @@ function handleSectionFromURL() {
 document.addEventListener("DOMContentLoaded", async () => {
   try {
     await initAppEntry();
-
   } catch (err) {
     console.error("App initialization failed:", err);
   }
-
-  const role = await getUserRole();
 
   if (auth?.currentUser) setupRoleUI(auth.currentUser);
 
@@ -98,12 +96,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   handleReferralFromURL();
   adjustMainHeight();
   setupNavMenuToggle();
-  setupRouterLinks();
-  setupStickyNavbarScrollHandler();
-  setupMobileMenuToggle();
-
-  const cleanPath = window.location.pathname.split("?")[0].split("#")[0];
-  loadModuleByPath(cleanPath, role);
 
   window.logClientError = logClientError;
 
