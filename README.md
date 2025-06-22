@@ -1,5 +1,3 @@
-+45
--1
 
 # RecoveryTools
 RecoveryToolsApp
