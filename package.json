@@ -16,7 +16,7 @@
     "seed:all": "node functions/scripts/seedAll.js",
     "emulators": "firebase emulators:start",
     "check:imports": "node scripts/verify-imports.js",
-    "lint": "node ./node_modules/@eslint/core/bin/eslint.js ."
+    "lint": "eslint ."
   },
   "dependencies": {
     "@google-cloud/recaptcha-enterprise": "^6.2.0",
@@ -31,6 +31,7 @@
     "eslint-plugin-n": "^17.18.0",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.17",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "eslint": "^8.57.1"
   }
 }
