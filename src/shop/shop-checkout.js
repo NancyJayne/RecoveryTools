@@ -285,12 +285,12 @@ export async function setupCheckoutPage() {
   // 🔄 Toggle billing section visibility
   const toggleCheckbox = form.querySelector("#sameAsShipping");
   toggleCheckbox?.addEventListener("change", (e) => {
-  const isSame = e.target.checked;
-  billingContainer.classList.toggle("hidden", isSame);
-  billingGroup.querySelectorAll("input").forEach(input => {
-    input.disabled = isSame;
+    const isSame = e.target.checked;
+    billingContainer.classList.toggle("hidden", isSame);
+    billingGroup.querySelectorAll("input").forEach((input) => {
+      input.disabled = isSame;
+    });
   });
-});
 
   const createFieldRow = (labelText, value) => {
     const row = document.createElement("div");
@@ -335,8 +335,8 @@ export async function setupCheckoutPage() {
   cartSummary.appendChild(createFieldRow("Shipping", formatCurrency(shippingCost)));
   cartSummary.appendChild(createFieldRow("GST", formatCurrency(gst)));
   const totalRow = createFieldRow("Total", formatCurrency(total));
-totalRow.classList.add("text-lg", "font-bold", "text-white");
-cartSummary.appendChild(totalRow);
+  totalRow.classList.add("text-lg", "font-bold", "text-white");
+  cartSummary.appendChild(totalRow);
 
 
   summaryContainer.appendChild(cartSummary);

@@ -57,7 +57,7 @@ export async function initFirebase() {
       }
 
       const siteKey = getRecaptchaSiteKey();
-       if (siteKey) {
+      if (siteKey) {
         initializeAppCheck(app, {
           provider: new ReCaptchaV3Provider(siteKey),
           isTokenAutoRefreshEnabled: true,

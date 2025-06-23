@@ -7,7 +7,7 @@ export default {
     "./admin/**/*.{html,js}",
     "./src/**/*.{html,js}",
   ],
-  safelist: ['mobile-nav', 'mobile-nav-open'],
+  safelist: ["mobile-nav", "mobile-nav-open"],
   theme: {
     extend: {
       colors: {
