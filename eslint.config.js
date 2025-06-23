@@ -4,6 +4,9 @@ import node from "eslint-plugin-n";
 
 /** @type {import("eslint").FlatConfig[]} */
 export default [
+  {
+    ignores: ["dist/**", "public/**"],
+  },
   js.configs.recommended,
   {
     files: ["**/*.js"],

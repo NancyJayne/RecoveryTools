@@ -16,7 +16,8 @@
     "seed:all": "node functions/scripts/seedAll.js",
     "emulators": "firebase emulators:start",
     "check:imports": "node scripts/verify-imports.js",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:firebase": "node testFirebase.cjs"
   },
   "dependencies": {
     "@google-cloud/recaptcha-enterprise": "^6.2.0",

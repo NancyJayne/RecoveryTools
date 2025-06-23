@@ -249,7 +249,12 @@ export async function setupCheckoutPage() {
   toggleWrapper.className = "mt-6";
   toggleWrapper.innerHTML = `
     <label class="inline-flex items-center text-white">
-      <input type="checkbox" id="sameAsShipping" class="form-checkbox bg-gray-800 border-gray-700 text-green-500" checked />
+      <input
+        type="checkbox"
+        id="sameAsShipping"
+        class="form-checkbox bg-gray-800 border-gray-700 text-green-500"
+        checked
+      />
       <span class="ml-2">Billing address same as shipping</span>
     </label>
   `;

@@ -17,6 +17,22 @@ RecoveryToolsApp
 Copy `.env.example` to `.env` and replace the placeholder values with your real
 configuration before running development server or building the project.
 
+### Firebase Admin
+
+If you need to run `testFirebase.cjs` or other admin scripts, encode your Firebase
+service account JSON as base64 and add it as `FIREBASE_ADMIN_KEY_BASE64` in
+your `.env` file:
+
+```bash
+export FIREBASE_ADMIN_KEY_BASE64=$(base64 -w0 path/to/service-account.json)
+```
+
+Then create a `.env` entry:
+
+```env
+FIREBASE_ADMIN_KEY_BASE64=PASTE_THE_BASE64_VALUE_HERE
+```
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

@@ -10,22 +10,16 @@ import { formatWorkshopForViewer } from "../utils/date-utils.js";
 const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 const workshopGrid = document.getElementById("workshopGrid");
-const workshopDetailContainer = document.getElementById("workshopDetailContainer");
 const pastWorkshopGrid = document.getElementById("pastWorkshopGrid");
 const filterLocation = document.getElementById("filterLocation");
 const filterTag = document.getElementById("filterTag");
 
 let allWorkshops = [];
-
-function formatLocalTime(dateUTC, timezone = "Australia/Brisbane") {
-  if (!dateUTC) return "—";
-  try {
-    const utcDate = DateTime.fromISO(dateUTC, { zone: "utc" });
-    return utcDate.setZone(userTimezone).toFormat("dd/MM/yyyy HH:mm") + ` (${userTimezone})`;
-  } catch {
-    return dateUTC;
-  }
-}
+const placeholderImg =
+  "https://firebasestorage.googleapis.com/v0/b/" +
+  "recovery-tools.firebasestorage.app/o/videos%2FImages%2Fworkshop-placeholder.png?alt=media";
+const btnBaseClasses =
+  "px-4 py-2 rounded text-white font-semibold flex items-center gap-2";
 
 export function showWorkshopDetail(workshop, overrideTZ = userTimezone) {
   const container = document.getElementById("workshopDetailContainer");
@@ -40,16 +34,28 @@ export function showWorkshopDetail(workshop, overrideTZ = userTimezone) {
     eventDateForCalendar = new Date(dt.toISO());
   }
 
-  const locationQuery = workshop.location ? encodeURIComponent(workshop.location) : null;
-  const mapsLink = locationQuery ? `https://www.google.com/maps/search/?api=1&query=${locationQuery}` : null;
-  const calendarLink = eventDateForCalendar
-    ? `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(workshop.name)}&dates=${formatCalendarDate(eventDateForCalendar)}/${formatCalendarDate(eventDateForCalendar, true)}&details=${encodeURIComponent(workshop.description || "")}&location=${encodeURIComponent(workshop.location || "")}`
+  const locationQuery = workshop.location
+    ? encodeURIComponent(workshop.location)
     : null;
+  const mapsLink = locationQuery
+    ? `https://www.google.com/maps/search/?api=1&query=${locationQuery}`
+    : null;
+
+  let calendarLink = null;
+  if (eventDateForCalendar) {
+    const params = [
+      `text=${encodeURIComponent(workshop.name)}`,
+      `dates=${formatCalendarDate(eventDateForCalendar)}/${formatCalendarDate(eventDateForCalendar, true)}`,
+      `details=${encodeURIComponent(workshop.description || "")}`,
+      `location=${encodeURIComponent(workshop.location || "")}`,
+    ].join("&");
+    calendarLink = `https://www.google.com/calendar/render?action=TEMPLATE&${params}`;
+  }
 
   container.textContent = "";
 
   const img = document.createElement("img");
-  img.src = workshop.image || "https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2Fworkshop-placeholder.png?alt=media";
+  img.src = workshop.image || placeholderImg;
   img.alt = workshop.name;
   img.className = "w-full h-64 object-cover rounded mb-6";
   container.appendChild(img);
@@ -92,7 +98,7 @@ export function showWorkshopDetail(workshop, overrideTZ = userTimezone) {
     const mapAnchor = document.createElement("a");
     mapAnchor.href = mapsLink;
     mapAnchor.target = "_blank";
-    mapAnchor.className = "bg-blue-600 px-4 py-2 rounded text-white font-semibold hover:bg-blue-700 flex items-center gap-2";
+    mapAnchor.className = `bg-blue-600 hover:bg-blue-700 ${btnBaseClasses}`;
     mapAnchor.innerHTML = "📍 <span>View Location</span>";
     btnGroup.appendChild(mapAnchor);
   }
@@ -101,27 +107,33 @@ export function showWorkshopDetail(workshop, overrideTZ = userTimezone) {
     const calAnchor = document.createElement("a");
     calAnchor.href = calendarLink;
     calAnchor.target = "_blank";
-    calAnchor.className = "bg-yellow-500 px-4 py-2 rounded text-white font-semibold hover:bg-yellow-600 flex items-center gap-2";
+    calAnchor.className = `bg-yellow-500 hover:bg-yellow-600 ${btnBaseClasses}`;
     calAnchor.innerHTML = "🗕️ <span>Add to Google Calendar</span>";
     btnGroup.appendChild(calAnchor);
 
     const icalBtn = document.createElement("button");
-    icalBtn.className = "bg-purple-600 px-4 py-2 rounded text-white font-semibold hover:bg-purple-700 flex items-center gap-2";
+    icalBtn.className = `bg-purple-600 hover:bg-purple-700 ${btnBaseClasses}`;
     icalBtn.innerHTML = "🗓️ <span>Add to iCal</span>";
-    icalBtn.onclick = () => downloadICS(workshop.name, eventDateForCalendar.toISOString(), workshop.location || "", workshop.description || "");
+    icalBtn.onclick = () =>
+      downloadICS(
+        workshop.name,
+        eventDateForCalendar.toISOString(),
+        workshop.location || "",
+        workshop.description || "",
+      );
     btnGroup.appendChild(icalBtn);
   }
 
   if (auth.currentUser) {
     const promoteBtn = document.createElement("button");
-    promoteBtn.className = "bg-indigo-600 px-4 py-2 rounded text-white font-semibold hover:bg-indigo-700 flex items-center gap-2";
+    promoteBtn.className = `bg-indigo-600 hover:bg-indigo-700 ${btnBaseClasses}`;
     promoteBtn.innerHTML = "📣 <span>Promote This Event</span>";
     promoteBtn.onclick = () => copyReferralLink(workshop.id);
     btnGroup.appendChild(promoteBtn);
   }
 
   const shareBtn = document.createElement("button");
-  shareBtn.className = "bg-gray-700 px-4 py-2 rounded text-white font-semibold hover:bg-gray-800 flex items-center gap-2";
+  shareBtn.className = `bg-gray-700 hover:bg-gray-800 ${btnBaseClasses}`;
   shareBtn.innerHTML = "💬 <span>Share This Workshop</span>";
   shareBtn.onclick = () => copyWorkshopLink(workshop.id);
   btnGroup.appendChild(shareBtn);
@@ -140,7 +152,13 @@ export function showWorkshopDetail(workshop, overrideTZ = userTimezone) {
 
 export async function loadWorkshops() {
   try {
-    const snapshot = await getDocs(query(collection(db, "workshops"), where("visible", "==", true), orderBy("dateUTC", "desc")));
+    const snapshot = await getDocs(
+      query(
+        collection(db, "workshops"),
+        where("visible", "==", true),
+        orderBy("dateUTC", "desc"),
+      ),
+    );
     allWorkshops = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     renderWorkshopGrids();
     populateFilterOptions();

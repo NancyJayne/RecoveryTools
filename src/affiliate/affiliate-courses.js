@@ -286,9 +286,20 @@ export async function saveEditedCourse() {
   const onSale = document.getElementById("editCourseOnSale").checked;
   const shortDescription = document.getElementById("editCourseShortDescription").value.trim();
   const duration = document.getElementById("editCourseDuration").value.trim();
-  const maxParticipants = parseInt(document.getElementById("editCourseMaxParticipants").value.trim(), 10) || null;
-  const tags = document.getElementById("editCourseTags").value.trim().split(",").map((tag) => tag.trim()).filter(Boolean);
-  const features = document.getElementById("editCourseFeatures").value.trim().split(",").map((f) => f.trim()).filter(Boolean);
+  const maxParticipants =
+    parseInt(document.getElementById("editCourseMaxParticipants").value.trim(), 10) || null;
+
+  const tagsInput = document.getElementById("editCourseTags").value.trim();
+  const tags = tagsInput
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
+  const featuresInput = document.getElementById("editCourseFeatures").value.trim();
+  const features = featuresInput
+    .split(",")
+    .map((f) => f.trim())
+    .filter(Boolean);
   const visible = document.getElementById("editCourseVisible").checked;
 
   let slug = document.getElementById("editCourseSlug").value.trim().toLowerCase();

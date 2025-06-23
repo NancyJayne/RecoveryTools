@@ -59,7 +59,7 @@ export async function setupProfilePage() {
         hasCustomPhoto = true;
       }
     } catch (e) {
-      console.warn("Could not load profile photo, using fallback.");
+      console.warn("Could not load profile photo, using fallback.", e);
     }
 
     document.getElementById("profileAvatar").src = photoURL;

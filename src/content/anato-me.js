@@ -16,7 +16,8 @@ export function initAnatoMePage() {
   const paragraph = document.createElement("p");
   paragraph.className = "text-gray-400 mb-6";
   paragraph.textContent =
-    "Our anatomy-inspired stories explain common pain issues in a way that's relatable, raw, and real. Stay tuned for episodes.";
+    "Our anatomy-inspired stories explain common pain issues in a way that's " +
+    "relatable, raw, and real. Stay tuned for episodes.";
 
   const comingSoon = document.createElement("div");
   comingSoon.className = "text-sm text-gray-500";

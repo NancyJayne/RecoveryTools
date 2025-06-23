@@ -332,7 +332,9 @@ export async function loadMyWorkshops() {
       if (workshop.status !== "approved") {
         const pendingBadge = document.createElement("span");
         pendingBadge.textContent = "Pending Review";
-        pendingBadge.className = "ml-2 inline-block bg-yellow-400 text-black text-xs px-2 py-1 rounded-full align-middle";
+        pendingBadge.className =
+          "ml-2 inline-block bg-yellow-400 text-black text-xs px-2 py-1 rounded-full " +
+          "align-middle";
         name.appendChild(pendingBadge);
       }
 

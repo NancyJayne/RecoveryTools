@@ -1,5 +1,5 @@
-// testFirebase.js
-const admin = require("./firebaseAdmin");
+// testFirebase.cjs
+const admin = require("./firebaseAdmin.cjs");
 
 admin.auth().listUsers(1)
   .then((data) => {
