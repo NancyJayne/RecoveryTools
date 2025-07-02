@@ -21,9 +21,10 @@ export async function executeRecaptcha(action = "submit_review") {
     await new Promise((resolve) => window.grecaptcha.ready(resolve));
 
     const token = await window.grecaptcha.execute(siteKey, { action });
-    console.debug("✅ reCAPTCHA token received:", token);
+    // Use console.log so the token is visible even when dev tools filters
+    console.log("✅ reCAPTCHA token received:", token);
 
-        // Guard against undefined or empty token
+    // Guard against undefined or empty token
     if (!token) {
       console.error("❌ reCAPTCHA token missing.");
       showToast("Something went wrong with reCAPTCHA.", "error");
