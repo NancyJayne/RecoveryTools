@@ -9,8 +9,8 @@ export const verifyRecaptchaToken = onCall(
     region: "australia-southeast1",
     secrets: [RECAPTCHA_SECRET_KEY],
   },
-  async (data) => {
-    const { token } = data;
+  async (request) => {
+    const { token } = request.data || {};
 
     if (!token) {
       throw new HttpsError("invalid-argument", "reCAPTCHA token is required.");

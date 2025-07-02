@@ -54,7 +54,7 @@ VITE_RECAPTCHA_SITE_KEY=YOUR_RECAPTCHA_SITE_KEY
 firebase functions:secrets:set RECAPTCHA_SECRET_KEY
 ```
 
-For local emulators you can export `RECAPTCHA_SECRET_KEY` in your shell before starting the emulators.
+For local testing with the emulators, add `RECAPTCHA_SECRET_KEY` to your `.env` file so tokens can be verified.
 
 ## License
 
