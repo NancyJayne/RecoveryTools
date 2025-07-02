@@ -23,6 +23,13 @@ export async function executeRecaptcha(action = "submit_review") {
     const token = await window.grecaptcha.execute(siteKey, { action });
     console.debug("✅ reCAPTCHA token received:", token);
 
+        // Guard against undefined or empty token
+    if (!token) {
+      console.error("❌ reCAPTCHA token missing.");
+      showToast("Something went wrong with reCAPTCHA.", "error");
+      throw new Error(RECAPTCHA_ERROR_MSG);
+    }
+
     // Call Firebase Cloud Function to verify via standard v3
     const verifyRecaptchaToken = httpsCallable(functions, "verifyRecaptchaToken");
     const result = await verifyRecaptchaToken({ token });

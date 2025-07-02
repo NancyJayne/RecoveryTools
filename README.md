@@ -39,6 +39,23 @@ Then create a `.env` entry:
 FIREBASE_ADMIN_KEY_BASE64=PASTE_THE_BASE64_VALUE_HERE
 ```
 
+### Configuring reCAPTCHA
+
+1. Create a reCAPTCHA v3 site in the [Google admin console](https://www.google.com/recaptcha/admin).
+2. Copy the **site key** into your `.env` file:
+
+```env
+VITE_RECAPTCHA_SITE_KEY=YOUR_RECAPTCHA_SITE_KEY
+```
+
+3. Store the **secret key** as a Firebase secret so Cloud Functions can verify tokens:
+
+```bash
+firebase functions:secrets:set RECAPTCHA_SECRET_KEY
+```
+
+For local emulators you can export `RECAPTCHA_SECRET_KEY` in your shell before starting the emulators.
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
