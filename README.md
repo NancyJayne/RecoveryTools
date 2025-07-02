@@ -27,6 +27,12 @@ your `.env` file:
 export FIREBASE_ADMIN_KEY_BASE64=$(base64 -w0 path/to/service-account.json)
 ```
 
+On Windows PowerShell:
+
+```powershell
+$Env:FIREBASE_ADMIN_KEY_BASE64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes("path\\to\\service-account.json"))
+```
+
 Then create a `.env` entry:
 
 ```env
