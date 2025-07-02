@@ -1,3 +1,6 @@
++8
+-4
+
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
 import stripeLib from "stripe";
@@ -11,14 +14,18 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-const verifyRecaptcha = async (token) => {
+const verifyRecaptcha = async (token, context) => {
   if (!token) throw new HttpsError("invalid-argument", "Missing reCAPTCHA token");
 
-  const secret = RECAPTCHA_SECRET_KEY.value();
+  const recaptchaSecret =
+    process.env.FUNCTIONS_EMULATOR === "true"
+      ? process.env.RECAPTCHA_SECRET_KEY
+      : context.secrets.RECAPTCHA_SECRET_KEY;
+
   const res = await fetch("https://www.google.com/recaptcha/api/siteverify", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `secret=${secret}&response=${token}`,
+    body: `secret=${recaptchaSecret}&response=${token}`,
   });
 
   const data = await res.json();
@@ -38,7 +45,7 @@ const createCheckoutSessionHandler = async (data, context) => {
     throw new HttpsError("invalid-argument", "Cart is empty or invalid.");
   }
 
-  await verifyRecaptcha(token); // ✅ reCAPTCHA validation
+  await verifyRecaptcha(token, context); // ✅ reCAPTCHA validation
 
   const stripe = stripeLib(STRIPE_SECRET_KEY.value());
   const db = admin.firestore();

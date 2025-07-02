@@ -97,3 +97,17 @@ Deploy Cloud Functions and hosting:
 firebase deploy --only functions
 firebase deploy --only hosting
 ```
+
+## Viewing Cloud Function logs
+
+To view logs for a specific function, pass `--only` with the function name:
+
+```bash
+firebase functions:log --only verifyRecaptchaToken
+```
+
+You can run the same command through the `functions/` scripts for consistency:
+
+```bash
+npm --prefix functions run logs -- --only verifyRecaptchaToken
+```
