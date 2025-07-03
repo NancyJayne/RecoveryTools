@@ -44,7 +44,7 @@ export async function setupAuthState() {
 
       authButtons?.classList.add("hidden");
       avatarWrapper?.classList.remove("hidden");
-      if (headerAvatar) headerAvatar.src = user.photoURL || FALLBACK_AVATAR;
+      if (headerAvatar) headerAvatar.src = user.photoURL || fallbackAvatarUrl;
     } else {
       console.log("👋 No user signed in");
 
