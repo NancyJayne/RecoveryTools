@@ -3,6 +3,7 @@
 import { auth, functions } from "../utils/firebase-config.js";
 import { httpsCallable } from "firebase/functions";
 import { showToast } from "../utils/utils.js";
+import { handleSignOut } from "../auth/user-auth.js";
 
 import {
   loadOrderReceipts,
@@ -126,6 +127,11 @@ export async function setupProfilePage() {
   });
 
   setupProfileFormHandlers();
+
+    const signOutBtn = document.getElementById("signOutBtn");
+  if (signOutBtn) {
+    signOutBtn.addEventListener("click", handleSignOut);
+  }
 
   const affiliateSignupBtn = document.getElementById("affiliateSignup");
   if (affiliateSignupBtn) {

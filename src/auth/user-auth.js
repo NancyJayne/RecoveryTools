@@ -1,11 +1,29 @@
 // Signup, login, auth state
 import { auth, db } from "../utils/firebase-config.js";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { setupRoleUI } from "./user-roles.js"; // Role UI setup
 import { showToast } from "../utils/utils.js";
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { unlockCourseContent, refreshProfileCourses } from "../profile/profile-utils.js"; // or wherever these live
 
+const fallbackAvatarUrl =
+  "https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FProfile.png?alt=media&token=261b1542-dc99-44ce-9089-6342e0ee6db9";
+
+function updateHeaderUI(user) {
+  const authBtns = document.getElementById("authButtons");
+  const avatarWrap = document.getElementById("profileAvatarWrapper");
+  const avatarImg = document.getElementById("headerAvatar");
+
+  if (user) {
+    authBtns?.classList.add("hidden");
+    avatarWrap?.classList.remove("hidden");
+    if (avatarImg) avatarImg.src = user.photoURL || fallbackAvatarUrl;
+  } else {
+    authBtns?.classList.remove("hidden");
+    avatarWrap?.classList.add("hidden");
+    if (avatarImg) avatarImg.src = fallbackAvatarUrl;
+  }
+}
 
 // 🔄 Initialize auth state and handle user presence
 export async function setupAuthState() {
@@ -15,15 +33,38 @@ export async function setupAuthState() {
   }
 
   onAuthStateChanged(auth, async (user) => {
+        updateHeaderUI(user);
+    const authButtons = document.getElementById("authButtons");
+    const avatarWrapper = document.getElementById("profileAvatarWrapper");
+    const headerAvatar = document.getElementById("headerAvatar");
+
     if (user) {
       setupRoleUI(user);
       console.log("✅ User signed in:", user.email);
+
+      authButtons?.classList.add("hidden");
+      avatarWrapper?.classList.remove("hidden");
+      if (headerAvatar) headerAvatar.src = user.photoURL || FALLBACK_AVATAR;
     } else {
       console.log("👋 No user signed in");
+
+      authButtons?.classList.remove("hidden");
+      avatarWrapper?.classList.add("hidden");
+      if (headerAvatar) headerAvatar.src = "";
     }
   });
 }
 
+// 🚪 Sign the current user out
+export async function handleSignOut() {
+  try {
+    await signOut(auth);
+    showToast("Signed out", "success");
+  } catch (err) {
+    console.error("Sign out error:", err);
+    showToast(err.message || "Failed to sign out", "error");
+  }
+}
 
 export async function validateTokenFromURL() {
   const url = new URL(window.location.href);
