@@ -32,25 +32,17 @@ export async function setupAuthState() {
     return;
   }
 
+  // Ensure header reflects current login state on initial load
+  updateHeaderUI(auth.currentUser);
+
   onAuthStateChanged(auth, async (user) => {
-        updateHeaderUI(user);
-    const authButtons = document.getElementById("authButtons");
-    const avatarWrapper = document.getElementById("profileAvatarWrapper");
-    const headerAvatar = document.getElementById("headerAvatar");
+    updateHeaderUI(user);
 
     if (user) {
       setupRoleUI(user);
       console.log("✅ User signed in:", user.email);
-
-      authButtons?.classList.add("hidden");
-      avatarWrapper?.classList.remove("hidden");
-      if (headerAvatar) headerAvatar.src = user.photoURL || fallbackAvatarUrl;
     } else {
       console.log("👋 No user signed in");
-
-      authButtons?.classList.remove("hidden");
-      avatarWrapper?.classList.add("hidden");
-      if (headerAvatar) headerAvatar.src = "";
     }
   });
 }
