@@ -10,3 +10,4 @@ export function initTermsPage() {
     </div>
   `;
 }
+export default initTermsPage;

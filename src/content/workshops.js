@@ -280,3 +280,5 @@ export function downloadICS(title, startDateISO, location, description) {
 export function initWorkshopsPage() {
   loadWorkshops();
 }
+
+export default initWorkshopsPage;

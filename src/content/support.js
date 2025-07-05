@@ -10,3 +10,4 @@ export function initSupportPage() {
     </div>
   `;
 }
+export default initSupportPage;

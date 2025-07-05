@@ -58,3 +58,5 @@ export function initContactPage() {
     }
   });
 }
+
+export default initContactPage;

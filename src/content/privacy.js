@@ -10,3 +10,4 @@ export function initPrivacyPage() {
     </div>
   `;
 }
+export default initPrivacyPage;

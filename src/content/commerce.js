@@ -10,3 +10,4 @@ export function initCommercePage() {
     </div>
   `;
 }
+export default initCommercePage;

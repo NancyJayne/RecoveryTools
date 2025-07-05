@@ -7,3 +7,5 @@ export function initAboutPage() {
     section.scrollIntoView({ behavior: "smooth" });
   }
 }
+
+export default initAboutPage;

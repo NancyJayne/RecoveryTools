@@ -15,3 +15,5 @@ export function initProgramsPage() {
 }
 
 // This placeholder ensures the route /programs doesn't trigger a "no module found" warning
+
+export default initProgramsPage;
