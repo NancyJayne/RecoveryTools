@@ -10,6 +10,7 @@ import { updateCartCount } from "./shop/shop-cart.js";
 import { logClientError } from "./utils/logClientError.js";
 import { setupNavMenuToggle, scrollToElement, showToast, debounce, showTabContent } from "./utils/utils.js";
 import { observeAdminPanel } from "./utils/observe-admin-panels.js";
+import { initAdminNavigation } from "./admin/admin-navigation.js";
 import { loadRecaptchaScript } from "./utils/loadRecaptcha.js";
 import { initAppEntry } from "./app-entry.js";
 
@@ -108,4 +109,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   observeAdminPanel("productManagerPanel", "./admin/admin-products.js", "setupProductManager");
   observeAdminPanel("pendingCourseApprovals", "./admin/admin-course.js", "setupCourseApprovals");
   observeAdminPanel("adminWorkshopApprovals", "./admin/admin-workshops.js", "setupWorkshopManagement");
+  observeAdminPanel("adminOrdersSection", "./admin/admin-orders.js", "setupOrderManagement");
+  observeAdminPanel("userRoleManager", "./admin/admin-crm.js", "setupRoleManager");
+  observeAdminPanel("anatoMeForm", "./admin/admin-anatoMe.js", "setupAnatoMeEpisodeAdminForm");
+
+  initAdminNavigation();
 });
