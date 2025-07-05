@@ -214,7 +214,7 @@ export async function renderCartItems() {
       updateCartItem(index, action);
     });
   });
-    updateCartCount();
+  updateCartCount();
 }
 
 function updateCartItem(index, action) {

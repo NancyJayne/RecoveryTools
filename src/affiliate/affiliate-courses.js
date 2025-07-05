@@ -55,7 +55,7 @@ export async function deleteCourse(courseId) {
 
 export async function submitCourseProposal(formData) {
   try {
-    const uid = auth.currentUser?.uid;
+    const uid = auth?.currentUser?.uid;
     if (!uid) throw new Error("User not authenticated");
 
     await addDoc(collection(db, "courses"), {
@@ -73,7 +73,7 @@ export async function submitCourseProposal(formData) {
 }
 
 export async function loadAffiliateCourses() {
-  const uid = auth.currentUser?.uid;
+  const uid = auth?.currentUser?.uid;
   if (!uid) return [];
 
   const q = query(collection(db, "courses"), where("creatorId", "==", uid));
@@ -82,7 +82,7 @@ export async function loadAffiliateCourses() {
 }
 
 export async function loadMyCourses() {
-  const user = auth.currentUser;
+  const user = auth?.currentUser;
   if (!user) return;
 
   const grid = document.getElementById("mySubmittedCourses");
@@ -350,7 +350,7 @@ export async function saveEditedCourse() {
 }
 
 export function copyCourseReferralLink(courseId) {
-  const user = auth.currentUser;
+  const user = auth?.currentUser;
   if (!user) {
     showToast("Please login to generate your referral link.", "error");
     return;

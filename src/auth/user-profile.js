@@ -20,7 +20,7 @@ export async function getUserProfile(uid) {
 }
 
 export async function updateUserProfile({ name, phone, address }) {
-  const uid = auth.currentUser?.uid;
+  const uid = auth?.currentUser?.uid;
   if (!uid) throw new Error("Not logged in");
 
   const ref = doc(db, "users", uid);
@@ -28,7 +28,7 @@ export async function updateUserProfile({ name, phone, address }) {
 }
 
 export async function changeUserPassword(newPassword) {
-  if (!auth.currentUser) throw new Error("User not authenticated");
+  if (!auth?.currentUser) throw new Error("User not authenticated");
   return await updatePassword(auth.currentUser, newPassword);
 }
 
@@ -106,7 +106,7 @@ export async function loadProfileCourses() {
   try {
     const q = query(
       collection(db, "courses"),
-      where("purchasedBy", "array-contains", auth.currentUser.uid),
+      where("purchasedBy", "array-contains", auth?.currentUser?.uid),
     );
     const snapshot = await getDocs(q);
     grid.textContent = "";
@@ -146,7 +146,7 @@ export async function loadProfileWorkshops() {
   try {
     const q = query(
       collection(db, "workshops"),
-      where("purchasedBy", "array-contains", auth.currentUser.uid),
+      where("purchasedBy", "array-contains", auth?.currentUser?.uid),
     );
     const snapshot = await getDocs(q);
     grid.textContent = "";
@@ -186,7 +186,7 @@ export async function loadMyPrograms() {
   try {
     const q = query(
       collection(db, "programs"),
-      where("assignedTo", "==", auth.currentUser.uid),
+      where("assignedTo", "==", auth?.currentUser?.uid),
     );
     const snapshot = await getDocs(q);
     grid.textContent = "";

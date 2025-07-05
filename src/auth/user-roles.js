@@ -4,7 +4,7 @@ import { auth } from "../utils/firebase-config.js";
  * Get the current user's role from custom claims
  */
 export async function getUserRole() {
-  const user = auth.currentUser;
+  const user = auth?.currentUser;
   if (!user) return null;
 
   try {

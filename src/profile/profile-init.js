@@ -17,7 +17,7 @@ import {
 import { showAuthModal } from "../auth/auth-modal.js";
 
 export async function setupProfilePage() {
-  const user = auth.currentUser;
+  const user = auth?.currentUser;
   const profileSection = document.getElementById("profileSection");
   const fallbackURL = "https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FProfile.png?alt=media&token=261b1542-dc99-44ce-9089-6342e0ee6db9";
 
@@ -128,7 +128,7 @@ export async function setupProfilePage() {
 
   setupProfileFormHandlers();
 
-    const signOutBtn = document.getElementById("signOutBtn");
+  const signOutBtn = document.getElementById("signOutBtn");
   if (signOutBtn) {
     signOutBtn.addEventListener("click", handleSignOut);
   }
@@ -171,8 +171,8 @@ function setupProfileFormHandlers() {
   const phoneInput = document.getElementById("updatePhone");
   const addressInput = document.getElementById("updateAddress");
 
-  if (auth.currentUser?.uid && nameInput && phoneInput && addressInput) {
-    const uid = auth.currentUser.uid;
+  if (auth?.currentUser?.uid && nameInput && phoneInput && addressInput) {
+    const uid = auth?.currentUser?.uid;
     import("../auth/user-profile.js").then(async (mod) => {
       const profile = await mod.getUserProfile(uid);
       if (profile) {
@@ -227,7 +227,7 @@ function setupProfileFormHandlers() {
   if (avatarInput) {
     avatarInput.addEventListener("change", async (e) => {
       const file = e.target.files[0];
-      if (!file || !auth.currentUser) return;
+      if (!file || !auth?.currentUser) return;
 
       const storageRef = (await import("firebase/storage")).ref;
       const uploadBytes = (await import("firebase/storage")).uploadBytes;
@@ -235,14 +235,14 @@ function setupProfileFormHandlers() {
       const { getStorage } = await import("firebase/storage");
 
       const storage = getStorage();
-      const avatarRef = storageRef(storage, `avatars/${auth.currentUser.uid}.jpg`);
+      const avatarRef = storageRef(storage, `avatars/${auth?.currentUser?.uid}.jpg`);
 
       try {
         await uploadBytes(avatarRef, file);
         const url = await getDownloadURL(avatarRef);
 
         const { doc, updateDoc } = await import("firebase/firestore");
-        const userRef = doc((await import("../utils/firebase-config.js")).db, "users", auth.currentUser.uid);
+        const userRef = doc((await import("../utils/firebase-config.js")).db, "users", auth?.currentUser?.uid);
         await updateDoc(userRef, { photoURL: url });
 
         document.getElementById("profileAvatar").src = url;
@@ -257,7 +257,7 @@ function setupProfileFormHandlers() {
     const removeBtn = document.getElementById("removeAvatarBtn");
     if (removeBtn) {
       removeBtn.addEventListener("click", async () => {
-        if (!auth.currentUser) return;
+        if (!auth?.currentUser) return;
 
         const confirmRemove = confirm("Are you sure you want to remove your profile photo?");
         if (!confirmRemove) return;
@@ -270,7 +270,7 @@ function setupProfileFormHandlers() {
         try {
           const { getStorage, ref, deleteObject } = await import("firebase/storage");
           const storage = getStorage();
-          const avatarRef = ref(storage, `avatars/${auth.currentUser.uid}.jpg`);
+          const avatarRef = ref(storage, `avatars/${auth?.currentUser?.uid}.jpg`);
 
           // Attempt to delete from storage
           await deleteObject(avatarRef).catch((err) => {
@@ -280,7 +280,7 @@ function setupProfileFormHandlers() {
 
           // Clear photoURL in Firestore
           const { doc, updateDoc } = await import("firebase/firestore");
-          const userRef = doc((await import("../utils/firebase-config.js")).db, "users", auth.currentUser.uid);
+          const userRef = doc((await import("../utils/firebase-config.js")).db, "users", auth?.currentUser?.uid);
           await updateDoc(userRef, { photoURL: "" });
 
           // Update UI with fallback image

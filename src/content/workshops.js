@@ -124,7 +124,7 @@ export function showWorkshopDetail(workshop, overrideTZ = userTimezone) {
     btnGroup.appendChild(icalBtn);
   }
 
-  if (auth.currentUser) {
+  if (auth?.currentUser) {
     const promoteBtn = document.createElement("button");
     promoteBtn.className = `bg-indigo-600 hover:bg-indigo-700 ${btnBaseClasses}`;
     promoteBtn.innerHTML = "📣 <span>Promote This Event</span>";

@@ -30,7 +30,7 @@ export async function renderSubmittedWorkshops() {
     const q = query(
       collection(db, "products"),
       where("type", "==", "Workshop"),
-      where("creatorId", "==", auth.currentUser.uid),
+      where("creatorId", "==", auth?.currentUser?.uid),
       orderBy("createdAt", "desc"),
     );
     const snapshot = await getDocs(q);
@@ -115,7 +115,7 @@ export async function setupWorkshopForm() {
       dateLocal: dateInput,
       dateUTC,
       timezone,
-      createdBy: auth.currentUser.uid,
+      createdBy: auth?.currentUser?.uid,
       createdAt: serverTimestamp(),
       visible: false,
     };
@@ -165,7 +165,7 @@ export async function deleteWorkshop(workshopId) {
 // Handle workshop form submission
 export async function submitAffiliateWorkshop(formData) {
   try {
-    const uid = auth.currentUser?.uid;
+    const uid = auth?.currentUser?.uid;
     if (!uid) throw new Error("User not authenticated");
 
     await addDoc(collection(db, "workshops"), {
@@ -184,7 +184,7 @@ export async function submitAffiliateWorkshop(formData) {
 
 // Load submitted workshops
 export async function loadAffiliateWorkshops() {
-  const uid = auth.currentUser?.uid;
+  const uid = auth?.currentUser?.uid;
   if (!uid) return [];
 
   const q = query(collection(db, "workshops"), where("creatorId", "==", uid));
@@ -223,7 +223,7 @@ document.getElementById("deleteEditWorkshopBtn")?.addEventListener("click", asyn
 export async function submitWorkshop(e) {
   e.preventDefault();
 
-  const user = auth.currentUser;
+  const user = auth?.currentUser;
   if (!user) {
     showToast("Please log in first.", "error");
     return;
@@ -290,7 +290,7 @@ export async function submitWorkshop(e) {
 
   
 export async function loadMyWorkshops() {
-  const user = auth.currentUser;
+  const user = auth?.currentUser;
   if (!user) return;
 
   const grid = document.getElementById("mySubmittedWorkshops");
@@ -495,7 +495,7 @@ export async function saveEditedWorkshop() {
 
   
 export function copyReferralLink(workshopId) {
-  const user = auth.currentUser;
+  const user = auth?.currentUser;
   if (!user) {
     showToast("Please login to generate your referral link.", "error");
     return;

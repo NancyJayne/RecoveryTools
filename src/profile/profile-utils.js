@@ -4,7 +4,7 @@ import { showToast } from "../utils/utils.js";
 
 // 🔓 Unlocks access to a course for a logged-in user
 export async function unlockCourseContent(courseId) {
-  const user = auth.currentUser;
+  const user = auth?.currentUser;
   if (!user) {
     showToast("Please login first.", "error");
     return;
@@ -49,7 +49,7 @@ export async function unlockCourseContent(courseId) {
 
 // 🔄 Refreshes the profile course list on the frontend
 export async function refreshProfileCourses() {
-  const user = auth.currentUser;
+  const user = auth?.currentUser;
   if (!user) return;
 
   try {

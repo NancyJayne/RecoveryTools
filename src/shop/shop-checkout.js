@@ -7,7 +7,7 @@ import { confirmOrderFromStripeRedirect } from "./shop-orders.js";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { executeRecaptcha } from "../utils/verifyRecaptchaToken.js";
 
-let user = auth.currentUser;
+let user = auth?.currentUser;
 
 
 export async function setupCheckoutPage() {
@@ -171,7 +171,7 @@ export async function setupCheckoutPage() {
   form.className = "space-y-4";
   summaryContainer.appendChild(form);
 
-  user = auth.currentUser; // reuse outer `let user`
+  user = auth?.currentUser; // reuse outer `let user`
   let profileData = {};
   if (user) {
     const userDoc = await getDoc(doc(db, "users", user.uid));

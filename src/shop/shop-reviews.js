@@ -55,7 +55,7 @@ export function setupReviewForm(productId) {
   form.onsubmit = async (e) => {
     e.preventDefault();
 
-    const user = auth.currentUser;
+    const user = auth?.currentUser;
     if (!user) {
       showToast("Please log in to leave a review.", "error");
       return;

@@ -6,7 +6,7 @@ import { showToast } from "../utils/utils.js";
 import { detectUserTimezone, populateTimezoneDropdown } from "../utils/date-utils.js";
 
 export async function initAffiliateRegisterForm() {
-  const user = auth.currentUser;
+  const user = auth?.currentUser;
   if (!user) {
     showToast("Please log in before becoming an affiliate.", "error");
     window.location.href = "/signup?next=/affiliate/register";
@@ -96,7 +96,7 @@ export function setupAffiliateRegistrationForm() {
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
 
-    const user = auth.currentUser;
+    const user = auth?.currentUser;
     if (!user) {
       showToast("You must be logged in to register as an affiliate.", "error");
       return;

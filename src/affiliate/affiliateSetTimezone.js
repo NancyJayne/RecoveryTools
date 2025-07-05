@@ -13,7 +13,7 @@ export async function setupAffiliateTimezoneSettings() {
   // Populate timezone options
   populateTimezoneDropdown(selectEl);
 
-  const user = auth.currentUser;
+  const user = auth?.currentUser;
   if (!user) return;
 
   const docRef = doc(db, "affiliates", user.uid);

@@ -31,7 +31,7 @@ export async function setupStripeButtons() {
   const manageBtn = document.getElementById("manageStripeBtn");
 
   try {
-    const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+    const userDoc = await getDoc(doc(db, "users", auth?.currentUser?.uid));
     const stripeAccountId = userDoc.data()?.stripeAccountId;
 
     if (stripeAccountId) {
