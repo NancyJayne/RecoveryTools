@@ -32,8 +32,8 @@ export async function setupAuthState() {
     return;
   }
 
-  // Ensure header reflects current login state on initial load
-  updateHeaderUI(auth.currentUser);
+ // Update header immediately if auth state is already available
+  if (auth.currentUser) updateHeaderUI(auth.currentUser);
 
   onAuthStateChanged(auth, async (user) => {
     updateHeaderUI(user);
