@@ -299,3 +299,5 @@ function setupProfileFormHandlers() {
     }
   }
 }
+
+export default setupProfilePage;
