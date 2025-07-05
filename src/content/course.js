@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { showToast } from "../utils/utils.js";
 import { refreshProfileCourses } from "../profile/profile-utils.js";
+import { createProductTile } from "../shop/shop-products.js";
 
 export async function handleCourseFromURL() {
   const params = new URLSearchParams(window.location.search);
@@ -187,29 +188,13 @@ export async function validateTokenFromURL() {
 }
 
 // ✅ content/course.js
-
 export function initCoursesPage() {
-  const section = document.getElementById("coursesSection");
-  if (!section) return;
-
-  section.classList.add("active");
-  section.innerHTML = ""; // clear previous content
-
-  const wrapper = document.createElement("div");
-  wrapper.className = "text-center py-10";
-
-  const heading = document.createElement("h2");
-  heading.className = "text-2xl font-bold text-white mb-4";
-  heading.textContent = "Courses Coming Soon";
-
-  const paragraph = document.createElement("p");
-  paragraph.className = "text-gray-400";
-  paragraph.textContent =
-    "Explore educational courses designed for your recovery and growth.";
-
-  wrapper.append(heading, paragraph);
-  section.appendChild(wrapper);
-  section.scrollIntoView({ behavior: "smooth" });
+  loadCourses();
+  handleCourseFromURL();
+  validateTokenFromURL();
 }
+
+export default initCoursesPage;
+
 
 

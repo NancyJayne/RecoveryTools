@@ -67,7 +67,7 @@ export async function initAppEntry() {
   await setupAuthState();
   userRole = await getUserRole();
 
-  if (document.getElementById("openCartBtn")) {
+  if (document.querySelector(".open-cart-btn")) {
     import("./shop/shop-cart.js").then((m) => m.initCartUI?.());
   }
 

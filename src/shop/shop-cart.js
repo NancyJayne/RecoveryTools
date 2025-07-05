@@ -5,16 +5,16 @@ import { functions } from "../utils/firebase-config.js";
 import { httpsCallable } from "firebase/functions";
 
 export function initCartUI() {
-  const openBtn = document.getElementById("openCartBtn");
+  const openBtns = document.querySelectorAll(".open-cart-btn");
   const closeBtn = document.getElementById("closeCartBtn");
   const checkoutBtn = document.getElementById("checkoutBtn");
 
-  if (openBtn) {
-    openBtn.addEventListener("click", (e) => {
+  openBtns.forEach((btn) => {
+    btn.addEventListener("click", (e) => {
       e.preventDefault();
       openCartDrawer();
     });
-  }
+  });
 
   if (closeBtn) {
     closeBtn.addEventListener("click", closeCartDrawer);
