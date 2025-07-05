@@ -8,7 +8,7 @@ import { showAuthModal } from "./auth/auth-modal.js";
 import { showResetPasswordForm } from "./auth/reset-password.js";
 
 // Preload homepage enhancements
-import("./content/homepage.js");
+import(new URL("./content/homepage.js", import.meta.url));
 
 let userRole = null;
 
@@ -68,7 +68,7 @@ export async function initAppEntry() {
   userRole = await getUserRole();
 
   if (document.querySelector(".open-cart-btn")) {
-    import("./shop/shop-cart.js").then((m) => m.initCartUI?.());
+    import(new URL("./shop/shop-cart.js", import.meta.url)).then((m) => m.initCartUI?.());
   }
 
   setupRouterLinks();
@@ -97,64 +97,124 @@ export async function loadModuleByPath(path, role) {
 
   switch (true) {
   case path === "/cart":
-    await safeImport(() => import("./shop/shop-cart.js"), "Cart");
+    await safeImport(
+      () => import(new URL("./shop/shop-cart.js", import.meta.url)),
+      "Cart",
+    );
     break;
   case path === "/checkout":
-    await safeImport(() => import("./shop/shop-checkout.js"), "Checkout");
+    await safeImport(
+      () => import(new URL("./shop/shop-checkout.js", import.meta.url)),
+      "Checkout",
+    );
     break;
   case path === "/checkout-success":
-    await safeImport(() => import("./shop/shop-orders.js"), "Checkout Success");
+    await safeImport(
+      () => import(new URL("./shop/shop-orders.js", import.meta.url)),
+      "Checkout Success",
+    );
     break;
   case path.startsWith("/shop"):
-    await safeImport(() => import("./shop/shop-page.js"), "Shop Page");
+    await safeImport(
+      () => import(new URL("./shop/shop-page.js", import.meta.url)),
+      "Shop Page",
+    );
     break;
   case path.startsWith("/profile"):
-    await safeImport(() => import("./profile/profile-init.js"), "Profile");
+    await safeImport(
+      () => import(new URL("./profile/profile-init.js", import.meta.url)),
+      "Profile",
+    );
     break;
   case path.startsWith("/admin") && role === "admin":
-    await safeImport(() => import("./admin/admin-dashboard.js"), "Admin Dashboard");
+    await safeImport(
+      () => import(new URL("./admin/admin-dashboard.js", import.meta.url)),
+      "Admin Dashboard",
+    );
     break;
   case path.startsWith("/affiliate") && role === "affiliate":
-    await safeImport(() => import("./affiliate/affiliate-dashboard.js"), "Affiliate Dashboard");
+    await safeImport(
+      () => import(new URL("./affiliate/affiliate-dashboard.js", import.meta.url)),
+      "Affiliate Dashboard",
+    );
     break;
   case path.startsWith("/therapist") && role === "therapist":
-    await safeImport(() => import("./therapist/therapist-dashboard.js"), "Therapist Dashboard");
+    await safeImport(
+      () => import(new URL("./therapist/therapist-dashboard.js", import.meta.url)),
+      "Therapist Dashboard",
+    );
     break;
   case path.startsWith("/courses"):
-    await safeImport(() => import("./content/course.js"), "Courses Page");
+    await safeImport(
+      () => import(new URL("./content/course.js", import.meta.url)),
+      "Courses Page",
+    );
     break;
   case path.startsWith("/workshops"):
-    await safeImport(() => import("./content/workshops.js"), "Workshops Page");
+    await safeImport(
+      () => import(new URL("./content/workshops.js", import.meta.url)),
+      "Workshops Page",
+    );
     break;
   case path.startsWith("/programs"):
-    await safeImport(() => import("./content/programs.js"), "Programs Page");
+    await safeImport(
+      () => import(new URL("./content/programs.js", import.meta.url)),
+      "Programs Page",
+    );
     break;
   case path === "/" || path.startsWith("/home"):
-    await safeImport(() => import("./content/homepage.js"), "Homepage");
+    await safeImport(
+      () => import(new URL("./content/homepage.js", import.meta.url)),
+      "Homepage",
+    );
     break;
   case path.startsWith("/contact"):
-    await safeImport(() => import("./content/contact.js"), "Contact Page");
+    await safeImport(
+      () => import(new URL("./content/contact.js", import.meta.url)),
+      "Contact Page",
+    );
     break;
   case path.startsWith("/about"):
-    await safeImport(() => import("./content/about.js"), "About Page");
+    await safeImport(
+      () => import(new URL("./content/about.js", import.meta.url)),
+      "About Page",
+    );
     break;
   case path.startsWith("/terms"):
-    await safeImport(() => import("./content/terms.js"), "Terms Page");
+    await safeImport(
+      () => import(new URL("./content/terms.js", import.meta.url)),
+      "Terms Page",
+    );
     break;
   case path.startsWith("/privacy"):
-    await safeImport(() => import("./content/privacy.js"), "Privacy Page");
+    await safeImport(
+      () => import(new URL("./content/privacy.js", import.meta.url)),
+      "Privacy Page",
+    );
     break;
   case path.startsWith("/commerce"):
-    await safeImport(() => import("./content/commerce.js"), "Commerce Page");
+    await safeImport(
+      () => import(new URL("./content/commerce.js", import.meta.url)),
+      "Commerce Page",
+    );
     break;
   case path.startsWith("/support"):
-    await safeImport(() => import("./content/support.js"), "Support Page");
+    await safeImport(
+      () => import(new URL("./content/support.js", import.meta.url)),
+      "Support Page",
+    );
     break;
   case path.startsWith("/affiliateSignup"):
-    await safeImport(() => import("./affiliate/affiliate-signup.js"), "Affiliate Signup Page");
+    await safeImport(
+      () => import(new URL("./affiliate/affiliate-signup.js", import.meta.url)),
+      "Affiliate Signup Page",
+    );
     break;
   case path.startsWith("/anato-me"):
-    await safeImport(() => import("./content/anato-me.js"), "Anato-Me Page");
+    await safeImport(
+      () => import(new URL("./content/anato-me.js", import.meta.url)),
+      "Anato-Me Page",
+    );
     break;
   default:
     console.warn(`⚠️ No module found for path: ${path}`);

@@ -21,7 +21,9 @@ function setupShopNowCTA() {
       e.preventDefault();
       history.pushState({}, "", "/shop");
       showTabContent("shopSection");
-      const { initShopPage } = await import("../shop/shop-page.js");
+      const { initShopPage } = await import(
+        new URL("../shop/shop-page.js", import.meta.url)
+      );
       initShopPage?.();
     });
   }
@@ -33,7 +35,9 @@ function setupAffiliateCTA() {
     affiliateBtn.addEventListener("click", async () => {
       history.pushState({}, "", "/affiliateSignup");
       showTabContent("affiliateWhySection");
-      const { initAffiliateSignup } = await import("../affiliate/affiliate-signup.js");
+      const { initAffiliateSignup } = await import(
+        new URL("../affiliate/affiliate-signup.js", import.meta.url)
+      );
       initAffiliateSignup?.();
     });
   }
@@ -45,7 +49,9 @@ function setupBackToShopBtn() {
     backToShopBtn.addEventListener("click", async () => {
       history.pushState({}, "", "/shop");
       showTabContent("shopSection");
-      const { initShopPage } = await import("../shop/shop-page.js");
+      const { initShopPage } = await import(
+        new URL("../shop/shop-page.js", import.meta.url)
+      );
       initShopPage?.();
     });
   }

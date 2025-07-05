@@ -87,7 +87,15 @@ export async function setupProfilePage() {
             await deleteObject(avatarRef).catch(() => {}); // ignore if doesn't exist
 
             const { doc, updateDoc } = await import("firebase/firestore");
-            const userRef = doc((await import("../utils/firebase-config.js")).db, "users", user.uid);
+            const userRef = doc(
+              (
+                await import(
+                  new URL("../utils/firebase-config.js", import.meta.url)
+                )
+              ).db,
+              "users",
+              user.uid,
+            );
             await updateDoc(userRef, { photoURL: "" });
 
             document.getElementById("profileAvatar").src = fallbackURL;
@@ -137,7 +145,9 @@ export async function setupProfilePage() {
   if (affiliateSignupBtn) {
     affiliateSignupBtn.addEventListener("click", async () => {
       history.pushState({}, "", "/affiliateSignup");
-      const { initAffiliateSignup } = await import("../affiliate/affiliate-signup.js");
+      const { initAffiliateSignup } = await import(
+        new URL("../affiliate/affiliate-signup.js", import.meta.url)
+      );
       initAffiliateSignup?.();
     });
   }
@@ -173,7 +183,7 @@ function setupProfileFormHandlers() {
 
   if (auth?.currentUser?.uid && nameInput && phoneInput && addressInput) {
     const uid = auth?.currentUser?.uid;
-    import("../auth/user-profile.js").then(async (mod) => {
+    import(new URL("../auth/user-profile.js", import.meta.url)).then(async (mod) => {
       const profile = await mod.getUserProfile(uid);
       if (profile) {
         nameInput.value = profile.name || "";
@@ -242,7 +252,13 @@ function setupProfileFormHandlers() {
         const url = await getDownloadURL(avatarRef);
 
         const { doc, updateDoc } = await import("firebase/firestore");
-        const userRef = doc((await import("../utils/firebase-config.js")).db, "users", auth?.currentUser?.uid);
+        const userRef = doc(
+          (
+            await import(new URL("../utils/firebase-config.js", import.meta.url))
+          ).db,
+          "users",
+          auth?.currentUser?.uid,
+        );
         await updateDoc(userRef, { photoURL: url });
 
         document.getElementById("profileAvatar").src = url;
@@ -280,7 +296,15 @@ function setupProfileFormHandlers() {
 
           // Clear photoURL in Firestore
           const { doc, updateDoc } = await import("firebase/firestore");
-          const userRef = doc((await import("../utils/firebase-config.js")).db, "users", auth?.currentUser?.uid);
+          const userRef = doc(
+            (
+              await import(
+                new URL("../utils/firebase-config.js", import.meta.url)
+              )
+            ).db,
+            "users",
+            auth?.currentUser?.uid,
+          );
           await updateDoc(userRef, { photoURL: "" });
 
           // Update UI with fallback image

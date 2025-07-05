@@ -10,13 +10,13 @@ export async function setupAffiliateDashboard() {
     { setupStripeButtons },
     { setupAffiliateTimezoneSettings },
   ] = await Promise.all([
-    import("./affiliate-dashboard.js"),
-    import("./affiliate-courses.js"),
-    import("./affiliate-workshops.js"),
-    import("./affiliate-referrals.js"),
-    import("./affiliate-payouts.js"),
-    import("./affiliate-stripe.js"),
-    import("./affiliateSetTimezone.js"),
+    import(new URL("./affiliate-dashboard.js", import.meta.url)),
+    import(new URL("./affiliate-courses.js", import.meta.url)),
+    import(new URL("./affiliate-workshops.js", import.meta.url)),
+    import(new URL("./affiliate-referrals.js", import.meta.url)),
+    import(new URL("./affiliate-payouts.js", import.meta.url)),
+    import(new URL("./affiliate-stripe.js", import.meta.url)),
+    import(new URL("./affiliateSetTimezone.js", import.meta.url)),
   ]);
 
   // Initialize core dashboard views and forms
