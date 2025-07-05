@@ -69,6 +69,7 @@ export function addToCart(item) {
   localStorage.setItem("recovery_cart", JSON.stringify(cart));
   renderCartItems();
   openCartDrawer();
+  updateCartCount();
   showToast("Item added to cart", "success");
 }
 
@@ -213,6 +214,7 @@ export async function renderCartItems() {
       updateCartItem(index, action);
     });
   });
+    updateCartCount();
 }
 
 function updateCartItem(index, action) {
@@ -225,6 +227,7 @@ function updateCartItem(index, action) {
 
   localStorage.setItem("recovery_cart", JSON.stringify(cart));
   renderCartItems();
+  updateCartCount();
 }
 
 export function refreshCart() {
@@ -234,8 +237,11 @@ export function refreshCart() {
 
 export function updateCartCount() {
   const cart = getCurrentCart();
+  const count = cart.reduce((sum, i) => sum + i.quantity, 0);
   const cartCountEl = document.getElementById("cartCount");
-  if (cartCountEl) cartCountEl.textContent = cart.reduce((sum, i) => sum + i.quantity, 0);
+  if (cartCountEl) cartCountEl.textContent = count;
+  const floatingBtn = document.getElementById("floatingCartBtn");
+  if (floatingBtn) floatingBtn.style.display = count > 0 ? "block" : "none";
 }
 
 export function getCurrentCart() {
