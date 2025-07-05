@@ -33,18 +33,19 @@ export async function setupAuthState() {
   }
 
  // Update header immediately if auth state is already available
-  if (auth.currentUser) updateHeaderUI(auth.currentUser);
+// Update header immediately if auth state is already available
+if (auth.currentUser) updateHeaderUI(auth.currentUser);
 
-  onAuthStateChanged(auth, async (user) => {
-    updateHeaderUI(user);
+onAuthStateChanged(auth, async (user) => {
+  updateHeaderUI(user);
 
-    if (user) {
-      setupRoleUI(user);
-      console.log("✅ User signed in:", user.email);
-    } else {
-      console.log("👋 No user signed in");
-    }
-  });
+  if (user) {
+    setupRoleUI(user);
+    console.log("✅ User signed in:", user.email);
+  } else {
+    console.log("👋 No user signed in");
+  }
+});
 }
 
 // 🚪 Sign the current user out
