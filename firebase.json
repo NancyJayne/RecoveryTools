@@ -11,10 +11,6 @@
     ],
     "rewrites": [
       {
-        "source": "!**/*.{js,css,png,jpg,jpeg,svg,webp,woff,woff2,ttf,eot,ico,html,json,map}",
-        "destination": "/index.html"
-      },
-      {
         "source": "**",
         "destination": "/index.html"
       }
