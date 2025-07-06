@@ -13,7 +13,7 @@ import(new URL("./content/homepage.js", import.meta.url));
 let userRole = null;
 
 export function setupRouterLinks() {
-  document.body.addEventListener("click", (e) => {
+  document.body.addEventListener("click", async (e) => {
     const link = e.target.closest("a.router-link");
     if (link) {
       const href = link.getAttribute("href");
@@ -26,7 +26,8 @@ export function setupRouterLinks() {
         if (href === "/reset") return showResetPasswordForm();
 
         history.pushState({}, "", href);
-        loadModuleByPath(href, userRole);
+        await loadModuleByPath(href, userRole);
+        window.dispatchEvent(new PopStateEvent("popstate"));
 
         // Close mobile menu after click
         const mobileNav = document.getElementById("mobileNav");

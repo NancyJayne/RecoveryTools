@@ -101,7 +101,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.error("App initialization failed:", err);
   }
 
-   const role = await getUserRole();
+  const role = await getUserRole();
 
   if (auth?.currentUser) setupRoleUI(auth.currentUser);
 
