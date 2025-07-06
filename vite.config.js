@@ -7,5 +7,12 @@ export default defineConfig({
   build: {
     outDir: "dist", // or 'public' if you want Firebase to host directly
     emptyOutDir: true,
+    rollupOptions: {
+      preserveEntrySignatures: "exports-only",
+      output: {
+        preserveModules: true,
+        preserveModulesRoot: "src",
+      },
+    },
   },
 });
