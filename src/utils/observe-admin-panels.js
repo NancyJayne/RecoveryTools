@@ -5,6 +5,15 @@
  * and lazily loads the associated JS module to run its init method.
  * Includes retry + fallback logging for robustness.
  */
+const importMap = {
+  "./admin/admin-products.js": () => import("../admin/admin-products.js"),
+  "./admin/admin-course.js": () => import("../admin/admin-course.js"),
+  "./admin/admin-workshops.js": () => import("../admin/admin-workshops.js"),
+  "./admin/admin-orders.js": () => import("../admin/admin-orders.js"),
+  "./admin/admin-crm.js": () => import("../admin/admin-crm.js"),
+  "./admin/admin-anatoMe.js": () => import("../admin/admin-anatoMe.js"),
+};
+
 export function observeAdminPanel(tabId, importPath, methodName, maxRetries = 3) {
   const target = document.getElementById(tabId);
   if (!target) {
@@ -24,7 +33,12 @@ export function observeAdminPanel(tabId, importPath, methodName, maxRetries = 3)
 
   async function attemptLoad() {
     try {
-      const mod = await import(/* @vite-ignore */ importPath);
+      const importer = importMap[importPath];
+      if (!importer) {
+        console.warn(`⚠️ No import mapping for ${importPath}`);
+        return;
+      }
+      const mod = await importer();
       if (mod?.[methodName]) {
         mod[methodName]();
         console.info(`✅ Loaded ${methodName} from ${importPath}`);
