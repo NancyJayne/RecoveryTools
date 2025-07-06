@@ -101,6 +101,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.error("App initialization failed:", err);
   }
 
+   const role = await getUserRole();
+
   if (auth?.currentUser) setupRoleUI(auth.currentUser);
 
   await handleSectionFromURL();
@@ -126,5 +128,5 @@ document.addEventListener("DOMContentLoaded", async () => {
   observeAdminPanel("userRoleManager", "./admin/admin-crm.js", "setupRoleManager");
   observeAdminPanel("anatoMeForm", "./admin/admin-anatoMe.js", "setupAnatoMeEpisodeAdminForm");
 
-  initAdminNavigation();
+  initAdminNavigation(role);
 });
