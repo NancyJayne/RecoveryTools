@@ -4,7 +4,7 @@ import "./style.css";
 import { getRecaptchaSiteKey, auth } from "./utils/firebase-config.js";
 import { validateTokenFromURL } from "./auth/user-auth.js";
 import { setupAuthModal } from "./auth/auth-modal.js";
-import { setupRoleUI } from "./auth/user-roles.js";
+import { setupRoleUI, getUserRole } from "./auth/user-roles.js";
 import { handleReferralFromURL } from "./affiliate/affiliate-referrals.js";
 import { updateCartCount } from "./shop/shop-cart.js";
 import { logClientError } from "./utils/logClientError.js";
@@ -74,9 +74,22 @@ function updateMetadata(tab) {
   document.querySelector("meta[name='twitter:description']")?.setAttribute("content", currentDescription);
 }
 
-function handleSectionFromURL() {
-  const pathSegment = window.location.pathname.split("/").filter(Boolean)[0];
+async function handleSectionFromURL() {
+  const path = window.location.pathname;
+  const pathSegment = path.split("/").filter(Boolean)[0];
   const sectionId = pathSegment ? `${pathSegment}Section` : "homeSection";
+
+  if (path.startsWith("/admin")) {
+    const role = await getUserRole();
+    if (role !== "admin") {
+      history.replaceState({}, "", "/profile");
+      showTabContent("profileSection");
+      updateMetadata("profileSection");
+      showToast("Insufficient permissions to access admin panel", "error");
+      return;
+    }
+  }
+
   showTabContent(sectionId);
   updateMetadata(sectionId);
 }
@@ -90,7 +103,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   if (auth?.currentUser) setupRoleUI(auth.currentUser);
 
-  handleSectionFromURL();
+  await handleSectionFromURL();
   setupAuthModal();
   updateCartCount();
   validateTokenFromURL();
@@ -101,8 +114,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   window.logClientError = logClientError;
 
   window.addEventListener("resize", adjustMainHeight);
-  window.addEventListener("popstate", () => {
-    handleSectionFromURL();
+  window.addEventListener("popstate", async () => {
+    await handleSectionFromURL();
     scrollToTop();
   });
 
