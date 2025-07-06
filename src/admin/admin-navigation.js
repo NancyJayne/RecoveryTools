@@ -17,8 +17,11 @@ export function initAdminNavigation(role) {
   };
 
   function showByPath(path) {
+    if (!path.startsWith("/admin")) return;
+
     const clean = path.replace(/\/?$/, "");
     const tabId = map[clean] || "adminDashboardSection";
+
     container.querySelectorAll(".admin-tab, .admin-section").forEach((el) => {
       el.classList.add("hidden");
     });
@@ -35,8 +38,12 @@ export function initAdminNavigation(role) {
     });
   });
 
-  window.addEventListener("popstate", () => showByPath(window.location.pathname));
+  window.addEventListener("popstate", () => {
+    showByPath(window.location.pathname);
+  });
 
-  // activate based on current path on load
-  showByPath(window.location.pathname);
+  // activate based on current path on load if URL is within /admin
+  if (window.location.pathname.startsWith("/admin")) {
+    showByPath(window.location.pathname);
+  }
 }
