@@ -4,7 +4,8 @@
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "!dist/assets/node_modules/**"
     ],
     "predeploy": [
       "npm run build"
