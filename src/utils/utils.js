@@ -27,20 +27,6 @@ export function showToast(message, type = "info", duration = 3000) {
   setTimeout(() => toast.remove(), duration);
 }
 
-export function updateCartCount() {
-  const cart = getCurrentCart();
-  const cartCountEl = document.getElementById("cartCount");
-  if (cartCountEl) cartCountEl.textContent = cart.length;
-}
-
-export function getCurrentCart() {
-  return JSON.parse(localStorage.getItem("cart")) || [];
-}
-
-export function setCart(cart) {
-  localStorage.setItem("cart", JSON.stringify(cart));
-}
-
 export function formatCurrency(amount, locale = "en-AU", currency = "AUD") {
   return new Intl.NumberFormat(locale, {
     style: "currency",
@@ -62,8 +48,13 @@ export function scrollToElement(selector) {
 }
 
 export function showTabContent(id) {
+  let targetId = id;
+  if (!document.getElementById(targetId)) {
+    targetId = "homeSection";
+  }
+
   document.querySelectorAll(".tab-content").forEach((el) => {
-    const isTarget = el.id === id;
+    const isTarget = el.id === targetId;
     el.classList.toggle("hidden", !isTarget);
     el.classList.toggle("active", isTarget);
   });

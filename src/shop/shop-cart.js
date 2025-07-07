@@ -8,6 +8,7 @@ export function initCartUI() {
   const openBtns = document.querySelectorAll(".open-cart-btn");
   const closeBtn = document.getElementById("closeCartBtn");
   const checkoutBtn = document.getElementById("checkoutBtn");
+  const overlay = document.getElementById("cartOverlay");
 
   openBtns.forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -18,6 +19,10 @@ export function initCartUI() {
 
   if (closeBtn) {
     closeBtn.addEventListener("click", closeCartDrawer);
+  }
+
+    if (overlay) {
+    overlay.addEventListener("click", closeCartDrawer);
   }
 
   if (checkoutBtn) {
