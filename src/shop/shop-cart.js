@@ -21,7 +21,7 @@ export function initCartUI() {
     closeBtn.addEventListener("click", closeCartDrawer);
   }
 
-    if (overlay) {
+  if (overlay) {
     overlay.addEventListener("click", closeCartDrawer);
   }
 
