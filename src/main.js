@@ -22,13 +22,9 @@ window.showToast = showToast;
 window.scrollToElement = scrollToElement;
 // Utility for resizing main content area
 const adjustMainHeight = debounce(() => {
-  const header = document.querySelector("header");
-  const footer = document.querySelector("footer");
   const main = document.querySelector("main");
-  if (!header || !footer || !main) return;
-  const headerHeight = header.offsetHeight;
-  const footerHeight = footer.offsetHeight;
-  main.style.minHeight = `calc(100vh - ${headerHeight + footerHeight}px)`;
+  if (!main) return;
+  main.style.minHeight = "auto";
 }, 150);
 
 // Make main height adjustment utility globally available

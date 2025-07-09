@@ -9,6 +9,7 @@ public/output.css
 firebase-debug.log
 firestore-debug.log
 .node_repl_history
+pglite-debug.log
 emulator-data/
 firebase-export-*
 .firebaserc
