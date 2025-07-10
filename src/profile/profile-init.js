@@ -2,6 +2,7 @@
 
 import { auth, functions } from "../utils/firebase-config.js";
 import { httpsCallable } from "firebase/functions";
+import { onAuthStateChanged } from "firebase/auth";
 import { showToast } from "../utils/utils.js";
 import { handleSignOut } from "../auth/user-auth.js";
 
@@ -10,16 +11,27 @@ import {
   loadProfileCourses,
   loadProfileWorkshops,
   loadMyPrograms,
+  getUserProfile,
   updateUserProfile,
   changeUserPassword,
 } from "../auth/user-profile.js";
 
 import { showAuthModal } from "../auth/auth-modal.js";
 
+async function waitForAuth() {
+  if (auth?.currentUser) return auth.currentUser;
+  return new Promise((resolve) => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      unsub();
+      resolve(u);
+    });
+  });
+}
+
 export async function setupProfilePage() {
-  const user = auth?.currentUser;
   const profileSection = document.getElementById("profileSection");
   const fallbackURL = "https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FProfile.png?alt=media&token=261b1542-dc99-44ce-9089-6342e0ee6db9";
+  const user = await waitForAuth();
 
   if (!user) {
     profileSection?.classList.remove("hidden");
