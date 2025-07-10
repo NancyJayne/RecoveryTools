@@ -104,22 +104,31 @@ export async function loadProfileCourses() {
   grid.textContent = "Loading your courses...";
 
   try {
-    const q = query(
-      collection(db, "courses"),
-      where("purchasedBy", "array-contains", auth?.currentUser?.uid),
-    );
-    const snapshot = await getDocs(q);
+    const uid = auth?.currentUser?.uid;
+    if (!uid) {
+      grid.textContent = "No user found.";
+      return;
+    }
+
+    const purchasesSnap = await getDocs(collection(db, "users", uid, "purchases"));
     grid.textContent = "";
 
-    if (snapshot.empty) {
+    if (purchasesSnap.empty) {
       grid.textContent = "No courses found.";
       return;
     }
 
-    snapshot.forEach((doc) => {
-      const course = doc.data();
+    for (const purchase of purchasesSnap.docs) {
+      const courseId = purchase.id || purchase.data().courseId;
+      const courseSnap = await getDoc(doc(db, "courses", courseId));
+      if (!courseSnap.exists()) continue;
+      const course = courseSnap.data();
+
       const card = document.createElement("div");
-      card.className = "bg-gray-800 p-4 rounded shadow";
+      card.className = "bg-gray-800 p-4 rounded shadow cursor-pointer hover:bg-gray-700";
+      card.addEventListener("click", () => {
+        window.location.href = `/courses?course=${courseId}`;
+      });
 
       const title = document.createElement("h4");
       title.className = "text-white font-semibold";
@@ -131,7 +140,7 @@ export async function loadProfileCourses() {
 
       card.append(title, desc);
       grid.appendChild(card);
-    });
+    }
   } catch (err) {
     console.error("Error loading courses:", err);
     grid.textContent = "Failed to load courses.";

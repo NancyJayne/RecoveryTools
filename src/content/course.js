@@ -7,6 +7,7 @@ import {
   serverTimestamp,
   collection,
   query,
+  where,
   orderBy,
   getDocs,
 } from "firebase/firestore";
@@ -63,7 +64,11 @@ export async function loadCourses() {
   grid.appendChild(spinner);
 
   try {
-    const q = query(collection(db, "courses"), orderBy("title", "asc"));
+    const q = query(
+      collection(db, "courses"),
+      where("visible", "==", true),
+      orderBy("title", "asc"),
+    );
     const snapshot = await getDocs(q);
     const courses = snapshot.docs.map((doc) => {
       const data = doc.data();
@@ -85,8 +90,11 @@ export async function loadCourses() {
     }
 
     courses.forEach((course) => {
-      const tile = createProductTile(course, "course");
-      grid.appendChild(tile);
+      const tile = createProductTile(
+        { ...course, name: course.title || course.name },
+        "course",
+      );
+      if (tile) grid.appendChild(tile);
     });
 
   } catch (error) {
