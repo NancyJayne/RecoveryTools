@@ -7,6 +7,14 @@
         { "fieldPath": "visible", "order": "ASCENDING" },
         { "fieldPath": "title", "order": "ASCENDING" }
       ]
+          },
+    {
+      "collectionGroup": "workshops",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "visible", "order": "ASCENDING" },
+        { "fieldPath": "dateUTC", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

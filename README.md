@@ -79,6 +79,18 @@ cd functions
 npm install
 ```
 
+### Firestore indexes
+
+Deploy the composite indexes defined in `firestore.indexes.json` before running
+the app:
+
+```bash
+firebase deploy --only firestore:indexes
+```
+
+This creates indexes for the `courses` collection and a second index for the
+`workshops` collection on `visible` (ascending) and `dateUTC` (descending).
+
 ## Running the dev server
 
 Start the local development server with:
