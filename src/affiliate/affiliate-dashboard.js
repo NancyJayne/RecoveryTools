@@ -5,6 +5,8 @@ import { renderSubmittedCourses, setupCourseProposalForm } from "./affiliate-cou
 import { renderSubmittedWorkshops, setupWorkshopForm } from "./affiliate-workshops.js";
 import { exportPayoutsToCSV } from "./affiliate-utils.js";
 import { formatDateTime } from "../utils/date-utils.js";
+import { db, auth } from "../utils/firebase-config.js";
+import { collection, query, where, getDocs } from "firebase/firestore";
 
 let payoutsCache = [];
 
@@ -18,6 +20,7 @@ export function initAffiliateDashboard() {
 
       if (targetId === "affiliateEarningsTab") {
         await renderPayouts();
+        await renderAffiliateOrders();
       } else if (targetId === "affiliateSettingsTab") {
         await setupStripeButtons();
       } else if (targetId === "submitCourseProposalTab") {
@@ -109,4 +112,29 @@ function applyFilter() {
   } else {
     renderPayouts();
   }
+}
+
+async function renderAffiliateOrders() {
+  const uid = auth?.currentUser?.uid;
+  if (!uid) return;
+  const ordersRef = collection(db, "orders");
+  const q = query(ordersRef, where("referredBy", "==", uid));
+  const snapshot = await getDocs(q);
+  const container = document.getElementById("affiliateOrdersGrid");
+  if (!container) return;
+  container.innerHTML = "";
+  if (snapshot.empty) {
+    container.innerHTML = `<p class="text-sm text-gray-400">No orders yet.</p>`;
+    return;
+  }
+  snapshot.docs.forEach((docSnap) => {
+    const data = docSnap.data();
+    const div = document.createElement("div");
+    div.className = "bg-gray-800 p-4 rounded";
+    div.innerHTML = `
+      <div><strong>Invoice:</strong> ${docSnap.id}</div>
+      <div><strong>Total:</strong> $${(data.total || 0).toFixed(2)}</div>
+    `;
+    container.appendChild(div);
+  });
 }

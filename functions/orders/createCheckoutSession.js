@@ -57,6 +57,26 @@ const createCheckoutSessionHandler = async (data, context) => {
       productIds.map((id) => db.collection("products").doc(id).get()),
     );
 
+    const creatorIds = [
+      ...new Set(
+        productDocs
+          .map((d) => d.data()?.creatorId)
+          .filter((cId) => typeof cId === "string"),
+      ),
+    ];
+    const creatorDocs = await Promise.all(
+      creatorIds.map((cId) => db.collection("users").doc(cId).get()),
+    );
+    const creatorMap = Object.fromEntries(
+      creatorDocs.map((d) => [d.id, d.data()?.stripeAccountId || null]),
+    );
+
+    const settingsSnap = await db
+      .collection("settings")
+      .doc("affiliateCommissions")
+      .get();
+    const commissionRates = settingsSnap.exists ? settingsSnap.data() : {};
+
     const validatedItems = productDocs.map((doc, i) => {
       if (!doc.exists) throw new HttpsError("not-found", `Product not found: ${productIds[i]}`);
 
@@ -73,6 +93,8 @@ const createCheckoutSessionHandler = async (data, context) => {
         type: data.type || "item",
         price,
         quantity,
+        creatorId: data.creatorId || null,
+        stripeAccountId: creatorMap[data.creatorId] || null,
       };
     });
 
@@ -110,6 +132,18 @@ const createCheckoutSessionHandler = async (data, context) => {
       cancel_url: `https://recoverytools.au/cart`,
       metadata,
     };
+
+    const primaryAccount = validatedItems[0]?.stripeAccountId;
+    if (primaryAccount) {
+      const totalFee = validatedItems.reduce((sum, item) => {
+        const rate = commissionRates[item.type] ?? 0.1;
+        return sum + Math.round(item.price * item.quantity * rate);
+      }, 0);
+      sessionConfig.payment_intent_data = {
+        transfer_data: { destination: primaryAccount },
+        application_fee_amount: totalFee,
+      };
+    }
 
     if (collectShipping) {
       sessionConfig.shipping_address_collection = {

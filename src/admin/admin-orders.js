@@ -5,6 +5,8 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
+  where,
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
@@ -13,6 +15,7 @@ import { showToast } from "../utils/utils.js";
 const ORDER_GRID_ID = "globalOrdersGrid";
 const urlParams = new URLSearchParams(window.location.search);
 const filterOrderId = urlParams.get("filter");
+const filterRef = urlParams.get("ref");
 
 let allOrders = [];
 
@@ -42,7 +45,11 @@ export function setupOrderManagement() {
 }
 
 export async function loadAllOrdersForAdmin() {
-  const snapshot = await getDocs(collection(db, "orders"));
+  let q = collection(db, "orders");
+  if (filterRef) {
+    q = query(q, where("referredBy", "==", filterRef));
+  }
+  const snapshot = await getDocs(q);
   let rawOrders = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
   allOrders = await attachUserDetails(rawOrders);
   renderOrderGrid(allOrders);

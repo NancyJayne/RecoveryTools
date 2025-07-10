@@ -15,6 +15,7 @@ export { sendAffiliateWelcomeEmail } from "./emails/sendAffiliateWelcomeEmail.js
 export { sendAdminBroadcastEmail } from "./emails/sendAdminBroadcastEmail.js";
 export { onNewReview } from "./emails/onNewReview.js";
 export { sendOrderEmailWithPDF } from "./emails/sendOrderEmailWithPDF.js";
+export { sendWorkshopTicketEmail } from "./emails/sendWorkshopTicketEmail.js";
 export { sendContactMessage } from "./emails/sendContactMessage.js";
 export { sendPasswordReset } from "./emails/sendPasswordReset.js";
 export { sendWelcomeEmail } from "./emails/sendWelcomeEmail.js";

@@ -3,6 +3,7 @@ import admin from "firebase-admin";
 import stripeLib from "stripe";
 import { defineSecret } from "firebase-functions/params";
 import { sendOrderEmailWithPDF } from "../emails/sendOrderEmailWithPDF.js";
+import { sendWorkshopTicketEmail } from "../emails/sendWorkshopTicketEmail.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 
@@ -72,6 +73,44 @@ const confirmStripePurchaseHandler = async (data, context) => {
     admin.firestore().collection("users").doc(uid).collection("orders").doc(invoiceNumber).set(orderData),
     admin.firestore().collection("orders").doc(invoiceNumber).set(orderData),
   ]);
+
+  // 🔓 Unlock purchased content and issue tickets
+  await Promise.all(
+    enrichedProducts.map(async (item) => {
+      if (item.type === "course") {
+        await admin
+          .firestore()
+          .collection("users")
+          .doc(uid)
+          .collection("purchases")
+          .doc(item.productId)
+          .set({
+            courseId: item.productId,
+            accessGranted: true,
+            unlockedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+      } else if (item.type === "workshop") {
+        const ticketId = `${uid}_${item.productId}`;
+        await admin
+          .firestore()
+          .collection("workshopTickets")
+          .doc(ticketId)
+          .set({
+            ticketId,
+            userId: uid,
+            workshopId: item.productId,
+            quantity: item.quantity,
+            purchasedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+        await sendWorkshopTicketEmail({
+          to: session.customer_email,
+          workshopName: item.name,
+          ticketId,
+        });
+      }
+    }),
+  );
 
   await sendOrderEmailWithPDF({
     to: session.customer_email,
