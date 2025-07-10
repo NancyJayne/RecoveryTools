@@ -153,32 +153,49 @@ export async function loadProfileWorkshops() {
   grid.textContent = "Loading your workshops...";
 
   try {
-    const q = query(
-      collection(db, "workshops"),
-      where("purchasedBy", "array-contains", auth?.currentUser?.uid),
+    const uid = auth?.currentUser?.uid;
+    const ticketQuery = query(
+      collection(db, "workshopTickets"),
+      where("userId", "==", uid),
     );
-    const snapshot = await getDocs(q);
+
+    const ticketSnap = await getDocs(ticketQuery);
     grid.textContent = "";
 
-    if (snapshot.empty) {
+    if (ticketSnap.empty) {
       grid.textContent = "No workshops found.";
       return;
     }
 
-    snapshot.forEach((doc) => {
-      const ws = doc.data();
+    const workshopDocs = await Promise.all(
+      ticketSnap.docs.map((t) => {
+        const wid = t.data()?.workshopId;
+        return wid ? getDoc(doc(db, "workshops", wid)) : Promise.resolve(null);
+      }),
+    );
+
+    workshopDocs.forEach((wsSnap) => {
+      if (!wsSnap?.exists()) return;
+      const ws = wsSnap.data();
+      const workshopId = wsSnap.id;
+
       const card = document.createElement("div");
       card.className = "bg-gray-800 p-4 rounded shadow";
 
       const title = document.createElement("h4");
       title.className = "text-white font-semibold";
-      title.textContent = ws.name;
+      title.textContent = ws.name || ws.title;
 
       const desc = document.createElement("p");
       desc.className = "text-sm text-gray-400";
-      desc.textContent = ws.description;
+      desc.textContent = ws.description || "";
 
-      card.append(title, desc);
+      const link = document.createElement("a");
+      link.href = `/workshops?event=${workshopId}`;
+      link.className = "text-[#407471] text-sm hover:underline mt-2 inline-block";
+      link.textContent = "View Details";
+
+      card.append(title, desc, link);
       grid.appendChild(card);
     });
   } catch (err) {
