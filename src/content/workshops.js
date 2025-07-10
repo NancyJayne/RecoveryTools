@@ -3,7 +3,7 @@
 import { db, auth } from "../utils/firebase-config.js";
 import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
 import { DateTime } from "luxon";
-import { showToast, showSection } from "../utils/utils.js";
+import { showToast, showSection, redirectToPayment } from "../utils/utils.js";
 import { formatCalendarDate } from "../utils/calendar.js";
 import { formatWorkshopForViewer } from "../utils/date-utils.js";
 

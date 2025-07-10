@@ -10,7 +10,7 @@ import {
   orderBy,
   getDocs,
 } from "firebase/firestore";
-import { showToast } from "../utils/utils.js";
+import { showToast, redirectToPayment } from "../utils/utils.js";
 import { refreshProfileCourses } from "../profile/profile-utils.js";
 import { createProductTile } from "../shop/shop-products.js";
 

@@ -71,3 +71,7 @@ export function showSection(id) {
   const target = document.getElementById(id);
   if (target) target.classList.remove("hidden");
 }
+
+export function redirectToPayment(url) {
+  window.location.href = url;
+}
