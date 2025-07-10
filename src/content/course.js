@@ -24,7 +24,12 @@ export async function handleCourseFromURL() {
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
-        const course = { id: docSnap.id, ...docSnap.data() };
+        const data = docSnap.data();
+        const course = {
+          id: docSnap.id,
+          ...data,
+          name: data.title || data.name,
+        };
         showCourseDetail(course);
 
         // 🧹 Push clean URL after loading
@@ -58,12 +63,16 @@ export async function loadCourses() {
   grid.appendChild(spinner);
 
   try {
-    const q = query(collection(db, "courses"), orderBy("name", "asc"));
+    const q = query(collection(db, "courses"), orderBy("title", "asc"));
     const snapshot = await getDocs(q);
-    const courses = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    const courses = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        name: data.title || data.name,
+      };
+    });
 
     grid.innerHTML = "";
 
@@ -109,12 +118,12 @@ export function showCourseDetail(course) {
   image.src =
     course.image ||
     "https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2Fcourse-placeholder.png?alt=media";
-  image.alt = course.name;
+  image.alt = course.title || course.name;
   image.className = "w-full h-64 object-cover rounded mb-6";
 
   const title = document.createElement("h1");
   title.className = "text-3xl font-bold mb-4";
-  title.textContent = course.name;
+  title.textContent = course.title || course.name;
 
   const description = document.createElement("p");
   description.className = "text-gray-400 mb-6";

@@ -61,6 +61,7 @@ export async function submitCourseProposal(formData) {
     await addDoc(collection(db, "courses"), {
       ...formData,
       creatorId: uid,
+      name: formData.title,
       createdAt: new Date(),
       type: "Course",
     });
@@ -325,6 +326,7 @@ export async function saveEditedCourse() {
 
     await updateDoc(doc(db, "courses", courseId), {
       title,
+      name: title,
       description,
       price,
       salePrice,

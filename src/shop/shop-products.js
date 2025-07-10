@@ -59,7 +59,10 @@ export function createProductTile(product) {
   wrapper.className = "relative bg-gray-800 p-4 rounded-lg shadow hover:ring-2 hover:ring-[#407471]";
   wrapper.setAttribute("role", "button");
   wrapper.setAttribute("tabindex", "0");
-  wrapper.setAttribute("aria-label", `View details for ${product.name}`);
+  wrapper.setAttribute(
+    "aria-label",
+    `View details for ${product.name || product.title}`,
+  );
   wrapper.setAttribute("aria-pressed", "false");
   wrapper.addEventListener("keydown", (e) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -68,9 +71,9 @@ export function createProductTile(product) {
   });
 
   wrapper.dataset.productId = product.id;
-  wrapper.dataset.productName = product.name;
+  wrapper.dataset.productName = product.name || product.title;
   wrapper.dataset.productPrice = product.price;
-  wrapper.dataset.productImage = product.images?.[0] || "";
+  wrapper.dataset.productImage = product.images?.[0] || product.image || "";
   wrapper.dataset.productDescription = product.shortDescription;
   wrapper.dataset.productStock = product.stock;
   wrapper.dataset.productFull = JSON.stringify(product);
@@ -83,12 +86,15 @@ export function createProductTile(product) {
   }
 
   const image = document.createElement("img");
-  image.src = product.images?.[0] || "https://via.placeholder.com/300x300?text=Product";
-  image.alt = product.name;
+  image.src =
+    product.images?.[0] ||
+    product.image ||
+    "https://via.placeholder.com/300x300?text=Product";
+  image.alt = product.name || product.title;
   image.className = "w-full h-48 object-cover rounded";
 
   const name = document.createElement("h3");
-  name.textContent = product.name;
+  name.textContent = product.name || product.title;
   name.className = "text-lg font-semibold mt-2 text-white";
 
   const shortDesc = document.createElement("p");
@@ -150,15 +156,18 @@ export function showProductDetail(product) {
   wrapper.className = "flex flex-col md:flex-row gap-10 items-start px-4 sm:px-6 md:px-8 max-w-screen-xl mx-auto";
 
   const img = document.createElement("img");
-  img.src = product.images?.[0] || "https://via.placeholder.com/400x400";
-  img.alt = product.name;
+  img.src =
+    product.images?.[0] ||
+    product.image ||
+    "https://via.placeholder.com/400x400";
+  img.alt = product.name || product.title;
   img.className = "w-full h-auto max-h-[400px] object-cover rounded md:max-w-[600px]";
 
   const content = document.createElement("div");
   content.className = "flex flex-col md:w-1/2 px-4";
 
   const title = document.createElement("h2");
-  title.textContent = product.name;
+  title.textContent = product.name || product.title;
   title.className = "text-2xl font-bold mb-2";
 
   const price = document.createElement("span");
@@ -235,13 +244,13 @@ export function showProductDetail(product) {
     btn.addEventListener("click", () => {
       addToCart({
         id: product.id,
-        name: product.name,
+        name: product.name || product.title,
         price: finalPrice,
         quantity,
         type: product.type || "tool",
         creatorId: product.creatorId,
         affiliatePercent: product.affiliatePercent,
-        image: product.images?.[0],
+        image: product.images?.[0] || product.image,
       });
     });
 
@@ -279,7 +288,7 @@ export function showProductDetail(product) {
   window.history.pushState({}, "", `/shop/${product.slug}`);
 
   setPageMeta({
-    title: `${product.name} | Recovery Tools`,
+    title: `${product.name || product.title} | Recovery Tools`,
     description: product.shortDescription || product.longDescription?.slice(0, 140),
     url: `https://recoverytools.au/shop/${product.slug}`,
   });
@@ -296,8 +305,8 @@ export function injectProductSchema(product) {
   script.innerHTML = JSON.stringify({
     "@context": "https://schema.org",
     "@type": "Product",
-    "name": product.name,
-    "image": product.images?.[0],
+    "name": product.name || product.title,
+    "image": product.images?.[0] || product.image,
     "description": product.shortDescription || product.longDescription,
     "sku": product.slug,
     "brand": { "@type": "Organization", "name": "Recovery Tools" },

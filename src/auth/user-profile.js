@@ -123,7 +123,7 @@ export async function loadProfileCourses() {
 
       const title = document.createElement("h4");
       title.className = "text-white font-semibold";
-      title.textContent = course.name;
+      title.textContent = course.title || course.name;
 
       const desc = document.createElement("p");
       desc.className = "text-sm text-gray-400";
