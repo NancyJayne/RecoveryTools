@@ -39,6 +39,7 @@ export { deleteAnatoMeEpisode } from "./anato-me/deleteAnatoMeEpisode.js";
 export { saveAnatoMeEpisode } from "./anato-me/saveAnatoMeEpisode.js";
 
 // Users
+export { createUserProfile } from "./users/createUserProfile.js";
 export { setUserRoles } from "./users/setUserRoles.js";
 export { getUserRole } from "./users/getUserRole.js";
 export { getUserRoleWithPermissions } from "./users/getUserRoleWithPermissions.js";
