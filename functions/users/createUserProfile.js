@@ -1,11 +1,13 @@
-import { user } from "firebase-functions/v1/auth";
+import { region } from "firebase-functions/v1";
 import admin from "firebase-admin";
 
 if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-export const createUserProfile = user().onCreate(async (user) => {
+export const createUserProfile = region("australia-southeast1")
+  .auth.user()
+  .onCreate(async (user) => {
   const { uid, email, displayName } = user;
   try {
     await admin.firestore().collection("users").doc(uid).set({
