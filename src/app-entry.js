@@ -133,11 +133,22 @@ export async function loadModuleByPath(path, role) {
       "Admin Dashboard",
     );
     break;
-  case path.startsWith("/affiliate") && role === "affiliate":
-    await safeImport(
-      () => import("./affiliate/affiliate-dashboard.js"),
-      "Affiliate Dashboard",
-    );
+  case path.startsWith("/affiliate"):
+    if (role === "affiliate") {
+      await safeImport(
+        () => import("./affiliate/affiliate-dashboard.js"),
+        "Affiliate Dashboard",
+      );
+    } else if (!role) {
+      showAuthModal("login");
+    } else {
+      history.pushState({}, "", "/affiliateSignup");
+      await safeImport(
+        () => import("./affiliate/affiliate-signup.js"),
+        "Affiliate Signup Page",
+      );
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }
     break;
   case path.startsWith("/therapist") && role === "therapist":
     await safeImport(

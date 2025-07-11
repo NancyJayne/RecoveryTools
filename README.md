@@ -72,6 +72,13 @@ Install dependencies in the project root:
 npm install
 ```
 
+This step installs the development dependencies used by the lint tasks. Make
+sure to run it before executing `npm run lint` or any other lint script.
+
+If a lint command fails with an error like `Cannot find module '@eslint/js'`,
+ensure you've installed the dependencies by running `npm install` in this
+directory (or in `functions/` when linting Cloud Functions).
+
 Then install Cloud Functions dependencies:
 
 ```bash
