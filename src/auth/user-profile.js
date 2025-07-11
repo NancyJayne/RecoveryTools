@@ -12,6 +12,7 @@ import {
 import { db, auth, functions } from "../utils/firebase-config.js";
 import { httpsCallable } from "firebase/functions";
 import { showToast } from "../utils/utils.js";
+import { updatePassword } from "firebase/auth";
 
 export async function getUserProfile(uid) {
   const userRef = doc(db, "users", uid);
