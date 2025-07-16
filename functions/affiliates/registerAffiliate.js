@@ -43,6 +43,14 @@ export const registerAffiliate = onCall(
         }),
       ]);
 
+            // 🔐 Update custom claims for immediate access
+      const { customClaims = {} } = await admin.auth().getUser(uid);
+      await admin.auth().setCustomUserClaims(uid, {
+        ...customClaims,
+        affiliate: true,
+        role: "affiliate",
+      });
+
       return { success: true, referralCode };
     } catch (err) {
       console.error("Affiliate registration failed:", err);

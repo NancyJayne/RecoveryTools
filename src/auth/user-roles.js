@@ -29,6 +29,8 @@ export function setupRoleUI(user) {
     document.getElementById("adminAccessLink")?.classList.toggle("hidden", role !== "admin");
     document.getElementById("therapistAccessLink")?.classList.toggle("hidden", role !== "therapist");
     document.getElementById("affiliateBadge")?.classList.toggle("hidden", role !== "affiliate");
+    document.getElementById("affiliateAccessLink")?.classList.toggle("hidden", role !== "affiliate");
+    document.getElementById("affiliateAccessBtn")?.classList.toggle("hidden", role !== "affiliate");
   }).catch((err) => {
     console.error("Error reading role claims:", err);
   });

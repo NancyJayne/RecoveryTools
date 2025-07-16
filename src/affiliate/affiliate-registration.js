@@ -1,7 +1,8 @@
 // affiliate-registration.js
-import { auth, db, storage } from "../utils/firebase-config.js";
+import { auth, storage, functions } from "../utils/firebase-config.js";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
-import { setDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
+import { serverTimestamp } from "firebase/firestore";
 import { showToast } from "../utils/utils.js";
 import { detectUserTimezone, populateTimezoneDropdown } from "../utils/date-utils.js";
 
@@ -67,10 +68,11 @@ export async function initAffiliateRegisterForm() {
     };
 
     try {
-      await setDoc(doc(db, "affiliates", user.uid), data, { merge: true });
-      await updateDoc(doc(db, "users", user.uid), { role: "affiliate" });
+      const register = httpsCallable(functions, "registerAffiliate");
+      await register(data);
+      await auth.currentUser.getIdToken(true);
       showToast("Affiliate registration successful!", "success");
-      document.getElementById("affiliateRegisterForm")?.reset();
+      window.location.href = "/affiliate";
     } catch (err) {
       console.error("Affiliate registration error:", err);
       showToast("Something went wrong. Please try again.", "error");
@@ -103,15 +105,15 @@ export function setupAffiliateRegistrationForm() {
     }
 
     try {
-      await setDoc(doc(db, "affiliates", user.uid), {
+      const register = httpsCallable(functions, "registerAffiliate");
+      await register({
         ...data,
         timezone: data.timezone || detectUserTimezone(),
         status: "pending",
-        createdAt: new Date().toISOString(),
       });
-
+      await auth.currentUser.getIdToken(true);
       showToast("Affiliate application submitted.", "success");
-      form.reset();
+      window.location.href = "/affiliate";
     } catch (err) {
       console.error("Failed to save affiliate profile:", err);
       showToast("Something went wrong.", "error");
