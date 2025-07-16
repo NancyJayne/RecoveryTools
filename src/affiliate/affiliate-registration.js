@@ -4,6 +4,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage
 import { httpsCallable } from "firebase/functions";
 import { showToast } from "../utils/utils.js";
 import { detectUserTimezone, populateTimezoneDropdown } from "../utils/date-utils.js";
+import { setupRoleUI } from "../auth/user-roles.js";
 
 export async function initAffiliateRegisterForm() {
   const user = auth?.currentUser;
@@ -69,6 +70,7 @@ export async function initAffiliateRegisterForm() {
       const register = httpsCallable(functions, "registerAffiliate");
       await register(data);
       await auth.currentUser.getIdToken(true);
+      setupRoleUI(auth.currentUser);
       showToast("Affiliate registration successful!", "success");
       window.location.href = "/affiliate";
     } catch (err) {
@@ -110,6 +112,7 @@ export function setupAffiliateRegistrationForm() {
         status: "pending",
       });
       await auth.currentUser.getIdToken(true);
+      setupRoleUI(auth.currentUser);
       showToast("Affiliate application submitted.", "success");
       window.location.href = "/affiliate";
     } catch (err) {
