@@ -54,12 +54,28 @@ export function setupAuthModal() {
     e.preventDefault();
     const email = document.getElementById("loginEmail")?.value;
     const password = document.getElementById("loginPassword")?.value;
+    
+    const btn = e.submitter || loginForm.querySelector("button[type='submit']");
+    const spinner = document.createElement("span");
+    spinner.className =
+      "ml-2 inline-block w-4 h-4 border-2 border-t-transparent border-white rounded-full animate-spin";
+
+    if (btn) {
+      btn.disabled = true;
+      btn.appendChild(spinner);
+    }
+
     try {
       await loginWithEmail(email, password);
       hideAuthModal();
     } catch (err) {
       loginError.textContent = err.message || "Login failed";
       loginError.classList.remove("hidden");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        spinner.remove();
+      }
     }
   });
 
@@ -70,6 +86,11 @@ export function setupAuthModal() {
     const password = document.getElementById("signupPassword")?.value;
     const confirm = document.getElementById("signupConfirmPassword")?.value;
     const agree = document.getElementById("agreeTerms")?.checked;
+
+    const btn = e.submitter || signupForm.querySelector("button[type='submit']");
+    const spinner = document.createElement("span");
+    spinner.className =
+      "ml-2 inline-block w-4 h-4 border-2 border-t-transparent border-white rounded-full animate-spin";
 
     if (password !== confirm) {
       signupError.textContent = "Passwords do not match.";
@@ -82,12 +103,22 @@ export function setupAuthModal() {
       return;
     }
 
+    if (btn) {
+      btn.disabled = true;
+      btn.appendChild(spinner);
+    }
+
     try {
       await signupWithEmail(name, email, password);
       hideAuthModal();
     } catch (err) {
       signupError.textContent = err.message || "Signup failed";
       signupError.classList.remove("hidden");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        spinner.remove();
+      }
     }
   });
 
