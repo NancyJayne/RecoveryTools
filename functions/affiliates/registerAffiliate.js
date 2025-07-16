@@ -43,7 +43,7 @@ export const registerAffiliate = onCall(
         }),
       ]);
 
-            // 🔐 Update custom claims for immediate access
+      // 🔐 Update custom claims for immediate access
       const { customClaims = {} } = await admin.auth().getUser(uid);
       await admin.auth().setCustomUserClaims(uid, {
         ...customClaims,

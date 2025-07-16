@@ -2,7 +2,6 @@
 import { auth, storage, functions } from "../utils/firebase-config.js";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { httpsCallable } from "firebase/functions";
-import { serverTimestamp } from "firebase/firestore";
 import { showToast } from "../utils/utils.js";
 import { detectUserTimezone, populateTimezoneDropdown } from "../utils/date-utils.js";
 
@@ -64,7 +63,6 @@ export async function initAffiliateRegisterForm() {
       logoUrl,
       timezone,
       approved: true,
-      createdAt: serverTimestamp(),
     };
 
     try {
