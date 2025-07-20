@@ -167,8 +167,9 @@ export async function setupProfilePage() {
   // Auto-open if linked via hash
   if (window.location.hash === "#profileSection") {
     profileSection?.classList.remove("hidden");
-    document.querySelector("[data-profile-tab=\"myProfile\"]")?.click();
   }
+    // Ensure "My Profile" tab loads by default
+  document.querySelector("[data-profile-tab=\"myProfile\"]")?.click();
 }
 
 function loadTabContent(tabId) {
