@@ -18,3 +18,5 @@ function createFallbackSection() {
   document.querySelector("main")?.appendChild(section);
   return section;
 }
+
+export default initAdminDashboard;

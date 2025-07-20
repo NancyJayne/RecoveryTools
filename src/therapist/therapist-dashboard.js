@@ -33,3 +33,5 @@ export function initTherapistDashboard() {
 
   section.scrollIntoView({ behavior: "smooth" });
 }
+
+export default initTherapistDashboard;

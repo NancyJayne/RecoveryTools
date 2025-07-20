@@ -258,3 +258,5 @@ export function setCart(cart) {
 }
 
 window.openCartDrawer = openCartDrawer;
+
+export default initCartUI;

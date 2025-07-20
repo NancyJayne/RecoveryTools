@@ -138,3 +138,5 @@ async function renderAffiliateOrders() {
     container.appendChild(div);
   });
 }
+
+export default initAffiliateDashboard;

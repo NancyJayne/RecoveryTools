@@ -28,3 +28,5 @@ function setupProductClickHandler() {
     showProductDetail(product);
   });
 }
+
+export default initShopPage;
