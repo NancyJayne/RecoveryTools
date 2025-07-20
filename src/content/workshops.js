@@ -183,6 +183,14 @@ function renderWorkshopGrids() {
 
   const past = allWorkshops.filter((w) => DateTime.fromISO(w.dateUTC).toUTC() <= now);
 
+  if (filtered.length === 0) {
+    workshopGrid.innerHTML = "<p class='text-gray-400'>No workshops found.</p>";
+  }
+
+  if (past.length === 0) {
+    pastWorkshopGrid.innerHTML = "<p class='text-gray-400'>No workshops found.</p>";
+  }
+    
   for (const workshop of filtered) {
     const card = createWorkshopCard(workshop, userTZ);
     workshopGrid.appendChild(card);
