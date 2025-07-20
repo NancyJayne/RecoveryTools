@@ -11,7 +11,7 @@ import {
   orderBy,
   getDocs,
 } from "firebase/firestore";
-import { showToast, redirectToPayment } from "../utils/utils.js";
+import { showToast, redirectToPayment, showSection } from "../utils/utils.js";
 import { refreshProfileCourses } from "../profile/profile-utils.js";
 import { createProductTile } from "../shop/shop-products.js";
 

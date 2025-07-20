@@ -8,7 +8,7 @@ import { renderProductReviews, setupReviewForm } from "./shop-reviews.js";
 import { renderRelatedSuggestions } from "./shop-related.js";
 import { addToCart } from "./shop-cart.js";
 import { setPageMeta } from "../utils/seo-utils.js";
-import { showToast } from "../utils/utils.js";
+import { showToast, showTabContent, showSection } from "../utils/utils.js";
 
 
 export async function loadProducts() {
