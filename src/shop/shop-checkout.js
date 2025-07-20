@@ -411,3 +411,5 @@ export async function setupCheckoutPage() {
     }
   });
 }
+
+export default setupCheckoutPage;

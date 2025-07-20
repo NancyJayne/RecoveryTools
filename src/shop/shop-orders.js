@@ -29,3 +29,7 @@ export async function confirmOrderFromStripeRedirect() {
     showToast("⚠ Something went wrong confirming your order.", "error");
   }
 }
+
+export default function () {
+  confirmOrderFromStripeRedirect();
+}
