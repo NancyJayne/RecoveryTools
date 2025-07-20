@@ -5,6 +5,7 @@ import {
   addDoc,
   where,
   getDocs,
+  orderBy,
   updateDoc,
   doc,
   Timestamp,
@@ -303,7 +304,12 @@ export async function loadMyWorkshops() {
   `;
 
   try {
-    const snapshot = await db.collection("workshops").where("createdBy", "==", user.uid).get();
+    const snapshot = await getDocs(
+      query(
+        collection(db, "workshops"),
+        where("createdBy", "==", user.uid),
+      ),
+    );
     const workshops = snapshot.docs.map((doc) => ({
       id: doc.id,
       slug: generateSlug(doc.data().name),
