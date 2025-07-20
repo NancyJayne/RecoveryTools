@@ -1,5 +1,6 @@
 // contact.js – Handles contact form submission with reCAPTCHA, Firestore logging, and secure email
 import { functions, db } from "../utils/firebase-config.js";
+import { httpsCallable } from "firebase/functions";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { showToast } from "../utils/utils.js";
 import { executeRecaptcha } from "../utils/verifyRecaptchaToken.js"; // ✅ Use central utility
@@ -43,7 +44,7 @@ export function initContactPage() {
       });
 
       // ✅ Trigger backend email
-      const sendContactMessage = functions.httpsCallable("sendContactMessage");
+      const sendContactMessage = httpsCallable(functions, "sendContactMessage");
       await sendContactMessage({ name, email, message, token });
 
       form.reset();

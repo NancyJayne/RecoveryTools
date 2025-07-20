@@ -1,5 +1,6 @@
 // shop/shop-related.js
 import { functions } from "../utils/firebase-config.js";
+import { httpsCallable } from "firebase/functions";
 import { createProductTile } from "./shop-products.js";
 
 /**
@@ -13,7 +14,7 @@ export async function renderRelatedSuggestions(product) {
   grid.innerHTML = "";
 
   try {
-    const getProducts = functions.httpsCallable("getFirestoreProducts");
+    const getProducts = httpsCallable(functions, "getFirestoreProducts");
     const res = await getProducts({ type: "Tool" });
     const products = res.data.products || [];
 

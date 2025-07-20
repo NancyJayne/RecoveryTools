@@ -5,7 +5,8 @@ import {
   orderBy,
   getDocs,
 } from "firebase/firestore";
-import { auth, db } from "../utils/firebase-config.js";
+import { auth, db, functions } from "../utils/firebase-config.js";
+import { httpsCallable } from "firebase/functions";
 import { showToast } from "../utils/utils.js";
 import { executeRecaptcha } from "../utils/verifyRecaptchaToken.js"; // ✅ Secure backend check
 
@@ -82,7 +83,7 @@ export function setupReviewForm(productId) {
     try {
       const token = await executeRecaptcha("review_submission");
 
-      const submitReview = functions.httpsCallable("submitProductReview");
+      const submitReview = httpsCallable(functions, "submitProductReview");
       await submitReview({
         productId,
         userName,

@@ -3,6 +3,7 @@
 
 import { functions } from "../utils/firebase-config.js";
 import { logClientError } from "../utils/logClientError.js";
+import { httpsCallable } from "firebase/functions";
 import { renderProductReviews, setupReviewForm } from "./shop-reviews.js";
 import { renderRelatedSuggestions } from "./shop-related.js";
 import { addToCart } from "./shop-cart.js";
@@ -21,7 +22,7 @@ export async function loadProducts() {
   `;
 
   try {
-    const getProducts = functions.httpsCallable("getFirestoreProducts");
+    const getProducts = httpsCallable(functions, "getFirestoreProducts");
     const res = await getProducts({ type: "Tool" });
     const products = Array.isArray(res.data?.products) ? res.data.products : [];
 

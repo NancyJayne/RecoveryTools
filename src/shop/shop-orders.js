@@ -1,5 +1,6 @@
 // Store orders, create receipts
 import { functions } from "../utils/firebase-config.js";
+import { httpsCallable } from "firebase/functions";
 import { showToast } from "../utils/utils.js";
 
 export async function confirmOrderFromStripeRedirect() {
@@ -8,7 +9,7 @@ export async function confirmOrderFromStripeRedirect() {
   if (params.get("success") !== "true") return;
 
   try {
-    const confirmPurchase = functions.httpsCallable("confirmStripePurchase");
+    const confirmPurchase = httpsCallable(functions, "confirmStripePurchase");
     const res = await confirmPurchase();
 
     if (res.data && res.data.orderId) {

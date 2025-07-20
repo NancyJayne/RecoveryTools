@@ -1,6 +1,7 @@
 // Refactored shop-checkout.js – Shortened lines, removed unused vars, retained structure
 
 import { auth, db, functions } from "../utils/firebase-config.js";
+import { httpsCallable } from "firebase/functions";
 import { getCurrentCart } from "./shop-cart.js";
 import { showToast, formatCurrency } from "../utils/utils.js";
 import { confirmOrderFromStripeRedirect } from "./shop-orders.js";
@@ -109,7 +110,7 @@ export async function setupCheckoutPage() {
 
         summaryContainer.appendChild(orderSummary);
 
-        const sendEmail = functions.httpsCallable("sendTransactionalEmail");
+        const sendEmail = httpsCallable(functions, "sendTransactionalEmail");
         sendEmail({
           to: order.userEmail,
           templateId: "d-4b0e5696c6a14a67892e586f385b6e7d",
@@ -387,7 +388,7 @@ export async function setupCheckoutPage() {
 
     try {
       const token = await executeRecaptcha("checkout");
-      const createCheckout = functions.httpsCallable("createCheckoutSession");
+      const createCheckout = httpsCallable(functions, "createCheckoutSession");
       const response = await createCheckout({
         cart,
         referrerId: localStorage.getItem("referrer_uid") || null,

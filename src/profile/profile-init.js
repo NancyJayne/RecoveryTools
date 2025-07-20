@@ -168,7 +168,7 @@ export async function setupProfilePage() {
   if (window.location.hash === "#profileSection") {
     profileSection?.classList.remove("hidden");
   }
-    // Ensure "My Profile" tab loads by default
+  // Ensure "My Profile" tab loads by default
   document.querySelector("[data-profile-tab=\"myProfile\"]")?.click();
 }
 
