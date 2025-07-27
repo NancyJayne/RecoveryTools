@@ -9,6 +9,7 @@ const importMap = {
   "./admin/admin-products.js": () => import("../admin/admin-products.js"),
   "./admin/admin-course.js": () => import("../admin/admin-course.js"),
   "./admin/admin-workshops.js": () => import("../admin/admin-workshops.js"),
+  "./admin/admin-affiliates.js": () => import("../admin/admin-affiliates.js"),
   "./admin/admin-orders.js": () => import("../admin/admin-orders.js"),
   "./admin/admin-crm.js": () => import("../admin/admin-crm.js"),
   "./admin/admin-anatoMe.js": () => import("../admin/admin-anatoMe.js"),

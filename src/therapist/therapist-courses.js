@@ -1,1 +1,1 @@
-// Create/manage therapist workshops
+// Placeholder page for therapist-specific courses add and manage their courses

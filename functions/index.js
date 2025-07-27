@@ -52,6 +52,7 @@ export { searchUsersByName } from "./users/searchUsersByName.js";
 export { createStripeConnectLink } from "./affiliates/createStripeConnectLink.js";
 export { createStripeLoginLink } from "./affiliates/createStripeLoginLink.js";
 export { registerAffiliate } from "./affiliates/registerAffiliate.js";
+export { getAffiliatePerformance } from "./admin/getAffiliatePerformance.js";
 
 
 // Products

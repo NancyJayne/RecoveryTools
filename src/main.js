@@ -121,6 +121,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   observeAdminPanel("pendingCourseApprovals", "./admin/admin-course.js", "setupCourseApprovals");
   observeAdminPanel("adminWorkshopApprovals", "./admin/admin-workshops.js", "setupWorkshopManagement");
   observeAdminPanel("adminOrdersSection", "./admin/admin-orders.js", "setupOrderManagement");
+  observeAdminPanel("adminAffiliateStats", "./admin/admin-affiliates.js", "setupAffiliateStats");
   observeAdminPanel("userRoleManager", "./admin/admin-crm.js", "setupRoleManager");
   observeAdminPanel("anatoMeForm", "./admin/admin-anatoMe.js", "setupAnatoMeEpisodeAdminForm");
 
