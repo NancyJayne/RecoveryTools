@@ -57,6 +57,30 @@ export const handleStripeWebhook = onRequest(
         console.error("❌ Failed to write webhook data to Firestore:", err);
         return res.status(500).send("Failed to log Stripe event.");
       }
+    } else if (event.type === "payout.paid") {
+      const payout = event.data.object;
+      const affiliateUID = payout?.metadata?.uid;
+
+      try {
+        await admin
+          .firestore()
+          .collection("affiliatePayouts")
+          .doc(payout.id)
+          .set(
+            {
+              uid: affiliateUID,
+              stripePayoutId: payout.id,
+              amount: (payout.amount || 0) / 100,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+
+        console.log(`✅ Recorded affiliate payout: ${payout.id}`);
+      } catch (err) {
+        console.error("❌ Failed to record affiliate payout:", err);
+        return res.status(500).send("Failed to log Stripe event.");
+      }
     }
 
     res.status(200).send("Received");
