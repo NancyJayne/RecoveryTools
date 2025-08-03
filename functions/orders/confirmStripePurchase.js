@@ -112,6 +112,20 @@ const confirmStripePurchaseHandler = async (data, context) => {
     }),
   );
 
+  if (orderData.referredBy) {
+    await Promise.all(
+      enrichedProducts.map((item) =>
+        admin.firestore().collection("referrals").add({
+          referrerUid: orderData.referredBy,
+          type: item.type,
+          targetId: item.productId,
+          event: "conversion",
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        }),
+      ),
+    );
+  }
+
   await sendOrderEmailWithPDF({
     to: session.customer_email,
     invoiceId: invoiceNumber,
