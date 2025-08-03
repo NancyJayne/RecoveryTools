@@ -14,6 +14,7 @@ export function initAdminNavigation(role) {
     "/admin/courses": "pendingCourseApprovals",
     "/admin/affiliates": "adminAffiliateStats",
     "/admin/anato-me": "anatoMeForm",
+    "/admin/emails": "adminEmailSection",
     "/admin/crm": "userRoleManager",
   };
 

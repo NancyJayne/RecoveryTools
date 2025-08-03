@@ -13,6 +13,7 @@ const importMap = {
   "./admin/admin-orders.js": () => import("../admin/admin-orders.js"),
   "./admin/admin-crm.js": () => import("../admin/admin-crm.js"),
   "./admin/admin-anatoMe.js": () => import("../admin/admin-anatoMe.js"),
+  "./admin/admin-emails.js": () => import("../admin/admin-emails.js"),
 };
 
 export function observeAdminPanel(tabId, importPath, methodName, maxRetries = 3) {

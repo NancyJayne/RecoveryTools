@@ -917,6 +917,7 @@
       <a href="/admin/affiliates" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Affiliates</a>
       <a href="/admin/anato-me" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Anato-Me</a>
       <a href="/admin/crm" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">CRM</a>
+      <a href="/admin/emails" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Emails</a>
       <a href="/profile" class="text-sm mt-6 text-blue-400 hover:underline">← Back to Profile</a>
     </aside>
 
@@ -1038,15 +1039,37 @@
         <div id="workshopApprovalGrid" class="space-y-4"></div>
       </div>
 
-      <div id="pendingCourseApprovals" class="admin-tab hidden">
-        <h2 class="text-2xl font-semibold">Course Proposals</h2>
-        <div id="pendingCourseList" class="space-y-4"></div>
-      </div>
+        <div id="pendingCourseApprovals" class="admin-tab hidden">
+          <h2 class="text-2xl font-semibold">Course Proposals</h2>
+          <div id="pendingCourseList" class="space-y-4"></div>
+        </div>
 
-      <div id="adminAffiliateStats" class="admin-tab hidden">
-        <h2 class="text-2xl font-semibold mb-4">Affiliate Performance</h2>
-        <div id="affiliateStatsContainer" class="space-y-4"></div>
-      </div>
+        <div id="adminEmailSection" class="admin-tab hidden">
+          <h2 class="text-2xl font-semibold mb-4">Broadcast Email</h2>
+          <form id="adminEmailForm" class="space-y-4 max-w-2xl">
+            <div>
+              <label for="emailAudience" class="block text-sm mb-1">Audience</label>
+              <select id="emailAudience" class="w-full p-2 rounded bg-gray-800 text-white">
+                <option value="all">All Users</option>
+                <option value="affiliates">Affiliates</option>
+              </select>
+            </div>
+            <div>
+              <label for="emailSubject" class="block text-sm mb-1">Subject</label>
+              <input id="emailSubject" type="text" class="w-full p-2 rounded bg-gray-800 text-white" />
+            </div>
+            <div>
+              <label for="emailHtml" class="block text-sm mb-1">HTML Content</label>
+              <textarea id="emailHtml" class="w-full p-2 h-48 rounded bg-gray-800 text-white"></textarea>
+            </div>
+            <button type="submit" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">Send Broadcast</button>
+          </form>
+        </div>
+
+        <div id="adminAffiliateStats" class="admin-tab hidden">
+          <h2 class="text-2xl font-semibold mb-4">Affiliate Performance</h2>
+          <div id="affiliateStatsContainer" class="space-y-4"></div>
+        </div>
 
       <div id="anatoMeForm" class="admin-tab hidden">
         <h2 class="text-2xl font-semibold">Anato-Me Episode Management</h2>
