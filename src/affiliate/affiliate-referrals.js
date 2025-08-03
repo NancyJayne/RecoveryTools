@@ -28,6 +28,7 @@ export async function fetchReferralStats() {
 export function handleReferralFromURL() {
   const urlParams = new URLSearchParams(window.location.search);
   const referrerId = urlParams.get("ref");
+  const courseId = urlParams.get("course");
   const event = urlParams.get("event");
 
   if (referrerId) {
@@ -35,5 +36,17 @@ export function handleReferralFromURL() {
   }
   if (event) {
     localStorage.setItem("ref_event", event);
+  }
+
+  const type = courseId ? "course" : event ? "workshop" : null;
+  const targetId = courseId || event;
+
+  if (referrerId && type && targetId) {
+    logReferralEvent({
+      referrerUid: referrerId,
+      type,
+      targetId,
+      event: "click",
+    });
   }
 }
