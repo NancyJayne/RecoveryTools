@@ -130,3 +130,22 @@ You can run the same command through the `functions/` scripts for consistency:
 ```bash
 npm --prefix functions run logs -- --only verifyRecaptchaToken
 ```
+
+## Admin broadcast email function
+
+The `sendAdminBroadcastEmail` Cloud Function sends a message to multiple
+recipients using SendGrid. It expects the following fields in the request
+payload:
+
+- `recipients`: array of recipient email addresses
+- `subject`: email subject line
+- `htmlContent`: HTML body of the message
+
+Before deploying, configure the SendGrid API key as a Firebase secret:
+
+```bash
+firebase functions:secrets:set SENDGRID_API_KEY
+```
+
+The backend automatically sends in batches (up to 1000 emails per request) to
+stay within SendGrid limits.
