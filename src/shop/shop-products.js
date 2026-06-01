@@ -90,7 +90,7 @@ export function createProductTile(product) {
   image.src =
     product.images?.[0] ||
     product.image ||
-    "https://via.placeholder.com/300x300?text=Product";
+    "/images/product-placeholder.png";
   image.alt = product.name || product.title;
   image.className = "w-full h-48 object-cover rounded";
 
@@ -160,7 +160,7 @@ export function showProductDetail(product) {
   img.src =
     product.images?.[0] ||
     product.image ||
-    "https://via.placeholder.com/400x400";
+    "/images/product-placeholder.png";
   img.alt = product.name || product.title;
   img.className = "w-full h-auto max-h-[400px] object-cover rounded md:max-w-[600px]";
 
@@ -280,7 +280,52 @@ export function showProductDetail(product) {
 
   wrapper.appendChild(img);
   wrapper.appendChild(content);
-  detail.appendChild(wrapper);
+
+
+  const reviewsSection = document.createElement("div");
+reviewsSection.className = "max-w-screen-xl mx-auto px-4 sm:px-6 md:px-8 mt-8";
+reviewsSection.innerHTML = `
+  <div id="reviews"></div>
+
+  <form id="reviewForm" class="mt-6 space-y-3">
+    <h4 class="text-lg font-semibold">Leave a Review</h4>
+
+    <input
+      id="reviewName"
+      type="text"
+      placeholder="Your name"
+      class="w-full p-2 rounded bg-gray-800 text-white"
+    />
+
+    <select
+      id="reviewRating"
+      class="w-full p-2 rounded bg-gray-800 text-white"
+    >
+      <option value="">Select rating</option>
+      <option value="5">★★★★★</option>
+      <option value="4">★★★★☆</option>
+      <option value="3">★★★☆☆</option>
+      <option value="2">★★☆☆☆</option>
+      <option value="1">★☆☆☆☆</option>
+    </select>
+
+    <textarea
+      id="reviewComment"
+      placeholder="Write your review"
+      class="w-full p-2 rounded bg-gray-800 text-white"
+    ></textarea>
+
+    <button
+      type="submit"
+      class="bg-[#407471] text-white px-4 py-2 rounded"
+    >
+      Submit Review
+    </button>
+  </form>
+`;
+
+detail.appendChild(wrapper);
+detail.appendChild(reviewsSection);
 
   renderProductReviews(product.id);
   setupReviewForm(product.id);

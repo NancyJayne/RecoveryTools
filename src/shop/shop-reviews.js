@@ -13,6 +13,12 @@ import { executeRecaptcha } from "../utils/verifyRecaptchaToken.js"; // ✅ Secu
 // ✅ Load product reviews
 export async function renderProductReviews(productId) {
   const container = document.getElementById("reviews");
+
+  if (!container) {
+    console.warn("Reviews container not found. Skipping review render.");
+    return;
+  }
+
   container.innerHTML = `<h4 class="text-lg font-semibold mb-2">Reviews</h4>`;
 
   try {

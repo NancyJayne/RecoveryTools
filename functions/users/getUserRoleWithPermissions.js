@@ -12,19 +12,30 @@ if (!admin.apps.length) {
  */
 export const getUserRoleWithPermissions = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    if (!context.auth) {
+  async (request) => {
+    if (!request.auth) {
       throw new HttpsError("unauthenticated", "You must be logged in.");
     }
 
     try {
-      const doc = await admin.firestore().collection("users").doc(context.auth.uid).get();
-      if (!doc.exists) throw new HttpsError("not-found", "User profile not found");
+      const uid = request.auth.uid;
+
+      const doc = await admin.firestore().collection("users").doc(uid).get();
+
+      if (!doc.exists) {
+        throw new HttpsError("not-found", "User profile not found");
+      }
 
       const { roles = {}, permissions = {} } = doc.data();
-      return { uid: context.auth.uid, roles, permissions };
+
+      return { uid, roles, permissions };
     } catch (err) {
       console.error("Error fetching Firestore user roles/permissions:", err);
+
+      if (err instanceof HttpsError) {
+        throw err;
+      }
+
       throw new HttpsError("internal", err.message);
     }
   },

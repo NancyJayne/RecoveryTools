@@ -1,4 +1,3 @@
-
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
 
@@ -11,8 +10,9 @@ if (!admin.apps.length) {
  */
 export const getUserOrders = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    const uid = context.auth?.uid;
+  async (request) => {
+    const uid = request.auth?.uid;
+
     if (!uid) {
       throw new HttpsError("unauthenticated", "You must be logged in to view orders.");
     }
