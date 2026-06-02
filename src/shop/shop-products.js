@@ -266,7 +266,7 @@ export function showProductDetail(product) {
   backBtn.className = "text-[#ffffff] hover:underline mt-4 block";
   backBtn.textContent = "← Back to Shop";
   backBtn.onclick = () => {
-    showSection("shopSection");
+    showTabContent("shopSection");
     window.history.pushState({}, "", "/shop");
   };
 
@@ -331,37 +331,40 @@ detail.appendChild(reviewsSection);
   setupReviewForm(product.id);
   renderRelatedSuggestions(product);
 
-  window.history.pushState({}, "", `/shop/${product.slug}`);
+  const productSlug = product.slug || product.id;
+window.history.pushState({}, "", `/shop/${productSlug}`);
 
   setPageMeta({
     title: `${product.name || product.title} | Recovery Tools`,
     description: product.shortDescription || product.longDescription?.slice(0, 140),
-    url: `https://recoverytools.au/shop/${product.slug}`,
+   url: `https://recoverytools.au/shop/${productSlug}`,
   });
 
   injectProductSchema(product);
 
-  showSection("productDetailSection");
+  showTabContent("productDetailSection");
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 export function injectProductSchema(product) {
+  const productSlug = product.slug || product.id;
+
   const script = document.createElement("script");
   script.type = "application/ld+json";
   script.innerHTML = JSON.stringify({
     "@context": "https://schema.org",
     "@type": "Product",
     "name": product.name || product.title,
-    "image": product.images?.[0] || product.image,
+    "image": product.images?.[0] || product.image || "/images/product-placeholder.png",
     "description": product.shortDescription || product.longDescription,
-    "sku": product.slug,
+    "sku": productSlug,
     "brand": { "@type": "Organization", "name": "Recovery Tools" },
     "offers": {
       "@type": "Offer",
       "priceCurrency": "AUD",
       "price": (product.salePrice || product.price) / 100,
       "availability": product.stock > 0 ? "InStock" : "OutOfStock",
-      "url": `https://recoverytools.au/shop/${product.slug}`,
+      "url": `https://recoverytools.au/shop/${productSlug}`,
     },
   });
   document.head.appendChild(script);

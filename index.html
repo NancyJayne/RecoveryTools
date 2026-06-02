@@ -275,96 +275,19 @@
   <div id="productDetail" class="hidden mt-6"></div>
 </section>
 
-    <!-- ✅ Product Detail Section -->
+
 <!-- ✅ Product Detail Section -->
 <section id="productDetailSection" class="tab-content hidden p-6">
-  <div id="productDetailContainer">
-    <div class="bg-gray-900 p-6 rounded shadow text-white max-w-5xl mx-auto">
-      
-<!-- 🛍 Breadcrumb -->
-<nav class="text-sm text-gray-400 mb-2" aria-label="Breadcrumb">
-  <button id="breadcrumbBackLink" type="button" class="hover:text-white underline">
-    Shop
-  </button>
-  <span class="mx-1">/</span>
-  <span id="breadcrumbProductName" class="text-white font-semibold" aria-current="page"></span>
-</nav>
+  <a
+    id="breadcrumbBackLink"
+    href="/shop"
+    class="text-sm text-gray-300 hover:text-white hover:underline block mb-4"
+  >
+    ← Back to Shop
+  </a>
 
-      <!-- 🖼 Product Image -->
-      <img
-        id="productDetailImage"
-        src=""
-        alt="Product Image"
-        class="w-full max-w-[600px] h-auto mx-auto rounded mb-4 object-cover"
-        style="aspect-ratio: 3 / 2;"
-        referrerpolicy="no-referrer"
-        crossorigin="anonymous"
-      />
-
-      <!-- 🛍 Product Info -->
-      <h3 id="productDetailName" class="text-2xl font-bold mb-2" tabindex="0" aria-label="Product name"></h3>
-      <p id="productDetailShort" class="text-sm text-gray-300 mb-2" aria-label="Short description"></p>
-      <p id="productDetailLong" class="text-sm text-gray-400 mb-4" aria-label="Long description"></p>
-
-      <!-- ⚠ Warnings and Linked Content -->
-      <div id="lowStockNotice" class="text-yellow-400 text-sm hidden mb-2">⚠ Only a few left in stock!</div>
-      <div id="preorderNotice" class="text-blue-400 text-sm hidden mb-2">📦 Pre-order available</div>
-      <div id="productBundles" class="text-sm text-gray-300 mb-2 hidden">🎁 Part of a bundle</div>
-      <div id="linkedCourse" class="text-sm text-blue-400 mb-4 hidden">
-        <!-- 🔗 Course Link -->
-<button id="courseLink" type="button" class="underline hover:text-white focus:outline-none">
-  ▶ Learn how to use this tool
-</button>
-      </div>
-
-      <!-- 💲 Price + Quantity + Add to Cart -->
-      <div class="flex items-center justify-between mb-4">
-        <span id="productDetailPrice" class="text-xl font-semibold" aria-live="polite"></span>
-      </div>
-
-      <div class="flex items-center gap-4 mb-4" aria-label="Quantity selector">
-        <button id="qtyMinus" class="bg-gray-700 text-white w-8 h-8 rounded text-lg">-</button>
-        <span id="qtyDisplay" class="text-white font-semibold w-8 text-center select-none" aria-live="polite">1</span>
-        <button id="qtyPlus" class="bg-gray-700 text-white w-8 h-8 rounded text-lg">+</button>
-      </div>
-
-      <button id="addToCartButton" class="bg-[#407471] px-4 py-2 rounded text-white mb-6">
-        Add to Cart
-      </button>
-
-      <!-- 💬 Reviews Placeholder -->
-      <div id="reviews" class="text-sm text-gray-300 mt-4 border-t border-gray-700 pt-4">
-        <h4 class="text-lg font-semibold mb-2">Reviews</h4>
-        <p class="italic text-gray-500">Reviews will appear here...</p>
-      </div>
-      <div id="writeReview" class="mt-6 border-t border-gray-700 pt-4">
-  <h4 class="text-lg font-semibold mb-2">Leave a Review</h4>
-  <form id="reviewForm" class="space-y-3">
-    <input type="text" id="reviewName" placeholder="Your name" class="bg-gray-800 text-white px-3 py-2 rounded w-full">
-    <select id="reviewRating" class="bg-gray-800 text-white px-3 py-2 rounded w-full">
-      <option value="">Rating (1–5)</option>
-      <option value="5">★★★★★</option>
-      <option value="4">★★★★☆</option>
-      <option value="3">★★★☆☆</option>
-      <option value="2">★★☆☆☆</option>
-      <option value="1">★☆☆☆☆</option>
-    </select>
-    <textarea id="reviewComment" placeholder="Your review..." class="bg-gray-800 text-white px-3 py-2 rounded w-full h-24"></textarea>
-    <button type="submit" class="bg-[#407471] text-white px-4 py-2 rounded">Submit Review</button>
-  </form>
-</div>
-
-
-      <!-- 🔙 Back Link -->
-      <button id="backToShopBtn" class="text-white hover:underline mt-6 block" aria-label="Back to Shop">← Back to Shop</button>
-    </div>
-  </div>
-  <div id="relatedSuggestions" class="mt-10">
-  <h4 class="text-lg font-semibold mb-4">You may also like</h4>
-  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6" id="relatedGrid"></div>
-</div>
+  <div id="productDetailContainer"></div>
 </section>
-
     
 <!-- Full Dynamic Profile Section -->
 <section id="profileSection" class="tab-content hidden p-6">
