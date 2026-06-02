@@ -67,7 +67,7 @@ export function addToCart(item) {
       affiliatePercent:
         item.affiliatePercent ??
         (item.type === "tool" ? 0.1 : item.type === "course" ? 0.8 : 0.5),
-      image: item.image || "https://via.placeholder.com/60x60?text=Item",
+      image: item.image || "/images/product-placeholder.png",
     });
   }
 
@@ -121,7 +121,7 @@ export async function renderCartItems() {
       left.className = "flex gap-3 items-center";
 
       const img = document.createElement("img");
-      img.src = item.image;
+      img.src = item.image || "/images/product-placeholder.png";
       img.alt = item.name;
       img.className = "w-12 h-12 object-cover rounded";
 
