@@ -1,34 +1,87 @@
-// auth-logic.js – Signup & login with reCAPTCHA and App Check support 
-import { auth, functions } from "../utils/firebase-config.js";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { showToast } from "../utils/utils.js";
+// auth-logic.js – Signup & login with reCAPTCHA, App Check, and Firestore profile creation
+
+import { auth, db, functions } from "../utils/firebase-config.js";
+
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile,
+} from "firebase/auth";
+
+import {
+  doc,
+  setDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+
 import { httpsCallable } from "firebase/functions";
+import { showToast } from "../utils/utils.js";
 import { executeRecaptcha } from "../utils/verifyRecaptchaToken.js";
 
 export async function handleSignup(email, password, name) {
   try {
-    await executeRecaptcha("signup");
-    const userCred = await createUserWithEmailAndPassword(auth, email, password);
-    await updateProfile(userCred.user, { displayName: name });
+    if (!email || !password || !name) {
+      throw new Error("Missing name, email or password.");
+    }
 
-    const welcomeEmail = httpsCallable(functions, "sendWelcomeEmail");
-    await welcomeEmail({ to: email, firstName: name.split(" ")[0] || "there" });
+    await executeRecaptcha("signup");
+
+    const userCred = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCred.user;
+
+    await updateProfile(user, {
+      displayName: name,
+    });
+
+    await setDoc(
+  doc(db, "users", user.uid),
+  {
+    uid: user.uid,
+    name,
+    email: user.email || email,
+
+    role: "user",
+    admin: false,
+    therapist: false,
+    affiliate: false,
+
+    photoURL: "",
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  },
+  { merge: true },
+);
+
+    try {
+      const welcomeEmail = httpsCallable(functions, "sendWelcomeEmail");
+      await welcomeEmail({
+        to: email,
+        firstName: name.split(" ")[0] || "there",
+      });
+    } catch (emailErr) {
+      console.warn("Welcome email failed, but signup completed:", emailErr);
+    }
 
     showToast("Signup successful!", "success");
+    return user;
   } catch (err) {
     console.error("Signup error:", err);
     showToast(err.message || "Signup failed", "error");
+    throw err;
   }
 }
 
 export async function handleLogin(email, password) {
   try {
     await executeRecaptcha("login");
-    await signInWithEmailAndPassword(auth, email, password);
+    const userCred = await signInWithEmailAndPassword(auth, email, password);
+
     showToast("Login successful!", "success");
+    return userCred.user;
   } catch (err) {
     console.error("Login error:", err);
     showToast(err.message || "Login failed", "error");
+    throw err;
   }
 }
 

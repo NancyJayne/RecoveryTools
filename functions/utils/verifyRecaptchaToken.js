@@ -10,23 +10,43 @@ export const verifyRecaptchaToken = onCall(
     secrets: [RECAPTCHA_SECRET_KEY],
   },
   async (request) => {
-    const { token } = request.data || {};
+    const { token, action } = request.data || {};
+
+    const isEmulated = process.env.FUNCTIONS_EMULATOR === "true";
+
+    // ✅ Local emulator/dev bypass only
+    if (isEmulated) {
+      console.warn(
+        `⚠️ Emulator mode: skipping reCAPTCHA verification for action: ${
+          action || "unknown"
+        }`,
+      );
+
+      return {
+        success: true,
+        score: 1,
+        skipped: true,
+      };
+    }
 
     if (!token) {
       throw new HttpsError("invalid-argument", "reCAPTCHA token is required.");
     }
 
-    const isEmulated = process.env.FUNCTIONS_EMULATOR === "true";
-    const recaptchaSecret = isEmulated
-      ? process.env.RECAPTCHA_SECRET_KEY
-      : RECAPTCHA_SECRET_KEY.value(); // ✅ Correct way to access the secret
+    const recaptchaSecret = RECAPTCHA_SECRET_KEY.value();
 
     if (!recaptchaSecret) {
       console.error("❌ reCAPTCHA secret not found.");
-      throw new HttpsError("internal", "Server error. Missing reCAPTCHA secret.");
+      throw new HttpsError(
+        "internal",
+        "Server error. Missing reCAPTCHA secret.",
+      );
     }
 
-    const url = `https://www.google.com/recaptcha/api/siteverify?secret=${recaptchaSecret}&response=${token}`;
+    const url =
+      "https://www.google.com/recaptcha/api/siteverify" +
+      `?secret=${recaptchaSecret}` +
+      `&response=${token}`;
 
     try {
       const response = await fetch(url, { method: "POST" });
@@ -34,15 +54,27 @@ export const verifyRecaptchaToken = onCall(
 
       if (!result.success) {
         console.warn("🛑 reCAPTCHA verification failed:", result["error-codes"]);
-        return { success: false, score: 0 };
+
+        return {
+          success: false,
+          score: 0,
+          errors: result["error-codes"] || [],
+        };
       }
 
-      if (result.score < 0.5) {
-        console.warn("⚠ Low reCAPTCHA score:", result.score);
-        return { success: false, score: result.score };
+      if (typeof result.score === "number" && result.score < 0.5) {
+        console.warn("⚠️ Low reCAPTCHA score:", result.score);
+
+        return {
+          success: false,
+          score: result.score,
+        };
       }
 
-      return { success: true, score: result.score };
+      return {
+        success: true,
+        score: result.score ?? null,
+      };
     } catch (error) {
       console.error("❌ Error verifying reCAPTCHA:", error);
       throw new HttpsError("internal", "Failed to verify reCAPTCHA.");

@@ -5,16 +5,27 @@ service cloud.firestore {
 
     // 🔐 User Profiles
     match /users/{userId} {
-      allow read: if request.auth.uid == userId;
-      allow update: if request.auth.uid == userId &&
-        request.resource.data.keys().hasOnly(['name', 'phone', 'address', 'photoURL']);
+    allow create: if request.auth != null &&
+                  request.auth.uid == userId;
 
-      allow write: if request.auth.token.therapist == true;
-      
-      match /purchases/{purchaseId} {
-        allow read, write: if request.auth.uid == userId;
-      }
+    allow read: if request.auth != null &&
+                request.auth.uid == userId;
+
+    allow update: if request.auth != null &&
+                  request.auth.uid == userId &&
+                  request.resource.data.diff(resource.data).affectedKeys()
+                    .hasOnly(['name', 'phone', 'address', 'photoURL', 'updatedAt']);
+
+    allow read, write: if request.auth.token.admin == true ||
+                       request.auth.token.therapist == true;
+
+    allow delete: if request.auth.token.admin == true;
+
+    match /purchases/{purchaseId} {
+      allow read, write: if request.auth != null &&
+                         request.auth.uid == userId;
     }
+  }
 
     // 📬 Contact Form
     match /contactSubmissions/{submissionId} {
