@@ -7,7 +7,7 @@ import { httpsCallable } from "firebase/functions";
 export function initCartUI() {
   const openBtns = document.querySelectorAll(".open-cart-btn");
   const closeBtn = document.getElementById("closeCartBtn");
-  const checkoutBtn = document.getElementById("checkoutBtn");
+  const checkoutBtn = document.getElementById("cartCheckoutBtn");
   const overlay = document.getElementById("cartOverlay");
 
   openBtns.forEach((btn) => {
@@ -26,10 +26,16 @@ export function initCartUI() {
   }
 
   if (checkoutBtn) {
-    checkoutBtn.addEventListener("click", () => {
-      window.location.href = "/checkout";
-    });
-  }
+  checkoutBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    console.log("🛒 Checkout button clicked");
+    window.location.assign("/checkout");
+  });
+} else {
+  console.warn("⚠ cartCheckoutBtn not found when initCartUI ran");
+}
 
   renderCartItems();
 }

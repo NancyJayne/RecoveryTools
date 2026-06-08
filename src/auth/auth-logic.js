@@ -34,23 +34,23 @@ export async function handleSignup(email, password, name) {
     });
 
     await setDoc(
-  doc(db, "users", user.uid),
-  {
-    uid: user.uid,
-    name,
-    email: user.email || email,
+      doc(db, "users", user.uid),
+      {
+        uid: user.uid,
+        name,
+        email: user.email || email,
 
-    role: "user",
-    admin: false,
-    therapist: false,
-    affiliate: false,
+        role: "user",
+        admin: false,
+        therapist: false,
+        affiliate: false,
 
-    photoURL: "",
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  },
-  { merge: true },
-);
+        photoURL: "",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
 
     try {
       const welcomeEmail = httpsCallable(functions, "sendWelcomeEmail");
@@ -63,6 +63,7 @@ export async function handleSignup(email, password, name) {
     }
 
     showToast("Signup successful!", "success");
+    window.location.href = "/profile";
     return user;
   } catch (err) {
     console.error("Signup error:", err);
@@ -77,6 +78,7 @@ export async function handleLogin(email, password) {
     const userCred = await signInWithEmailAndPassword(auth, email, password);
 
     showToast("Login successful!", "success");
+    window.location.href = "/profile";
     return userCred.user;
   } catch (err) {
     console.error("Login error:", err);

@@ -68,9 +68,7 @@ export async function initAppEntry() {
   await setupAuthState();
   userRole = await getUserRole();
 
-  if (document.querySelector(".open-cart-btn")) {
-    import("./shop/shop-cart.js").then((m) => m.initCartUI?.());
-  }
+  import("./shop/shop-cart.js").then((m) => m.initCartUI?.());
 
   setupRouterLinks();
   setupStickyNavbarScrollHandler();
@@ -90,7 +88,7 @@ export async function loadModuleByPath(path, role) {
   const safeImport = async (importFn, label) => {
     try {
       const mod = await importFn();
-      mod?.default?.();
+      await mod?.default?.();
     } catch (err) {
       console.error(`❌ Failed to load [${label}]`, err);
     }
@@ -123,7 +121,10 @@ export async function loadModuleByPath(path, role) {
     break;
   case path.startsWith("/profile"):
     await safeImport(
-      () => import("./profile/profile-init.js"),
+      async () => {
+        const mod = await import("./profile/profile-init.js");
+        await mod.setupProfilePage();
+      },
       "Profile",
     );
     break;

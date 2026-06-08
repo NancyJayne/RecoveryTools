@@ -52,6 +52,7 @@ export async function handleSignOut() {
   try {
     await signOut(auth);
     showToast("Signed out", "success");
+    window.location.href = "/";
   } catch (err) {
     console.error("Sign out error:", err);
     showToast(err.message || "Failed to sign out", "error");

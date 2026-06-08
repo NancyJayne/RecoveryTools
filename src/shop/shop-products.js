@@ -283,8 +283,8 @@ export function showProductDetail(product) {
 
 
   const reviewsSection = document.createElement("div");
-reviewsSection.className = "max-w-screen-xl mx-auto px-4 sm:px-6 md:px-8 mt-8";
-reviewsSection.innerHTML = `
+  reviewsSection.className = "max-w-screen-xl mx-auto px-4 sm:px-6 md:px-8 mt-8";
+  reviewsSection.innerHTML = `
   <div id="reviews"></div>
 
   <form id="reviewForm" class="mt-6 space-y-3">
@@ -324,20 +324,20 @@ reviewsSection.innerHTML = `
   </form>
 `;
 
-detail.appendChild(wrapper);
-detail.appendChild(reviewsSection);
+  detail.appendChild(wrapper);
+  detail.appendChild(reviewsSection);
 
   renderProductReviews(product.id);
   setupReviewForm(product.id);
   renderRelatedSuggestions(product);
 
   const productSlug = product.slug || product.id;
-window.history.pushState({}, "", `/shop/${productSlug}`);
+  window.history.pushState({}, "", `/shop/${productSlug}`);
 
   setPageMeta({
     title: `${product.name || product.title} | Recovery Tools`,
     description: product.shortDescription || product.longDescription?.slice(0, 140),
-   url: `https://recoverytools.au/shop/${productSlug}`,
+    url: `https://recoverytools.au/shop/${productSlug}`,
   });
 
   injectProductSchema(product);

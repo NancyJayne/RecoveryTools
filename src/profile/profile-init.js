@@ -30,6 +30,7 @@ async function waitForAuth() {
 
 export async function setupProfilePage() {
   const profileSection = document.getElementById("profileSection");
+  profileSection?.classList.remove("hidden");
   const fallbackURL = "https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FProfile.png?alt=media&token=261b1542-dc99-44ce-9089-6342e0ee6db9";
   const user = await waitForAuth();
 
@@ -67,6 +68,51 @@ export async function setupProfilePage() {
 
     try {
       const userData = await getUserProfile(user.uid);
+
+      const profileNameEl = document.querySelector("[data-profile-name]");
+      if (profileNameEl) {
+        profileNameEl.textContent =
+      userData?.name || user.displayName || user.email || "My Profile";
+      }
+
+      document.querySelectorAll("[data-profile-email]").forEach((el) => {
+        el.textContent = user.email || "Not set";
+      });
+
+      const inlineNameEl = document.querySelector("[data-profile-name-inline]");
+      if (inlineNameEl) {
+        inlineNameEl.textContent =
+      userData?.name || user.displayName || user.email || "Not set";
+      }
+
+      const profilePhoneEl = document.querySelector("[data-profile-phone]");
+      if (profilePhoneEl) {
+        profilePhoneEl.textContent = userData?.phone || "Not added yet";
+      }
+
+      const profileRoleEl = document.querySelector("[data-profile-role]");
+      if (profileRoleEl) {
+        profileRoleEl.textContent = userData?.role || "user";
+      }
+
+      const profileShippingEl = document.querySelector("[data-profile-shipping]");
+      if (profileShippingEl) {
+        profileShippingEl.textContent =
+      userData?.shippingAddress || userData?.address || "Not added yet";
+      }
+
+      const profileBillingEl = document.querySelector("[data-profile-billing]");
+      if (profileBillingEl) {
+        profileBillingEl.textContent =
+      userData?.billingAddress || "Same as shipping / not added yet";
+      }
+
+      const profileEmailPrefsEl = document.querySelector("[data-profile-email-preferences]");
+      if (profileEmailPrefsEl) {
+        profileEmailPrefsEl.textContent =
+      userData?.emailPreferences || "Transactional emails only";
+      }
+
       if (userData?.photoURL) {
         photoURL = userData.photoURL;
         hasCustomPhoto = true;
@@ -193,15 +239,23 @@ function setupProfileFormHandlers() {
   const nameInput = document.getElementById("updateName");
   const phoneInput = document.getElementById("updatePhone");
   const addressInput = document.getElementById("updateAddress");
+  const billingInput = document.getElementById("updateBillingAddress");
+  const emailPrefsInput = document.getElementById("updateEmailPreferences");
 
   if (auth?.currentUser?.uid && nameInput && phoneInput && addressInput) {
-    const uid = auth?.currentUser?.uid;
+    const uid = auth.currentUser.uid;
+
     import(new URL("../auth/user-profile.js", import.meta.url)).then(async (mod) => {
       const profile = await mod.getUserProfile(uid);
+
       if (profile) {
         nameInput.value = profile.name || "";
         phoneInput.value = profile.phone || "";
         addressInput.value = profile.address || "";
+        if (billingInput) billingInput.value = profile.billingAddress || "";
+        if (emailPrefsInput) {
+          emailPrefsInput.value = profile.emailPreferences || "Transactional emails only";
+        }
       }
     });
   }
@@ -210,12 +264,49 @@ function setupProfileFormHandlers() {
   if (updateForm) {
     updateForm.addEventListener("submit", async (e) => {
       e.preventDefault();
+
       const name = document.getElementById("updateName").value.trim();
       const phone = document.getElementById("updatePhone").value.trim();
       const address = document.getElementById("updateAddress").value.trim();
+      const billingAddress =
+        document.getElementById("updateBillingAddress")?.value.trim() || "";
+      const emailPreferences =
+        document.getElementById("updateEmailPreferences")?.value ||
+        "Transactional emails only";
 
       try {
-        await updateUserProfile({ name, phone, address });
+        await updateUserProfile({
+          name,
+          phone,
+          address,
+          billingAddress,
+          emailPreferences,
+        });
+
+        const freshProfile = await getUserProfile(auth.currentUser.uid);
+
+        document.querySelector("[data-profile-name]").textContent =
+          freshProfile?.name || auth.currentUser.email || "My Profile";
+
+        document.querySelector("[data-profile-name-inline]").textContent =
+          freshProfile?.name || auth.currentUser.email || "Not set";
+
+        document.querySelectorAll("[data-profile-email]").forEach((el) => {
+          el.textContent = auth.currentUser?.email || "Not set";
+        });
+
+        document.querySelector("[data-profile-phone]").textContent =
+          freshProfile?.phone || "Not added yet";
+
+        document.querySelector("[data-profile-shipping]").textContent =
+          freshProfile?.address || "Not added yet";
+
+        document.querySelector("[data-profile-billing]").textContent =
+          freshProfile?.billingAddress || "Same as shipping / not added yet";
+
+        document.querySelector("[data-profile-email-preferences]").textContent =
+          freshProfile?.emailPreferences || "Transactional emails only";
+
         showToast("✅ Profile updated.", "success");
       } catch (err) {
         console.error("Update profile error:", err);

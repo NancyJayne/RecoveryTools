@@ -349,9 +349,18 @@
     <!-- Main Output Tabs -->
     <div class="flex-1">
       <div id="myProfile" class="profile-tab-content hidden">
-        <h2 class="text-2xl font-semibold mb-4">My Profile</h2>
-        <!-- Duplicates removed (header already shown above) -->
-      </div>
+  <h2 class="text-2xl font-semibold mb-4">My Profile</h2>
+
+  <div class="bg-[#111827] border border-gray-700 rounded-lg p-4 space-y-3">
+    <p><span class="text-gray-400">Name:</span> <span data-profile-name-inline>Loading...</span></p>
+    <p><span class="text-gray-400">Email:</span> <span data-profile-email>Loading...</span></p>
+    <p><span class="text-gray-400">Phone:</span> <span data-profile-phone>Not added yet</span></p>
+    <p><span class="text-gray-400">Role:</span> <span data-profile-role>user</span></p>
+    <p><span class="text-gray-400">Shipping Address:</span> <span data-profile-shipping>Not added yet</span></p>
+    <p><span class="text-gray-400">Billing Address:</span> <span data-profile-billing>Not added yet</span></p>
+    <p><span class="text-gray-400">Email Preferences:</span> <span data-profile-email-preferences>Transactional emails only</span></p>
+  </div>
+</div>
 
       <div id="myCourses" class="profile-tab-content hidden">
         <h2 class="text-2xl font-semibold mb-4">My Courses</h2>
@@ -374,14 +383,25 @@
       </div>
 
       <div id="updateProfile" class="profile-tab-content hidden">
-        <h3 class="text-xl font-semibold mb-4">Update Profile</h3>
-        <form id="updateProfileForm" class="space-y-4">
-          <input id="updateName" placeholder="Name" class="input">
-          <input id="updatePhone" placeholder="Phone" class="input">
-          <input id="updateAddress" placeholder="Address" class="input">
-          <button class="bg-blue-500 px-4 py-2 rounded text-white font-semibold">Save Changes</button>
-        </form>
-      </div>
+  <h3 class="text-xl font-semibold mb-4">Update Profile</h3>
+
+  <form id="updateProfileForm" class="space-y-4">
+    <input id="updateName" placeholder="Name" class="input">
+    <input id="updatePhone" placeholder="Phone" class="input">
+    <input id="updateAddress" placeholder="Shipping Address" class="input">
+    <input id="updateBillingAddress" placeholder="Billing Address" class="input">
+
+    <select id="updateEmailPreferences" class="input">
+      <option value="Transactional emails only">Transactional emails only</option>
+      <option value="Order updates and product news">Order updates and product news</option>
+      <option value="All updates">All updates</option>
+    </select>
+
+    <button class="bg-blue-500 px-4 py-2 rounded text-white font-semibold">
+      Save Changes
+    </button>
+  </form>
+</div>
 
       <div id="changePassword" class="profile-tab-content hidden">
         <h3 class="text-xl font-semibold mb-4">Change Password</h3>
@@ -1517,7 +1537,7 @@
   Estimated Shipping: <span id="estimatedShippingCost">$0.00</span>
   <p class="text-xs text-gray-500">*Final shipping calculated at checkout.</p>
 </div>
-    <button id="checkoutBtn" aria-label="Proceed to Checkout" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded mt-2">
+    <button id="cartCheckoutBtn" aria-label="Proceed to Checkout" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded mt-2">
       Proceed to Checkout
     </button>
     <div class="text-xs text-gray-500 mt-4">

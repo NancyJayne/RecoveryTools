@@ -10,8 +10,8 @@ export const sendWelcomeEmail = onCall(
     region: "australia-southeast1",
     secrets: [SENDGRID_API_KEY],
   },
-  async (data) => {
-    const { to, firstName } = data;
+  async (request) => {
+    const { to, firstName } = request.data || {};
 
     if (!to || !firstName) {
       throw new HttpsError("invalid-argument", "Missing email or first name.");

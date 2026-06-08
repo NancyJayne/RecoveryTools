@@ -8,10 +8,11 @@ import { confirmOrderFromStripeRedirect } from "./shop-orders.js";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { executeRecaptcha } from "../utils/verifyRecaptchaToken.js";
 
-let user = auth?.currentUser;
-
 
 export async function setupCheckoutPage() {
+  document.getElementById("checkoutSection")?.classList.remove("hidden");
+  const user = auth.currentUser;
+
   const urlParams = new URLSearchParams(window.location.search);
   const isSuccess = urlParams.get("success") === "true";
   const summaryContainer = document.getElementById("checkoutSummary");
@@ -172,12 +173,24 @@ export async function setupCheckoutPage() {
   form.className = "space-y-4";
   summaryContainer.appendChild(form);
 
-  user = auth?.currentUser; // reuse outer `let user`
   let profileData = {};
-  if (user) {
-    const userDoc = await getDoc(doc(db, "users", user.uid));
-    profileData = userDoc.exists() ? userDoc.data().checkoutProfile || {} : {};
-  }
+
+if (user) {
+  const userDoc = await getDoc(doc(db, "users", user.uid));
+  const data = userDoc.exists() ? userDoc.data() : {};
+  const savedCheckout = data.checkoutProfile || {};
+
+  profileData = {
+    ...savedCheckout,
+    name: data.name || savedCheckout.name || user.displayName || "",
+    email: data.email || savedCheckout.email || user.email || "",
+    phone: data.phone || savedCheckout.phone || "",
+    shippingAddress_line1:
+      savedCheckout.shippingAddress_line1 || data.address || "",
+    billingAddress_line1:
+      savedCheckout.billingAddress_line1 || data.billingAddress || "",
+  };
+}
 
   // 👤 Full Name and Email Section
   const nameEmailGroup = document.createElement("div");
@@ -333,8 +346,8 @@ export async function setupCheckoutPage() {
     cartSummary.appendChild(createFieldRow(labelText, formatCurrency(totalPrice)));
   });
 
-  const shippingCost = 1000; // Default flat shipping
-  const gst = subtotal / 11;
+  const shippingCost = 10;
+  const gst = (subtotal + shippingCost) / 11;
   const total = subtotal + shippingCost;
 
   cartSummary.appendChild(createFieldRow("Subtotal", formatCurrency(subtotal)));

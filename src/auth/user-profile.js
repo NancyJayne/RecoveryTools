@@ -20,12 +20,25 @@ export async function getUserProfile(uid) {
   return snapshot.exists() ? snapshot.data() : null;
 }
 
-export async function updateUserProfile({ name, phone, address }) {
+export async function updateUserProfile({
+  name,
+  phone,
+  address,
+  billingAddress,
+  emailPreferences,
+}) {
   const uid = auth?.currentUser?.uid;
   if (!uid) throw new Error("Not logged in");
 
   const ref = doc(db, "users", uid);
-  await updateDoc(ref, { name, phone, address });
+
+  await updateDoc(ref, {
+    name,
+    phone,
+    address,
+    billingAddress,
+    emailPreferences,
+  });
 }
 
 export async function changeUserPassword(newPassword) {
