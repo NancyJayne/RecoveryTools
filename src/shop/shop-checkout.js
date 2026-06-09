@@ -411,14 +411,14 @@ if (user) {
       });
 
       const session = response.data;
-      if (session?.id) {
-        sessionStorage.setItem("cartBackup", JSON.stringify(cart));
-        window.location.href = `https://checkout.stripe.com/c/pay/${session.id}`;
-      } else {
-        showToast("Failed to initiate checkout session.", "error");
-      }
-    } catch (error) {
-      console.error("❌ Stripe Checkout error:", error);
+if (session?.url) {
+  sessionStorage.setItem("cartBackup", JSON.stringify(cart));
+  window.location.href = session.url;
+} else {
+  showToast("Failed to initiate checkout session.", "error");
+}
+        } catch (error) {
+      console.error("Unable to start checkout:", error);
       showToast("Unable to start checkout.", "error");
       confirmBtn.disabled = false;
       confirmBtn.textContent = "Checkout";

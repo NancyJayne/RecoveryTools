@@ -1,5 +1,3 @@
-+8
--4;
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
@@ -35,17 +33,20 @@ const verifyRecaptcha = async (token, context) => {
   }
 };
 
-const createCheckoutSessionHandler = async (data, context) => {
-  const uid = context.auth?.uid;
+const createCheckoutSessionHandler = async (request) => {
+  const uid = request.auth?.uid;
+  const data = request.data || {};
   if (!uid) throw new HttpsError("unauthenticated", "User must be logged in.");
 
   const { cart, referrerId, collectShipping = false, customerInfo = {}, token } = data;
 
   if (!Array.isArray(cart) || cart.length === 0) {
-    throw new HttpsError("invalid-argument", "Cart is empty or invalid.");
+  throw new HttpsError("invalid-argument", "Cart is empty or invalid.");
   }
 
-  await verifyRecaptcha(token, context); // ✅ reCAPTCHA validation
+  if (process.env.FUNCTIONS_EMULATOR !== "true") {
+    await verifyRecaptcha(token, request);
+  }
 
   const stripe = stripeLib(STRIPE_SECRET_KEY.value());
   const db = admin.firestore();
@@ -100,16 +101,16 @@ const createCheckoutSessionHandler = async (data, context) => {
 
     // 💳 Stripe line items
     const lineItems = validatedItems.map((item) => ({
-      price_data: {
-        currency: "aud",
-        unit_amount: item.price,
-        product_data: {
-          name: item.name,
-          images: [item.image],
-        },
-      },
-      quantity: item.quantity,
-    }));
+  price_data: {
+    currency: "aud",
+    unit_amount: Math.round(item.price * 100),
+    product_data: {
+      name: item.name,
+      images: [item.image],
+    },
+  },
+  quantity: item.quantity,
+}));
 
     const shippingCost = 1000;
 
@@ -125,19 +126,46 @@ const createCheckoutSessionHandler = async (data, context) => {
     };
 
     const sessionConfig = {
-      mode: "payment",
-      payment_method_types: ["card"],
-      line_items: lineItems,
-      success_url: `https://recoverytools.au/checkout?success=true`,
-      cancel_url: `https://recoverytools.au/cart`,
-      metadata,
-    };
+  mode: "payment",
+  payment_method_types: ["card"],
+  line_items: lineItems,
+  success_url: `https://recoverytools.au/checkout?success=true`,
+  cancel_url: `https://recoverytools.au/cart`,
+  metadata,
+
+  customer_email: customerInfo.email || undefined,
+
+  phone_number_collection: {
+    enabled: true,
+  },
+
+  shipping_address_collection: {
+    allowed_countries: ["AU"],
+  },
+
+  shipping_options: [
+    {
+      shipping_rate_data: {
+        type: "fixed_amount",
+        fixed_amount: {
+          amount: shippingCost,
+          currency: "aud",
+        },
+        display_name: "Standard Shipping",
+        delivery_estimate: {
+          minimum: { unit: "business_day", value: 2 },
+          maximum: { unit: "business_day", value: 5 },
+        },
+      },
+    },
+  ],
+};
 
     const primaryAccount = validatedItems[0]?.stripeAccountId;
     if (primaryAccount) {
       const totalFee = validatedItems.reduce((sum, item) => {
         const rate = commissionRates[item.type] ?? 0.1;
-        return sum + Math.round(item.price * item.quantity * rate);
+        return sum + Math.round(item.price * 100 * item.quantity * rate);
       }, 0);
       sessionConfig.payment_intent_data = {
         transfer_data: { destination: primaryAccount },
@@ -170,23 +198,33 @@ const createCheckoutSessionHandler = async (data, context) => {
       { checkoutProfile: customerInfo },
       { merge: true },
     );
-
+    
+console.log(
+  "Checkout config:",
+  JSON.stringify(sessionConfig, null, 2),
+);
     const session = await stripe.checkout.sessions.create(sessionConfig);
-    return { id: session.id };
+    return { id: session.id, url: session.url };
 
-  } catch (err) {
-    console.error("❌ Stripe session error:", err);
+    } catch (err) {
+    console.error("Unable to create checkout session:", err);
 
     await db.collection("logs").add({
       type: "error",
       message: err.message,
       stack: err.stack || null,
       source: "createCheckoutSession",
-      metadata: { uid, cartLength: cart?.length || 0 },
+      metadata: {
+        uid,
+        cartLength: cart?.length || 0,
+      },
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    throw new HttpsError("internal", "Unable to create checkout session.");
+    throw new HttpsError(
+      "internal",
+      "Unable to create checkout session.",
+    );
   }
 };
 
