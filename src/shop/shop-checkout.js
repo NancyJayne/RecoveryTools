@@ -5,7 +5,7 @@ import { httpsCallable } from "firebase/functions";
 import { getCurrentCart } from "./shop-cart.js";
 import { showToast, formatCurrency } from "../utils/utils.js";
 import { confirmOrderFromStripeRedirect } from "./shop-orders.js";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { executeRecaptcha } from "../utils/verifyRecaptchaToken.js";
 
 
@@ -228,7 +228,24 @@ if (user) {
   emailInput.value = profileData.email || "";
   emailWrapper.append(emailLabel, emailInput);
 
-  nameEmailGroup.append(nameWrapper, emailWrapper);
+  const phoneWrapper = document.createElement("div");
+const phoneLabel = document.createElement("label");
+phoneLabel.htmlFor = "phone";
+phoneLabel.className = "block text-sm font-medium text-white";
+phoneLabel.textContent = "Phone";
+
+const phoneInput = document.createElement("input");
+phoneInput.type = "tel";
+phoneInput.name = "phone";
+phoneInput.id = "phone";
+phoneInput.autocomplete = "tel";
+phoneInput.className =
+  "mt-1 block w-full bg-gray-800 border border-gray-700 text-white rounded-md px-3 py-2";
+phoneInput.value = profileData.phone || "";
+
+phoneWrapper.append(phoneLabel, phoneInput);
+
+  nameEmailGroup.append(nameWrapper, emailWrapper, phoneWrapper);
   form.appendChild(nameEmailGroup);
 
   // 📦 Shipping Address Section
@@ -301,32 +318,60 @@ if (user) {
   billingContainer.appendChild(billingGroup);
   form.appendChild(billingContainer);
 
-  // 🔄 Toggle billing section visibility
-  const toggleCheckbox = form.querySelector("#sameAsShipping");
-  toggleCheckbox?.addEventListener("change", (e) => {
-    const isSame = e.target.checked;
-    billingContainer.classList.toggle("hidden", isSame);
-    billingGroup.querySelectorAll("input").forEach((input) => {
-      input.disabled = isSame;
-    });
+// 🔄 Toggle billing section visibility
+const toggleCheckbox = form.querySelector("#sameAsShipping");
+toggleCheckbox?.addEventListener("change", (e) => {
+  const isSame = e.target.checked;
+  billingContainer.classList.toggle("hidden", isSame);
+
+  billingGroup.querySelectorAll("input").forEach((input) => {
+    input.disabled = isSame;
   });
+});
 
-  const createFieldRow = (labelText, value) => {
-    const row = document.createElement("div");
-    row.className = "flex justify-between border-b border-gray-700 py-2 text-sm";
+// 💾 Save as default shipping address
+const saveDefaultWrapper = document.createElement("div");
+saveDefaultWrapper.className = "mt-4";
 
-    const left = document.createElement("div");
-    const label = document.createElement("div");
-    label.className = "font-semibold";
-    label.textContent = labelText;
-    left.appendChild(label);
+saveDefaultWrapper.innerHTML = `
+  <label class="inline-flex items-center text-white">
+    <input
+      type="checkbox"
+      id="saveAsDefaultShipping"
+      class="form-checkbox bg-gray-800 border-gray-700 text-green-500"
+    />
+    <span class="ml-2">
+      Save this as my default shipping address
+    </span>
+  </label>
+`;
 
-    const right = document.createElement("div");
-    right.textContent = value;
+form.appendChild(saveDefaultWrapper);
 
-    row.append(left, right);
-    return row;
-  };
+// -------------------------------
+// Order Summary
+// -------------------------------
+
+const createFieldRow = (labelText, value) => {
+  const row = document.createElement("div");
+  row.className =
+    "flex justify-between border-b border-gray-700 py-2 text-sm";
+
+  const left = document.createElement("div");
+
+  const label = document.createElement("div");
+  label.className = "font-semibold";
+  label.textContent = labelText;
+
+  left.appendChild(label);
+
+  const right = document.createElement("div");
+  right.textContent = value;
+
+  row.append(left, right);
+
+  return row;
+};
 
   const cartSummary = document.createElement("div");
   cartSummary.className =
@@ -339,7 +384,7 @@ if (user) {
 
   let subtotal = 0;
   cart.forEach((item) => {
-    const totalPrice = (item.price * item.quantity) / 100;
+    const totalPrice = item.price * item.quantity;
     subtotal += totalPrice;
     const itemLabel = `${item.type?.toUpperCase() || "ITEM"} x${item.quantity}`;
     const labelText = `${item.name} (${itemLabel})`;
@@ -366,6 +411,8 @@ if (user) {
 
     const formData = new FormData(form);
     const customerInfo = Object.fromEntries(formData.entries());
+    const saveAsDefaultShipping =
+  form.querySelector("#saveAsDefaultShipping")?.checked || false;
 
     if (form.querySelector("#sameAsShipping")?.checked) {
       customerInfo.billingAddress = {
@@ -387,18 +434,6 @@ if (user) {
       };
     }
 
-    if (user) {
-      try {
-        await setDoc(
-          doc(db, "users", user.uid),
-          { checkoutProfile: customerInfo },
-          { merge: true },
-        );
-      } catch (err) {
-        console.warn("⚠ Failed to save checkout profile:", err);
-      }
-    }
-
     try {
       const token = await executeRecaptcha("checkout");
       const createCheckout = httpsCallable(functions, "createCheckoutSession");
@@ -407,6 +442,7 @@ if (user) {
         referrerId: localStorage.getItem("referrer_uid") || null,
         collectShipping: true,
         customerInfo,
+        saveAsDefaultShipping,
         token,
       });
 

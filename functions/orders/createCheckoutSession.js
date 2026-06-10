@@ -38,7 +38,14 @@ const createCheckoutSessionHandler = async (request) => {
   const data = request.data || {};
   if (!uid) throw new HttpsError("unauthenticated", "User must be logged in.");
 
-  const { cart, referrerId, collectShipping = false, customerInfo = {}, token } = data;
+  const {
+  cart,
+  referrerId,
+  collectShipping = false,
+  customerInfo = {},
+  saveAsDefaultShipping = false,
+  token,
+} = data;
 
   if (!Array.isArray(cart) || cart.length === 0) {
   throw new HttpsError("invalid-argument", "Cart is empty or invalid.");
@@ -114,10 +121,65 @@ const createCheckoutSessionHandler = async (request) => {
 
     const shippingCost = 1000;
 
+    const userRef = db.collection("users").doc(uid);
+const userSnap = await userRef.get();
+const userData = userSnap.exists ? userSnap.data() : {};
+
+let stripeCustomerId = userData.stripeCustomerId || null;
+
+const shippingAddress = {
+  line1: customerInfo.shippingAddress_line1 || "",
+  line2: customerInfo.shippingAddress_line2 || "",
+  city: customerInfo.shippingAddress_city || "",
+  state: customerInfo.shippingAddress_state || "",
+  postal_code: customerInfo.shippingAddress_postcode || "",
+  country: "AU",
+};
+
+if (!stripeCustomerId) {
+  const customer = await stripe.customers.create({
+    email: customerInfo.email || userData.email || request.auth?.token?.email,
+    name: customerInfo.name || userData.name || "",
+    phone: customerInfo.phone || userData.phone || "",
+    shipping: {
+      name: customerInfo.name || userData.name || "",
+      phone: customerInfo.phone || userData.phone || "",
+      address: shippingAddress,
+    },
+    metadata: {
+      firebaseUID: uid,
+    },
+  });
+
+  stripeCustomerId = customer.id;
+
+  await userRef.set(
+    {
+      stripeCustomerId,
+    },
+    { merge: true },
+  );
+} else {
+  await stripe.customers.update(stripeCustomerId, {
+    email: customerInfo.email || userData.email || request.auth?.token?.email,
+    name: customerInfo.name || userData.name || "",
+    phone: customerInfo.phone || userData.phone || "",
+    shipping: {
+      name: customerInfo.name || userData.name || "",
+      phone: customerInfo.phone || userData.phone || "",
+      address: shippingAddress,
+    },
+    metadata: {
+      firebaseUID: uid,
+    },
+  });
+}
+
     // 🧾 Metadata for tracking and analytics
     const metadata = {
       firebaseUID: uid,
       shippingCost: shippingCost.toString(),
+      saveAsDefaultShipping: saveAsDefaultShipping ? "true" : "false",
       ...(referrerId && { referrer_uid: referrerId }),
       ...(customerInfo.name && { customer_name: customerInfo.name }),
       ...(customerInfo.email && { customer_email: customerInfo.email }),
@@ -129,11 +191,18 @@ const createCheckoutSessionHandler = async (request) => {
   mode: "payment",
   payment_method_types: ["card"],
   line_items: lineItems,
-  success_url: `https://recoverytools.au/checkout?success=true`,
-  cancel_url: `https://recoverytools.au/cart`,
+  success_url:
+    process.env.FUNCTIONS_EMULATOR === "true"
+      ? "http://localhost:5173/checkout?success=true"
+      : "https://recoverytools.au/checkout?success=true",
+
+  cancel_url:
+    process.env.FUNCTIONS_EMULATOR === "true"
+      ? "http://localhost:5173/cart"
+      : "https://recoverytools.au/cart",
   metadata,
 
-  customer_email: customerInfo.email || undefined,
+  customer: stripeCustomerId,
 
   phone_number_collection: {
     enabled: true,
@@ -194,11 +263,22 @@ const createCheckoutSessionHandler = async (request) => {
     }
 
     // ✅ Store checkout info for reuse
-    await db.collection("users").doc(uid).set(
-      { checkoutProfile: customerInfo },
-      { merge: true },
-    );
-    
+    if (saveAsDefaultShipping) {
+  await userRef.set(
+    {
+      name: customerInfo.name || userData.name || "",
+      phone: customerInfo.phone || userData.phone || "",
+      address: customerInfo.shippingAddress_line1 || "",
+      defaultShippingAddress: shippingAddress,
+      checkoutProfile: customerInfo,
+    },
+    { merge: true },
+  );
+}
+
+console.log("Customer phone sent to Stripe:", customerInfo.phone);
+console.log("saveAsDefaultShipping:", saveAsDefaultShipping);
+
 console.log(
   "Checkout config:",
   JSON.stringify(sessionConfig, null, 2),

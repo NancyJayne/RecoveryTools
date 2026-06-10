@@ -138,7 +138,7 @@ export async function renderCartItems() {
 
       const details = document.createElement("div");
       details.className = "text-sm text-gray-400";
-      details.textContent = `$${(item.price / 100).toFixed(2)} × ${item.quantity}`;
+      details.textContent = `$${item.price.toFixed(2)} × ${item.quantity}`;
 
       info.appendChild(name);
       info.appendChild(details);
@@ -170,14 +170,16 @@ export async function renderCartItems() {
     container.appendChild(section);
   });
 
-  subtotalEl.textContent = `$${(subtotal / 100).toFixed(2)}`;
+  subtotalEl.textContent = `$${subtotal.toFixed(2)}`;
 
   try {
     const fetchSettings = httpsCallable(functions, "getShippingTaxSettings");
     const settingsRes = await fetchSettings();
     const { freeShippingMin = 0 } = settingsRes.data;
-    let shippingCost = subtotal >= freeShippingMin * 100 ? 0 : 800;
-    if (shippingEl) shippingEl.textContent = `$${(shippingCost / 100).toFixed(2)}`;
+    const shippingRate = settingsRes.data?.shippingZones?.find((z) => z.default)?.rate ?? 10;
+let shippingCost = subtotal >= freeShippingMin ? 0 : shippingRate;
+
+if (shippingEl) shippingEl.textContent = `$${shippingCost.toFixed(2)}`;
   } catch (err) {
     console.error("Shipping estimate error:", err);
     if (shippingEl) shippingEl.textContent = "$0.00";

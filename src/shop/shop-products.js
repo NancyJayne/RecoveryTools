@@ -109,11 +109,11 @@ export function createProductTile(product) {
   price.innerHTML =
   product.onSale && product.salePrice
     ? `<span class="line-through text-gray-500 mr-2">
-         $${(product.price / 100).toFixed(2)}
+         $${product.price.toFixed(2)}
        </span><span class="text-green-400 font-bold">
-         $${(finalPrice / 100).toFixed(2)}
+         $${finalPrice.toFixed(2)}
        </span>`
-    : `$${(finalPrice / 100).toFixed(2)}`;
+    : `$${finalPrice.toFixed(2)}`;
 
   price.className = "mt-1";
 
@@ -178,11 +178,11 @@ export function showProductDetail(product) {
   price.innerHTML =
   product.onSale && product.salePrice
     ? `<span class="line-through text-gray-500 mr-2">
-         $${(product.price / 100).toFixed(2)}
+         $${product.price.toFixed(2)}
        </span><span class="text-green-400 font-bold">
-         $${(finalPrice / 100).toFixed(2)}
+         $${finalPrice.toFixed(2)}
        </span>`
-    : `$${(finalPrice / 100).toFixed(2)}`;
+    : `$${finalPrice.toFixed(2)}`;
 
   price.className = "text-green-400 text-xl font-bold mb-2";
 
@@ -362,7 +362,7 @@ export function injectProductSchema(product) {
     "offers": {
       "@type": "Offer",
       "priceCurrency": "AUD",
-      "price": (product.salePrice || product.price) / 100,
+      "price": product.salePrice || product.price,
       "availability": product.stock > 0 ? "InStock" : "OutOfStock",
       "url": `https://recoverytools.au/shop/${productSlug}`,
     },

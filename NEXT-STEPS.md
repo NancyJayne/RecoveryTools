@@ -1,11 +1,10 @@
-# Recovery Tools — Next Steps
-
-## Current status
+Recovery Tools — Next Steps
+Current status
 
 ✅ Firebase CLI login fixed
 ✅ Local dev runs on Node 22
 ✅ Firebase emulators run
-✅ `npm run build` passes
+✅ npm run build passes
 ✅ Products load from Firestore emulator
 ✅ Product detail page works
 ✅ Add to Cart works
@@ -14,296 +13,308 @@
 ✅ Review crash fixed
 ✅ Placeholder product image fallback updated
 ✅ Shop page mostly works
-✅ `getShippingTaxSettings` CORS/500 error fixed
 ✅ Signup creates Auth emulator user
 ✅ Login works after signup
 ✅ Logout redirects home
-✅ Signup/login redirects to `/profile`
+✅ Signup/login redirects to /profile
 ✅ Profile page renders after login
 ✅ Profile header name/email displays
 ✅ My Profile tab displays account details
 ✅ Update Profile saves name, phone, shipping address, billing address, and email preferences
 ✅ Firestore rules allow users to update their own safe profile fields
 ✅ Welcome email callable v2 payload issue fixed
-✅ Cart checkout button navigates to `/checkout`
+✅ Cart checkout button navigates to /checkout
 ✅ Checkout section displays instead of blank page
-✅ Duplicate `checkoutBtn` ID issue fixed by changing cart drawer button to `cartCheckoutBtn`
+✅ Duplicate checkoutBtn ID fixed by changing cart drawer button to cartCheckoutBtn
+✅ Checkout callable auth v2 pattern fixed
+✅ Stripe checkout session creates successfully
+✅ Stripe unit_amount fixed from dollars to cents
+✅ Stripe Connect application fee calculation fixed to cents
+✅ Stripe session now returns session.url
+✅ Frontend redirects using session.url
+✅ Stripe back/cancel button works locally
+✅ Stripe Customer create/reuse added
+✅ users/{uid}.stripeCustomerId saves to Firestore
+✅ Stripe Checkout now prefills name, email and shipping address
+✅ Checkout “Save this as my default shipping address” checkbox added
+✅ Checkout sends saveAsDefaultShipping to backend
+✅ Product/cart/checkout price unit mismatch fixed
+✅ Product prices now treated as dollars in Firestore/frontend
+✅ Stripe amounts converted to cents only in backend
+✅ Cart, checkout and Stripe totals now match
+✅ Shipping standardized to $10
+✅ GST display confirmed correct for GST-inclusive pricing using total / 11
 
----
+Fixed today
+Cleared stale cart/localStorage issue.
+Confirmed checkout opens Stripe successfully.
+Fixed Stripe cancel/back URL for local emulator testing.
+Added/reused Stripe Customer logic in createCheckoutSession.js.
+Stores Stripe Customer ID on:
+users/{uid}.stripeCustomerId
+Uses existing Stripe Customer on future checkouts.
+Updated Stripe customer with:
+email
+name
+phone
+shipping.name
+shipping.phone
+shipping.address
+metadata.firebaseUID
+Replaced customer_email with:
+customer: stripeCustomerId
+Added checkout checkbox:
+Save this as my default shipping address
+Frontend now sends:
+saveAsDefaultShipping
+Removed automatic frontend checkout profile save.
+Added conditional backend profile save only when saveAsDefaultShipping === true.
+Fixed product price display by removing incorrect / 100 from:
+shop-cart.js
+shop-checkout.js
+shop-products.js
+Fixed product schema price so it uses dollar values.
+Updated shipping settings seed rate to $10.
+Confirmed:
+shop prices correct
+cart prices correct
+checkout totals correct
+Stripe product total correct
+Stripe shipping correct
+GST correct for GST-inclusive pricing
+Current issue
+1. Default shipping profile save is incomplete
 
-## Fixed today
+When the user ticks:
 
-* Fixed stale profile/auth rendering after login.
+Save this as my default shipping address
 
-* Added `waitForAuth()` to profile loading.
+the backend currently saves:
 
-* Made profile section visible after route load.
+address: customerInfo.shippingAddress_line1
+defaultShippingAddress: shippingAddress
+checkoutProfile: customerInfo
 
-* Populated:
+Phone saves correctly into the user profile.
 
-  * `data-profile-name`
-  * `data-profile-email`
-  * phone
-  * role
-  * shipping
-  * billing
-  * email preferences
+However, the visible profile fields only show address line 1. Address line 2, city, state and postcode are not showing in the profile UI yet.
 
-* Added extra Update Profile fields:
+Need to confirm whether the profile page reads from:
 
-  * billing address
-  * email preferences
+users/{uid}.address
+users/{uid}.billingAddress
 
-* Updated `updateUserProfile()` to save:
+or from:
 
-  * `name`
-  * `phone`
-  * `address`
-  * `billingAddress`
-  * `emailPreferences`
+users/{uid}.defaultShippingAddress
+users/{uid}.checkoutProfile
 
-* Added Firestore `users/{userId}` rule for safe self-updates.
+Likely fix: update profile display/prefill logic to support structured address objects.
 
-* Fixed logout so it redirects home.
+2. Billing address does not update from checkout
 
-* Fixed signup/login so user does not remain stuck on the logged-out profile page.
+Checkout collects billing address, but profile billing address is not updating when default checkbox is selected.
 
-* Updated `sendWelcomeEmail` from old callable payload handling to v2 callable request handling:
+Need to decide whether checkbox should save:
 
-  ```js
-  async (request) => {
-    const { to, firstName } = request.data || {};
-  }
-  ```
+defaultShippingAddress
 
-* Fixed cart drawer checkout button not navigating.
+only, or both:
 
-* Renamed cart drawer checkout button from:
+defaultShippingAddress
+defaultBillingAddress
 
-  ```html
-  id="checkoutBtn"
-  ```
+Recommended next fix:
 
-  to:
+Save shipping default and billing default separately if billing is present.
+3. Phone does not prefill into Stripe Checkout
 
-  ```html
-  id="cartCheckoutBtn"
-  ```
+Phone is saving/logging in the user profile, but it still does not prefill visually into Stripe Checkout.
 
-* Kept checkout page confirm button as:
+Backend currently sets:
 
-  ```html
-  id="checkoutBtn"
-  ```
+customer.phone
+customer.shipping.phone
+phone_number_collection.enabled = true
 
-* Made checkout section visible on `/checkout` by removing `hidden` inside `setupCheckoutPage()`.
+Need to check whether Stripe Checkout requires customer confirmation/entry when phone collection is enabled.
 
-* Fixed frontend checkout shipping display from `$1000` to `$10` by treating display values as dollars, not cents.
+This is not blocking checkout.
 
----
+Known issues to fix next
+1. Profile address structure mismatch
 
-## Known issues to fix next
+Current user profile likely expects simple strings:
 
-### 1. Stripe checkout session currently fails
+address
+billingAddress
 
-```text
-FirebaseError: User must be logged in.
-```
+but checkout now saves structured data:
 
-This is likely in:
-
-```text
-functions/orders/createCheckoutSession.js
-```
-
-Expected issue: old callable function pattern:
-
-```js
-async (data, context) => {
-  const uid = context.auth?.uid;
+defaultShippingAddress: {
+  line1,
+  line2,
+  city,
+  state,
+  postal_code,
+  country
 }
-```
 
-Should become v2 callable pattern:
+Need to update profile display and update form to support full structured addresses.
 
-```js
-async (request) => {
-  const uid = request.auth?.uid;
-  const data = request.data || {};
-}
-```
+2. Confirm completed order creation
 
-### 2. Inspect checkout function
+Every paid checkout should save order data to:
 
-```powershell
-Get-Content functions\orders\createCheckoutSession.js
-```
+orders/{orderId}
 
-### 3. Checkout fields need final confirmation
+This should happen in:
 
-* Name should prefill from:
+confirmStripePurchase
 
-  ```text
-  users/{uid}.name
-  ```
+not in createCheckoutSession.
 
-* Email should prefill from:
+Need to confirm order record includes:
 
-  ```text
-  users/{uid}.email
-  ```
+buyerUid
+stripeCustomerId
+stripeSessionId
+paymentIntentId
+products
+subtotal
+shipping
+total
+shippingName
+shippingPhone
+shippingAddress
+billingAddress
+saveAsDefaultShipping
+status
+createdAt
+3. Checkout success confirmation
 
-  or:
+Confirm /checkout?success=true calls:
 
-  ```js
-  auth.currentUser.email
-  ```
+confirmStripePurchase
 
-* Phone should prefill from:
+and creates a usable customer/admin order record.
 
-  ```text
-  users/{uid}.phone
-  ```
+4. SendGrid welcome email
 
-* Shipping should prefill from saved profile/checkout profile.
+SendGrid is reached but returns:
 
-* Checkout input should save back to:
-
-  ```text
-  users/{uid}.checkoutProfile
-  ```
-
-### 4. SendGrid welcome email
-
-SendGrid is now being reached but returns:
-
-```text
 ResponseError: Unauthorized
-```
 
 Likely:
 
-```text
 SENDGRID_API_KEY
-```
 
-is incorrect/missing in emulator configuration.
+is incorrect or missing in emulator configuration.
 
-Signup flow itself appears fixed.
-
-### 5. Shop filter buttons still need fixing
-
-* Featured
-* Back Pain
-* Mobility
-* Show All
-* Sort dropdown
-
-### 6. Vite warnings remain
+5. Shop filter buttons still need fixing
+Featured
+Back Pain
+Mobility
+Show All
+Sort dropdown
+6. Vite warnings remain
 
 Dynamic import warnings still appear during development.
 
 Build currently passes.
 
-### 7. ESLint warning remains
-
-```text
+7. ESLint warning remains
 src/shop/shop-products.js
 
 'showSection' is defined but never used
-```
-
-### 8. Placeholder image
+8. Placeholder image
 
 Replace temporary placeholder image with proper Recovery Tools asset.
 
----
-
-## Signup/Profile decision
+Signup/Profile decision
 
 Keep signup simple for now.
 
 Use one name field at signup:
 
-```js
 name: name
-```
 
 Later allow users to add/edit:
 
-* First name
-* Last name
-* Phone
-* Shipping address
-* Billing address
-* Profile image
-
-Shipping details can be captured during checkout and optionally saved back to the profile.
+First name
+Last name
+Phone
+Full shipping address
+Full billing address
+Profile image
 
 Do not split first/last name unless required for:
 
-* SendGrid
-* Stripe
-* Shipping labels
+SendGrid
+Stripe
+Shipping labels
+Checkout/Profile decision
 
----
+Use this rule:
 
-## Next session start
+Checkout address = address for this order
+Default profile address = only updates when checkbox is ticked
+Order history = every completed paid checkout
+
+Do not automatically overwrite user profile address from every checkout.
+
+For affiliates:
+
+Stripe Customer = the buyer/payer
+Shipping address = the recipient for this order
+
+Future affiliate feature:
+
+users/{affiliateUid}/shippingRecipients/{recipientId}
+
+for saved customer/recipient addresses.
+
+Next session start
 
 Run:
 
-```powershell
 npm run build
-```
 
 Then start emulators:
 
-```powershell
 npm run emulators
-```
 
 Then in another terminal:
 
-```powershell
 npm run dev
-```
 
-First debugging command:
+Optional browser console clear if cart looks stale:
 
-```powershell
-Get-Content functions\orders\createCheckoutSession.js
-```
-
----
-
-## Main goal for next session
-
-1. Fix `createCheckoutSession` v2 callable auth pattern.
-2. Retest `/checkout`.
-3. Confirm Stripe checkout session opens.
-4. Confirm checkout details save to Firestore.
-5. Return to shop filters once checkout is working.
-
----
-
-## End of session
+localStorage.removeItem("recovery_cart");
+localStorage.removeItem("cart");
+sessionStorage.removeItem("cartBackup");
+Main goal for next session
+Check profile page read/write logic for address fields.
+Update profile UI to display full structured shipping address.
+Update profile UI to display full structured billing address.
+Confirm default checkbox saves full address data correctly.
+Confirm confirmStripePurchase creates complete order records.
+Confirm order history shows shipping/billing details.
+Revisit Stripe phone prefill only after order/profile save is stable.
+End of session
 
 Commit and push:
 
-```powershell
 git status
 git add .
-git commit -m "Fix profile flow and checkout route setup"
+git commit -m "Add Stripe customer reuse and fix checkout pricing"
 git push
-```
 
 Then stop all running processes:
 
-```powershell
 Ctrl + C
-```
 
 Do this in both:
 
-* Emulator terminal
-* Vite dev terminal
+Emulator terminal
+Vite dev terminal

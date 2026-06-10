@@ -26,7 +26,7 @@ async function seedShopSettings() {
       {
         region: "AU",
         label: "Standard AU Shipping",
-        rate: 12,
+        rate: 10,
         currency: "AUD",
         default: true,
       },
