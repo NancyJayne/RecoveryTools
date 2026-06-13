@@ -136,6 +136,20 @@ const shippingAddress = {
   country: "AU",
 };
 
+const billingAddress = customerInfo.billingAddress
+  ? {
+      line1: customerInfo.billingAddress.line1 || "",
+      line2: customerInfo.billingAddress.line2 || "",
+      city: customerInfo.billingAddress.city || "",
+      state: customerInfo.billingAddress.state || "",
+      postal_code:
+        customerInfo.billingAddress.postal_code ||
+        customerInfo.billingAddress.postcode ||
+        "",
+      country: "AU",
+    }
+  : shippingAddress;
+  
 if (!stripeCustomerId) {
   const customer = await stripe.customers.create({
     email: customerInfo.email || userData.email || request.auth?.token?.email,
@@ -192,9 +206,9 @@ if (!stripeCustomerId) {
   payment_method_types: ["card"],
   line_items: lineItems,
   success_url:
-    process.env.FUNCTIONS_EMULATOR === "true"
-      ? "http://localhost:5173/checkout?success=true"
-      : "https://recoverytools.au/checkout?success=true",
+  process.env.FUNCTIONS_EMULATOR === "true"
+    ? "http://localhost:5173/checkout?success=true&session_id={CHECKOUT_SESSION_ID}"
+    : "https://recoverytools.au/checkout?success=true&session_id={CHECKOUT_SESSION_ID}",
 
   cancel_url:
     process.env.FUNCTIONS_EMULATOR === "true"
@@ -269,7 +283,9 @@ if (!stripeCustomerId) {
       name: customerInfo.name || userData.name || "",
       phone: customerInfo.phone || userData.phone || "",
       address: customerInfo.shippingAddress_line1 || "",
+      billingAddress: billingAddress.line1 || "",
       defaultShippingAddress: shippingAddress,
+      defaultBillingAddress: billingAddress,
       checkoutProfile: customerInfo,
     },
     { merge: true },

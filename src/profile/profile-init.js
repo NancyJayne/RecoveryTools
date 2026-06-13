@@ -28,6 +28,23 @@ async function waitForAuth() {
   });
 }
 
+function formatAddress(address) {
+  if (!address) return "";
+
+  if (typeof address === "string") return address;
+
+  return [
+    address.line1,
+    address.line2,
+    address.city,
+    address.state,
+    address.postal_code,
+    address.country,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
 export async function setupProfilePage() {
   const profileSection = document.getElementById("profileSection");
   profileSection?.classList.remove("hidden");
@@ -98,13 +115,18 @@ export async function setupProfilePage() {
       const profileShippingEl = document.querySelector("[data-profile-shipping]");
       if (profileShippingEl) {
         profileShippingEl.textContent =
-      userData?.shippingAddress || userData?.address || "Not added yet";
+  formatAddress(userData?.defaultShippingAddress) ||
+  formatAddress(userData?.shippingAddress) ||
+  formatAddress(userData?.address) ||
+  "Not added yet";
       }
 
       const profileBillingEl = document.querySelector("[data-profile-billing]");
       if (profileBillingEl) {
         profileBillingEl.textContent =
-      userData?.billingAddress || "Same as shipping / not added yet";
+  formatAddress(userData?.defaultBillingAddress) ||
+  formatAddress(userData?.billingAddress) ||
+  "Same as shipping / not added yet";
       }
 
       const profileEmailPrefsEl = document.querySelector("[data-profile-email-preferences]");
@@ -251,8 +273,18 @@ function setupProfileFormHandlers() {
       if (profile) {
         nameInput.value = profile.name || "";
         phoneInput.value = profile.phone || "";
-        addressInput.value = profile.address || "";
-        if (billingInput) billingInput.value = profile.billingAddress || "";
+        addressInput.value =
+  formatAddress(profile.defaultShippingAddress) ||
+  formatAddress(profile.shippingAddress) ||
+  formatAddress(profile.address) ||
+  "";
+
+if (billingInput) {
+  billingInput.value =
+    formatAddress(profile.defaultBillingAddress) ||
+    formatAddress(profile.billingAddress) ||
+    "";
+}
         if (emailPrefsInput) {
           emailPrefsInput.value = profile.emailPreferences || "Transactional emails only";
         }
@@ -299,10 +331,15 @@ function setupProfileFormHandlers() {
           freshProfile?.phone || "Not added yet";
 
         document.querySelector("[data-profile-shipping]").textContent =
-          freshProfile?.address || "Not added yet";
+  formatAddress(freshProfile?.defaultShippingAddress) ||
+  formatAddress(freshProfile?.shippingAddress) ||
+  formatAddress(freshProfile?.address) ||
+  "Not added yet";
 
-        document.querySelector("[data-profile-billing]").textContent =
-          freshProfile?.billingAddress || "Same as shipping / not added yet";
+document.querySelector("[data-profile-billing]").textContent =
+  formatAddress(freshProfile?.defaultBillingAddress) ||
+  formatAddress(freshProfile?.billingAddress) ||
+  "Same as shipping / not added yet";
 
         document.querySelector("[data-profile-email-preferences]").textContent =
           freshProfile?.emailPreferences || "Transactional emails only";

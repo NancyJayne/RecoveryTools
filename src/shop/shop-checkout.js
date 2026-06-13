@@ -7,11 +7,23 @@ import { showToast, formatCurrency } from "../utils/utils.js";
 import { confirmOrderFromStripeRedirect } from "./shop-orders.js";
 import { doc, getDoc } from "firebase/firestore";
 import { executeRecaptcha } from "../utils/verifyRecaptchaToken.js";
+import { onAuthStateChanged } from "firebase/auth";
+
+async function waitForAuth() {
+  if (auth?.currentUser) return auth.currentUser;
+
+  return new Promise((resolve) => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      unsub();
+      resolve(u);
+    });
+  });
+}
 
 
 export async function setupCheckoutPage() {
   document.getElementById("checkoutSection")?.classList.remove("hidden");
-  const user = auth.currentUser;
+  const user = await waitForAuth();
 
   const urlParams = new URLSearchParams(window.location.search);
   const isSuccess = urlParams.get("success") === "true";
@@ -181,15 +193,72 @@ if (user) {
   const savedCheckout = data.checkoutProfile || {};
 
   profileData = {
-    ...savedCheckout,
-    name: data.name || savedCheckout.name || user.displayName || "",
-    email: data.email || savedCheckout.email || user.email || "",
-    phone: data.phone || savedCheckout.phone || "",
-    shippingAddress_line1:
-      savedCheckout.shippingAddress_line1 || data.address || "",
-    billingAddress_line1:
-      savedCheckout.billingAddress_line1 || data.billingAddress || "",
-  };
+  ...savedCheckout,
+
+  name: data.name || savedCheckout.name || user.displayName || "",
+  email: data.email || savedCheckout.email || user.email || "",
+  phone: data.phone || savedCheckout.phone || "",
+
+  shippingAddress_line1:
+    savedCheckout.shippingAddress_line1 ||
+    data.defaultShippingAddress?.line1 ||
+    "",
+
+  shippingAddress_line2:
+    savedCheckout.shippingAddress_line2 ||
+    data.defaultShippingAddress?.line2 ||
+    "",
+
+  shippingAddress_city:
+    savedCheckout.shippingAddress_city ||
+    data.defaultShippingAddress?.city ||
+    "",
+
+  shippingAddress_state:
+    savedCheckout.shippingAddress_state ||
+    data.defaultShippingAddress?.state ||
+    "",
+
+  shippingAddress_postcode:
+    savedCheckout.shippingAddress_postcode ||
+    data.defaultShippingAddress?.postal_code ||
+    "",
+
+  shippingAddress_country:
+    savedCheckout.shippingAddress_country ||
+    data.defaultShippingAddress?.country ||
+    "Australia",
+
+  billingAddress_line1:
+    savedCheckout.billingAddress_line1 ||
+    data.defaultBillingAddress?.line1 ||
+    "",
+
+  billingAddress_line2:
+    savedCheckout.billingAddress_line2 ||
+    data.defaultBillingAddress?.line2 ||
+    "",
+
+  billingAddress_city:
+    savedCheckout.billingAddress_city ||
+    data.defaultBillingAddress?.city ||
+    "",
+
+  billingAddress_state:
+    savedCheckout.billingAddress_state ||
+    data.defaultBillingAddress?.state ||
+    "",
+
+  billingAddress_postcode:
+    savedCheckout.billingAddress_postcode ||
+    data.defaultBillingAddress?.postal_code ||
+    "",
+
+  billingAddress_country:
+    savedCheckout.billingAddress_country ||
+    data.defaultBillingAddress?.country ||
+    "Australia",
+};
 }
 
   // 👤 Full Name and Email Section
