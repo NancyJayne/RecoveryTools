@@ -77,6 +77,7 @@ export async function setupProfilePage() {
       document.getElementById("affiliateAccessLink")?.classList.remove("hidden");
       document.getElementById("affiliateAccessBtn")?.classList.remove("hidden");
       document.getElementById("affiliateBadge")?.classList.remove("hidden");
+      document.getElementById("affiliateSignup")?.classList.add("hidden");
     }
 
     // Load profile photo
@@ -109,7 +110,11 @@ export async function setupProfilePage() {
 
       const profileRoleEl = document.querySelector("[data-profile-role]");
       if (profileRoleEl) {
-        profileRoleEl.textContent = userData?.role || "user";
+        const roleNames = Object.entries(roles || {})
+          .filter(([, enabled]) => enabled)
+          .map(([role]) => role);
+
+        profileRoleEl.textContent = roleNames.length ? roleNames.join(", ") : "user";
       }
 
       const profileShippingEl = document.querySelector("[data-profile-shipping]");
@@ -279,12 +284,12 @@ function setupProfileFormHandlers() {
   formatAddress(profile.address) ||
   "";
 
-if (billingInput) {
-  billingInput.value =
+        if (billingInput) {
+          billingInput.value =
     formatAddress(profile.defaultBillingAddress) ||
     formatAddress(profile.billingAddress) ||
     "";
-}
+        }
         if (emailPrefsInput) {
           emailPrefsInput.value = profile.emailPreferences || "Transactional emails only";
         }
@@ -336,7 +341,7 @@ if (billingInput) {
   formatAddress(freshProfile?.address) ||
   "Not added yet";
 
-document.querySelector("[data-profile-billing]").textContent =
+        document.querySelector("[data-profile-billing]").textContent =
   formatAddress(freshProfile?.defaultBillingAddress) ||
   formatAddress(freshProfile?.billingAddress) ||
   "Same as shipping / not added yet";

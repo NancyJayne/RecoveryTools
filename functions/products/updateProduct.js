@@ -11,12 +11,12 @@ if (!admin.apps.length) {
  */
 export const updateProduct = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    if (!context.auth?.token?.admin) {
+  async (request) => {
+    if (!request.auth?.token?.admin) {
       throw new HttpsError("permission-denied", "Admin access required.");
     }
 
-    const { id, updates } = data;
+    const { id, updates } = request.data || {};
 
     if (!id || typeof updates !== "object") {
       throw new HttpsError("invalid-argument", "Missing product ID or updates object.");

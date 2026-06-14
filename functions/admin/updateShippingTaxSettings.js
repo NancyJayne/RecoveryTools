@@ -11,10 +11,15 @@ if (!admin.apps.length) {
  */
 export const updateShippingTaxSettings = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    if (!context.auth?.token?.admin) {
-      throw new HttpsError("permission-denied", "Only admins can update settings.");
+  async (request) => {
+    if (!request.auth?.token?.admin) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only admins can update settings.",
+      );
     }
+
+    const data = request.data;
 
     const allowedFields = [
       "gstRate",
@@ -37,15 +42,29 @@ export const updateShippingTaxSettings = onCall(
     }
 
     if (Object.keys(updateData).length === 0) {
-      throw new HttpsError("invalid-argument", "No valid settings provided.");
+      throw new HttpsError(
+        "invalid-argument",
+        "No valid settings provided.",
+      );
     }
 
     try {
-      await admin.firestore().collection("settings").doc("shop").set(updateData, { merge: true });
-      return { success: true, updated: updateData };
+      await admin
+        .firestore()
+        .collection("settings")
+        .doc("shop")
+        .set(updateData, { merge: true });
+
+      return {
+        success: true,
+        updated: updateData,
+      };
     } catch (err) {
       console.error("Failed to update shop settings:", err);
-      throw new HttpsError("internal", "Settings update failed.");
+      throw new HttpsError(
+        "internal",
+        "Settings update failed.",
+      );
     }
   },
 );

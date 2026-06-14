@@ -10,7 +10,15 @@ export const sendWelcomeEmail = onCall(
     region: "australia-southeast1",
     secrets: [SENDGRID_API_KEY],
   },
+  
   async (request) => {
+    if (!request.auth?.uid) {
+      throw new HttpsError(
+        "unauthenticated",
+        "Login required.",
+      );
+    }
+
     const { to, firstName } = request.data || {};
 
     if (!to || !firstName) {

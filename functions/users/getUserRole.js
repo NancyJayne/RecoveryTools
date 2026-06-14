@@ -1,4 +1,3 @@
-
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
 
@@ -11,13 +10,13 @@ if (!admin.apps.length) {
  */
 export const getUserRole = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    if (!context.auth) {
+  async (request) => {
+    if (!request.auth) {
       throw new HttpsError("unauthenticated", "You must be logged in.");
     }
 
     try {
-      const user = await admin.auth().getUser(context.auth.uid);
+      const user = await admin.auth().getUser(request.auth.uid);
       const roles = user.customClaims || {};
       return { uid: user.uid, roles };
     } catch (err) {
@@ -26,3 +25,4 @@ export const getUserRole = onCall(
     }
   },
 );
+

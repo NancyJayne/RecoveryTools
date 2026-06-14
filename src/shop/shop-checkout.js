@@ -187,79 +187,79 @@ export async function setupCheckoutPage() {
 
   let profileData = {};
 
-if (user) {
-  const userDoc = await getDoc(doc(db, "users", user.uid));
-  const data = userDoc.exists() ? userDoc.data() : {};
-  const savedCheckout = data.checkoutProfile || {};
+  if (user) {
+    const userDoc = await getDoc(doc(db, "users", user.uid));
+    const data = userDoc.exists() ? userDoc.data() : {};
+    const savedCheckout = data.checkoutProfile || {};
 
-  profileData = {
-  ...savedCheckout,
+    profileData = {
+      ...savedCheckout,
 
-  name: data.name || savedCheckout.name || user.displayName || "",
-  email: data.email || savedCheckout.email || user.email || "",
-  phone: data.phone || savedCheckout.phone || "",
+      name: data.name || savedCheckout.name || user.displayName || "",
+      email: data.email || savedCheckout.email || user.email || "",
+      phone: data.phone || savedCheckout.phone || "",
 
-  shippingAddress_line1:
+      shippingAddress_line1:
     savedCheckout.shippingAddress_line1 ||
     data.defaultShippingAddress?.line1 ||
     "",
 
-  shippingAddress_line2:
+      shippingAddress_line2:
     savedCheckout.shippingAddress_line2 ||
     data.defaultShippingAddress?.line2 ||
     "",
 
-  shippingAddress_city:
+      shippingAddress_city:
     savedCheckout.shippingAddress_city ||
     data.defaultShippingAddress?.city ||
     "",
 
-  shippingAddress_state:
+      shippingAddress_state:
     savedCheckout.shippingAddress_state ||
     data.defaultShippingAddress?.state ||
     "",
 
-  shippingAddress_postcode:
+      shippingAddress_postcode:
     savedCheckout.shippingAddress_postcode ||
     data.defaultShippingAddress?.postal_code ||
     "",
 
-  shippingAddress_country:
+      shippingAddress_country:
     savedCheckout.shippingAddress_country ||
     data.defaultShippingAddress?.country ||
     "Australia",
 
-  billingAddress_line1:
+      billingAddress_line1:
     savedCheckout.billingAddress_line1 ||
     data.defaultBillingAddress?.line1 ||
     "",
 
-  billingAddress_line2:
+      billingAddress_line2:
     savedCheckout.billingAddress_line2 ||
     data.defaultBillingAddress?.line2 ||
     "",
 
-  billingAddress_city:
+      billingAddress_city:
     savedCheckout.billingAddress_city ||
     data.defaultBillingAddress?.city ||
     "",
 
-  billingAddress_state:
+      billingAddress_state:
     savedCheckout.billingAddress_state ||
     data.defaultBillingAddress?.state ||
     "",
 
-  billingAddress_postcode:
+      billingAddress_postcode:
     savedCheckout.billingAddress_postcode ||
     data.defaultBillingAddress?.postal_code ||
     "",
 
-  billingAddress_country:
+      billingAddress_country:
     savedCheckout.billingAddress_country ||
     data.defaultBillingAddress?.country ||
     "Australia",
-};
-}
+    };
+  }
 
   // 👤 Full Name and Email Section
   const nameEmailGroup = document.createElement("div");
@@ -298,21 +298,21 @@ if (user) {
   emailWrapper.append(emailLabel, emailInput);
 
   const phoneWrapper = document.createElement("div");
-const phoneLabel = document.createElement("label");
-phoneLabel.htmlFor = "phone";
-phoneLabel.className = "block text-sm font-medium text-white";
-phoneLabel.textContent = "Phone";
+  const phoneLabel = document.createElement("label");
+  phoneLabel.htmlFor = "phone";
+  phoneLabel.className = "block text-sm font-medium text-white";
+  phoneLabel.textContent = "Phone";
 
-const phoneInput = document.createElement("input");
-phoneInput.type = "tel";
-phoneInput.name = "phone";
-phoneInput.id = "phone";
-phoneInput.autocomplete = "tel";
-phoneInput.className =
+  const phoneInput = document.createElement("input");
+  phoneInput.type = "tel";
+  phoneInput.name = "phone";
+  phoneInput.id = "phone";
+  phoneInput.autocomplete = "tel";
+  phoneInput.className =
   "mt-1 block w-full bg-gray-800 border border-gray-700 text-white rounded-md px-3 py-2";
-phoneInput.value = profileData.phone || "";
+  phoneInput.value = profileData.phone || "";
 
-phoneWrapper.append(phoneLabel, phoneInput);
+  phoneWrapper.append(phoneLabel, phoneInput);
 
   nameEmailGroup.append(nameWrapper, emailWrapper, phoneWrapper);
   form.appendChild(nameEmailGroup);
@@ -387,22 +387,22 @@ phoneWrapper.append(phoneLabel, phoneInput);
   billingContainer.appendChild(billingGroup);
   form.appendChild(billingContainer);
 
-// 🔄 Toggle billing section visibility
-const toggleCheckbox = form.querySelector("#sameAsShipping");
-toggleCheckbox?.addEventListener("change", (e) => {
-  const isSame = e.target.checked;
-  billingContainer.classList.toggle("hidden", isSame);
+  // 🔄 Toggle billing section visibility
+  const toggleCheckbox = form.querySelector("#sameAsShipping");
+  toggleCheckbox?.addEventListener("change", (e) => {
+    const isSame = e.target.checked;
+    billingContainer.classList.toggle("hidden", isSame);
 
-  billingGroup.querySelectorAll("input").forEach((input) => {
-    input.disabled = isSame;
+    billingGroup.querySelectorAll("input").forEach((input) => {
+      input.disabled = isSame;
+    });
   });
-});
 
-// 💾 Save as default shipping address
-const saveDefaultWrapper = document.createElement("div");
-saveDefaultWrapper.className = "mt-4";
+  // 💾 Save as default shipping address
+  const saveDefaultWrapper = document.createElement("div");
+  saveDefaultWrapper.className = "mt-4";
 
-saveDefaultWrapper.innerHTML = `
+  saveDefaultWrapper.innerHTML = `
   <label class="inline-flex items-center text-white">
     <input
       type="checkbox"
@@ -415,32 +415,32 @@ saveDefaultWrapper.innerHTML = `
   </label>
 `;
 
-form.appendChild(saveDefaultWrapper);
+  form.appendChild(saveDefaultWrapper);
 
-// -------------------------------
-// Order Summary
-// -------------------------------
+  // -------------------------------
+  // Order Summary
+  // -------------------------------
 
-const createFieldRow = (labelText, value) => {
-  const row = document.createElement("div");
-  row.className =
+  const createFieldRow = (labelText, value) => {
+    const row = document.createElement("div");
+    row.className =
     "flex justify-between border-b border-gray-700 py-2 text-sm";
 
-  const left = document.createElement("div");
+    const left = document.createElement("div");
 
-  const label = document.createElement("div");
-  label.className = "font-semibold";
-  label.textContent = labelText;
+    const label = document.createElement("div");
+    label.className = "font-semibold";
+    label.textContent = labelText;
 
-  left.appendChild(label);
+    left.appendChild(label);
 
-  const right = document.createElement("div");
-  right.textContent = value;
+    const right = document.createElement("div");
+    right.textContent = value;
 
-  row.append(left, right);
+    row.append(left, right);
 
-  return row;
-};
+    return row;
+  };
 
   const cartSummary = document.createElement("div");
   cartSummary.className =
@@ -516,13 +516,13 @@ const createFieldRow = (labelText, value) => {
       });
 
       const session = response.data;
-if (session?.url) {
-  sessionStorage.setItem("cartBackup", JSON.stringify(cart));
-  window.location.href = session.url;
-} else {
-  showToast("Failed to initiate checkout session.", "error");
-}
-        } catch (error) {
+      if (session?.url) {
+        sessionStorage.setItem("cartBackup", JSON.stringify(cart));
+        window.location.href = session.url;
+      } else {
+        showToast("Failed to initiate checkout session.", "error");
+      }
+    } catch (error) {
       console.error("Unable to start checkout:", error);
       showToast("Unable to start checkout.", "error");
       confirmBtn.disabled = false;

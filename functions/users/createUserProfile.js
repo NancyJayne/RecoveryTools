@@ -9,16 +9,24 @@ export const createUserProfile = region("australia-southeast1")
   .auth.user()
   .onCreate(async (user) => {
     const { uid, email, displayName } = user;
+
     try {
-      await admin.firestore().collection("users").doc(uid).set({
-        uid,
-        email: email || null,
-        displayName: displayName || null,
-        photoURL: "",
-        roles: {},
-      });
+      await admin.firestore().collection("users").doc(uid).set(
+        {
+          uid,
+          email: email || null,
+          name: displayName || "",
+          displayName: displayName || "",
+          photoURL: "",
+          roles: {},
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+
       console.log(`📝 Created profile for ${uid}`);
     } catch (err) {
       console.error("❌ Failed to create user profile:", err);
     }
   });
+  

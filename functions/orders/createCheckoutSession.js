@@ -39,16 +39,16 @@ const createCheckoutSessionHandler = async (request) => {
   if (!uid) throw new HttpsError("unauthenticated", "User must be logged in.");
 
   const {
-  cart,
-  referrerId,
-  collectShipping = false,
-  customerInfo = {},
-  saveAsDefaultShipping = false,
-  token,
-} = data;
+    cart,
+    referrerId,
+    collectShipping = false,
+    customerInfo = {},
+    saveAsDefaultShipping = false,
+    token,
+  } = data;
 
   if (!Array.isArray(cart) || cart.length === 0) {
-  throw new HttpsError("invalid-argument", "Cart is empty or invalid.");
+    throw new HttpsError("invalid-argument", "Cart is empty or invalid.");
   }
 
   if (process.env.FUNCTIONS_EMULATOR !== "true") {
@@ -108,86 +108,86 @@ const createCheckoutSessionHandler = async (request) => {
 
     // 💳 Stripe line items
     const lineItems = validatedItems.map((item) => ({
-  price_data: {
-    currency: "aud",
-    unit_amount: Math.round(item.price * 100),
-    product_data: {
-      name: item.name,
-      images: [item.image],
-    },
-  },
-  quantity: item.quantity,
-}));
+      price_data: {
+        currency: "aud",
+        unit_amount: Math.round(item.price * 100),
+        product_data: {
+          name: item.name,
+          images: [item.image],
+        },
+      },
+      quantity: item.quantity,
+    }));
 
     const shippingCost = 1000;
 
     const userRef = db.collection("users").doc(uid);
-const userSnap = await userRef.get();
-const userData = userSnap.exists ? userSnap.data() : {};
+    const userSnap = await userRef.get();
+    const userData = userSnap.exists ? userSnap.data() : {};
 
-let stripeCustomerId = userData.stripeCustomerId || null;
+    let stripeCustomerId = userData.stripeCustomerId || null;
 
-const shippingAddress = {
-  line1: customerInfo.shippingAddress_line1 || "",
-  line2: customerInfo.shippingAddress_line2 || "",
-  city: customerInfo.shippingAddress_city || "",
-  state: customerInfo.shippingAddress_state || "",
-  postal_code: customerInfo.shippingAddress_postcode || "",
-  country: "AU",
-};
+    const shippingAddress = {
+      line1: customerInfo.shippingAddress_line1 || "",
+      line2: customerInfo.shippingAddress_line2 || "",
+      city: customerInfo.shippingAddress_city || "",
+      state: customerInfo.shippingAddress_state || "",
+      postal_code: customerInfo.shippingAddress_postcode || "",
+      country: "AU",
+    };
 
-const billingAddress = customerInfo.billingAddress
-  ? {
-      line1: customerInfo.billingAddress.line1 || "",
-      line2: customerInfo.billingAddress.line2 || "",
-      city: customerInfo.billingAddress.city || "",
-      state: customerInfo.billingAddress.state || "",
-      postal_code:
+    const billingAddress = customerInfo.billingAddress
+      ? {
+        line1: customerInfo.billingAddress.line1 || "",
+        line2: customerInfo.billingAddress.line2 || "",
+        city: customerInfo.billingAddress.city || "",
+        state: customerInfo.billingAddress.state || "",
+        postal_code:
         customerInfo.billingAddress.postal_code ||
         customerInfo.billingAddress.postcode ||
         "",
-      country: "AU",
-    }
-  : shippingAddress;
+        country: "AU",
+      }
+      : shippingAddress;
   
-if (!stripeCustomerId) {
-  const customer = await stripe.customers.create({
-    email: customerInfo.email || userData.email || request.auth?.token?.email,
-    name: customerInfo.name || userData.name || "",
-    phone: customerInfo.phone || userData.phone || "",
-    shipping: {
-      name: customerInfo.name || userData.name || "",
-      phone: customerInfo.phone || userData.phone || "",
-      address: shippingAddress,
-    },
-    metadata: {
-      firebaseUID: uid,
-    },
-  });
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        email: customerInfo.email || userData.email || request.auth?.token?.email,
+        name: customerInfo.name || userData.name || "",
+        phone: customerInfo.phone || userData.phone || "",
+        shipping: {
+          name: customerInfo.name || userData.name || "",
+          phone: customerInfo.phone || userData.phone || "",
+          address: shippingAddress,
+        },
+        metadata: {
+          firebaseUID: uid,
+        },
+      });
 
-  stripeCustomerId = customer.id;
+      stripeCustomerId = customer.id;
 
-  await userRef.set(
-    {
-      stripeCustomerId,
-    },
-    { merge: true },
-  );
-} else {
-  await stripe.customers.update(stripeCustomerId, {
-    email: customerInfo.email || userData.email || request.auth?.token?.email,
-    name: customerInfo.name || userData.name || "",
-    phone: customerInfo.phone || userData.phone || "",
-    shipping: {
-      name: customerInfo.name || userData.name || "",
-      phone: customerInfo.phone || userData.phone || "",
-      address: shippingAddress,
-    },
-    metadata: {
-      firebaseUID: uid,
-    },
-  });
-}
+      await userRef.set(
+        {
+          stripeCustomerId,
+        },
+        { merge: true },
+      );
+    } else {
+      await stripe.customers.update(stripeCustomerId, {
+        email: customerInfo.email || userData.email || request.auth?.token?.email,
+        name: customerInfo.name || userData.name || "",
+        phone: customerInfo.phone || userData.phone || "",
+        shipping: {
+          name: customerInfo.name || userData.name || "",
+          phone: customerInfo.phone || userData.phone || "",
+          address: shippingAddress,
+        },
+        metadata: {
+          firebaseUID: uid,
+        },
+      });
+    }
 
     // 🧾 Metadata for tracking and analytics
     const metadata = {
@@ -202,47 +202,47 @@ if (!stripeCustomerId) {
     };
 
     const sessionConfig = {
-  mode: "payment",
-  payment_method_types: ["card"],
-  line_items: lineItems,
-  success_url:
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: lineItems,
+      success_url:
   process.env.FUNCTIONS_EMULATOR === "true"
     ? "http://localhost:5173/checkout?success=true&session_id={CHECKOUT_SESSION_ID}"
     : "https://recoverytools.au/checkout?success=true&session_id={CHECKOUT_SESSION_ID}",
 
-  cancel_url:
+      cancel_url:
     process.env.FUNCTIONS_EMULATOR === "true"
       ? "http://localhost:5173/cart"
       : "https://recoverytools.au/cart",
-  metadata,
+      metadata,
 
-  customer: stripeCustomerId,
+      customer: stripeCustomerId,
 
-  phone_number_collection: {
-    enabled: true,
-  },
-
-  shipping_address_collection: {
-    allowed_countries: ["AU"],
-  },
-
-  shipping_options: [
-    {
-      shipping_rate_data: {
-        type: "fixed_amount",
-        fixed_amount: {
-          amount: shippingCost,
-          currency: "aud",
-        },
-        display_name: "Standard Shipping",
-        delivery_estimate: {
-          minimum: { unit: "business_day", value: 2 },
-          maximum: { unit: "business_day", value: 5 },
-        },
+      phone_number_collection: {
+        enabled: true,
       },
-    },
-  ],
-};
+
+      shipping_address_collection: {
+        allowed_countries: ["AU"],
+      },
+
+      shipping_options: [
+        {
+          shipping_rate_data: {
+            type: "fixed_amount",
+            fixed_amount: {
+              amount: shippingCost,
+              currency: "aud",
+            },
+            display_name: "Standard Shipping",
+            delivery_estimate: {
+              minimum: { unit: "business_day", value: 2 },
+              maximum: { unit: "business_day", value: 5 },
+            },
+          },
+        },
+      ],
+    };
 
     const primaryAccount = validatedItems[0]?.stripeAccountId;
     if (primaryAccount) {
@@ -278,31 +278,31 @@ if (!stripeCustomerId) {
 
     // ✅ Store checkout info for reuse
     if (saveAsDefaultShipping) {
-  await userRef.set(
-    {
-      name: customerInfo.name || userData.name || "",
-      phone: customerInfo.phone || userData.phone || "",
-      address: customerInfo.shippingAddress_line1 || "",
-      billingAddress: billingAddress.line1 || "",
-      defaultShippingAddress: shippingAddress,
-      defaultBillingAddress: billingAddress,
-      checkoutProfile: customerInfo,
-    },
-    { merge: true },
-  );
-}
+      await userRef.set(
+        {
+          name: customerInfo.name || userData.name || "",
+          phone: customerInfo.phone || userData.phone || "",
+          address: customerInfo.shippingAddress_line1 || "",
+          billingAddress: billingAddress.line1 || "",
+          defaultShippingAddress: shippingAddress,
+          defaultBillingAddress: billingAddress,
+          checkoutProfile: customerInfo,
+        },
+        { merge: true },
+      );
+    }
 
-console.log("Customer phone sent to Stripe:", customerInfo.phone);
-console.log("saveAsDefaultShipping:", saveAsDefaultShipping);
+    console.log("Customer phone sent to Stripe:", customerInfo.phone);
+    console.log("saveAsDefaultShipping:", saveAsDefaultShipping);
 
-console.log(
-  "Checkout config:",
-  JSON.stringify(sessionConfig, null, 2),
-);
+    console.log(
+      "Checkout config:",
+      JSON.stringify(sessionConfig, null, 2),
+    );
     const session = await stripe.checkout.sessions.create(sessionConfig);
     return { id: session.id, url: session.url };
 
-    } catch (err) {
+  } catch (err) {
     console.error("Unable to create checkout session:", err);
 
     await db.collection("logs").add({

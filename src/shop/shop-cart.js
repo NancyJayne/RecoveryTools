@@ -26,16 +26,16 @@ export function initCartUI() {
   }
 
   if (checkoutBtn) {
-  checkoutBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    checkoutBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
 
-    console.log("🛒 Checkout button clicked");
-    window.location.assign("/checkout");
-  });
-} else {
-  console.warn("⚠ cartCheckoutBtn not found when initCartUI ran");
-}
+      console.log("🛒 Checkout button clicked");
+      window.location.assign("/checkout");
+    });
+  } else {
+    console.warn("⚠ cartCheckoutBtn not found when initCartUI ran");
+  }
 
   renderCartItems();
 }
@@ -177,9 +177,9 @@ export async function renderCartItems() {
     const settingsRes = await fetchSettings();
     const { freeShippingMin = 0 } = settingsRes.data;
     const shippingRate = settingsRes.data?.shippingZones?.find((z) => z.default)?.rate ?? 10;
-let shippingCost = subtotal >= freeShippingMin ? 0 : shippingRate;
+    let shippingCost = subtotal >= freeShippingMin ? 0 : shippingRate;
 
-if (shippingEl) shippingEl.textContent = `$${shippingCost.toFixed(2)}`;
+    if (shippingEl) shippingEl.textContent = `$${shippingCost.toFixed(2)}`;
   } catch (err) {
     console.error("Shipping estimate error:", err);
     if (shippingEl) shippingEl.textContent = "$0.00";

@@ -11,15 +11,21 @@ if (!admin.apps.length) {
  */
 export const deleteProduct = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    if (!context.auth?.token?.admin) {
-      throw new HttpsError("permission-denied", "Admin access required.");
+  async (request) => {
+    if (!request.auth?.token?.admin) {
+      throw new HttpsError(
+        "permission-denied",
+        "Admin access required.",
+      );
     }
 
-    const { id } = data;
+    const { id } = request.data || {};
 
     if (!id) {
-      throw new HttpsError("invalid-argument", "Missing product ID.");
+      throw new HttpsError(
+        "invalid-argument",
+        "Missing product ID.",
+      );
     }
 
     try {

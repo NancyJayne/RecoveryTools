@@ -12,9 +12,10 @@ if (!admin.apps.length) {
  */
 export const registerAffiliate = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    const uid = context.auth?.uid;
-    const email = context.auth?.token?.email;
+  async (request) => {
+    const uid = request.auth?.uid;
+    const email = request.auth?.token?.email;
+
     if (!uid || !email) {
       throw new HttpsError("unauthenticated", "You must be logged in.");
     }
@@ -45,10 +46,10 @@ export const registerAffiliate = onCall(
 
       // 🔐 Update custom claims for immediate access
       const { customClaims = {} } = await admin.auth().getUser(uid);
+
       await admin.auth().setCustomUserClaims(uid, {
         ...customClaims,
         affiliate: true,
-        role: "affiliate",
       });
 
       return { success: true, referralCode };

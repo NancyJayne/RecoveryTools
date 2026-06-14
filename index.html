@@ -313,13 +313,13 @@
     Become an Affiliate
   </button>
 
-  <a id="affiliateAccessLink" href="/affiliate" class="hidden text-sm text-green-500 hover:underline">
+  <a id="affiliateAccessLink" href="/affiliate" class="router-link hidden text-sm text-green-500 hover:underline">
     🤝 Affiliate Dashboard
   </a>
-  <a id="therapistAccessLink" href="/therapist" class="hidden text-sm text-indigo-400 hover:underline">
+  <a id="therapistAccessLink" href="/therapist" class="router-link hidden text-sm text-indigo-400 hover:underline">
     💼 Therapist Tools
   </a>
-  <a id="adminAccessLink" href="/admin" class="hidden text-sm text-purple-400 hover:underline">
+  <a id="adminAccessLink" href="/admin" class="router-link hidden text-sm text-purple-400 hover:underline">
     🔐 Admin Dashboard
   </a>
 </div>
@@ -340,9 +340,9 @@
       <button data-profile-tab="orderHistory" class="profile-tab-btn">My Orders</button>
       <button data-profile-tab="updateProfile" class="profile-tab-btn">Update Profile</button>
       <button data-profile-tab="changePassword" class="profile-tab-btn">Change Password</button>
-      <a id="affiliateAccessBtn" href="/affiliate" class="hidden profile-tab-btn bg-green-600 text-white">Affiliate Dashboard</a>
-      <a id="therapistAccessBtn" href="/therapist" class="hidden profile-tab-btn bg-indigo-600 text-white">Therapist Tools</a>
-      <a id="adminAccessBtn" href="/admin" class="hidden profile-tab-btn bg-purple-600 text-white">Admin Dashboard</a>
+      <a id="affiliateAccessBtn" href="/affiliate" class="router-link hidden profile-tab-btn bg-green-600 text-white">Affiliate Dashboard</a>
+      <a id="therapistAccessBtn" href="/therapist" class="router-link hidden profile-tab-btn bg-indigo-600 text-white">Therapist Tools</a>
+      <a id="adminAccessBtn" href="/admin" class="router-link hidden profile-tab-btn bg-purple-600 text-white">Admin Dashboard</a>
       <button id="signOutBtn" class="profile-tab-btn text-red-400">Sign Out</button>
     </aside>
 
@@ -967,14 +967,7 @@
           observer.observe(document.getElementById("globalOrdersGrid"), { childList: true, subtree: true });
         });
       </script>
-      </div>
-              <div>
-                <strong>User:</strong>
-                <a href="/admin/crm?uid=${data.uid}" class="text-blue-400 hover:underline" title="Go to user in CRM">
-                  ${data.userName || "Unknown"} (${data.userEmail})
-                </a>
-              </div>
-              
+      </div>  
             </div>
 
       <div id="adminWorkshopApprovals" class="admin-tab hidden">

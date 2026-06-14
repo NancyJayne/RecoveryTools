@@ -7,10 +7,10 @@ if (!admin.apps.length) {
 
 export const approveReview = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    const { productId, reviewId, approve } = data;
+  async (request) => {
+    const { productId, reviewId, approve } = request.data || {};
 
-    if (!context.auth?.token?.admin) {
+    if (!request.auth?.token?.admin) {
       throw new HttpsError("permission-denied", "Only admins can approve reviews.");
     }
 

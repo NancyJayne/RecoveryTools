@@ -1,13 +1,12 @@
 // functions/scripts/seedUserRoles.js
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { initializeApp } from "firebase-admin/app";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 
-// ✅ Force emulator usage
 process.env.GCLOUD_PROJECT = "recovery-tools";
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
-process.env.FIREBASE_AUTH_EMULATOR_HOST = "localhost:9099";
+process.env.FIREBASE_AUTH_EMULATOR_HOST = "localhost:9100";
 
-// 🔒 SAFETY CHECK
 if (process.env.GCLOUD_PROJECT !== "recovery-tools") {
   console.warn("🚨 Aborting: Not a safe test environment.");
   process.exit(1);
@@ -18,15 +17,18 @@ initializeApp({
 });
 
 const db = getFirestore();
+const auth = getAuth();
 
 const usersToSeed = [
   {
+    uid: "uid-admin",
     email: "admin@recoverytools.au",
     password: "secureTest123",
     displayName: "Admin User",
     roles: { admin: true },
   },
   {
+    uid: "uid-therapist",
     email: "therapist@recoverytools.au",
     password: "secureTest123",
     displayName: "Therapist User",
@@ -34,12 +36,14 @@ const usersToSeed = [
     therapistGroup: "Sports Rehab",
   },
   {
+    uid: "uid-affiliate",
     email: "affiliate@recoverytools.au",
     password: "secureTest123",
     displayName: "Affiliate User",
     roles: { affiliate: true },
   },
   {
+    uid: "uid-multi",
     email: "multi@recoverytools.au",
     password: "secureTest123",
     displayName: "Multi Role User",
@@ -56,9 +60,45 @@ async function resetCollections(collections) {
   for (const name of collections) {
     const snap = await db.collection(name).get();
     const batch = db.batch();
+
     snap.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
+
     console.log(`🧹 Cleared collection: ${name}`);
+  }
+}
+
+async function ensureAuthUser(user) {
+  try {
+    const existingUser = await auth.getUserByEmail(user.email);
+
+    if (existingUser.uid !== user.uid) {
+      console.warn(
+        `⚠️ ${user.email} exists with UID ${existingUser.uid}, expected ${user.uid}.`,
+      );
+      return existingUser;
+    }
+
+    await auth.updateUser(user.uid, {
+      email: user.email,
+      password: user.password,
+      displayName: user.displayName,
+      emailVerified: true,
+    });
+
+    return existingUser;
+  } catch (err) {
+    if (err.code !== "auth/user-not-found") {
+      throw err;
+    }
+
+    return auth.createUser({
+      uid: user.uid,
+      email: user.email,
+      password: user.password,
+      displayName: user.displayName,
+      emailVerified: true,
+    });
   }
 }
 
@@ -67,14 +107,15 @@ async function seedUsers() {
     "users",
     "badges",
     "orders",
-    "products",
     "affiliates",
     "clinicalCompanion",
   ]);
 
   for (const user of usersToSeed) {
     try {
-      const uid = `uid-${user.email.split("@")[0]}`;
+      const authUser = await ensureAuthUser(user);
+      const uid = authUser.uid;
+      await auth.setCustomUserClaims(uid, user.roles);
 
       await db.collection("users").doc(uid).set(
         {
@@ -82,8 +123,10 @@ async function seedUsers() {
           email: user.email,
           name: user.displayName,
           roles: user.roles,
+          role: Object.keys(user.roles).join(", "),
           photoURL: "",
           createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },
       );
@@ -103,8 +146,11 @@ async function seedUsers() {
 
       if (user.roles.affiliate) {
         const referralCode = generateReferralCode(user.email);
+
         await db.collection("affiliates").doc(uid).set(
           {
+            uid,
+            email: user.email,
             referralCode,
             clicks: 0,
             conversions: 0,
@@ -124,32 +170,13 @@ async function seedUsers() {
         { merge: true },
       );
 
-      await db.collection("orders").add({
-        userId: uid,
-        items: [{ name: "Trigger Ball", price: 19.95, quantity: 1 }],
-        total: 19.95,
-        status: "seeded",
-        createdAt: FieldValue.serverTimestamp(),
-      });
-
-      await db.collection("products").add({
-        name: `${user.displayName}'s Sample Tool`,
-        creatorId: uid,
-        type: "Tool",
-        visible: true,
-        shortDescription: "Test item created for seeding",
-        price: 29.95,
-        stock: 5,
-        createdAt: FieldValue.serverTimestamp(),
-      });
-
-      console.log(`✅ Seeded user & data for ${user.email}`);
+      console.log(`✅ Seeded Auth + Firestore user for ${user.email}`);
     } catch (err) {
       console.error(`❌ Error seeding ${user.email}:`, err.message);
     }
   }
 
-  console.log("🎉 All users and data seeded successfully.");
+  console.log("🎉 All users and role data seeded successfully.");
   process.exit(0);
 }
 

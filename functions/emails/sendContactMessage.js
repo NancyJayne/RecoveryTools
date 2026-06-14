@@ -1,4 +1,4 @@
-// 📧 sendContactMessage.js – Firebase Callable Function with fallback secret support
+// 📧 sendContactMessage.js – Firebase Callable Function using Firebase Secret Manager
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import admin from "firebase-admin";
@@ -28,21 +28,15 @@ function escapeHTML(str) {
   });
 }
 
-const sendContactMessageHandler = async (data) => {
-  const { name, email, message, token } = data || {};
+const sendContactMessageHandler = async (request) => {
+  const { name, email, message, token } = request.data || {};
 
   if (!name || !email || !message || !token) {
     throw new HttpsError("invalid-argument", "Missing required fields.");
   }
 
-  const recaptchaKey = process.env.RECAPTCHA_SECRET_KEY ||
-    (typeof RECAPTCHA_SECRET_KEY.value === "function"
-      ? RECAPTCHA_SECRET_KEY.value()
-      : undefined);
-  const sendgridKey = process.env.SENDGRID_API_KEY ||
-    (typeof SENDGRID_API_KEY.value === "function"
-      ? SENDGRID_API_KEY.value()
-      : undefined);
+  const recaptchaKey = RECAPTCHA_SECRET_KEY.value();
+  const sendgridKey = SENDGRID_API_KEY.value();
 
   if (!recaptchaKey || !sendgridKey) {
     console.error("Missing reCAPTCHA or SendGrid key.");

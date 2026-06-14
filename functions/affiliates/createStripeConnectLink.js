@@ -14,8 +14,9 @@ export const createStripeConnectLink = onCall(
     region: "australia-southeast1",
     secrets: [STRIPE_SECRET_KEY],
   },
-  async (data, context) => {
-    const uid = context.auth?.uid;
+  async (request) => {
+    const uid = request.auth?.uid;
+
     if (!uid) {
       throw new HttpsError("unauthenticated", "User must be logged in.");
     }
@@ -45,6 +46,7 @@ export const createStripeConnectLink = onCall(
       stripeAccountId = account.id;
 
       const affiliateRef = admin.firestore().collection("affiliates").doc(uid);
+
       await Promise.all([
         userDocRef.update({ stripeAccountId }),
         affiliateRef.set({ stripeAccountId }, { merge: true }),

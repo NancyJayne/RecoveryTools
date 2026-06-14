@@ -1,18 +1,13 @@
-Recovery Tools — Next Steps
-Current status
+# Recovery Tools — Next Steps
+
+## Current Status
+
+### Core Platform
 
 ✅ Firebase CLI login fixed
 ✅ Local dev runs on Node 22
 ✅ Firebase emulators run
 ✅ npm run build passes
-✅ Products load from Firestore emulator
-✅ Product detail page works
-✅ Add to Cart works
-✅ Quantity selector works
-✅ Cart drawer works
-✅ Review crash fixed
-✅ Placeholder product image fallback updated
-✅ Shop page mostly works
 ✅ Signup creates Auth emulator user
 ✅ Login works after signup
 ✅ Logout redirects home
@@ -20,12 +15,37 @@ Current status
 ✅ Profile page renders after login
 ✅ Profile header name/email displays
 ✅ My Profile tab displays account details
-✅ Update Profile saves name, phone, shipping address, billing address, and email preferences
+✅ Update Profile saves:
+
+* Name
+* Phone
+* Shipping address
+* Billing address
+* Email preferences
+
 ✅ Firestore rules allow users to update their own safe profile fields
-✅ Welcome email callable v2 payload issue fixed
+
+---
+
+### Shop
+
+✅ Products load from Firestore emulator
+✅ Product detail page works
+✅ Add to Cart works
+✅ Quantity selector works
+✅ Cart drawer works
+✅ Review crash fixed
+✅ Placeholder product image fallback updated
+✅ Shop tools visible again
+✅ Shop page mostly works
+
+---
+
+### Checkout & Stripe
+
 ✅ Cart checkout button navigates to /checkout
 ✅ Checkout section displays instead of blank page
-✅ Duplicate checkoutBtn ID fixed by changing cart drawer button to cartCheckoutBtn
+✅ Duplicate checkoutBtn ID fixed
 ✅ Checkout callable auth v2 pattern fixed
 ✅ Stripe checkout session creates successfully
 ✅ Stripe unit_amount fixed from dollars to cents
@@ -33,288 +53,305 @@ Current status
 ✅ Stripe session now returns session.url
 ✅ Frontend redirects using session.url
 ✅ Stripe back/cancel button works locally
+
 ✅ Stripe Customer create/reuse added
 ✅ users/{uid}.stripeCustomerId saves to Firestore
-✅ Stripe Checkout now prefills name, email and shipping address
-✅ Checkout “Save this as my default shipping address” checkbox added
-✅ Checkout sends saveAsDefaultShipping to backend
-✅ Product/cart/checkout price unit mismatch fixed
-✅ Product prices now treated as dollars in Firestore/frontend
-✅ Stripe amounts converted to cents only in backend
-✅ Cart, checkout and Stripe totals now match
+✅ Existing Stripe Customer reused on future checkouts
+
+✅ Stripe Checkout now prefills:
+
+* Name
+* Email
+* Shipping Address
+
+✅ Checkout "Save as default shipping address" checkbox added
+
+✅ Product/cart/checkout price mismatch fixed
 ✅ Shipping standardized to $10
-✅ GST display confirmed correct for GST-inclusive pricing using total / 11
+✅ GST calculation confirmed correct
 
-Fixed today
-Cleared stale cart/localStorage issue.
-Confirmed checkout opens Stripe successfully.
-Fixed Stripe cancel/back URL for local emulator testing.
-Added/reused Stripe Customer logic in createCheckoutSession.js.
-Stores Stripe Customer ID on:
-users/{uid}.stripeCustomerId
-Uses existing Stripe Customer on future checkouts.
-Updated Stripe customer with:
-email
-name
-phone
-shipping.name
-shipping.phone
-shipping.address
-metadata.firebaseUID
-Replaced customer_email with:
-customer: stripeCustomerId
-Added checkout checkbox:
-Save this as my default shipping address
-Frontend now sends:
-saveAsDefaultShipping
-Removed automatic frontend checkout profile save.
-Added conditional backend profile save only when saveAsDefaultShipping === true.
-Fixed product price display by removing incorrect / 100 from:
-shop-cart.js
-shop-checkout.js
-shop-products.js
-Fixed product schema price so it uses dollar values.
-Updated shipping settings seed rate to $10.
-Confirmed:
-shop prices correct
-cart prices correct
-checkout totals correct
-Stripe product total correct
-Stripe shipping correct
-GST correct for GST-inclusive pricing
-Current issue
-1. Default shipping profile save is incomplete
+---
 
-When the user ticks:
+### Functions Modernization
 
-Save this as my default shipping address
+✅ Migrated callable functions from:
 
-the backend currently saves:
+(data, context)
 
-address: customerInfo.shippingAddress_line1
-defaultShippingAddress: shippingAddress
-checkoutProfile: customerInfo
+to:
 
-Phone saves correctly into the user profile.
+(request)
 
-However, the visible profile fields only show address line 1. Address line 2, city, state and postcode are not showing in the profile UI yet.
+for Firebase Functions v2
 
-Need to confirm whether the profile page reads from:
+✅ Updated:
 
-users/{uid}.address
-users/{uid}.billingAddress
+* Affiliates
+* Orders
+* Courses
+* Workshops
+* Anato-Me
+* Reviews
+* Password Reset
+* Transactional Emails
+* Contact Form
+* Welcome Emails
+* Workshop Emails
+* Affiliate Emails
+* Referral Functions
 
-or from:
+✅ Added idempotency protection to confirmStripePurchase
 
-users/{uid}.defaultShippingAddress
-users/{uid}.checkoutProfile
+✅ Added payment status verification
 
-Likely fix: update profile display/prefill logic to support structured address objects.
+✅ Added order ownership checks for PDF generation
 
-2. Billing address does not update from checkout
+---
 
-Checkout collects billing address, but profile billing address is not updating when default checkbox is selected.
+## Current Priority
 
-Need to decide whether checkbox should save:
+### Priority 1 — Order Creation Verification
 
-defaultShippingAddress
+Confirm successful payment creates:
 
-only, or both:
+orders/{orderId}
 
-defaultShippingAddress
-defaultBillingAddress
+and
 
-Recommended next fix:
+users/{uid}/orders/{orderId}
 
-Save shipping default and billing default separately if billing is present.
-3. Phone does not prefill into Stripe Checkout
+Verify:
 
-Phone is saving/logging in the user profile, but it still does not prefill visually into Stripe Checkout.
+* Customer order history
+* Admin order history
+* Order totals
+* Shipping details
+* Billing details
+* Stripe IDs
+* Product list
 
-Backend currently sets:
+---
 
-customer.phone
-customer.shipping.phone
-phone_number_collection.enabled = true
+### Priority 2 — Unlock Engine
 
-Need to check whether Stripe Checkout requires customer confirmation/entry when phone collection is enabled.
+Design unified access system.
 
-This is not blocking checkout.
+Target flow:
 
-Known issues to fix next
-1. Profile address structure mismatch
+Product
+→ Plan
 
-Current user profile likely expects simple strings:
+Plan
+→ Blueprints
+
+Blueprints
+→ Items
+
+Items
+→ Additional Plans
+
+Purchases should unlock content automatically through inheritance.
+
+Create:
+
+userAccess collection
+
+and
+
+grantAccess(uid, sourceProductId)
+
+helper function.
+
+---
+
+### Priority 3 — Profile Address Structure
+
+Current profile uses a mix of:
 
 address
 billingAddress
 
-but checkout now saves structured data:
+and
 
-defaultShippingAddress: {
-  line1,
-  line2,
-  city,
-  state,
-  postal_code,
-  country
-}
+defaultShippingAddress
+defaultBillingAddress
 
-Need to update profile display and update form to support full structured addresses.
+Need a single structure.
 
-2. Confirm completed order creation
+Profile page should:
 
-Every paid checkout should save order data to:
+* Display full address
+* Edit full address
+* Prefill checkout
 
-orders/{orderId}
+---
 
-This should happen in:
+## Known Issues
 
-confirmStripePurchase
+### Admin Dashboard Layout
 
-not in createCheckoutSession.
+Admin content renders below navigation instead of beside navigation.
 
-Need to confirm order record includes:
+Same issue appears in Affiliate Dashboard.
 
-buyerUid
-stripeCustomerId
-stripeSessionId
-paymentIntentId
-products
-subtotal
-shipping
-total
-shippingName
-shippingPhone
-shippingAddress
-billingAddress
-saveAsDefaultShipping
-status
-createdAt
-3. Checkout success confirmation
+Investigate:
 
-Confirm /checkout?success=true calls:
+* index.html
+* admin-dashboard.js
+* affiliate-dashboard.js
 
-confirmStripePurchase
+Not blocking functionality.
 
-and creates a usable customer/admin order record.
+---
 
-4. SendGrid welcome email
+### Profile Role Display
 
-SendGrid is reached but returns:
+Admin users currently display:
 
-ResponseError: Unauthorized
+Role: user
 
-Likely:
+or
+
+Role: multi
+
+even though:
+
+roles.admin = true
+
+and custom claims are correct.
+
+Investigate:
+
+* getUserRoleWithPermissions
+* profile-init.js
+* role rendering logic
+
+Not blocking functionality.
+
+---
+
+### Profile Address Display
+
+Structured addresses save correctly.
+
+Profile UI still only shows partial address information.
+
+Need to support:
+
+* line1
+* line2
+* city
+* state
+* postcode
+* country
+
+---
+
+### Billing Address Save Logic
+
+Need decision:
+
+Save default shipping only
+
+OR
+
+Save shipping + billing defaults
+
+when checkbox is selected.
+
+---
+
+### Stripe Phone Prefill
+
+Phone saves to Stripe Customer.
+
+Phone still not visibly prefilling in Stripe Checkout.
+
+Not blocking checkout.
+
+---
+
+### SendGrid Emulator Testing
+
+Welcome email currently returns:
+
+Unauthorized
+
+Need to verify:
 
 SENDGRID_API_KEY
 
-is incorrect or missing in emulator configuration.
+inside local emulator environment.
 
-5. Shop filter buttons still need fixing
-Featured
-Back Pain
-Mobility
-Show All
-Sort dropdown
-6. Vite warnings remain
+Production deployment may already be correct.
 
-Dynamic import warnings still appear during development.
+---
 
-Build currently passes.
+### Shop Filters
 
-7. ESLint warning remains
-src/shop/shop-products.js
+Still required:
 
-'showSection' is defined but never used
-8. Placeholder image
+* Featured
+* Back Pain
+* Mobility
+* Show All
+* Sort Dropdown
 
-Replace temporary placeholder image with proper Recovery Tools asset.
+---
 
-Signup/Profile decision
+### Vite Warnings
 
-Keep signup simple for now.
+Dynamic import warnings remain.
 
-Use one name field at signup:
+Build passes.
 
-name: name
+---
 
-Later allow users to add/edit:
+### Placeholder Images
 
-First name
-Last name
-Phone
-Full shipping address
-Full billing address
-Profile image
+Replace temporary placeholder images with Recovery Tools assets.
 
-Do not split first/last name unless required for:
+---
 
-SendGrid
-Stripe
-Shipping labels
-Checkout/Profile decision
+## Next Session
 
-Use this rule:
-
-Checkout address = address for this order
-Default profile address = only updates when checkbox is ticked
-Order history = every completed paid checkout
-
-Do not automatically overwrite user profile address from every checkout.
-
-For affiliates:
-
-Stripe Customer = the buyer/payer
-Shipping address = the recipient for this order
-
-Future affiliate feature:
-
-users/{affiliateUid}/shippingRecipients/{recipientId}
-
-for saved customer/recipient addresses.
-
-Next session start
-
-Run:
+### Start Up
 
 npm run build
 
-Then start emulators:
-
 npm run emulators
-
-Then in another terminal:
 
 npm run dev
 
-Optional browser console clear if cart looks stale:
+---
 
-localStorage.removeItem("recovery_cart");
-localStorage.removeItem("cart");
-sessionStorage.removeItem("cartBackup");
-Main goal for next session
-Check profile page read/write logic for address fields.
-Update profile UI to display full structured shipping address.
-Update profile UI to display full structured billing address.
-Confirm default checkbox saves full address data correctly.
-Confirm confirmStripePurchase creates complete order records.
-Confirm order history shows shipping/billing details.
-Revisit Stripe phone prefill only after order/profile save is stable.
-End of session
+### Main Goal
 
-Commit and push:
+1. Complete test purchase
+2. Confirm confirmStripePurchase executes
+3. Confirm orders save correctly
+4. Confirm order history displays correctly
+5. Confirm admin can view order
+6. Confirm unlocks are granted
+
+---
+
+### After That
+
+1. Design userAccess collection
+2. Implement grantAccess()
+3. Implement Product → Plan unlock flow
+4. Build unlock inheritance system
+
+---
+
+## End Of Session
 
 git status
+
 git add .
-git commit -m "Add Stripe customer reuse and fix checkout pricing"
+
+git commit -m "Modernize Firebase v2 functions and stabilize checkout flow"
+
 git push
 
-Then stop all running processes:
-
-Ctrl + C
-
-Do this in both:
-
-Emulator terminal
-Vite dev terminal

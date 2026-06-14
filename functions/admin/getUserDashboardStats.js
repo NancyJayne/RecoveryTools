@@ -12,8 +12,8 @@ if (!admin.apps.length) {
  */
 export const getUserDashboardStats = onCall(
   { region: "australia-southeast1" }, // ✅ Scoped region only
-  async (data, context) => {
-    if (!context.auth?.token?.admin) {
+  async (request) => {
+    if (!request.auth?.token?.admin) {
       throw new HttpsError("permission-denied", "Admin access only.");
     }
 

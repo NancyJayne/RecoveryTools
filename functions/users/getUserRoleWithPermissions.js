@@ -26,7 +26,12 @@ export const getUserRoleWithPermissions = onCall(
         throw new HttpsError("not-found", "User profile not found");
       }
 
-      const { roles = {}, permissions = {} } = doc.data();
+      const userData = doc.data() || {};
+
+      const {
+        roles = {},
+        permissions = {},
+      } = userData;
 
       return { uid, roles, permissions };
     } catch (err) {

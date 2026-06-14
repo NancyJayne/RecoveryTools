@@ -28,8 +28,15 @@ const chunkArray = (array, size) => {
   return chunks;
 };
 
-const sendAdminBroadcastEmailHandler = async (data) => {
-  const { recipients, subject, htmlContent } = data;
+const sendAdminBroadcastEmailHandler = async (request) => {
+  if (!request.auth?.token?.admin) {
+    throw new HttpsError(
+      "permission-denied",
+      "Only admins can send broadcast emails.",
+    );
+  }
+
+  const { recipients, subject, htmlContent } = request.data || {};
 
   if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
     throw new HttpsError("invalid-argument", "Recipients list is missing or invalid.");

@@ -11,12 +11,15 @@ if (!admin.apps.length) {
  */
 export const adminResetUserPassword = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    if (!context.auth?.token?.admin) {
-      throw new HttpsError("permission-denied", "Only admins can reset passwords.");
+  async (request) => {
+    if (!request.auth?.token?.admin) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only admins can reset passwords.",
+      );
     }
 
-    const { uid, newPassword } = data;
+    const { uid, newPassword } = request.data || {};
 
     if (!uid || !newPassword) {
       throw new HttpsError("invalid-argument", "Both UID and new password are required.");
@@ -25,7 +28,9 @@ export const adminResetUserPassword = onCall(
     try {
       await admin.auth().updateUser(uid, { password: newPassword });
 
-      console.log(`✅ Admin ${context.auth.uid} reset password for UID: ${uid}`);
+      console.log(
+        `✅ Admin ${request.auth.uid} reset password for UID: ${uid}`,
+      );
 
       return {
         success: true,

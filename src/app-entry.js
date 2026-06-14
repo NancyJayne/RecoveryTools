@@ -1,12 +1,28 @@
 // ✅ app-entry.js – Updated to handle /signup and /reset as modal flows with safeImport logic
 
 // Exported helpers for main initialization
-import { initFirebase } from "./utils/firebase-config.js";
+import { initFirebase, auth } from "./utils/firebase-config.js";
 import { setupAuthState } from "./auth/user-auth.js";
 import { getUserRole } from "./auth/user-roles.js";
 import { showAuthModal } from "./auth/auth-modal.js";
 import { showResetPasswordForm } from "./auth/reset-password.js";
 
+function hasRole(roleValue, targetRole) {
+  if (!roleValue) return false;
+
+  if (typeof roleValue === "string") {
+    return roleValue
+      .split(",")
+      .map((role) => role.trim())
+      .includes(targetRole);
+  }
+
+  if (typeof roleValue === "object") {
+    return roleValue[targetRole] === true;
+  }
+
+  return false;
+}
 // Preload homepage enhancements
 import("./content/homepage.js");
 
@@ -25,7 +41,10 @@ export function setupRouterLinks() {
         if (href === "/login") return showAuthModal("login");
         if (href === "/reset") return showResetPasswordForm();
 
+        console.log("Clicked router link:", href);
         history.pushState({}, "", href);
+        userRole = await getUserRole();
+        console.log("Router role before loading:", userRole);
         await loadModuleByPath(href, userRole);
         window.dispatchEvent(new PopStateEvent("popstate"));
 
@@ -81,7 +100,7 @@ export async function initAppEntry() {
   if (cleanPath === "/login") return showAuthModal("login");
   if (cleanPath === "/reset") return showResetPasswordForm();
 
-  loadModuleByPath(cleanPath, userRole);
+  await loadModuleByPath(cleanPath, userRole);
 }
 
 export async function loadModuleByPath(path, role) {
@@ -128,34 +147,41 @@ export async function loadModuleByPath(path, role) {
       "Profile",
     );
     break;
-  case path.startsWith("/admin") && role === "admin":
-    await safeImport(
-      () => import("./admin/admin-dashboard.js"),
-      "Admin Dashboard",
-    );
+  case path.startsWith("/admin"):
+    if (hasRole(role, "admin")) {
+      await safeImport(
+        () => import("./admin/admin-dashboard.js"),
+        "Admin Dashboard",
+      );
+    } else if (!auth?.currentUser) {
+      showAuthModal("login");
+    } else {
+      console.warn("Admin route blocked. Current role:", role);
+    }
     break;
   case path.startsWith("/affiliate"):
-    if (role === "affiliate") {
+    if (hasRole(role, "affiliate")) {
       await safeImport(
         () => import("./affiliate/affiliate-dashboard.js"),
         "Affiliate Dashboard",
       );
-    } else if (!role) {
+    } else if (!auth?.currentUser) {
       showAuthModal("login");
     } else {
-      history.pushState({}, "", "/affiliateSignup");
-      await safeImport(
-        () => import("./affiliate/affiliate-signup.js"),
-        "Affiliate Signup Page",
-      );
-      window.dispatchEvent(new PopStateEvent("popstate"));
+      console.warn("Affiliate route blocked. Current role:", role);
     }
     break;
-  case path.startsWith("/therapist") && role === "therapist":
-    await safeImport(
-      () => import("./therapist/therapist-dashboard.js"),
-      "Therapist Dashboard",
-    );
+  case path.startsWith("/therapist"):
+    if (hasRole(role, "therapist")) {
+      await safeImport(
+        () => import("./therapist/therapist-dashboard.js"),
+        "Therapist Dashboard",
+      );
+    } else if (!auth?.currentUser) {
+      showAuthModal("login");
+    } else {
+      console.warn("Therapist route blocked. Current role:", role);
+    }
     break;
   case path.startsWith("/courses"):
     await safeImport(

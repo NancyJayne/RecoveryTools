@@ -23,7 +23,7 @@ export async function loadProducts() {
 
   try {
     const getProducts = httpsCallable(functions, "getFirestoreProducts");
-    const res = await getProducts({ type: "Tool" });
+    const res = await getProducts({ type: "tool" });
     const products = Array.isArray(res.data?.products) ? res.data.products : [];
 
 

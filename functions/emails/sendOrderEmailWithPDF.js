@@ -11,8 +11,12 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-const sendOrderEmailWithPDFHandler = async (data) => {
-  const { to, invoiceId, userName = "Customer" } = data;
+const sendOrderEmailWithPDFHandler = async (request) => {
+  const {
+    to,
+    invoiceId,
+    userName = "Customer",
+  } = request.data || {};
 
   if (!to || !invoiceId) {
     throw new HttpsError("invalid-argument", "Missing required email or invoiceId");

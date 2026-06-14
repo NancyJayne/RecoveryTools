@@ -23,10 +23,7 @@ export const onNewReview = onDocumentCreated(
 
     try {
       // ✅ Use deployed secret or fallback to env var locally
-      const apiKey = event.secrets?.SENDGRID_API_KEY || process.env.SENDGRID_API_KEY;
-      if (!apiKey) throw new Error("No SendGrid API key found");
-
-      sgMail.setApiKey(apiKey);
+      sgMail.setApiKey(SENDGRID_API_KEY.value());
 
       const productSnap = await admin.firestore().doc(`products/${productId}`).get();
       const product = productSnap.exists ? productSnap.data() : { name: productId };

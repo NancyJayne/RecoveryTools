@@ -15,15 +15,23 @@ const bucket = storage.bucket("recovery-tools.appspot.com"); // Adjust if your b
 
 export const generateOrderPDF = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    const uid = context.auth?.uid;
+  async (request) => {
+    const uid = request.auth?.uid;
+
     if (!uid) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
+      throw new HttpsError(
+        "unauthenticated",
+        "User must be logged in.",
+      );
     }
 
-    const { invoiceId } = data;
+    const { invoiceId } = request.data || {};
+
     if (!invoiceId) {
-      throw new HttpsError("invalid-argument", "Missing invoice ID.");
+      throw new HttpsError(
+        "invalid-argument",
+        "Missing invoice ID.",
+      );
     }
 
     try {
@@ -35,6 +43,17 @@ export const generateOrderPDF = onCall(
       }
 
       const order = orderSnap.data();
+      
+      const isAdmin = request.auth?.token?.admin === true;
+      const orderOwnerUid = order.buyerUid || order.userId || order.uid;
+
+      if (!isAdmin && orderOwnerUid !== uid) {
+        throw new HttpsError(
+          "permission-denied",
+          "You can only generate invoices for your own orders.",
+        );
+      }
+
       const fileName = `invoices/${invoiceId}.pdf`;
       const pdfStream = new PassThrough();
 

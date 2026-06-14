@@ -12,15 +12,15 @@ if (!admin.apps.length) {
  */
 export const getAllOrdersForAdmin = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    const uid = context.auth?.uid;
-    const token = context.auth?.token;
+  async (request) => {
+    const uid = request.auth?.uid;
+    const token = request.auth?.token;
 
     if (!uid || !token?.admin) {
       throw new HttpsError("permission-denied", "Admin access required.");
     }
 
-    const { invoiceNumber, name, startDate, endDate } = data;
+    const { invoiceNumber, name, startDate, endDate } = request.data || {};
     let query = admin.firestore().collection("orders");
 
     if (invoiceNumber) {

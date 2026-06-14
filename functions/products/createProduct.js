@@ -11,12 +11,24 @@ if (!admin.apps.length) {
  */
 export const createProduct = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    if (!context.auth?.token?.admin) {
-      throw new HttpsError("permission-denied", "Admin access required.");
+  async (request) => {
+    if (!request.auth?.token?.admin) {
+      throw new HttpsError(
+        "permission-denied",
+        "Admin access required.",
+      );
     }
 
-    const { name, price, description, stock, type, imageUrl, tags, creatorId } = data;
+    const {
+      name,
+      price,
+      description,
+      stock,
+      type,
+      imageUrl,
+      tags,
+      creatorId,
+    } = request.data || {};
 
     if (!name || typeof price !== "number") {
       throw new HttpsError("invalid-argument", "Missing or invalid product fields.");

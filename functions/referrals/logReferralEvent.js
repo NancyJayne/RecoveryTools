@@ -4,11 +4,13 @@ if (!admin.apps.length) admin.initializeApp();
 
 export const logReferralEvent = onCall(
   { region: "australia-southeast1" },
-  async (data) => {
-    const { referrerUid, type, targetId, event } = data;
+  async (request) => {
+    const { referrerUid, type, targetId, event } = request.data || {};
+
     if (!referrerUid || !type || !targetId || !["click", "conversion"].includes(event)) {
       throw new HttpsError("invalid-argument", "Missing or invalid referral data.");
     }
+
     try {
       await admin.firestore().collection("referrals").add({
         referrerUid,
@@ -17,6 +19,7 @@ export const logReferralEvent = onCall(
         event,
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
       });
+
       return { success: true };
     } catch (err) {
       console.error("Referral log error:", err);

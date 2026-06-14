@@ -7,10 +7,11 @@ import chalk from "chalk";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+
 const scripts = [
   "seedUserRoles.js",
   "seedShopSettings.js",
-  "seedDemoData.js",
+  "seedRecoveryProducts.js",
 ];
 
 console.log(`\n${chalk.green.bold("🌱 Seeding all emulator data")}`);
@@ -27,6 +28,7 @@ for (const script of scripts) {
         ...process.env,
         GCLOUD_PROJECT: "recovery-tools",
         FIRESTORE_EMULATOR_HOST: "localhost:8080",
+        FIREBASE_AUTH_EMULATOR_HOST: "localhost:9100",
       },
     });
   } catch (err) {

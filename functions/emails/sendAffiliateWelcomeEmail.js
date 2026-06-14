@@ -6,8 +6,15 @@ import { defineSecret } from "firebase-functions/params";
 // Define secret
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 
-const sendAffiliateWelcomeEmailHandler = async (data) => {
-  const { email, name } = data;
+const sendAffiliateWelcomeEmailHandler = async (request) => {
+  if (!request.auth?.token?.admin) {
+    throw new HttpsError(
+      "permission-denied",
+      "Only admins can send affiliate welcome emails.",
+    );
+  }
+
+  const { email, name } = request.data || {};
 
   if (!email || !name) {
     throw new HttpsError("invalid-argument", "Missing name or email.");

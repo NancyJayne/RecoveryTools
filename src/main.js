@@ -76,8 +76,9 @@ async function handleSectionFromURL() {
   const sectionId = pathSegment ? `${pathSegment}Section` : "homeSection";
 
   if (path.startsWith("/admin")) {
-    const role = await getUserRole();
-    if (role !== "admin") {
+    const roles = await getUserRole();
+
+    if (!roles?.admin) {
       history.replaceState({}, "", "/profile");
       showTabContent("profileSection");
       updateMetadata("profileSection");

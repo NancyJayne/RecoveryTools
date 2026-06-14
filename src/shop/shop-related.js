@@ -15,7 +15,7 @@ export async function renderRelatedSuggestions(product) {
 
   try {
     const getProducts = httpsCallable(functions, "getFirestoreProducts");
-    const res = await getProducts({ type: "Tool" });
+    const res = await getProducts({ type: "tool" });
     const products = res.data.products || [];
 
     const related = products

@@ -12,9 +12,10 @@ if (!admin.apps.length) {
  */
 export const getFirestoreProducts = onCall(
   { region: "australia-southeast1" },
-  async (data) => {
+  async (request) => {
     try {
-      const { type, tag } = data;
+      const { type, tag } = request.data || {};
+
       let query = admin.firestore().collection("products");
 
       if (type) {
@@ -26,6 +27,7 @@ export const getFirestoreProducts = onCall(
       }
 
       const snapshot = await query.orderBy("name").get();
+
       const products = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -34,7 +36,11 @@ export const getFirestoreProducts = onCall(
       return { products };
     } catch (error) {
       console.error("Error fetching filtered products:", error);
-      throw new HttpsError("internal", "Unable to fetch product list.");
+
+      throw new HttpsError(
+        "internal",
+        "Unable to fetch product list.",
+      );
     }
   },
 );

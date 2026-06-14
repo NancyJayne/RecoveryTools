@@ -1,4 +1,3 @@
-
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
 
@@ -11,18 +10,26 @@ if (!admin.apps.length) {
  */
 export const searchUsersByName = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    if (!context.auth?.token?.admin) {
-      throw new HttpsError("permission-denied", "Admin access required.");
+  async (request) => {
+    if (!request.auth?.token?.admin) {
+      throw new HttpsError(
+        "permission-denied",
+        "Admin access required.",
+      );
     }
 
-    const { nameQuery } = data;
+    const { nameQuery } = request.data || {};
+
     if (!nameQuery || typeof nameQuery !== "string") {
-      throw new HttpsError("invalid-argument", "Missing or invalid name query.");
+      throw new HttpsError(
+        "invalid-argument",
+        "Missing or invalid name query.",
+      );
     }
 
     try {
-      const snapshot = await admin.firestore()
+      const snapshot = await admin
+        .firestore()
         .collection("users")
         .where("name", ">=", nameQuery)
         .where("name", "<=", nameQuery + "\uf8ff")
@@ -39,7 +46,10 @@ export const searchUsersByName = onCall(
       return { users };
     } catch (err) {
       console.error("Search by name failed:", err);
-      throw new HttpsError("internal", err.message);
+      throw new HttpsError(
+        "internal",
+        err.message,
+      );
     }
   },
 );

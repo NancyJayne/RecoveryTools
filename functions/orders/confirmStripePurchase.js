@@ -6,6 +6,7 @@ import { sendOrderEmailWithPDF } from "../emails/sendOrderEmailWithPDF.js";
 import { sendWorkshopTicketEmail } from "../emails/sendWorkshopTicketEmail.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
+const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -23,13 +24,20 @@ const confirmStripePurchaseHandler = async (request) => {
 
   const session = await stripe.checkout.sessions.retrieve(sessionId, {
     expand: [
-  "line_items",
-  "line_items.data.price",
-  "line_items.data.price.product",
-  "payment_intent",
-  "customer",
-],
+      "line_items",
+      "line_items.data.price",
+      "line_items.data.price.product",
+      "payment_intent",
+      "customer",
+    ],
   });
+
+  if (session.payment_status !== "paid") {
+    throw new HttpsError(
+      "failed-precondition",
+      "Checkout session has not been paid yet.",
+    );
+  }
 
   const lineItems = session.line_items;
 
@@ -43,7 +51,7 @@ const confirmStripePurchaseHandler = async (request) => {
     ? item.price.product
     : item.price.product?.id;
 
-  const productId =
+      const productId =
     item.price.product?.metadata?.firebaseProductId ||
     item.price.metadata?.firebaseProductId ||
     stripeProductId;
@@ -65,58 +73,71 @@ const confirmStripePurchaseHandler = async (request) => {
   );
 
   const subtotal = (session.amount_subtotal || 0) / 100;
-const shipping = (session.total_details?.amount_shipping || 0) / 100;
-const total = (session.amount_total || 0) / 100;
-const gst = total / 11;
+  const shipping = (session.total_details?.amount_shipping || 0) / 100;
+  const total = (session.amount_total || 0) / 100;
+  const gst = total / 11;
 
   const invoiceNumber = session.id;
-  const orderData = {
-  buyerUid: uid,
-  userId: uid,
-  userEmail: session.customer_details?.email || session.customer_email || "",
-  userName: session.customer_details?.name || "Customer",
+  const orderRef = admin.firestore().collection("orders").doc(invoiceNumber);
+  const existingOrder = await orderRef.get();
 
-  stripeCustomerId:
+  if (existingOrder.exists) {
+    return existingOrder.data();
+  }
+  const orderData = {
+    buyerUid: uid,
+    userId: uid,
+    userEmail: session.customer_details?.email || session.customer_email || "",
+    userName: session.customer_details?.name || "Customer",
+
+    stripeCustomerId:
     typeof session.customer === "string"
       ? session.customer
       : session.customer?.id || null,
 
-  stripeSessionId: session.id,
-  paymentIntentId:
+    stripeSessionId: session.id,
+    paymentIntentId:
     typeof session.payment_intent === "string"
       ? session.payment_intent
       : session.payment_intent?.id || null,
 
-  products: enrichedProducts,
+    products: enrichedProducts,
 
-  subtotal,
-  shipping: {
-    amount_total: shipping,
-    name: session.shipping_details?.name || session.customer_details?.name || "",
-    phone: session.customer_details?.phone || "",
-    address: session.shipping_details?.address || null,
-  },
-  total,
-  gst,
+    subtotal,
+    shipping: {
+      amount_total: shipping,
+      name: session.shipping_details?.name || session.customer_details?.name || "",
+      phone: session.customer_details?.phone || "",
+      address: session.shipping_details?.address || null,
+    },
+    total,
+    gst,
 
-  billingAddress: session.customer_details?.address || null,
-  shippingAddress: session.shipping_details?.address || null,
-  shippingName: session.shipping_details?.name || "",
-  shippingPhone: session.customer_details?.phone || "",
+    billingAddress: session.customer_details?.address || null,
+    shippingAddress: session.shipping_details?.address || null,
+    shippingName: session.shipping_details?.name || "",
+    shippingPhone: session.customer_details?.phone || "",
 
-  invoiceNumber,
-  invoiceId: invoiceNumber,
-  status: "Paid",
-  purchasedAt: admin.firestore.FieldValue.serverTimestamp(),
-  createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    invoiceNumber,
+    invoiceId: invoiceNumber,
+    status: "Paid",
+    purchasedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
 
-  referredBy: session.metadata?.referrer_uid || null,
-  referralEvent: session.metadata?.ref_event || null,
-};
+    referredBy: session.metadata?.referrer_uid || null,
+    referralEvent: session.metadata?.ref_event || null,
+  };
 
   await Promise.all([
-    admin.firestore().collection("users").doc(uid).collection("orders").doc(invoiceNumber).set(orderData),
-    admin.firestore().collection("orders").doc(invoiceNumber).set(orderData),
+    admin
+      .firestore()
+      .collection("users")
+      .doc(uid)
+      .collection("orders")
+      .doc(invoiceNumber)
+      .set(orderData),
+
+    orderRef.set(orderData),
   ]);
 
   // 🔓 Unlock purchased content and issue tickets
@@ -183,7 +204,7 @@ const gst = total / 11;
 export const confirmStripePurchase = onCall(
   {
     region: "australia-southeast1",
-    secrets: [STRIPE_SECRET_KEY],
+    secrets: [STRIPE_SECRET_KEY, SENDGRID_API_KEY],
   },
   confirmStripePurchaseHandler,
 );

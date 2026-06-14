@@ -13,8 +13,8 @@ if (!admin.apps.length) {
  */
 export const exportAllOrdersCSV = onCall(
   { region: "australia-southeast1" }, // ✅ Scoped region
-  async (data, context) => {
-    if (!context.auth?.token?.admin) {
+  async (request) => {
+    if (!request.auth?.token?.admin) {
       throw new HttpsError("permission-denied", "Only admins can export orders.");
     }
 

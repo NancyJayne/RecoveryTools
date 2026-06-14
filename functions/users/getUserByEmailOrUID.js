@@ -1,4 +1,3 @@
-
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
 
@@ -11,19 +10,26 @@ if (!admin.apps.length) {
  */
 export const getUserByEmailOrUID = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    if (!context.auth?.token?.admin) {
-      throw new HttpsError("permission-denied", "Only admins can fetch users.");
+  async (request) => {
+    if (!request.auth?.token?.admin) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only admins can fetch users.",
+      );
     }
 
-    const { email, uid } = data;
+    const { email, uid } = request.data || {};
 
     if (!email && !uid) {
-      throw new HttpsError("invalid-argument", "Must provide either email or UID.");
+      throw new HttpsError(
+        "invalid-argument",
+        "Must provide either email or UID.",
+      );
     }
 
     try {
       let user;
+
       if (uid) {
         user = await admin.auth().getUser(uid);
       } else {
@@ -39,7 +45,11 @@ export const getUserByEmailOrUID = onCall(
       };
     } catch (err) {
       console.error("Get user failed:", err);
-      throw new HttpsError("not-found", err.message);
+
+      throw new HttpsError(
+        "not-found",
+        err.message,
+      );
     }
   },
 );

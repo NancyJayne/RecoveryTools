@@ -1,8 +1,25 @@
 import { showTabContent } from "../utils/utils.js";
 
 // Handles sidebar navigation for admin dashboard
+function hasRole(roleValue, targetRole) {
+  if (!roleValue) return false;
+
+  if (typeof roleValue === "string") {
+    return roleValue
+      .split(",")
+      .map((role) => role.trim())
+      .includes(targetRole);
+  }
+
+  if (typeof roleValue === "object") {
+    return roleValue[targetRole] === true;
+  }
+
+  return false;
+}
+
 export function initAdminNavigation(role) {
-  if (role !== "admin") return;
+  if (!hasRole(role, "admin")) return;
 
   const container = document.getElementById("adminSection");
   if (!container) return;

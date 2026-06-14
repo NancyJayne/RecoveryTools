@@ -2,7 +2,17 @@
 // src/admin/admin-dashboard.js
 
 export function initAdminDashboard() {
-  const container = document.getElementById("adminDashboardSection") || createFallbackSection();
+  console.log("✅ Admin dashboard loaded");
+
+  document.querySelectorAll("main > section").forEach((section) => {
+    section.classList.add("hidden");
+  });
+
+  const container =
+    document.getElementById("adminDashboardSection") || createFallbackSection();
+
+  container.classList.remove("hidden");
+
   container.innerHTML = `
     <div class="max-w-4xl mx-auto py-12 px-6">
       <h1 class="text-3xl font-bold text-white mb-6">Admin Dashboard</h1>

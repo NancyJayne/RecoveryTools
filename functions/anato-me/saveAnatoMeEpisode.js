@@ -1,4 +1,3 @@
-
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
 
@@ -6,13 +5,10 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-/**
- * ✅ Admin-only save or update Anato-Me episode
- */
 export const saveAnatoMeEpisode = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    if (!context.auth || !context.auth.token?.admin) {
+  async (request) => {
+    if (!request.auth?.token?.admin) {
       throw new HttpsError("permission-denied", "Only admins can save episodes.");
     }
 
@@ -20,13 +16,14 @@ export const saveAnatoMeEpisode = onCall(
       slug, title, videoUrl, thumbnail, tags, category, storyClean, storyRated,
       reflectionPrompts, relatedProducts, condition, clinicalTips, treatmentSuggestions,
       educationalUse, publicVisible, therapistVisible, isPublished,
-    } = data;
+    } = request.data || {};
 
     if (!slug || !title || !videoUrl) {
       throw new HttpsError("invalid-argument", "Missing required fields.");
     }
 
-    const episodeRef = admin.firestore().doc(`admin/${slug}`);
+    const episodeRef = admin.firestore().doc(`anatoMeEpisodes/${slug}`);
+
     const payload = {
       title,
       videoUrl,
