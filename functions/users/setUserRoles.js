@@ -28,7 +28,13 @@ export const setUserRoles = onCall(
     }
 
     try {
-      await admin.auth().setCustomUserClaims(uid, roles);
+      const normalizedRoles = {
+        admin: !!roles.admin,
+        affiliate: !!roles.affiliate,
+        therapist: !!roles.therapist,
+      };
+
+      await admin.auth().setCustomUserClaims(uid, normalizedRoles);
 
       return {
         success: true,

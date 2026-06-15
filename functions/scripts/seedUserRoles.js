@@ -25,29 +25,45 @@ const usersToSeed = [
     email: "admin@recoverytools.au",
     password: "secureTest123",
     displayName: "Admin User",
-    roles: { admin: true },
+    roles: {
+      admin: true,
+      affiliate: false,
+      therapist: false,
+    }
   },
   {
     uid: "uid-therapist",
     email: "therapist@recoverytools.au",
     password: "secureTest123",
     displayName: "Therapist User",
-    roles: { therapist: true },
+    roles: {
+      admin: false,
+      affiliate: false,
+      therapist: true
+    },
     therapistGroup: "Sports Rehab",
   },
   {
-    uid: "uid-affiliate",
-    email: "affiliate@recoverytools.au",
-    password: "secureTest123",
-    displayName: "Affiliate User",
-    roles: { affiliate: true },
+  uid: "uid-affiliate",
+  email: "affiliate@recoverytools.au",
+  password: "secureTest123",
+  displayName: "Affiliate User",
+  roles: {
+    admin: false,
+    affiliate: true,
+    therapist: false,
   },
-  {
+},
+ {
     uid: "uid-multi",
     email: "multi@recoverytools.au",
     password: "secureTest123",
     displayName: "Multi Role User",
-    roles: { therapist: true, affiliate: true },
+    roles: {
+      admin: false,
+      affiliate: true,
+      therapist: true
+    },
     therapistGroup: "Pilates",
   },
 ];
@@ -123,7 +139,10 @@ async function seedUsers() {
           email: user.email,
           name: user.displayName,
           roles: user.roles,
-          role: Object.keys(user.roles).join(", "),
+          role: Object.entries(user.roles)
+            .filter(([, value]) => value)
+            .map(([key]) => key)
+            .join(", "),
           photoURL: "",
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),

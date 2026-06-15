@@ -15,9 +15,17 @@ admin.initializeApp({
 
 // ✅ Option 2: By Email
 const email = "test@recoverytools.au";
-admin.auth().getUserByEmail(email)
-  .then((user) => {
-    return admin.auth().setCustomUserClaims(user.uid, { admin: true });
+
+admin.auth()
+  .getUserByEmail(email)
+  .then(async (user) => {
+    const claims = user.customClaims || {};
+
+    return admin.auth().setCustomUserClaims(user.uid, {
+      admin: true,
+      affiliate: !!claims.affiliate,
+      therapist: !!claims.therapist,
+    });
   })
   .then(() => console.log(`✅ Admin claim set for: ${email}`))
   .catch((err) => console.error("❌ Error:", err));

@@ -72,6 +72,39 @@
 
 ---
 
+### Roles & Permissions
+
+✅ Standardized role architecture
+
+All users now use:
+
+roles: {
+admin: false,
+affiliate: false,
+therapist: false
+}
+
+✅ Updated:
+
+* seedUserRoles.js
+* auth-logic.js
+* setUserRoles.js
+* registerAffiliate.js
+* setAdminClaim.cjs
+* authHelpers.js
+
+✅ Custom claims now normalized
+
+All custom claims now contain:
+
+* admin
+* affiliate
+* therapist
+
+No missing-role claim structures remain.
+
+---
+
 ### Functions Modernization
 
 ✅ Migrated callable functions from:
@@ -109,6 +142,26 @@ for Firebase Functions v2
 ---
 
 ## Current Priority
+
+### Priority 0 — Verify Purchase Pipeline
+
+Complete end-to-end purchase test.
+
+Confirm:
+
+Product
+→ Stripe Checkout
+→ confirmStripePurchase
+→ Firestore Order Creation
+
+Verify:
+
+* Stripe payment succeeds
+* confirmStripePurchase executes
+* No function errors
+* No Firestore write errors
+
+---
 
 ### Priority 1 — Order Creation Verification
 
@@ -187,6 +240,22 @@ Profile page should:
 ---
 
 ## Known Issues
+
+### Affiliate Collection Access
+
+Affiliate dropdown attempts to load:
+
+affiliates/{uid}
+
+Current Firestore rules prevent non-affiliate users from reading affiliate records.
+
+Need to:
+
+* Review affiliate collection security
+* Separate public affiliate directory from private affiliate data if required
+* Ensure cart referral selector can load safely
+
+---
 
 ### Admin Dashboard Layout
 
@@ -327,12 +396,15 @@ npm run dev
 
 ### Main Goal
 
-1. Complete test purchase
-2. Confirm confirmStripePurchase executes
-3. Confirm orders save correctly
-4. Confirm order history displays correctly
-5. Confirm admin can view order
-6. Confirm unlocks are granted
+1. Re-seed users
+2. Sign in again
+3. Test cart
+4. Complete Stripe test purchase
+5. Confirm confirmStripePurchase executes
+6. Verify orders/{orderId}
+7. Verify users/{uid}/orders/{orderId}
+8. Verify Order History page
+9. Verify Admin Orders page
 
 ---
 
@@ -351,7 +423,6 @@ git status
 
 git add .
 
-git commit -m "Modernize Firebase v2 functions and stabilize checkout flow"
+git commit -m "Standardize roles architecture and normalize custom claims"
 
 git push
-

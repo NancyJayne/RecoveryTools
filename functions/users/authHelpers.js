@@ -45,12 +45,31 @@ export const adminCreateUser = onCall(
         displayName,
       });
 
-      if (roles && typeof roles === "object") {
-        await admin.auth().setCustomUserClaims(
-          user.uid,
-          roles,
-        );
-      }
+      const normalizedRoles = {
+        admin: !!roles?.admin,
+        affiliate: !!roles?.affiliate,
+        therapist: !!roles?.therapist,
+      };
+
+      await admin.auth().setCustomUserClaims(user.uid, normalizedRoles);
+
+      await admin.firestore().collection("users").doc(user.uid).set(
+        {
+          uid: user.uid,
+          email,
+          name: displayName || "",
+          roles: normalizedRoles,
+          role:
+            Object.entries(normalizedRoles)
+              .filter(([, value]) => value)
+              .map(([key]) => key)
+              .join(", ") || "user",
+          photoURL: "",
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
 
       return {
         success: true,

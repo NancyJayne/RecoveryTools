@@ -40,10 +40,13 @@ export async function handleSignup(email, password, name) {
         name,
         email: user.email || email,
 
+        roles: {
+          admin: false,
+          affiliate: false,
+          therapist: false,
+        },
+
         role: "user",
-        admin: false,
-        therapist: false,
-        affiliate: false,
 
         photoURL: "",
         createdAt: serverTimestamp(),

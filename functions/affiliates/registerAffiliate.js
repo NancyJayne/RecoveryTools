@@ -1,4 +1,3 @@
-
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
 
@@ -8,7 +7,8 @@ if (!admin.apps.length) {
 
 /**
  * ✅ Register a user as an affiliate
- * Assigns referralCode, creates record in affiliates/{uid}
+ * Assigns referralCode, creates record in affiliates/{uid},
+ * updates custom claims, then updates users/{uid}
  */
 export const registerAffiliate = onCall(
   { region: "australia-southeast1" },
@@ -21,35 +21,49 @@ export const registerAffiliate = onCall(
     }
 
     try {
-      const affiliateRef = admin.firestore().collection("affiliates").doc(uid);
+      const db = admin.firestore();
+      const affiliateRef = db.collection("affiliates").doc(uid);
+      const userRef = db.collection("users").doc(uid);
+
       const affiliateSnap = await affiliateRef.get();
 
       if (affiliateSnap.exists) {
         return { message: "Already registered as an affiliate." };
       }
 
-      const referralCode = email.split("@")[0].replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+      const referralCode = email
+        .split("@")[0]
+        .replace(/[^a-zA-Z0-9]/g, "")
+        .toLowerCase();
 
-      await Promise.all([
-        affiliateRef.set({
-          uid,
-          email,
-          referralCode,
-          joinedAt: admin.firestore.FieldValue.serverTimestamp(),
-          earnings: 0,
-        }),
-        admin.firestore().collection("users").doc(uid).update({
-          "roles.affiliate": true,
-          referralCode,
-        }),
-      ]);
-
-      // 🔐 Update custom claims for immediate access
       const { customClaims = {} } = await admin.auth().getUser(uid);
 
-      await admin.auth().setCustomUserClaims(uid, {
-        ...customClaims,
+      const normalizedClaims = {
+        admin: !!customClaims.admin,
         affiliate: true,
+        therapist: !!customClaims.therapist,
+      };
+
+      await affiliateRef.set({
+        uid,
+        email,
+        referralCode,
+        businessName: "",
+        website: "",
+        stripeAccountId: "",
+        status: "pending",
+        joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+        earnings: 0,
+      });
+
+      await admin.auth().setCustomUserClaims(uid, normalizedClaims);
+
+      await userRef.update({
+        "roles.admin": normalizedClaims.admin,
+        "roles.affiliate": true,
+        "roles.therapist": normalizedClaims.therapist,
+        referralCode,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
       return { success: true, referralCode };
