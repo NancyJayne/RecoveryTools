@@ -12,6 +12,13 @@ RecoveryToolsApp
   npm install -g firebase-tools
   ```
 
+## Project documentation
+
+- `README.md` — setup, environment, installation, deployment, and repo-level instructions.
+- `DEVELOPER-HANDBOOK.md` — internal Recovery Tools architecture, Firestore schemas, daily workflow, unlock rules, and development checklists.
+- `NEXT-STEPS.md` — current active development tasks.
+
+
 ## Environment setup
 
 Copy `.env.example` to `.env` and replace the placeholder values with your real

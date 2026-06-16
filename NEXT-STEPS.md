@@ -15,6 +15,7 @@
 ✅ Profile page renders after login
 ✅ Profile header name/email displays
 ✅ My Profile tab displays account details
+
 ✅ Update Profile saves:
 
 * Name
@@ -78,11 +79,13 @@
 
 All users now use:
 
+```js
 roles: {
-admin: false,
-affiliate: false,
-therapist: false
+  admin: false,
+  affiliate: false,
+  therapist: false
 }
+```
 
 ✅ Updated:
 
@@ -109,11 +112,15 @@ No missing-role claim structures remain.
 
 ✅ Migrated callable functions from:
 
+```js
 (data, context)
+```
 
 to:
 
+```js
 (request)
+```
 
 for Firebase Functions v2
 
@@ -141,7 +148,7 @@ for Firebase Functions v2
 
 ---
 
-## Current Priority
+## Current Priorities
 
 ### Priority 0 — Verify Purchase Pipeline
 
@@ -167,11 +174,15 @@ Verify:
 
 Confirm successful payment creates:
 
+```text
 orders/{orderId}
+```
 
 and
 
+```text
 users/{uid}/orders/{orderId}
+```
 
 Verify:
 
@@ -185,12 +196,139 @@ Verify:
 
 ---
 
+### Priority 1A — Order Lifecycle Verification
+
+Verify what is currently stored when Stripe payment succeeds.
+
+Confirm orders contain:
+
+* Order Number
+* User ID
+* Customer Name
+* Customer Email
+* Shipping Address
+* Billing Address
+* Stripe Session ID
+* Stripe Payment Intent ID
+* Stripe Customer ID
+* Affiliate ID
+* Referral ID
+* Product List
+* Order Totals
+* Payment Status
+
+Determine whether current order documents already support:
+
+* Fulfillment Status
+* Tracking Number
+* Pickup Orders
+* Access Status
+
+---
+
+### Priority 1B — Order Status Architecture
+
+Separate order tracking into:
+
+```text
+paymentStatus
+fulfillmentStatus
+accessStatus
+```
+
+#### paymentStatus
+
+```text
+pending
+paid
+failed
+refunded
+partially_refunded
+```
+
+#### fulfillmentStatus
+
+```text
+not_required
+pending
+packing
+ready_for_pickup
+picked_up
+shipped
+delivered
+completed
+return_requested
+returned
+cancelled
+```
+
+#### accessStatus
+
+```text
+not_required
+pending
+granted
+revoked
+```
+
+---
+
+### Priority 1C — Shipping vs Digital Fulfillment Logic
+
+Verify product structure supports:
+
+* Requires Shipping
+* Unlocks Access
+* Access Type
+* Workshop
+* Digital Product
+* Physical Product
+
+Target behaviour:
+
+#### Physical Product
+
+Collect shipping.
+
+#### Digital Product
+
+No shipping required.
+
+#### Workshop
+
+No shipping required.
+
+#### Physical Product + Course
+
+Collect shipping and unlock content.
+
+---
+
+### Priority 1D — Click & Collect Design
+
+Checkout options:
+
+```text
+Ship To Me
+Pick Up From Affiliate
+```
+
+Investigate:
+
+* Affiliate pickup location structure
+* Pickup notifications
+* Shipping cost removal
+* Pickup status updates
+
+---
+
 ### Priority 2 — Unlock Engine
 
 Design unified access system.
 
 Target flow:
 
+```text
 Product
 → Plan
 
@@ -202,32 +340,70 @@ Blueprints
 
 Items
 → Additional Plans
-
-Purchases should unlock content automatically through inheritance.
+```
 
 Create:
 
-userAccess collection
+```text
+userAccess
+```
 
-and
+collection and:
 
+```js
 grantAccess(uid, sourceProductId)
+```
 
 helper function.
 
 ---
 
+### Priority 2A — Post Purchase Access Automation
+
+Target flow:
+
+```text
+Payment Success
+→ Create Order
+→ Grant Access
+→ Send Confirmation Email
+→ Send Access Email
+```
+
+Verify confirmStripePurchase can support automatic unlocks.
+
+---
+
+### Priority 2B — Mixed Product Unlocks
+
+Support:
+
+```text
+Physical Product + Attached Course
+Physical Product + Attached Exercise Plan
+Workshop + Bonus Course
+Membership + Content Library
+```
+
+Verify unlock inheritance works regardless of product type.
+
+---
+
 ### Priority 3 — Profile Address Structure
 
-Current profile uses a mix of:
+Current profile uses:
 
+```text
 address
 billingAddress
+```
 
 and
 
+```text
 defaultShippingAddress
 defaultBillingAddress
+```
 
 Need a single structure.
 
@@ -239,21 +415,190 @@ Profile page should:
 
 ---
 
+### Priority 4 — Order Fulfillment System
+
+Build admin fulfillment workflow.
+
+Admin actions:
+
+```text
+Mark Packing
+Mark Ready For Pickup
+Mark Shipped
+Mark Delivered
+Mark Complete
+```
+
+Store:
+
+```text
+packedAt
+shippedAt
+deliveredAt
+completedAt
+```
+
+Create Admin Orders dashboard filters:
+
+* New Orders
+* Packing
+* Pickup
+* Shipped
+* Completed
+* Returns
+
+---
+
+### Priority 5 — Tracking Integration
+
+Store:
+
+```text
+trackingCarrier
+trackingNumber
+trackingUrl
+```
+
+Version 1:
+
+Manual tracking entry.
+
+Version 2:
+
+Australia Post integration.
+
+---
+
+### Priority 6 — Digital Delivery Emails
+
+Design:
+
+#### Order Confirmation
+
+Immediately after payment.
+
+#### Access Granted
+
+Immediately after unlock.
+
+#### Workshop Confirmation
+
+Workshop purchases.
+
+#### Membership Welcome
+
+Membership purchases.
+
+---
+
+### Priority 7 — Tax Invoice System
+
+Verify current Stripe behaviour.
+
+Determine:
+
+* Stripe receipt only
+* Stripe invoice
+* Recovery Tools PDF invoice
+
+Potential function:
+
+```js
+generateOrderPDF()
+```
+
+Requirements:
+
+* ABN
+* GST
+* Invoice Number
+* Order Number
+* Customer Details
+
+---
+
+### Priority 8 — Review Automation
+
+#### Physical Products
+
+```text
+Delivered
+→ Wait 7 Days
+→ Review Email
+```
+
+#### Digital Products
+
+```text
+Access Granted
+→ Wait 7–14 Days
+→ Review Email
+```
+
+Investigate:
+
+* Firebase Scheduled Functions
+* Cloud Tasks
+
+---
+
+### Priority 9 — Returns & Refunds
+
+Create:
+
+```text
+returns/{returnId}
+```
+
+Statuses:
+
+```text
+requested
+approved
+rejected
+received
+refunded
+```
+
+Customer flow:
+
+```text
+Order History
+→ Request Return
+```
+
+Admin flow:
+
+```text
+Approve
+Reject
+Refund
+```
+
+Verify Stripe refund integration.
+
+
+### Priority 10 — Membership Engine
+access architecture you've designed for Products → Plans → Blueprints → Items → Additional Plans will also be the foundation for memberships later, so you'll avoid redesigning the unlock system twice.
+---
+
 ## Known Issues
 
 ### Affiliate Collection Access
 
 Affiliate dropdown attempts to load:
 
+```text
 affiliates/{uid}
+```
 
-Current Firestore rules prevent non-affiliate users from reading affiliate records.
+Current rules prevent non-affiliate users from reading affiliate records.
 
 Need to:
 
-* Review affiliate collection security
-* Separate public affiliate directory from private affiliate data if required
-* Ensure cart referral selector can load safely
+* Review security
+* Separate public affiliate directory if required
+* Ensure cart referral selector loads safely
 
 ---
 
@@ -261,7 +606,7 @@ Need to:
 
 Admin content renders below navigation instead of beside navigation.
 
-Same issue appears in Affiliate Dashboard.
+Same issue in Affiliate Dashboard.
 
 Investigate:
 
@@ -269,33 +614,27 @@ Investigate:
 * admin-dashboard.js
 * affiliate-dashboard.js
 
-Not blocking functionality.
-
 ---
 
 ### Profile Role Display
 
 Admin users currently display:
 
+```text
 Role: user
+```
 
 or
 
+```text
 Role: multi
+```
 
-even though:
-
-roles.admin = true
-
-and custom claims are correct.
-
-Investigate:
+Need to investigate:
 
 * getUserRoleWithPermissions
 * profile-init.js
 * role rendering logic
-
-Not blocking functionality.
 
 ---
 
@@ -303,9 +642,9 @@ Not blocking functionality.
 
 Structured addresses save correctly.
 
-Profile UI still only shows partial address information.
+UI still only shows partial address information.
 
-Need to support:
+Need support for:
 
 * line1
 * line2
@@ -320,13 +659,10 @@ Need to support:
 
 Need decision:
 
-Save default shipping only
+* Save shipping only
+* Save shipping + billing
 
-OR
-
-Save shipping + billing defaults
-
-when checkbox is selected.
+when checkbox selected.
 
 ---
 
@@ -334,9 +670,40 @@ when checkbox is selected.
 
 Phone saves to Stripe Customer.
 
-Phone still not visibly prefilling in Stripe Checkout.
+Still not visibly prefilling in Stripe Checkout.
 
-Not blocking checkout.
+---
+
+### Checkout Fulfillment Logic
+
+Need confirmation checkout correctly handles:
+
+* Physical Products
+* Digital Products
+* Workshops
+* Memberships
+* Mixed Orders
+
+---
+
+### Order Number Generation
+
+Need verification every completed purchase receives:
+
+```text
+RT-YYYY-XXXXXX
+```
+
+or similar unique order number.
+
+---
+
+### Order Confirmation Emails
+
+Need verification purchase currently sends:
+
+* Customer confirmation email
+* Admin notification email
 
 ---
 
@@ -344,15 +711,17 @@ Not blocking checkout.
 
 Welcome email currently returns:
 
+```text
 Unauthorized
+```
 
-Need to verify:
+Verify:
 
+```text
 SENDGRID_API_KEY
+```
 
-inside local emulator environment.
-
-Production deployment may already be correct.
+inside emulator environment.
 
 ---
 
@@ -386,11 +755,11 @@ Replace temporary placeholder images with Recovery Tools assets.
 
 ### Start Up
 
+```bash
 npm run build
-
 npm run emulators
-
 npm run dev
+```
 
 ---
 
@@ -405,24 +774,31 @@ npm run dev
 7. Verify users/{uid}/orders/{orderId}
 8. Verify Order History page
 9. Verify Admin Orders page
+10. Verify order fields stored
+11. Verify Stripe Customer reuse
+12. Verify shipping data persistence
 
 ---
 
 ### After That
 
-1. Design userAccess collection
-2. Implement grantAccess()
-3. Implement Product → Plan unlock flow
-4. Build unlock inheritance system
+1. Build final order schema
+2. Implement fulfillment statuses
+3. Design userAccess collection
+4. Implement grantAccess()
+5. Implement Product → Plan unlock flow
+6. Implement unlock inheritance system
 
 ---
 
 ## End Of Session
 
+```bash
 git status
 
 git add .
 
-git commit -m "Standardize roles architecture and normalize custom claims"
+git commit -m "Verify purchase pipeline and begin order architecture"
 
 git push
+```

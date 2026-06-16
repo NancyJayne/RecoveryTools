@@ -6,6 +6,7 @@ import { defineSecret } from "firebase-functions/params";
 import fetch from "node-fetch";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
+const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
 const RECAPTCHA_SECRET_KEY = defineSecret("RECAPTCHA_SECRET_KEY");
 
 if (!admin.apps.length) {
@@ -55,7 +56,13 @@ const createCheckoutSessionHandler = async (request) => {
     await verifyRecaptcha(token, request);
   }
 
-  const stripe = stripeLib(STRIPE_SECRET_KEY.value());
+  const stripeSecretKey =
+    process.env.FUNCTIONS_EMULATOR === "true"
+      ? STRIPE_SECRET_KEY_TEST.value()
+      : STRIPE_SECRET_KEY.value();
+
+  const stripe = stripeLib(stripeSecretKey);
+
   const db = admin.firestore();
 
   try {
@@ -327,7 +334,7 @@ const createCheckoutSessionHandler = async (request) => {
 export const createCheckoutSession = onCall(
   {
     region: "australia-southeast1",
-    secrets: [STRIPE_SECRET_KEY, RECAPTCHA_SECRET_KEY],
+    secrets: [STRIPE_SECRET_KEY, STRIPE_SECRET_KEY_TEST, RECAPTCHA_SECRET_KEY],
   },
   createCheckoutSessionHandler,
 );
