@@ -2,233 +2,214 @@
 
 ## Current Status
 
-### Core Platform
+### Platform Foundation Complete
 
-✅ Firebase CLI login fixed
-✅ Local dev runs on Node 22
-✅ Firebase emulators run
-✅ npm run build passes
-✅ Signup creates Auth emulator user
-✅ Login works after signup
-✅ Logout redirects home
-✅ Signup/login redirects to /profile
-✅ Profile page renders after login
-✅ Profile header name/email displays
-✅ My Profile tab displays account details
+✅ Firebase local development environment operational
 
-✅ Update Profile saves:
+* Node 22
+* Firebase Emulator Suite
+* Vite build process
+* App Check
+* Firebase Auth
+* Firestore connectivity
 
-* Name
-* Phone
-* Shipping address
-* Billing address
-* Email preferences
+✅ User account system operational
 
-✅ Firestore rules allow users to update their own safe profile fields
+* Signup
+* Login
+* Logout
+* Profile page
+* Profile editing
+* Role architecture
+* Custom claims architecture
 
----
+✅ Shop operational
 
-### Shop
+* Product loading
+* Product detail pages
+* Add to cart
+* Cart drawer
+* Quantity controls
+* Pricing calculations
+* GST calculations
+* Shipping calculations
 
-✅ Products load from Firestore emulator
-✅ Product detail page works
-✅ Add to Cart works
-✅ Quantity selector works
-✅ Cart drawer works
-✅ Review crash fixed
-✅ Placeholder product image fallback updated
-✅ Shop tools visible again
-✅ Shop page mostly works
+✅ Stripe checkout operational
 
----
+* Checkout page
+* Stripe session creation
+* Stripe redirect
+* Stripe customer create/reuse
+* Customer details prefill
+* Shipping address prefill
 
-### Checkout & Stripe
+✅ Firebase Functions modernization complete
 
-✅ Cart checkout button navigates to /checkout
-✅ Checkout section displays instead of blank page
-✅ Duplicate checkoutBtn ID fixed
-✅ Checkout callable auth v2 pattern fixed
-✅ Stripe checkout session creates successfully
-✅ Stripe unit_amount fixed from dollars to cents
-✅ Stripe Connect application fee calculation fixed to cents
-✅ Stripe session now returns session.url
-✅ Frontend redirects using session.url
-✅ Stripe back/cancel button works locally
-
-✅ Stripe Customer create/reuse added
-✅ users/{uid}.stripeCustomerId saves to Firestore
-✅ Existing Stripe Customer reused on future checkouts
-
-✅ Stripe Checkout now prefills:
-
-* Name
-* Email
-* Shipping Address
-
-✅ Checkout "Save as default shipping address" checkbox added
-
-✅ Product/cart/checkout price mismatch fixed
-✅ Shipping standardized to $10
-✅ GST calculation confirmed correct
+* Functions v2 migration
+* Callable modernization
+* Role normalization
+* Payment validation
+* Idempotency protection
 
 ---
 
-### Roles & Permissions
+# Current Blocker
 
-✅ Standardized role architecture
+## Priority 0 — Complete Stripe Purchase Pipeline
 
-All users now use:
+Current state:
 
-```js
-roles: {
-  admin: false,
-  affiliate: false,
-  therapist: false
-}
+✅ Checkout session created successfully
+
+✅ Stripe test payment successful
+
+✅ Redirect back to Recovery Tools successful
+
+❌ confirmStripePurchase failing
+
+❌ Order not created
+
+❌ Cart not cleared
+
+❌ Order history empty
+
+Current error:
+
+```text
+401 Unauthorized
+User must be logged in with a valid session
 ```
 
-✅ Updated:
-
-* seedUserRoles.js
-* auth-logic.js
-* setUserRoles.js
-* registerAffiliate.js
-* setAdminClaim.cjs
-* authHelpers.js
-
-✅ Custom claims now normalized
-
-All custom claims now contain:
-
-* admin
-* affiliate
-* therapist
-
-No missing-role claim structures remain.
-
 ---
 
-### Functions Modernization
+## Priority 0A — Standardize Stripe Live/Test Architecture
 
-✅ Migrated callable functions from:
-
-```js
-(data, context)
-```
-
-to:
-
-```js
-(request)
-```
-
-for Firebase Functions v2
-
-✅ Updated:
-
-* Affiliates
-* Orders
-* Courses
-* Workshops
-* Anato-Me
-* Reviews
-* Password Reset
-* Transactional Emails
-* Contact Form
-* Welcome Emails
-* Workshop Emails
-* Affiliate Emails
-* Referral Functions
-
-✅ Added idempotency protection to confirmStripePurchase
-
-✅ Added payment status verification
-
-✅ Added order ownership checks for PDF generation
-
----
-
-## Current Priorities
-
-### Priority 0 — Verify Purchase Pipeline
-
-Complete end-to-end purchase test.
-
-Confirm:
-
-Product
-→ Stripe Checkout
-→ confirmStripePurchase
-→ Firestore Order Creation
+### Firebase Secret Manager
 
 Verify:
 
-* Stripe payment succeeds
-* confirmStripePurchase executes
-* No function errors
-* No Firestore write errors
+```text
+STRIPE_SECRET_KEY
+STRIPE_SECRET_KEY_TEST
+```
+
+### Local Environment
+
+Verify:
+
+```env
+VITE_STRIPE_PUBLISHABLE_KEY
+VITE_STRIPE_PUBLISHABLE_KEY_TEST
+```
+
+### Backend Files To Update
+
+Review and standardize:
+
+```text
+functions/affiliates/createStripeConnectLink.js
+functions/affiliates/createStripeLoginLink.js
+functions/orders/confirmStripePurchase.js
+functions/orders/createCheckoutSession.js
+functions/webhooks/handleStripeWebhook.js
+```
+
+Target:
+
+```text
+Local Emulator
+→ STRIPE_SECRET_KEY_TEST
+
+Production
+→ STRIPE_SECRET_KEY
+```
+
+### Frontend Files To Update
+
+Review:
+
+```text
+.env.example
+src/utils/firebase-config.js
+```
+
+Target:
+
+```text
+Localhost
+→ VITE_STRIPE_PUBLISHABLE_KEY_TEST
+
+Production
+→ VITE_STRIPE_PUBLISHABLE_KEY
+```
 
 ---
 
-### Priority 1 — Order Creation Verification
+## Priority 0B — Fix confirmStripePurchase
 
-Confirm successful payment creates:
+Verify:
+
+### Stripe initialization
+
+Uses correct test key locally.
+
+### Authentication
+
+Confirm user auth state exists before:
+
+```text
+confirmStripePurchase
+```
+
+is called.
+
+Investigate:
+
+```text
+shop-orders.js
+confirmStripePurchase.js
+```
+
+Target flow:
+
+```text
+Stripe Payment
+→ Redirect
+→ Firebase Auth Restored
+→ confirmStripePurchase
+→ Firestore Order Created
+→ Cart Cleared
+→ Order History Updated
+```
+
+---
+
+## Priority 1 — Order System Verification
+
+Once Stripe pipeline works verify:
 
 ```text
 orders/{orderId}
-```
-
-and
-
-```text
 users/{uid}/orders/{orderId}
 ```
 
-Verify:
-
-* Customer order history
-* Admin order history
-* Order totals
-* Shipping details
-* Billing details
-* Stripe IDs
-* Product list
-
----
-
-### Priority 1A — Order Lifecycle Verification
-
-Verify what is currently stored when Stripe payment succeeds.
-
-Confirm orders contain:
+Confirm storage of:
 
 * Order Number
-* User ID
-* Customer Name
-* Customer Email
+* User
+* Products
+* Totals
 * Shipping Address
 * Billing Address
-* Stripe Session ID
-* Stripe Payment Intent ID
-* Stripe Customer ID
-* Affiliate ID
-* Referral ID
-* Product List
-* Order Totals
-* Payment Status
-
-Determine whether current order documents already support:
-
-* Fulfillment Status
-* Tracking Number
-* Pickup Orders
-* Access Status
+* Stripe IDs
+* Affiliate Data
+* Referral Data
 
 ---
 
-### Priority 1B — Order Status Architecture
+## Priority 2 — Order Architecture
 
-Separate order tracking into:
+Design:
 
 ```text
 paymentStatus
@@ -236,110 +217,28 @@ fulfillmentStatus
 accessStatus
 ```
 
-#### paymentStatus
+Implement:
 
-```text
-pending
-paid
-failed
-refunded
-partially_refunded
-```
-
-#### fulfillmentStatus
-
-```text
-not_required
-pending
-packing
-ready_for_pickup
-picked_up
-shipped
-delivered
-completed
-return_requested
-returned
-cancelled
-```
-
-#### accessStatus
-
-```text
-not_required
-pending
-granted
-revoked
-```
+* Pending
+* Paid
+* Packing
+* Shipped
+* Delivered
+* Complete
+* Refunded
 
 ---
 
-### Priority 1C — Shipping vs Digital Fulfillment Logic
+## Priority 3 — Unlock Engine
 
-Verify product structure supports:
-
-* Requires Shipping
-* Unlocks Access
-* Access Type
-* Workshop
-* Digital Product
-* Physical Product
-
-Target behaviour:
-
-#### Physical Product
-
-Collect shipping.
-
-#### Digital Product
-
-No shipping required.
-
-#### Workshop
-
-No shipping required.
-
-#### Physical Product + Course
-
-Collect shipping and unlock content.
-
----
-
-### Priority 1D — Click & Collect Design
-
-Checkout options:
-
-```text
-Ship To Me
-Pick Up From Affiliate
-```
-
-Investigate:
-
-* Affiliate pickup location structure
-* Pickup notifications
-* Shipping cost removal
-* Pickup status updates
-
----
-
-### Priority 2 — Unlock Engine
-
-Design unified access system.
-
-Target flow:
+Implement:
 
 ```text
 Product
 → Plan
-
-Plan
-→ Blueprints
-
-Blueprints
-→ Items
-
-Items
-→ Additional Plans
+→ Blueprint
+→ Item
+→ Additional Plan
 ```
 
 Create:
@@ -348,412 +247,158 @@ Create:
 userAccess
 ```
 
-collection and:
+collection.
+
+Implement:
 
 ```js
 grantAccess(uid, sourceProductId)
 ```
 
-helper function.
+---
+
+## Priority 4 — Order Fulfillment
+
+Admin workflow:
+
+```text
+Pending
+Packing
+Ready For Pickup
+Shipped
+Delivered
+Completed
+```
+
+Add:
+
+* Tracking numbers
+* Click & Collect
+* Australia Post integration (future)
 
 ---
 
-### Priority 2A — Post Purchase Access Automation
+## Priority 5 — Digital Delivery
 
-Target flow:
+Implement:
 
-```text
-Payment Success
-→ Create Order
-→ Grant Access
-→ Send Confirmation Email
-→ Send Access Email
-```
-
-Verify confirmStripePurchase can support automatic unlocks.
+* Order confirmations
+* Access emails
+* Workshop emails
+* Membership emails
 
 ---
 
-### Priority 2B — Mixed Product Unlocks
+## Priority 6 — Tax Invoices
 
-Support:
-
-```text
-Physical Product + Attached Course
-Physical Product + Attached Exercise Plan
-Workshop + Bonus Course
-Membership + Content Library
-```
-
-Verify unlock inheritance works regardless of product type.
-
----
-
-### Priority 3 — Profile Address Structure
-
-Current profile uses:
-
-```text
-address
-billingAddress
-```
-
-and
-
-```text
-defaultShippingAddress
-defaultBillingAddress
-```
-
-Need a single structure.
-
-Profile page should:
-
-* Display full address
-* Edit full address
-* Prefill checkout
-
----
-
-### Priority 4 — Order Fulfillment System
-
-Build admin fulfillment workflow.
-
-Admin actions:
-
-```text
-Mark Packing
-Mark Ready For Pickup
-Mark Shipped
-Mark Delivered
-Mark Complete
-```
-
-Store:
-
-```text
-packedAt
-shippedAt
-deliveredAt
-completedAt
-```
-
-Create Admin Orders dashboard filters:
-
-* New Orders
-* Packing
-* Pickup
-* Shipped
-* Completed
-* Returns
-
----
-
-### Priority 5 — Tracking Integration
-
-Store:
-
-```text
-trackingCarrier
-trackingNumber
-trackingUrl
-```
-
-Version 1:
-
-Manual tracking entry.
-
-Version 2:
-
-Australia Post integration.
-
----
-
-### Priority 6 — Digital Delivery Emails
-
-Design:
-
-#### Order Confirmation
-
-Immediately after payment.
-
-#### Access Granted
-
-Immediately after unlock.
-
-#### Workshop Confirmation
-
-Workshop purchases.
-
-#### Membership Welcome
-
-Membership purchases.
-
----
-
-### Priority 7 — Tax Invoice System
-
-Verify current Stripe behaviour.
-
-Determine:
-
-* Stripe receipt only
-* Stripe invoice
-* Recovery Tools PDF invoice
-
-Potential function:
+Implement:
 
 ```js
 generateOrderPDF()
 ```
 
-Requirements:
+Include:
 
 * ABN
 * GST
 * Invoice Number
 * Order Number
-* Customer Details
 
 ---
 
-### Priority 8 — Review Automation
+## Priority 7 — Review Automation
 
-#### Physical Products
+Physical:
 
 ```text
 Delivered
-→ Wait 7 Days
-→ Review Email
+→ Wait 7 days
+→ Review email
 ```
 
-#### Digital Products
+Digital:
 
 ```text
-Access Granted
-→ Wait 7–14 Days
-→ Review Email
+Access granted
+→ Wait 7–14 days
+→ Review email
 ```
-
-Investigate:
-
-* Firebase Scheduled Functions
-* Cloud Tasks
 
 ---
 
-### Priority 9 — Returns & Refunds
+## Priority 8 — Returns
 
-Create:
+Implement:
 
 ```text
 returns/{returnId}
 ```
 
-Statuses:
+Workflow:
 
 ```text
-requested
-approved
-rejected
-received
-refunded
-```
-
-Customer flow:
-
-```text
-Order History
-→ Request Return
-```
-
-Admin flow:
-
-```text
+Request
 Approve
-Reject
+Receive
 Refund
 ```
 
-Verify Stripe refund integration.
+---
 
+## Priority 9 — Membership Engine
 
-### Priority 10 — Membership Engine
-access architecture you've designed for Products → Plans → Blueprints → Items → Additional Plans will also be the foundation for memberships later, so you'll avoid redesigning the unlock system twice.
+Reuse existing unlock architecture for:
+
+* Memberships
+* Exercise Library
+* Recovery Plans
+* Audio Library
+
 ---
 
 ## Known Issues
 
+### Stripe Confirmation Failure
+
+Payment succeeds.
+
+Order confirmation fails.
+
+Order not created.
+
+Cart not cleared.
+
+Primary investigation tomorrow.
+
 ### Affiliate Collection Access
 
-Affiliate dropdown attempts to load:
-
-```text
-affiliates/{uid}
-```
-
-Current rules prevent non-affiliate users from reading affiliate records.
-
-Need to:
-
-* Review security
-* Separate public affiliate directory if required
-* Ensure cart referral selector loads safely
-
----
+Review public vs private affiliate data.
 
 ### Admin Dashboard Layout
 
-Admin content renders below navigation instead of beside navigation.
-
-Same issue in Affiliate Dashboard.
-
-Investigate:
-
-* index.html
-* admin-dashboard.js
-* affiliate-dashboard.js
-
----
+Navigation/content layout issue.
 
 ### Profile Role Display
 
-Admin users currently display:
-
-```text
-Role: user
-```
-
-or
-
-```text
-Role: multi
-```
-
-Need to investigate:
-
-* getUserRoleWithPermissions
-* profile-init.js
-* role rendering logic
-
----
+Role rendering inconsistency.
 
 ### Profile Address Display
 
-Structured addresses save correctly.
-
-UI still only shows partial address information.
-
-Need support for:
-
-* line1
-* line2
-* city
-* state
-* postcode
-* country
-
----
-
-### Billing Address Save Logic
-
-Need decision:
-
-* Save shipping only
-* Save shipping + billing
-
-when checkbox selected.
-
----
-
-### Stripe Phone Prefill
-
-Phone saves to Stripe Customer.
-
-Still not visibly prefilling in Stripe Checkout.
-
----
-
-### Checkout Fulfillment Logic
-
-Need confirmation checkout correctly handles:
-
-* Physical Products
-* Digital Products
-* Workshops
-* Memberships
-* Mixed Orders
-
----
-
-### Order Number Generation
-
-Need verification every completed purchase receives:
-
-```text
-RT-YYYY-XXXXXX
-```
-
-or similar unique order number.
-
----
-
-### Order Confirmation Emails
-
-Need verification purchase currently sends:
-
-* Customer confirmation email
-* Admin notification email
-
----
-
-### SendGrid Emulator Testing
-
-Welcome email currently returns:
-
-```text
-Unauthorized
-```
-
-Verify:
-
-```text
-SENDGRID_API_KEY
-```
-
-inside emulator environment.
-
----
+Full address rendering incomplete.
 
 ### Shop Filters
 
-Still required:
+Still required.
 
-* Featured
-* Back Pain
-* Mobility
-* Show All
-* Sort Dropdown
+### Placeholder Assets
 
----
-
-### Vite Warnings
-
-Dynamic import warnings remain.
-
-Build passes.
-
----
-
-### Placeholder Images
-
-Replace temporary placeholder images with Recovery Tools assets.
+Replace temporary images.
 
 ---
 
 ## Next Session
 
-### Start Up
+### Startup
 
 ```bash
 npm run build
@@ -761,44 +406,38 @@ npm run emulators
 npm run dev
 ```
 
----
+### First Task
 
-### Main Goal
+Review and update:
 
-1. Re-seed users
-2. Sign in again
-3. Test cart
-4. Complete Stripe test purchase
-5. Confirm confirmStripePurchase executes
-6. Verify orders/{orderId}
-7. Verify users/{uid}/orders/{orderId}
-8. Verify Order History page
-9. Verify Admin Orders page
-10. Verify order fields stored
-11. Verify Stripe Customer reuse
-12. Verify shipping data persistence
+```text
+functions/affiliates/createStripeConnectLink.js
+functions/affiliates/createStripeLoginLink.js
+functions/orders/confirmStripePurchase.js
+functions/orders/createCheckoutSession.js
+functions/webhooks/handleStripeWebhook.js
 
----
+src/utils/firebase-config.js
+.env.example
+```
 
-### After That
+### Then
 
-1. Build final order schema
-2. Implement fulfillment statuses
-3. Design userAccess collection
-4. Implement grantAccess()
-5. Implement Product → Plan unlock flow
-6. Implement unlock inheritance system
+Run complete Stripe test purchase.
 
----
+Verify:
 
-## End Of Session
+```text
+Order Created
+Order History Updated
+Cart Cleared
+```
+
+### End Of Session
 
 ```bash
 git status
-
 git add .
-
-git commit -m "Verify purchase pipeline and begin order architecture"
-
+git commit -m "Standardize Stripe test/live architecture"
 git push
 ```

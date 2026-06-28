@@ -1,5 +1,6 @@
 .env
 .env.local
+.env.live-backup
 **/node_modules/
 
 # Build output
