@@ -242,7 +242,10 @@
   </div>
 </div>
 </section>
-    <section id="programsSection" class="tab-content hidden">Programs content here...</section>
+    <section id="programsSection" class="tab-content hidden p-6">
+      <h2 class="text-2xl font-semibold mb-4">Programs</h2>
+      <div id="programGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
+    </section>
 
 
 <!-- Shop Section -->
@@ -1296,15 +1299,17 @@
 <section id="checkoutSection" class="hidden max-w-2xl mx-auto px-4 py-8 text-white">
   <h1 class="text-2xl font-bold mb-4">Confirm Your Order</h1>
   <div id="checkoutSummary" class="space-y-2"></div>
-  <button id="checkoutBtn" class="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded mt-6">
-    Confirm and Pay
-  </button>
-  <p class="text-xs text-gray-500 mt-4 text-center">
-    By confirming, you agree to our 
-    <a href="/terms" class="underline">Terms</a>, 
-    <a href="/privacy" class="underline">Privacy Policy</a>, and 
-    <a href="/shipping" class="underline">Shipping Info</a>.
-  </p>
+  <div id="checkoutActions">
+    <button id="checkoutBtn" class="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded mt-6">
+      Confirm and Pay
+    </button>
+    <p class="text-xs text-gray-500 mt-4 text-center">
+      By confirming, you agree to our
+      <a href="/terms" class="underline">Terms</a>,
+      <a href="/privacy" class="underline">Privacy Policy</a>, and
+      <a href="/shipping" class="underline">Shipping Info</a>.
+    </p>
+  </div>
 </section>
 
 <!-- Checkout Success Section -->

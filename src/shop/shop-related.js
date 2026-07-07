@@ -3,6 +3,13 @@ import { functions } from "../utils/firebase-config.js";
 import { httpsCallable } from "firebase/functions";
 import { createProductTile } from "./shop-products.js";
 
+function productTags(product) {
+  return [
+    ...(Array.isArray(product?.tags) ? product.tags : []),
+    ...(Array.isArray(product?.tagIds) ? product.tagIds : []),
+  ];
+}
+
 /**
  * Render related tools based on tag overlap or bundle tags
  */
@@ -17,13 +24,17 @@ export async function renderRelatedSuggestions(product) {
     const getProducts = httpsCallable(functions, "getFirestoreProducts");
     const res = await getProducts({ type: "tool" });
     const products = res.data.products || [];
+    const sourceTags = productTags(product);
 
     const related = products
-      .filter((p) =>
-        p.id !== product.id &&
-        p.visible !== false &&
-        (p.tags?.some((tag) => product.tags?.includes(tag)) || p.tags?.includes("bundle")),
-      )
+      .filter((p) => {
+        const tags = productTags(p);
+        return (
+          p.id !== product.id &&
+          p.visible !== false &&
+          (tags.some((tag) => sourceTags.includes(tag)) || tags.includes("bundle"))
+        );
+      })
       .slice(0, 3);
 
     if (related.length === 0) {

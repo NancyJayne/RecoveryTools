@@ -34,6 +34,13 @@ const verifyRecaptcha = async (token, context) => {
   }
 };
 
+function firstImage(data) {
+  const mediaImage = Array.isArray(data.media)
+    ? data.media.find((asset) => asset?.type === "image")?.url
+    : "";
+  return data.images?.[0] || mediaImage || data.image || data.imageUrl || "https://via.placeholder.com/300";
+}
+
 const createCheckoutSessionHandler = async (request) => {
   const uid = request.auth?.uid;
   const data = request.data || {};
@@ -97,14 +104,24 @@ const createCheckoutSessionHandler = async (request) => {
 
       const data = doc.data();
       const quantity = cart[i].quantity || 1;
-      const price = data.onSale && data.salePrice ? data.salePrice : data.price;
+      const price = data.onSale && data.salePrice ? data.salePrice : data.price ?? data.priceFrom;
+      const name = data.name || data.title || doc.id;
 
-      if (!price || isNaN(price)) throw new HttpsError("invalid-argument", `Invalid price for: ${data.name}`);
+      if (!price || isNaN(price)) throw new HttpsError("invalid-argument", `Invalid price for: ${name}`);
 
       return {
         id: doc.id,
-        name: data.name,
-        image: data.images?.[0] || "https://via.placeholder.com/300",
+        name,
+        image: firstImage(data),
+        itemId: data.itemId || null,
+        variantId: cart[i].variantId || null,
+        sku: data.sku || null,
+        accessType: data.accessType || null,
+        relatedPlanId: data.relatedPlanId || null,
+        relatedCourseId: data.relatedCourseId || null,
+        relatedWorkshopId: data.relatedWorkshopId || null,
+        requiresShipping: data.requiresShipping !== false,
+        unlocksAccess: data.unlocksAccess === true,
         type: data.type || "item",
         price,
         quantity,
@@ -121,6 +138,19 @@ const createCheckoutSessionHandler = async (request) => {
         product_data: {
           name: item.name,
           images: [item.image],
+          metadata: {
+            firebaseProductId: item.id,
+            itemId: item.itemId || "",
+            variantId: item.variantId || "",
+            sku: item.sku || "",
+            productType: item.type || "item",
+            accessType: item.accessType || "",
+            relatedPlanId: item.relatedPlanId || "",
+            relatedCourseId: item.relatedCourseId || "",
+            relatedWorkshopId: item.relatedWorkshopId || "",
+            requiresShipping: item.requiresShipping ? "true" : "false",
+            unlocksAccess: item.unlocksAccess ? "true" : "false",
+          },
         },
       },
       quantity: item.quantity,

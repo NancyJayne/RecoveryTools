@@ -93,6 +93,26 @@ cd functions
 npm install
 ```
 
+## Master database import
+
+Use a versioned `.xlsx` workbook as the initial Firestore seed source.
+Always dry-run before importing:
+
+```bash
+cd functions
+node scripts/importMasterDatabase.js --dry-run "C:\Users\hello\Downloads\Recovery Tools Master Database (5).xlsx"
+node scripts/importMasterDatabase.js --emulator "C:\Users\hello\Downloads\Recovery Tools Master Database (5).xlsx"
+```
+
+Live import/export is guarded and requires explicit confirmation:
+
+```bash
+--live --confirm-live
+```
+
+See `docs/import-export-workflow.md` and `docs/firestore-data-map.md` for the
+full import/export workflow and sheet-to-Firestore mapping.
+
 ### Firestore indexes
 
 Deploy the composite indexes defined in `firestore.indexes.json` before running

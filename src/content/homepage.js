@@ -1,7 +1,7 @@
 // homepage.js – Interactive Homepage Logic for Recovery Tools
 import { showTabContent } from "../utils/utils.js";
-import { collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "../utils/firebase-config.js";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../utils/firebase-config.js";
 import { showProductDetail } from "../shop/shop-products.js";
 
 export function initHomepage() {
@@ -21,9 +21,7 @@ function setupShopNowCTA() {
       e.preventDefault();
       history.pushState({}, "", "/shop");
       showTabContent("shopSection");
-      const { initShopPage } = await import(
-        new URL("../shop/shop-page.js", import.meta.url)
-      );
+      const { initShopPage } = await import("../shop/shop-page.js");
       initShopPage?.();
     });
   }
@@ -35,9 +33,7 @@ function setupAffiliateCTA() {
     affiliateBtn.addEventListener("click", async () => {
       history.pushState({}, "", "/affiliateSignup");
       showTabContent("affiliateWhySection");
-      const { initAffiliateSignup } = await import(
-        new URL("../affiliate/affiliate-signup.js", import.meta.url)
-      );
+      const { initAffiliateSignup } = await import("../affiliate/affiliate-signup.js");
       initAffiliateSignup?.();
     });
   }
@@ -49,9 +45,7 @@ function setupBackToShopBtn() {
     backToShopBtn.addEventListener("click", async () => {
       history.pushState({}, "", "/shop");
       showTabContent("shopSection");
-      const { initShopPage } = await import(
-        new URL("../shop/shop-page.js", import.meta.url)
-      );
+      const { initShopPage } = await import("../shop/shop-page.js");
       initShopPage?.();
     });
   }
@@ -61,18 +55,14 @@ async function renderFeaturedTools() {
   const container = document.getElementById("featuredToolsGrid");
   if (!container) return;
 
-  const productsRef = collection(db, "products");
-  const q = query(
-    productsRef,
-    where("type", "==", "Tool"),
-    where("tags", "array-contains", "featured"),
-  );
-
   try {
-    const querySnapshot = await getDocs(q);
+    const getProducts = httpsCallable(functions, "getFirestoreProducts");
+    const res = await getProducts({ type: "tool", tag: "featured" });
+    const products = Array.isArray(res.data?.products) ? res.data.products : [];
+
     container.innerHTML = "";
 
-    if (querySnapshot.empty) {
+    if (products.length === 0) {
       const msg = document.createElement("p");
       msg.className = "text-gray-400";
       msg.textContent = "No featured tools at the moment.";
@@ -80,36 +70,33 @@ async function renderFeaturedTools() {
       return;
     }
 
-    querySnapshot.forEach((docSnap) => {
-      const data = docSnap.data();
-      const productId = docSnap.id;
-
+    products.forEach((data) => {
       const tile = document.createElement("div");
       tile.className =
         "bg-gray-900 p-4 rounded shadow text-center cursor-pointer hover:shadow-lg transition";
-      tile.dataset.productId = productId;
-      tile.dataset.productFull = JSON.stringify({ ...data, id: productId });
+      tile.dataset.productId = data.id;
+      tile.dataset.productFull = JSON.stringify(data);
 
       const img = document.createElement("img");
       img.loading = "lazy";
-      img.src = data.images?.[0] || "/default.jpg";
-      img.alt = data.name;
+      img.src = data.image || data.images?.[0] || "/default.jpg";
+      img.alt = data.name || data.title || "Featured product";
       img.className = "mx-auto mb-2 rounded object-cover h-40 w-full";
 
       const name = document.createElement("h3");
       name.className = "font-semibold text-white mb-1";
-      name.textContent = data.name;
+      name.textContent = data.name || data.title || "Product";
 
       const desc = document.createElement("p");
       desc.className = "text-sm text-gray-400";
-      desc.textContent = data.shortDescription || "";
+      desc.textContent = data.shortDescription || data.description || "";
 
       const price = document.createElement("p");
       price.className = "text-green-400 font-bold mt-2";
-      price.textContent = `$${(data.price || 0).toFixed(2)}`;
+      price.textContent = `$${Number(data.price ?? data.priceFrom ?? 0).toFixed(2)}`;
 
       tile.append(img, name, desc, price);
-      tile.addEventListener("click", () => showProductDetail({ ...data, id: productId }));
+      tile.addEventListener("click", () => showProductDetail(data));
 
       container.appendChild(tile);
     });

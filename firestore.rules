@@ -1,191 +1,340 @@
-// ✅ Firestore Rules Update – Add public access to visible workshops
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 🔐 User Profiles
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    function isTherapist() {
+      return signedIn() && request.auth.token.therapist == true;
+    }
+
+    function isAffiliate() {
+      return signedIn() && request.auth.token.affiliate == true;
+    }
+
+    function isInstructor() {
+      return signedIn() && request.auth.token.instructor == true;
+    }
+
+    function isPrivilegedContentEditor() {
+      return isAdmin() || isTherapist() || isInstructor();
+    }
+
+    function isActiveStatus() {
+      return resource.data.status == 'active' ||
+             resource.data.status == 'ACTIVE' ||
+             resource.data.status == 'Active';
+    }
+
+    function isPublicVisible() {
+      return resource.data.visible == true ||
+             resource.data.websiteVisible == true ||
+             isActiveStatus();
+    }
+
+    function isActiveDisplayStatus() {
+      return resource.data.displayStatus == 'active' ||
+             resource.data.displayStatus == 'ACTIVE' ||
+             resource.data.displayStatus == 'Active';
+    }
+
+    function ownsOrder(orderId) {
+      return signedIn() &&
+             exists(/databases/$(database)/documents/orders/$(orderId)) &&
+             (
+               get(/databases/$(database)/documents/orders/$(orderId)).data.userId == request.auth.uid ||
+               get(/databases/$(database)/documents/orders/$(orderId)).data.firebaseUserId == request.auth.uid
+             );
+    }
+
+    function userCanUpdateOwnProfile() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'name',
+        'phone',
+        'address',
+        'billingAddress',
+        'defaultShippingAddress',
+        'defaultBillingAddress',
+        'checkoutProfile',
+        'business',
+        'emailPreferences',
+        'photoURL',
+        'updatedAt'
+      ]);
+    }
+
+    // User Profiles
     match /users/{userId} {
-    allow create: if request.auth != null &&
-                  request.auth.uid == userId;
+      allow create: if isOwner(userId);
+      allow get: if isOwner(userId) || isAdmin() || isTherapist();
+      allow list: if isAdmin() || isTherapist();
+      allow update: if isAdmin() || (isOwner(userId) && userCanUpdateOwnProfile());
+      allow delete: if isAdmin();
 
-    allow read: if request.auth != null &&
-                request.auth.uid == userId;
-
-    allow update: if request.auth != null &&
-                  request.auth.uid == userId &&
-                  request.resource.data.diff(resource.data).affectedKeys()
-                    .hasOnly(['name', 'phone', 'address', 'photoURL', 'updatedAt']);
-
-    allow read, write: if request.auth.token.admin == true ||
-                       request.auth.token.therapist == true;
-
-    allow delete: if request.auth.token.admin == true;
-
-    match /purchases/{purchaseId} {
-      allow read, write: if request.auth != null &&
-                         request.auth.uid == userId;
-    }
-  }
-
-    // 📬 Contact Form
-    match /contactSubmissions/{submissionId} {
-      allow create: if true;
-      allow read, update, delete: if request.auth.token.admin == true;
-    }
-    match /contactMessages/{msgId} {
-      allow read, write: if false; // only allow server-side writes
+      match /purchases/{purchaseId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if false;
+      }
     }
 
-    // 🛍️ Products
+    // Public/catalogue master data
+    match /items/{itemId} {
+      allow read: if isPublicVisible() || isPrivilegedContentEditor();
+      allow write: if isPrivilegedContentEditor();
+    }
+
     match /products/{productId} {
-      allow list: if true;
-      allow get: if resource.data.visible == true
-                  || request.auth.token.admin == true
-                  || request.auth.uid == resource.data.creatorId;
-      allow update, delete: if request.auth.token.admin == true
-                            || request.auth.uid == resource.data.creatorId;
-      allow create: if request.auth.token.admin == true
-                    || request.auth.token.therapist == true
-                    || request.auth.token.affiliate == true;
+      allow read: if resource.data.visible == true ||
+                     isAdmin() ||
+                     (signedIn() && request.auth.uid == resource.data.creatorId);
+      allow create: if isAdmin() || isTherapist() || isAffiliate();
+      allow update, delete: if isAdmin() ||
+                            (signedIn() && request.auth.uid == resource.data.creatorId);
 
-      // ✍️ Product Reviews
       match /reviews/{reviewId} {
         allow read: if true;
-        allow create: if request.auth != null &&
-                      request.resource.data.timestamp > request.time - duration.value(1, "minutes");
+        allow create: if signedIn() &&
+                      request.resource.data.userId == request.auth.uid &&
+                      request.resource.data.timestamp > request.time - duration.value(1, 'minutes');
+        allow update, delete: if false;
       }
     }
-    match /products/{productId}/reviews/{reviewId} {
-  allow read: if resource.data.visible == true || request.auth.token.admin == true;
-  allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
-  allow update, delete: if false;
-}
 
-
-    // ⚙️ Settings
-    match /settings/{docId} {
-      allow read: if true;
+    match /productPrices/{priceId} {
+      allow read, write: if isAdmin();
     }
 
-    // 🧾 Orders
+    match /itemVariants/{variantId} {
+      allow read: if isPublicVisible() || isPrivilegedContentEditor();
+      allow write: if isAdmin();
+    }
+
+    match /assets/{assetId} {
+      allow read: if isPublicVisible() || isPrivilegedContentEditor();
+      allow write: if isAdmin();
+    }
+
+    match /itemAssets/{itemAssetId} {
+      allow read: if isPublicVisible() || isActiveDisplayStatus() || isPrivilegedContentEditor();
+      allow write: if isAdmin();
+    }
+
+    match /inventory/{inventoryId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Orders and fulfilment. Client code reads own data; trusted Functions/Admin SDK writes it.
     match /orders/{orderId} {
-      allow create: if request.auth != null;
-      allow read: if request.auth.token.admin == true
-                    || request.auth.uid == resource.data.userId
-                   || request.auth.uid == resource.data.referredBy;
-      allow update: if request.auth.token.admin == true;
-    }
-
-    match /workshopTickets/{ticketId} {
-      allow read: if request.auth.uid == resource.data.userId
-                   || request.auth.token.admin == true;
-      allow write: if request.auth.token.admin == true;
-    }
-
-    // 💪 Programs
-    match /programs/{programId} {
-      allow read: if resource.data.visible == true || request.auth != null;
-      allow write: if request.auth.token.therapist == true || request.auth.token.admin == true;
-    }
-
-    // 🎓 Courses
-    match /courses/{courseId} {
-      allow read: if resource.data.visible == true || request.auth != null;
-      allow write: if request.auth.token.therapist == true || request.auth.token.admin == true;
-    }
-
-    // 🧠 Anato-Me Stories
-    match /anatoMe/{storyId} {
-      allow read: if true;
-      allow write: if request.auth.token.admin == true;
-
-      // 💬 Comments
-      match /comments/{commentId} {
-        allow read: if true;
-        allow create: if request.auth != null &&
-                      request.resource.data.timestamp > request.time - duration.value(1, "minutes");
-        allow delete: if request.auth.token.admin == true;
-      }
-    }
-
-    // 📅 Workshops – ✅ Added public read + list for visible workshops
-    match /workshops/{workshopId} {
-      allow read, list: if resource.data.visible == true;
-      allow write: if request.auth.token.admin == true || request.auth.token.therapist == true;
-    }
-
-    // 📅 Appointments
-    match /appointments/{appointmentId} {
-      allow read, write: if request.auth.token.therapist == true || request.auth.token.admin == true;
-    }
-
-    // 🧠 Q&A
-    match /questions/{questionId} {
-      allow read: if true;
-      allow create: if request.auth != null &&
-                    request.resource.data.timestamp > request.time - duration.value(1, "minutes");
-      allow update: if request.auth.token.therapist == true;
-    }
-
-    // 🏅 Badges + Logs
-    match /badges/{userId} {
-      allow read: if request.auth.uid == userId;
-      allow write: if request.auth.token.admin == true;
-    }
-
-    match /logs/{logId} {
-      allow read, write: if request.auth.token.admin == true;
-    }
-
-    // 🧑‍⚕️ Admin & Therapist Panels
-    match /admin/{docId} {
-      allow read, write: if request.auth.token.admin == true;
-    }
-
-    match /clinicalCompanion/{docId} {
-      allow read, write: if request.auth.token.therapist == true;
-    }
-
-    match /patients/{id} {
-      allow read, write: if request.auth.token.therapist == true;
-    }
-
-    match /affiliates/{docId} {
-      allow read, write: if request.auth.token.affiliate == true;
-    }
-
-    // 🌱 Referrals
-    match /referrals/{refId} {
-      allow create: if request.auth != null || request.time != null;
-      allow read: if request.auth.token.affiliate == true || request.auth.token.admin == true;
-    }
-
-    match /affiliatePayouts/{payoutId} {
-      allow read: if request.auth.uid == resource.data.uid || request.auth.token.admin == true;
-      allow write: if false;
-    }
-
-    match /users/{userId} {
-      allow create: if request.auth != null && request.auth.uid == userId;
-      allow read: if request.auth != null && request.auth.uid == userId;
-
-      allow update: if request.auth != null
-                    && request.auth.uid == userId
-                    && request.resource.data.diff(resource.data).changedKeys()
-                      .hasOnly([
-                        "name",
-                        "phone",
-                        "address",
-                        "billingAddress",
-                        "emailPreferences",
-                        "photoURL",
-                        "updatedAt"
-                      ]);
-
+      allow get: if isAdmin() ||
+                    (
+                      signedIn() &&
+                      (
+                        request.auth.uid == resource.data.userId ||
+                        request.auth.uid == resource.data.firebaseUserId ||
+                        request.auth.uid == resource.data.referredBy
+                      )
+                    );
+      allow list: if isAdmin() ||
+                    (
+                      signedIn() &&
+                      (
+                        request.auth.uid == resource.data.userId ||
+                        request.auth.uid == resource.data.firebaseUserId ||
+                        request.auth.uid == resource.data.referredBy
+                      )
+                    );
+      allow create: if false;
+      allow update: if isAdmin();
       allow delete: if false;
     }
 
-    // 🚫 Catch-all
+    match /orderItems/{orderItemId} {
+      allow get, list: if isAdmin() || ownsOrder(resource.data.orderId);
+      allow write: if false;
+    }
+
+    match /customerAddresses/{addressId} {
+      allow get, list: if isAdmin() ||
+                          (
+                            signedIn() &&
+                            (
+                              request.auth.uid == resource.data.userId ||
+                              request.auth.uid == resource.data.firebaseUserId
+                            )
+                          );
+      allow write: if false;
+    }
+
+    match /shipments/{shipmentId} {
+      allow get, list: if isAdmin() || ownsOrder(resource.data.orderId);
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /stripeEvents/{stripeEventId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /userAccess/{userAccessId} {
+      allow get: if isAdmin() || (signedIn() && request.auth.uid == resource.data.userId);
+      allow list: if isAdmin() || (signedIn() && request.auth.uid == resource.data.userId);
+      allow write: if isAdmin();
+    }
+
+    // Contact Form
+    match /contactSubmissions/{submissionId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /contactMessages/{msgId} {
+      allow read, write: if false;
+    }
+
+    // Settings
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /workshopTickets/{ticketId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == resource.data.userId);
+      allow write: if isAdmin();
+    }
+
+    // Programs
+    match /programs/{programId} {
+      allow read: if resource.data.visible == true || signedIn();
+      allow write: if isTherapist() || isAdmin();
+    }
+
+    // Courses
+    match /courses/{courseId} {
+      allow read: if resource.data.visible == true || signedIn();
+      allow write: if isTherapist() || isAdmin();
+    }
+
+    // Anato-Me Stories
+    match /anatoMe/{storyId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if signedIn() &&
+                      request.resource.data.timestamp > request.time - duration.value(1, 'minutes');
+        allow delete: if isAdmin();
+        allow update: if false;
+      }
+    }
+
+    // Workshops
+    match /workshops/{workshopId} {
+      allow read: if resource.data.visible == true;
+      allow write: if isAdmin() || isTherapist();
+    }
+
+    // Appointments
+    match /appointments/{appointmentId} {
+      allow read, write: if isTherapist() || isAdmin();
+    }
+
+    // Q&A
+    match /questions/{questionId} {
+      allow read: if true;
+      allow create: if signedIn() &&
+                    request.resource.data.timestamp > request.time - duration.value(1, 'minutes');
+      allow update: if isTherapist();
+      allow delete: if isAdmin();
+    }
+
+    // Badges and logs
+    match /badges/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if isAdmin();
+    }
+
+    match /logs/{logId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Role profile collections
+    match /admin/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /affiliates/{docId} {
+      allow get: if isAdmin() || (signedIn() && request.auth.uid == resource.data.userId);
+      allow list: if isAdmin() || isAffiliate();
+      allow create: if isAdmin() ||
+                    (isAffiliate() && request.resource.data.userId == request.auth.uid);
+      allow update: if isAdmin() ||
+                    (
+                      isAffiliate() &&
+                      resource.data.userId == request.auth.uid &&
+                      request.resource.data.userId == request.auth.uid
+                    );
+      allow delete: if isAdmin();
+    }
+
+    match /therapists/{docId} {
+      allow get: if isAdmin() || (signedIn() && request.auth.uid == resource.data.userId);
+      allow list: if isAdmin() || isTherapist();
+      allow create: if isAdmin() ||
+                    (isTherapist() && request.resource.data.userId == request.auth.uid);
+      allow update: if isAdmin() ||
+                    (
+                      isTherapist() &&
+                      resource.data.userId == request.auth.uid &&
+                      request.resource.data.userId == request.auth.uid
+                    );
+      allow delete: if isAdmin();
+    }
+
+    match /instructors/{docId} {
+      allow get: if isAdmin() || (signedIn() && request.auth.uid == resource.data.userId);
+      allow list: if isAdmin() || isInstructor();
+      allow create: if isAdmin() ||
+                    (isInstructor() && request.resource.data.userId == request.auth.uid);
+      allow update: if isAdmin() ||
+                    (
+                      isInstructor() &&
+                      resource.data.userId == request.auth.uid &&
+                      request.resource.data.userId == request.auth.uid
+                    );
+      allow delete: if isAdmin();
+    }
+
+    match /clinicalCompanion/{docId} {
+      allow read, write: if isTherapist();
+    }
+
+    match /patients/{id} {
+      allow read, write: if isTherapist();
+    }
+
+    // Referrals
+    match /referrals/{refId} {
+      allow create: if signedIn() || request.time != null;
+      allow read: if isAffiliate() || isAdmin();
+    }
+
+    match /affiliatePayouts/{payoutId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == resource.data.uid);
+      allow write: if false;
+    }
+
+    // Catch-all
     match /{document=**} {
       allow read, write: if false;
     }

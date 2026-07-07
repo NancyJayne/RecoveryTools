@@ -5,7 +5,13 @@ import node from "eslint-plugin-n";
 /** @type {import("eslint").FlatConfig[]} */
 export default [
   {
-    ignores: ["dist/**", "public/**", "**/*.cjs"],
+    ignores: [
+      ".codex-spreadsheet-inspect/**",
+      ".pnpm-store/**",
+      "dist/**",
+      "public/**",
+      "**/*.cjs",
+    ],
   },
   js.configs.recommended,
   {

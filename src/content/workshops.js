@@ -6,6 +6,7 @@ import { DateTime } from "luxon";
 import { showToast, showSection, redirectToPayment } from "../utils/utils.js";
 import { formatCalendarDate } from "../utils/calendar.js";
 import { formatWorkshopForViewer } from "../utils/date-utils.js";
+import { renderProductCatalog, setupCatalogClickHandler } from "./product-catalog.js";
 
 const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -151,6 +152,15 @@ export function showWorkshopDetail(workshop, overrideTZ = userTimezone) {
 }
 
 export async function loadWorkshops() {
+  await renderProductCatalog({
+    gridId: "workshopGrid",
+    type: "workshop",
+    emptyMessage: "No workshops found.",
+    errorMessage: "Failed to load workshops.",
+  });
+}
+
+export async function loadLegacyWorkshops() {
   try {
     const snapshot = await getDocs(
       query(
@@ -286,6 +296,7 @@ export function downloadICS(title, startDateISO, location, description) {
 }
 
 export function initWorkshopsPage() {
+  setupCatalogClickHandler("workshopGrid");
   loadWorkshops();
 }
 

@@ -2,11 +2,9 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
 import stripeLib from "stripe";
 import { defineSecret } from "firebase-functions/params";
-import { sendOrderEmailWithPDF } from "../emails/sendOrderEmailWithPDF.js";
-import { sendWorkshopTicketEmail } from "../emails/sendWorkshopTicketEmail.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
-const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
+const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -20,7 +18,12 @@ const confirmStripePurchaseHandler = async (request) => {
     throw new HttpsError("unauthenticated", "User must be logged in with a valid session.");
   }
 
-  const stripe = stripeLib(STRIPE_SECRET_KEY.value());
+  const stripeSecretKey =
+    process.env.FUNCTIONS_EMULATOR === "true"
+      ? STRIPE_SECRET_KEY_TEST.value()
+      : STRIPE_SECRET_KEY.value();
+
+  const stripe = stripeLib(stripeSecretKey);
 
   const session = await stripe.checkout.sessions.retrieve(sessionId, {
     expand: [
@@ -169,11 +172,7 @@ const confirmStripePurchaseHandler = async (request) => {
             purchasedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
 
-        await sendWorkshopTicketEmail({
-          to: orderData.userEmail,
-          workshopName: item.name,
-          ticketId,
-        });
+        console.log(`Workshop ticket created: ${ticketId}`);
       }
     }),
   );
@@ -192,19 +191,13 @@ const confirmStripePurchaseHandler = async (request) => {
     );
   }
 
-  await sendOrderEmailWithPDF({
-    to: orderData.userEmail,
-    invoiceId: invoiceNumber,
-    userName: session.customer_details?.name || "Customer",
-  });
-
   return orderData;
 };
 
 export const confirmStripePurchase = onCall(
   {
     region: "australia-southeast1",
-    secrets: [STRIPE_SECRET_KEY, SENDGRID_API_KEY],
+    secrets: [STRIPE_SECRET_KEY, STRIPE_SECRET_KEY_TEST],
   },
   confirmStripePurchaseHandler,
 );

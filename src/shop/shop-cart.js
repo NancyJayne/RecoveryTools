@@ -117,7 +117,8 @@ export async function renderCartItems() {
     section.appendChild(heading);
 
     grouped[type].forEach((item) => {
-      const itemTotal = item.price * item.quantity;
+      const itemPrice = Number(item.price ?? item.priceFrom ?? 0);
+      const itemTotal = itemPrice * item.quantity;
       subtotal += itemTotal;
 
       const itemRow = document.createElement("div");
@@ -138,7 +139,7 @@ export async function renderCartItems() {
 
       const details = document.createElement("div");
       details.className = "text-sm text-gray-400";
-      details.textContent = `$${item.price.toFixed(2)} × ${item.quantity}`;
+      details.textContent = `$${itemPrice.toFixed(2)} × ${item.quantity}`;
 
       info.appendChild(name);
       info.appendChild(details);

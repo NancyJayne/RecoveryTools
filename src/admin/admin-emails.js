@@ -8,14 +8,14 @@ import { showToast } from "../utils/utils.js";
 export async function setupAdminEmails() {
   const role = await getUserRole();
 
-if (
-  !(
-    role === "admin" ||
+  if (
+    !(
+      role === "admin" ||
     role?.admin === true
-  )
-) {
-  return;
-}
+    )
+  ) {
+    return;
+  }
 
   const form = document.getElementById("adminEmailForm");
   if (!form) return;

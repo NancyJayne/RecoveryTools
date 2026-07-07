@@ -10,7 +10,10 @@
     "shell": "firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "import:master:dry-run": "node scripts/importMasterDatabase.js --dry-run",
+    "import:master:emulator": "node scripts/importMasterDatabase.js --emulator",
+    "export:backup:emulator": "node scripts/exportFirestoreBackup.js --emulator"
   },
   "engines": {
     "node": "22"
@@ -26,7 +29,8 @@
     "json2csv": "^6.0.0-alpha.2",
     "node-fetch": "^3.3.2",
     "pdfkit": "^0.17.1",
-    "stripe": "^12.18.0"
+    "stripe": "^12.18.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.29.0",

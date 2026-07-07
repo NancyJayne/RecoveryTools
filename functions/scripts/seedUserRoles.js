@@ -29,7 +29,7 @@ const usersToSeed = [
       admin: true,
       affiliate: false,
       therapist: false,
-    }
+    },
   },
   {
     uid: "uid-therapist",
@@ -39,22 +39,22 @@ const usersToSeed = [
     roles: {
       admin: false,
       affiliate: false,
-      therapist: true
+      therapist: true,
     },
     therapistGroup: "Sports Rehab",
   },
   {
-  uid: "uid-affiliate",
-  email: "affiliate@recoverytools.au",
-  password: "secureTest123",
-  displayName: "Affiliate User",
-  roles: {
-    admin: false,
-    affiliate: true,
-    therapist: false,
+    uid: "uid-affiliate",
+    email: "affiliate@recoverytools.au",
+    password: "secureTest123",
+    displayName: "Affiliate User",
+    roles: {
+      admin: false,
+      affiliate: true,
+      therapist: false,
+    },
   },
-},
- {
+  {
     uid: "uid-multi",
     email: "multi@recoverytools.au",
     password: "secureTest123",
@@ -62,7 +62,7 @@ const usersToSeed = [
     roles: {
       admin: false,
       affiliate: true,
-      therapist: true
+      therapist: true,
     },
     therapistGroup: "Pilates",
   },

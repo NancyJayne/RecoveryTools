@@ -8,7 +8,46 @@ import { renderProductReviews, setupReviewForm } from "./shop-reviews.js";
 import { renderRelatedSuggestions } from "./shop-related.js";
 import { addToCart } from "./shop-cart.js";
 import { setPageMeta } from "../utils/seo-utils.js";
-import { showToast, showTabContent, showSection } from "../utils/utils.js";
+import { showToast, showTabContent } from "../utils/utils.js";
+
+const PRODUCT_PLACEHOLDER = "/images/product-placeholder.png";
+
+function asMoney(value) {
+  const amount = Number(value ?? 0);
+  return `$${amount.toFixed(2)}`;
+}
+
+function getProductName(product) {
+  return product.name || product.title || product.productTitle || "Product";
+}
+
+function getProductImage(product) {
+  return product.images?.[0] ||
+    product.media?.find((asset) => asset?.type === "image")?.url ||
+    product.image ||
+    product.imageUrl ||
+    PRODUCT_PLACEHOLDER;
+}
+
+function getProductImageAlt(product) {
+  return product.media?.find((asset) => asset?.url === getProductImage(product))?.altText ||
+    getProductName(product);
+}
+
+function getProductPrice(product) {
+  return Number(product.onSale && product.salePrice ? product.salePrice : product.price ?? product.priceFrom ?? 0);
+}
+
+function getProductTags(product) {
+  return [
+    ...(Array.isArray(product.tags) ? product.tags : []),
+    ...(Array.isArray(product.tagIds) ? product.tagIds : []),
+  ];
+}
+
+function isFeatured(product) {
+  return product.featured === true || getProductTags(product).includes("featured");
+}
 
 
 export async function loadProducts() {
@@ -55,6 +94,9 @@ export async function loadProducts() {
 
 export function createProductTile(product) {
   if (product.visible === false) return null;
+  const productName = getProductName(product);
+  const productImage = getProductImage(product);
+  const finalPrice = getProductPrice(product);
 
   const wrapper = document.createElement("div");
   wrapper.className = "relative bg-gray-800 p-4 rounded-lg shadow hover:ring-2 hover:ring-[#407471]";
@@ -62,7 +104,7 @@ export function createProductTile(product) {
   wrapper.setAttribute("tabindex", "0");
   wrapper.setAttribute(
     "aria-label",
-    `View details for ${product.name || product.title}`,
+    `View details for ${productName}`,
   );
   wrapper.setAttribute("aria-pressed", "false");
   wrapper.addEventListener("keydown", (e) => {
@@ -72,14 +114,14 @@ export function createProductTile(product) {
   });
 
   wrapper.dataset.productId = product.id;
-  wrapper.dataset.productName = product.name || product.title;
-  wrapper.dataset.productPrice = product.price;
-  wrapper.dataset.productImage = product.images?.[0] || product.image || "";
-  wrapper.dataset.productDescription = product.shortDescription;
-  wrapper.dataset.productStock = product.stock;
+  wrapper.dataset.productName = productName;
+  wrapper.dataset.productPrice = finalPrice;
+  wrapper.dataset.productImage = productImage;
+  wrapper.dataset.productDescription = product.shortDescription || "";
+  wrapper.dataset.productStock = product.stock ?? 0;
   wrapper.dataset.productFull = JSON.stringify(product);
 
-  if (product.tags?.includes("featured")) {
+  if (isFeatured(product)) {
     const badge = document.createElement("span");
     badge.textContent = "★ Featured";
     badge.className = "absolute top-2 left-2 bg-yellow-500 text-black text-xs px-2 py-1 rounded";
@@ -87,33 +129,27 @@ export function createProductTile(product) {
   }
 
   const image = document.createElement("img");
-  image.src =
-    product.images?.[0] ||
-    product.image ||
-    "/images/product-placeholder.png";
-  image.alt = product.name || product.title;
+  image.src = productImage;
+  image.alt = getProductImageAlt(product);
   image.className = "w-full h-48 object-cover rounded";
 
   const name = document.createElement("h3");
-  name.textContent = product.name || product.title;
+  name.textContent = productName;
   name.className = "text-lg font-semibold mt-2 text-white";
 
   const shortDesc = document.createElement("p");
   shortDesc.textContent = product.shortDescription || "";
   shortDesc.className = "text-sm text-gray-300 mt-1";
 
-  const finalPrice =
-  product.onSale && product.salePrice ? product.salePrice : product.price;
-
   const price = document.createElement("p");
   price.innerHTML =
   product.onSale && product.salePrice
     ? `<span class="line-through text-gray-500 mr-2">
-         $${product.price.toFixed(2)}
+         ${asMoney(product.price)}
        </span><span class="text-green-400 font-bold">
-         $${finalPrice.toFixed(2)}
+         ${asMoney(finalPrice)}
        </span>`
-    : `$${finalPrice.toFixed(2)}`;
+    : asMoney(finalPrice);
 
   price.className = "mt-1";
 
@@ -135,6 +171,9 @@ export function createProductTile(product) {
 export function showProductDetail(product) {
   const detail = document.getElementById("productDetailContainer");
   if (detail.dataset.currentId === product.id) return;
+  const productName = getProductName(product);
+  const productImage = getProductImage(product);
+  const finalPrice = getProductPrice(product);
 
   detail.dataset.currentId = product.id;
   detail.innerHTML = "";
@@ -157,42 +196,36 @@ export function showProductDetail(product) {
   wrapper.className = "flex flex-col md:flex-row gap-10 items-start px-4 sm:px-6 md:px-8 max-w-screen-xl mx-auto";
 
   const img = document.createElement("img");
-  img.src =
-    product.images?.[0] ||
-    product.image ||
-    "/images/product-placeholder.png";
-  img.alt = product.name || product.title;
+  img.src = productImage;
+  img.alt = getProductImageAlt(product);
   img.className = "w-full h-auto max-h-[400px] object-cover rounded md:max-w-[600px]";
 
   const content = document.createElement("div");
   content.className = "flex flex-col md:w-1/2 px-4";
 
   const title = document.createElement("h2");
-  title.textContent = product.name || product.title;
+  title.textContent = productName;
   title.className = "text-2xl font-bold mb-2";
 
   const price = document.createElement("span");
-  const finalPrice =
-  product.onSale && product.salePrice ? product.salePrice : product.price;
-
   price.innerHTML =
   product.onSale && product.salePrice
     ? `<span class="line-through text-gray-500 mr-2">
-         $${product.price.toFixed(2)}
+         ${asMoney(product.price)}
        </span><span class="text-green-400 font-bold">
-         $${finalPrice.toFixed(2)}
+         ${asMoney(finalPrice)}
        </span>`
-    : `$${finalPrice.toFixed(2)}`;
+    : asMoney(finalPrice);
 
   price.className = "text-green-400 text-xl font-bold mb-2";
 
 
   const shortDesc = document.createElement("p");
-  shortDesc.textContent = product.shortDescription;
+  shortDesc.textContent = product.shortDescription || "";
   shortDesc.className = "text-sm text-gray-300 mb-2";
 
   const longDesc = document.createElement("p");
-  longDesc.textContent = product.longDescription;
+  longDesc.textContent = product.longDescription || "";
   longDesc.className = "text-sm text-gray-400 mb-4";
 
   const featureList = document.createElement("ul");
@@ -245,13 +278,13 @@ export function showProductDetail(product) {
     btn.addEventListener("click", () => {
       addToCart({
         id: product.id,
-        name: product.name || product.title,
+        name: productName,
         price: finalPrice,
         quantity,
         type: product.type || "tool",
         creatorId: product.creatorId,
         affiliatePercent: product.affiliatePercent,
-        image: product.images?.[0] || product.image,
+        image: productImage,
       });
     });
 
@@ -335,7 +368,7 @@ export function showProductDetail(product) {
   window.history.pushState({}, "", `/shop/${productSlug}`);
 
   setPageMeta({
-    title: `${product.name || product.title} | Recovery Tools`,
+    title: `${productName} | Recovery Tools`,
     description: product.shortDescription || product.longDescription?.slice(0, 140),
     url: `https://recoverytools.au/shop/${productSlug}`,
   });
@@ -348,21 +381,24 @@ export function showProductDetail(product) {
 
 export function injectProductSchema(product) {
   const productSlug = product.slug || product.id;
+  const productName = getProductName(product);
+  const productImage = getProductImage(product);
+  const finalPrice = getProductPrice(product);
 
   const script = document.createElement("script");
   script.type = "application/ld+json";
   script.innerHTML = JSON.stringify({
     "@context": "https://schema.org",
     "@type": "Product",
-    "name": product.name || product.title,
-    "image": product.images?.[0] || product.image || "/images/product-placeholder.png",
+    "name": productName,
+    "image": productImage,
     "description": product.shortDescription || product.longDescription,
-    "sku": productSlug,
+    "sku": product.sku || productSlug,
     "brand": { "@type": "Organization", "name": "Recovery Tools" },
     "offers": {
       "@type": "Offer",
       "priceCurrency": "AUD",
-      "price": product.salePrice || product.price,
+      "price": finalPrice,
       "availability": product.stock > 0 ? "InStock" : "OutOfStock",
       "url": `https://recoverytools.au/shop/${productSlug}`,
     },

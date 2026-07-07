@@ -5,29 +5,34 @@ import { showToast } from "../utils/utils.js";
 
 export async function confirmOrderFromStripeRedirect() {
   const params = new URLSearchParams(window.location.search);
+  const sessionId = params.get("session_id");
 
-  if (params.get("success") !== "true") return;
+  if (params.get("success") !== "true") return null;
+  if (!sessionId) {
+    throw new Error("Missing Stripe checkout session ID.");
+  }
 
   try {
     const confirmPurchase = httpsCallable(functions, "confirmStripePurchase");
-    const res = await confirmPurchase();
+    const res = await confirmPurchase({ sessionId });
+    const order = res.data?.order || res.data;
 
-    if (res.data && res.data.orderId) {
-      showToast("✅ Order confirmed. A receipt has been emailed to you.", "success");
+    if (order?.orderId || order?.invoiceId || order?.stripeCheckoutSessionId) {
+      showToast("Order confirmed. A receipt has been emailed to you.", "success");
       localStorage.removeItem("recovery_cart");
+      sessionStorage.removeItem("cartBackup");
 
-      // Optionally redirect to confirmation screen
       document.getElementById("orderConfirmationSection")?.classList.remove("hidden");
       document.getElementById("mainContent")?.classList.add("hidden");
 
-      // You can also populate confirmation UI with res.data.order if needed
-      return res.data;
-    } else {
-      throw new Error("Order confirmation failed.");
+      return order;
     }
+
+    throw new Error("Order confirmation failed.");
   } catch (err) {
     console.error("Order confirmation error:", err);
-    showToast("⚠ Something went wrong confirming your order.", "error");
+    showToast("Something went wrong confirming your order.", "error");
+    throw err;
   }
 }
 

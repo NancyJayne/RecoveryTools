@@ -9,6 +9,28 @@ import { doc, getDoc } from "firebase/firestore";
 import { executeRecaptcha } from "../utils/verifyRecaptchaToken.js";
 import { onAuthStateChanged } from "firebase/auth";
 
+function asDollars(value) {
+  const amount = Number(value || 0);
+  return amount > 1000 ? amount / 100 : amount;
+}
+
+function orderItems(order) {
+  return Array.isArray(order?.products) ? order.products : [];
+}
+
+function itemName(item) {
+  return item.name || item.productTitle || "Item";
+}
+
+function itemType(item) {
+  return item.type || item.productType || "item";
+}
+
+function itemLineTotal(item) {
+  if (item.lineTotal !== undefined) return Number(item.lineTotal || 0);
+  return asDollars(item.price || item.unitPrice) * Number(item.quantity || 1);
+}
+
 async function waitForAuth() {
   if (auth?.currentUser) return auth.currentUser;
 
@@ -29,12 +51,24 @@ export async function setupCheckoutPage() {
   const isSuccess = urlParams.get("success") === "true";
   const summaryContainer = document.getElementById("checkoutSummary");
   const confirmBtn = document.getElementById("checkoutBtn");
+  const checkoutActions = document.getElementById("checkoutActions");
   if (!summaryContainer) return;
 
   if (isSuccess) {
+    checkoutActions?.remove();
+    summaryContainer.innerHTML = `
+      <div class="text-center py-12 px-4">
+        <div
+          class="w-12 h-12 border-4 border-gray-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"
+        ></div>
+        <p class="text-gray-300">Confirming your order...</p>
+      </div>
+    `;
+
     confirmOrderFromStripeRedirect()
       .then((order) => {
-        const hasCourse = order.products.some((p) => p.type === "course");
+        if (!order) return;
+        const items = orderItems(order);
 
         const summaryBox = document.createElement("div");
         summaryBox.className = "text-center py-12 px-4 sm:px-6 lg:px-8";
@@ -53,7 +87,7 @@ export async function setupCheckoutPage() {
 
         const orderId = document.createElement("p");
         orderId.className = "text-gray-400 text-sm";
-        orderId.innerHTML = `Order ID: <strong>${order?.invoiceId || "N/A"}</strong>`;
+        orderId.innerHTML = `Order ID: <strong>${order?.invoiceId || order?.orderId || "N/A"}</strong>`;
 
         const continueLink = document.createElement("a");
         continueLink.href = "/shop";
@@ -74,7 +108,7 @@ export async function setupCheckoutPage() {
         headingSummary.textContent = "Order Summary";
         orderSummary.appendChild(headingSummary);
 
-        order.products.forEach((item) => {
+        items.forEach((item) => {
           const line = document.createElement("div");
           line.className =
             "flex justify-between border-b border-gray-700 py-2 text-sm";
@@ -83,31 +117,31 @@ export async function setupCheckoutPage() {
 
           const name = document.createElement("div");
           name.className = "font-semibold";
-          name.textContent = item.name;
+          name.textContent = itemName(item);
 
           const typeQty = document.createElement("div");
           typeQty.className = "text-gray-400";
-          typeQty.textContent = `${item.type?.toUpperCase() || "ITEM"} x${item.quantity}`;
+          typeQty.textContent = `${itemType(item).toUpperCase()} x${item.quantity}`;
 
           left.append(name, typeQty);
 
           const right = document.createElement("div");
-          right.textContent = formatCurrency((item.price * item.quantity) / 100);
+          right.textContent = formatCurrency(itemLineTotal(item));
 
           line.append(left, right);
           orderSummary.appendChild(line);
         });
 
         const summaryLines = [
-          { label: "Subtotal", value: formatCurrency(order.subtotal / 100) },
+          { label: "Subtotal", value: formatCurrency(asDollars(order.subtotal)) },
           {
             label: "Shipping",
-            value: formatCurrency((order.shipping?.amount_total || 1000) / 100),
+            value: formatCurrency(asDollars(order.shippingAmount ?? order.shipping?.amount_total ?? 0)),
           },
-          { label: "GST", value: formatCurrency(order.total / 11) },
+          { label: "GST", value: formatCurrency(order.gstAmount ?? (asDollars(order.total) / 11)) },
           {
             label: "Total",
-            value: formatCurrency(order.total / 100),
+            value: formatCurrency(asDollars(order.total)),
             bold: true,
           },
         ];
@@ -123,44 +157,6 @@ export async function setupCheckoutPage() {
 
         summaryContainer.appendChild(orderSummary);
 
-        const sendEmail = httpsCallable(functions, "sendTransactionalEmail");
-        sendEmail({
-          to: order.userEmail,
-          templateId: "d-4b0e5696c6a14a67892e586f385b6e7d",
-          dynamicTemplateData: {
-            first_name: order?.userName?.split(" ")[0] || "Customer",
-            order_id: order?.invoiceId,
-            order_items: order.products.map((p) => ({
-              name: p.name,
-              quantity: p.quantity,
-              type: p.type || "Item",
-              price: formatCurrency(p.price / 100),
-              accessUrl:
-                p.type === "course"
-                  ? `https://recoverytools.au/courses/${p.productId}`
-                  : null,
-            })),
-            total: formatCurrency(order.total / 100),
-            shipping_cost: formatCurrency(
-              (order.shipping?.amount_total || 1000) / 100,
-            ),
-            shipping_name: order.shipping?.name || order.userName || "",
-            shipping_address: {
-              line1: order.shipping?.address?.line1 || "",
-              line2: order.shipping?.address?.line2 || "",
-              city: order.shipping?.address?.city || "",
-              state: order.shipping?.address?.state || "",
-              postcode: order.shipping?.address?.postal_code || "",
-              country: order.shipping?.address?.country || "AU",
-            },
-            invoice_url: order.invoiceUrl || "https://recoverytools.au/profile",
-            unsubscribe_url: "https://recoverytools.au/unsubscribe",
-            show_course_button: hasCourse,
-            course_button_url: hasCourse
-              ? "https://recoverytools.au/courses"
-              : "",
-          },
-        });
       })
       .catch(() => {
         summaryContainer.innerHTML =

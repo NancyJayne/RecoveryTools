@@ -1,19 +1,9 @@
 // course.js
 import { db } from "../utils/firebase-config.js";
-import {
-  doc,
-  getDoc,
-  updateDoc,
-  serverTimestamp,
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-} from "firebase/firestore";
+import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { showToast, redirectToPayment, showSection } from "../utils/utils.js";
 import { refreshProfileCourses } from "../profile/profile-utils.js";
-import { createProductTile } from "../shop/shop-products.js";
+import { renderProductCatalog, setupCatalogClickHandler } from "./product-catalog.js";
 
 export async function handleCourseFromURL() {
   const params = new URLSearchParams(window.location.search);
@@ -48,64 +38,12 @@ export async function handleCourseFromURL() {
 }
 
 export async function loadCourses() {
-  const grid = document.getElementById("courseGrid");
-  if (!grid) return;
-
-  grid.innerHTML = ""; // clear before loading
-
-  const spinner = document.createElement("div");
-  spinner.className = "flex justify-center items-center min-h-[200px]";
-
-  const loader = document.createElement("div");
-  loader.className =
-    "w-12 h-12 border-4 border-t-4 border-gray-500 border-t-transparent rounded-full animate-spin";
-
-  spinner.appendChild(loader);
-  grid.appendChild(spinner);
-
-  try {
-    const q = query(
-      collection(db, "courses"),
-      where("visible", "==", true),
-      orderBy("title", "asc"),
-    );
-    const snapshot = await getDocs(q);
-    const courses = snapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        ...data,
-        name: data.title || data.name,
-      };
-    });
-
-    grid.innerHTML = "";
-
-    if (courses.length === 0) {
-      const message = document.createElement("p");
-      message.className = "text-gray-400";
-      message.textContent = "No courses found.";
-      grid.appendChild(message);
-      return;
-    }
-
-    courses.forEach((course) => {
-      const tile = createProductTile(
-        { ...course, name: course.title || course.name },
-        "course",
-      );
-      if (tile) grid.appendChild(tile);
-    });
-
-  } catch (error) {
-    console.error("Error loading courses:", error);
-    grid.innerHTML = "";
-
-    const message = document.createElement("p");
-    message.className = "text-red-500";
-    message.textContent = "Failed to load courses.";
-    grid.appendChild(message);
-  }
+  await renderProductCatalog({
+    gridId: "courseGrid",
+    type: "course",
+    emptyMessage: "No courses found.",
+    errorMessage: "Failed to load courses.",
+  });
 }
 
 export function goBackToCourses() {
@@ -206,6 +144,7 @@ export async function validateTokenFromURL() {
 
 // ✅ content/course.js
 export function initCoursesPage() {
+  setupCatalogClickHandler("courseGrid");
   loadCourses();
   handleCourseFromURL();
   validateTokenFromURL();

@@ -1,5 +1,38 @@
 # Recovery Tools — Next Steps
 
+## Latest Session Handoff
+
+Stripe checkout is now completing locally through the confirmation screen.
+
+Confirmed today:
+
+* Product/course data imports display in shop and course sections.
+* Product images, prices, descriptions, and cart add flow work from imported `products`.
+* Stripe test payment succeeds.
+* Return to `/checkout?success=true&session_id=...` succeeds.
+* `confirmStripePurchase` now returns an order summary.
+* Cart clears after confirmation.
+* Checkout success removes the `Confirm and Pay` controls so users cannot click payment again.
+
+Tomorrow verify in Firestore Emulator UI:
+
+```text
+orders/{checkoutSessionId}
+users/{uid}/orders/{checkoutSessionId}
+orderItems/{checkoutSessionId}_1
+customerAddresses/{checkoutSessionId}_billing
+customerAddresses/{checkoutSessionId}_shipping
+stripeEvents/{stripeEventId}
+userAccess/{userId}_{accessType}_{accessId} for digital/access products
+```
+
+Known tomorrow checks:
+
+* Confirm whether the Stripe webhook writes the new collections during local testing.
+* Confirm whether `confirmStripePurchase` writes only the legacy order shape or needs to share the webhook writer.
+* Fix affiliate list rule warning from cart: `Property admin is undefined on object`.
+* Later: guest checkout/auth flow, dedicated course detail page, and shop tag refinements.
+
 ## Current Status
 
 ### Platform Foundation Complete
@@ -207,6 +240,19 @@ Confirm storage of:
 
 ---
 
+## Current Website/Firebase Implementation Focus
+
+Work on these next while the spreadsheet remains the prototype and initial seed source:
+
+1. Create a mapping document from spreadsheet columns to Firestore fields.
+2. Write a seed/import script that reads the workbook and writes Firestore docs.
+3. Update Firestore rules for the target collections.
+4. Build admin update functions for products, prices, assets, orders, shipping, and users.
+5. Build the user profile update flow that writes back to `users/{userId}`.
+6. Build the Stripe webhook flow that writes `Orders`, `OrderItem`, `CustomerAddresses`, `StripeEvents`, and `User Access`.
+
+---
+
 ## Priority 2 — Order Architecture
 
 Design:
@@ -370,6 +416,17 @@ Cart not cleared.
 
 Primary investigation tomorrow.
 
+### Guest Checkout Auth Flow
+
+Checkout currently fails with `401 Unauthorized` if a customer adds items to cart while logged out and then enters checkout details.
+
+Later fix:
+
+* If checkout email matches an existing user, prompt login before creating the Stripe checkout session.
+* If checkout email does not match a user, create a new Firebase Auth user/profile or offer account creation before payment.
+* Preserve cart contents and entered checkout details through login/signup.
+* Then continue to Stripe checkout once authenticated.
+
 ### Affiliate Collection Access
 
 Review public vs private affiliate data.
@@ -390,9 +447,43 @@ Full address rendering incomplete.
 
 Still required.
 
+Refine visible filter tags at top of shop:
+
+```text
+Featured
+Pain
+Mobility
+Stability
+```
+
+### Course Detail Page
+
+Courses currently display in the Courses section, but clicking a course opens the shared shop product detail page.
+
+Build a dedicated course detail page with:
+
+* More detailed course information than physical product pages
+* Course-specific layout and copy sections
+* Add to cart / buy flow that preserves referral tracking
+* Access course button for users who already have `userAccess`
+* Correct handling of affiliate commission values from the new imported product/order structure
+
 ### Placeholder Assets
 
 Replace temporary images.
+
+---
+
+## Later Spreadsheet Cleanup
+
+Do these after the website/Firebase work is underway:
+
+1. Add real product assets with `FileURL` values.
+2. Fill the missing `ItemProduct` course/product descriptions.
+3. Fill `ProductPrice.stripeProductId` and `ProductPrice.stripePriceId` once Stripe products/prices exist.
+4. Decide whether blank `ProductPrice` formula rows should stay; import should only read rows with `ItemProductID`.
+5. Add status values consistently; `ACTIVE`/`Active` should be normalized by import.
+6. Add seed rows for your own admin user in `Users` and `Admin`.
 
 ---
 

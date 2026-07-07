@@ -211,6 +211,32 @@ firebase auth:export users.json --format=json
 
 ---
 
+## Master Database Import
+
+Use the versioned master workbook as the seed source for Firestore. Always run a
+dry-run first:
+
+```bash
+cd functions
+node scripts/importMasterDatabase.js --dry-run "C:\Users\hello\Downloads\Recovery Tools Master Database (5).xlsx"
+node scripts/importMasterDatabase.js --emulator "C:\Users\hello\Downloads\Recovery Tools Master Database (5).xlsx"
+```
+
+Live import/export is guarded and requires:
+
+```bash
+--live --confirm-live
+```
+
+Reference docs:
+
+```text
+docs/firestore-data-map.md
+docs/import-export-workflow.md
+```
+
+---
+
 # 7. Firestore Naming Conventions
 
 ## Collections
