@@ -2,6 +2,35 @@
 
 ## Latest Session Handoff
 
+Workbook-backed recovery product seeding is now implemented.
+
+Confirmed today:
+
+* `functions/scripts/seedRecoveryProducts.js` reads `Recovery Tools Master Database (3).xlsx`.
+* Product seed data is joined from `ItemProduct`, `Items`, `ProductPrice`, `Inventory`, `ItemAsset`, and `Asset`.
+* `ItemProductID` is used as the Firestore `products/{productId}` document ID.
+* Active `ProductPrice` rows provide `price`, `retailPrice`, sale fields, and Stripe ID placeholders.
+* Inventory rows are summed into `stock`.
+* Product images are resolved through `ItemAsset -> Asset.FileURL`.
+* `references` and `referenceStatus` are carried through from `Items`.
+* `--dry-run` validates the generated product documents without writing to Firestore.
+* ESLint passed for `functions/scripts/seedRecoveryProducts.js`.
+
+Useful commands:
+
+```powershell
+cd "C:\Users\hello\Firebase project\functions"
+node scripts/seedRecoveryProducts.js --dry-run --workbook "C:\Users\hello\Downloads\Recovery Tools Master Database (3).xlsx"
+node scripts/seedRecoveryProducts.js --workbook "C:\Users\hello\Downloads\Recovery Tools Master Database (3).xlsx"
+```
+
+Remaining spreadsheet checks before a live upload:
+
+* Keep `ProductPrice.Status` set to `Active` for the price row to import.
+* Keep `ItemProduct.ItemProductID` stable; changing it creates a new Firestore product document.
+* Replace placeholder/fallback image behavior only after every product has a production `Asset.FileURL`.
+* Standardize `Reference Status` values: `Not required`, `Needs source`, `Draft source`, `Verified`.
+
 Stripe checkout is now completing locally through the confirmation screen.
 
 Confirmed today:
@@ -244,12 +273,12 @@ Confirm storage of:
 
 Work on these next while the spreadsheet remains the prototype and initial seed source:
 
-1. Create a mapping document from spreadsheet columns to Firestore fields.
-2. Write a seed/import script that reads the workbook and writes Firestore docs.
-3. Update Firestore rules for the target collections.
-4. Build admin update functions for products, prices, assets, orders, shipping, and users.
-5. Build the user profile update flow that writes back to `users/{userId}`.
-6. Build the Stripe webhook flow that writes `Orders`, `OrderItem`, `CustomerAddresses`, `StripeEvents`, and `User Access`.
+1. Extend the workbook import beyond product seeding into plans, blueprints, assets, prices, and access rows.
+2. Update Firestore rules for the target collections.
+3. Build admin update functions for products, prices, assets, orders, shipping, and users.
+4. Build the user profile update flow that writes back to `users/{userId}`.
+5. Build the Stripe webhook flow that writes `Orders`, `OrderItem`, `CustomerAddresses`, `StripeEvents`, and `User Access`.
+6. Add an admin-only import validation screen or report before any live workbook upload.
 
 ---
 
@@ -490,12 +519,12 @@ Replace temporary images.
 
 Do these after the website/Firebase work is underway:
 
-1. Add real product assets with `FileURL` values.
-2. Fill the missing `ItemProduct` course/product descriptions.
-3. Fill `ProductPrice.stripeProductId` and `ProductPrice.stripePriceId` once Stripe products/prices exist.
-4. Decide whether blank `ProductPrice` formula rows should stay; import should only read rows with `ItemProductID`.
-5. Add status values consistently; `ACTIVE`/`Active` should be normalized by import.
-6. Add seed rows for your own admin user in `Users` and `Admin`.
+1. Fill `ProductPrice.stripeProductId` and `ProductPrice.stripePriceId` once Stripe products/prices exist.
+2. Decide whether blank `ProductPrice` formula rows should stay; import currently only uses active rows with `ItemProductID`.
+3. Add status values consistently; import currently normalizes common casing such as `ACTIVE`/`Active`.
+4. Add seed rows for your own admin user in `Users` and `Admin`.
+5. Fill `Reference Status` consistently for Items and Blueprints.
+6. Add `Features` fields if the product detail bullet list should be populated from the workbook.
 
 ---
 
