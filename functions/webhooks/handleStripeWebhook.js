@@ -33,13 +33,14 @@ function normalizeAddress(address = {}) {
   };
 }
 
-function addressDoc({ addressId, orderId, userId, type, name, phone, address }) {
+function addressDoc({ addressId, orderId, userId, type, name, email, phone, address }) {
   return {
     addressId,
     orderId,
     userId,
     addressType: type,
     name: name || "",
+    email: email || "",
     phone: phone || "",
     ...normalizeAddress(address),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -153,6 +154,11 @@ async function writeCheckoutCompleted({ stripe, session, event }) {
     customerPhone: customerDetails.phone || "",
     userName: customerDetails.name || shippingDetails.name || "",
     userEmail: customerDetails.email || session.customer_email || "",
+    shippingName: shippingDetails.name || customerDetails.name || "",
+    shippingEmail: customerDetails.email || session.customer_email || "",
+    shippingPhone: customerDetails.phone || "",
+    shippingAddress: shippingDetails.address || null,
+    billingAddress: customerDetails.address || null,
     shippingAddressId: hasPhysicalItems ? shippingAddressId : null,
     billingAddressId,
     trackingId: "",
@@ -205,6 +211,7 @@ async function writeCheckoutCompleted({ stripe, session, event }) {
     userId,
     type: "billing",
     name: customerDetails.name,
+    email: customerDetails.email || session.customer_email,
     phone: customerDetails.phone,
     address: customerDetails.address,
   }), { merge: true });
@@ -216,6 +223,7 @@ async function writeCheckoutCompleted({ stripe, session, event }) {
       userId,
       type: "shipping",
       name: shippingDetails.name || customerDetails.name,
+      email: customerDetails.email || session.customer_email,
       phone: customerDetails.phone,
       address: shippingDetails.address,
     }), { merge: true });

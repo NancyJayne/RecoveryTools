@@ -304,6 +304,7 @@ export async function setupCheckoutPage() {
   phoneInput.name = "phone";
   phoneInput.id = "phone";
   phoneInput.autocomplete = "tel";
+  phoneInput.required = true;
   phoneInput.className =
   "mt-1 block w-full bg-gray-800 border border-gray-700 text-white rounded-md px-3 py-2";
   phoneInput.value = profileData.phone || "";
@@ -385,6 +386,10 @@ export async function setupCheckoutPage() {
 
   // 🔄 Toggle billing section visibility
   const toggleCheckbox = form.querySelector("#sameAsShipping");
+  billingGroup.querySelectorAll("input").forEach((input) => {
+    input.disabled = toggleCheckbox?.checked ?? true;
+  });
+
   toggleCheckbox?.addEventListener("change", (e) => {
     const isSame = e.target.checked;
     billingContainer.classList.toggle("hidden", isSame);
@@ -471,11 +476,22 @@ export async function setupCheckoutPage() {
   summaryContainer.appendChild(cartSummary);
   confirmBtn.addEventListener("click", async (e) => {
     e.preventDefault();
+    if (!form.reportValidity()) return;
+
     confirmBtn.disabled = true;
     confirmBtn.textContent = "Processing...";
 
     const formData = new FormData(form);
     const customerInfo = Object.fromEntries(formData.entries());
+    const phoneDigits = String(customerInfo.phone || "").replace(/\D/g, "");
+    if (!phoneDigits || phoneDigits.length < 8) {
+      showToast("Enter a recipient phone number for parcel delivery.", "error");
+      form.querySelector("#phone")?.focus();
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = "Checkout";
+      return;
+    }
+
     const saveAsDefaultShipping =
   form.querySelector("#saveAsDefaultShipping")?.checked || false;
 

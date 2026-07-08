@@ -404,6 +404,18 @@ Reuse existing unlock architecture for:
 
 ## Known Issues
 
+### Local Admin Login vs Product Seed Workflow
+
+Current local testing has an awkward split:
+
+* Real Firebase mode allows signup/login and admin claims, but checkout needs seeded/imported products.
+* Emulator mode can use seeded products and seeded admin users, but requires `VITE_USE_FIREBASE_EMULATORS=true` and the Firebase emulators running.
+* Confirm the preferred local workflow so admin login, product seed data, checkout, and order creation all target the same Firebase environment.
+
+### Password Reset Email
+
+Send reset link email is not working. Verify the callable/export path, reCAPTCHA verification, SendGrid template/content, and whether the frontend is calling the intended reset function.
+
 ### Stripe Confirmation Failure
 
 Payment succeeds.

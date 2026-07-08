@@ -10,6 +10,35 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
+function stripeId(value) {
+  return typeof value === "string" ? value : value?.id || null;
+}
+
+function normalizeAddress(address = {}) {
+  return {
+    line1: address.line1 || "",
+    line2: address.line2 || "",
+    city: address.city || "",
+    state: address.state || "",
+    postcode: address.postal_code || address.postcode || "",
+    country: address.country || "",
+  };
+}
+
+function addressDoc({ addressId, orderId, userId, type, name, email, phone, address }) {
+  return {
+    addressId,
+    orderId,
+    userId,
+    addressType: type,
+    name: name || "",
+    email: email || "",
+    phone: phone || "",
+    ...normalizeAddress(address),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
 const confirmStripePurchaseHandler = async (request) => {
   const { sessionId } = request.data || {};
   const uid = request.auth?.uid;
@@ -69,11 +98,13 @@ const confirmStripePurchaseHandler = async (request) => {
         price: item.amount_subtotal / 100,
         lineTotal: item.amount_total / 100,
         type,
+        requiresShipping: product.requiresShipping !== false,
         creatorId: product.creatorId || null,
         affiliatePercent: commissionRates[type] ?? 0.1,
       };
     }),
   );
+  const hasPhysicalItems = enrichedProducts.some((item) => item.requiresShipping);
 
   const subtotal = (session.amount_subtotal || 0) / 100;
   const shipping = (session.total_details?.amount_shipping || 0) / 100;
@@ -87,39 +118,51 @@ const confirmStripePurchaseHandler = async (request) => {
   if (existingOrder.exists) {
     return existingOrder.data();
   }
+  const customerDetails = session.customer_details || {};
+  const shippingDetails = session.shipping_details || session.shipping || {};
+  const customerEmail = customerDetails.email || session.customer_email || "";
+  const customerName = customerDetails.name || shippingDetails.name || "Customer";
+  const customerPhone = customerDetails.phone || "";
+  const shippingAddressId = `${invoiceNumber}_shipping`;
+  const billingAddressId = `${invoiceNumber}_billing`;
+
   const orderData = {
     buyerUid: uid,
     userId: uid,
-    userEmail: session.customer_details?.email || session.customer_email || "",
-    userName: session.customer_details?.name || "Customer",
+    userEmail: customerEmail,
+    userName: customerName,
+    customerEmail,
+    customerName,
+    customerPhone,
 
-    stripeCustomerId:
-    typeof session.customer === "string"
-      ? session.customer
-      : session.customer?.id || null,
+    stripeCustomerId: stripeId(session.customer),
 
     stripeSessionId: session.id,
-    paymentIntentId:
-    typeof session.payment_intent === "string"
-      ? session.payment_intent
-      : session.payment_intent?.id || null,
+    stripeCheckoutSessionId: session.id,
+    paymentIntentId: stripeId(session.payment_intent),
+    stripePaymentIntentId: stripeId(session.payment_intent),
 
     products: enrichedProducts,
 
     subtotal,
     shipping: {
       amount_total: shipping,
-      name: session.shipping_details?.name || session.customer_details?.name || "",
-      phone: session.customer_details?.phone || "",
-      address: session.shipping_details?.address || null,
+      name: shippingDetails.name || customerName,
+      email: customerEmail,
+      phone: customerPhone,
+      address: shippingDetails.address || null,
     },
     total,
     gst,
 
-    billingAddress: session.customer_details?.address || null,
-    shippingAddress: session.shipping_details?.address || null,
-    shippingName: session.shipping_details?.name || "",
-    shippingPhone: session.customer_details?.phone || "",
+    billingAddress: customerDetails.address || null,
+    shippingAddress: shippingDetails.address || null,
+    shippingAddressId: hasPhysicalItems ? shippingAddressId : null,
+    billingAddressId,
+    shippingName: shippingDetails.name || customerName,
+    shippingEmail: customerEmail,
+    shippingPhone: customerPhone,
+    hasPhysicalItems,
 
     invoiceNumber,
     invoiceId: invoiceNumber,
@@ -131,17 +174,37 @@ const confirmStripePurchaseHandler = async (request) => {
     referralEvent: session.metadata?.ref_event || null,
   };
 
-  await Promise.all([
-    admin
-      .firestore()
-      .collection("users")
-      .doc(uid)
-      .collection("orders")
-      .doc(invoiceNumber)
-      .set(orderData),
+  const db = admin.firestore();
+  const batch = db.batch();
+  batch.set(orderRef, orderData);
+  batch.set(
+    db.collection("users").doc(uid).collection("orders").doc(invoiceNumber),
+    orderData,
+  );
+  batch.set(db.collection("customerAddresses").doc(billingAddressId), addressDoc({
+    addressId: billingAddressId,
+    orderId: invoiceNumber,
+    userId: uid,
+    type: "billing",
+    name: customerName,
+    email: customerEmail,
+    phone: customerPhone,
+    address: customerDetails.address,
+  }), { merge: true });
 
-    orderRef.set(orderData),
-  ]);
+  if (hasPhysicalItems) {
+    batch.set(db.collection("customerAddresses").doc(shippingAddressId), addressDoc({
+      addressId: shippingAddressId,
+      orderId: invoiceNumber,
+      userId: uid,
+      type: "shipping",
+      name: shippingDetails.name || customerName,
+      email: customerEmail,
+      phone: customerPhone,
+      address: shippingDetails.address,
+    }), { merge: true });
+  }
+  await batch.commit();
 
   // 🔓 Unlock purchased content and issue tickets
   await Promise.all(

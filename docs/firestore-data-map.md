@@ -616,6 +616,7 @@ Purpose: order-specific shipping and billing address snapshots.
 | `FirebaseUserID` | `userId` |
 | `AddressType` | `addressType` |
 | `Name` | `name` |
+| `Email` | `email` |
 | `Phone` | `phone` |
 | `Line1` | `line1` |
 | `Line2` | `line2` |
@@ -636,7 +637,7 @@ Purpose: order-specific shipping and billing address snapshots.
 
 ### Validation Rules
 
-- Shipping addresses require name, line1, city, state, postcode, and country.
+- Shipping addresses require name, email, phone, line1, city, state, postcode, and country for domestic parcels.
 - Users can update profile/default addresses, but order address snapshots should be created by webhook/system.
 
 ### Writers

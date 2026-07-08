@@ -70,7 +70,7 @@ export async function initFirebase() {
     }
 
     // 🛠 Connect to emulators in development
-    if (["localhost", "127.0.0.1"].includes(location.hostname)) {
+    if (import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true") {
       console.log("⚙️ Connecting Firebase SDKs to local emulators...");
       connectAuthEmulator(auth, "http://127.0.0.1:9100");
       connectFirestoreEmulator(db, "127.0.0.1", 8080);

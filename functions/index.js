@@ -28,6 +28,7 @@ export { getUserOrders } from "./orders/getUserOrders.js";
 export { getAllOrdersForAdmin } from "./orders/getAllOrdersForAdmin.js";
 export { generateOrderPDF } from "./orders/generateOrderPDF.js";
 export { getOrderByInvoiceID } from "./orders/getOrderByInvoiceID.js";
+export { updateOrderFulfilment } from "./orders/updateOrderFulfilment.js";
 
 // Referrals
 export { logReferralEvent } from "./referrals/logReferralEvent.js";

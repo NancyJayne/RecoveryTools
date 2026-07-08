@@ -41,6 +41,69 @@ function firstImage(data) {
   return data.images?.[0] || mediaImage || data.image || data.imageUrl || "https://via.placeholder.com/300";
 }
 
+function cleanString(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function cleanEmail(value) {
+  return cleanString(value).toLowerCase();
+}
+
+function hasValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail(value));
+}
+
+function hasValidPhone(value) {
+  return cleanString(value).replace(/\D/g, "").length >= 8;
+}
+
+function normalizeAuCountry(value) {
+  const country = cleanString(value);
+  return country.toUpperCase() === "AU" || country.toLowerCase() === "australia" ? "AU" : country;
+}
+
+function normalizeShippingAddress(customerInfo = {}) {
+  return {
+    line1: cleanString(customerInfo.shippingAddress_line1),
+    line2: cleanString(customerInfo.shippingAddress_line2),
+    city: cleanString(customerInfo.shippingAddress_city),
+    state: cleanString(customerInfo.shippingAddress_state).toUpperCase(),
+    postal_code: cleanString(customerInfo.shippingAddress_postcode),
+    country: normalizeAuCountry(customerInfo.shippingAddress_country || "AU"),
+  };
+}
+
+function normalizeBillingAddress(customerInfo = {}) {
+  const address = customerInfo.billingAddress || {};
+  return {
+    line1: cleanString(address.line1),
+    line2: cleanString(address.line2),
+    city: cleanString(address.city),
+    state: cleanString(address.state).toUpperCase(),
+    postal_code: cleanString(address.postal_code || address.postcode),
+    country: normalizeAuCountry(address.country || "AU"),
+  };
+}
+
+function assertPhysicalCheckoutDetails({ contact, shippingAddress }) {
+  const missing = [];
+  if (!contact.name) missing.push("recipient name");
+  if (!hasValidEmail(contact.email)) missing.push("recipient email");
+  if (!hasValidPhone(contact.phone)) missing.push("recipient phone");
+  if (!shippingAddress.line1) missing.push("shipping address line 1");
+  if (!shippingAddress.city) missing.push("shipping city");
+  if (!shippingAddress.state) missing.push("shipping state");
+  if (!shippingAddress.postal_code) missing.push("shipping postcode");
+  if (shippingAddress.country !== "AU") missing.push("Australian shipping country");
+
+  if (missing.length) {
+    throw new HttpsError(
+      "invalid-argument",
+      `Physical products require ${missing.join(", ")} for domestic parcel delivery.`,
+    );
+  }
+}
+
 const createCheckoutSessionHandler = async (request) => {
   const uid = request.auth?.uid;
   const data = request.data || {};
@@ -131,6 +194,8 @@ const createCheckoutSessionHandler = async (request) => {
     });
 
     // 💳 Stripe line items
+    const hasPhysicalItems = validatedItems.some((item) => item.requiresShipping);
+
     const lineItems = validatedItems.map((item) => ({
       price_data: {
         currency: "aud",
@@ -164,37 +229,29 @@ const createCheckoutSessionHandler = async (request) => {
 
     let stripeCustomerId = userData.stripeCustomerId || null;
 
-    const shippingAddress = {
-      line1: customerInfo.shippingAddress_line1 || "",
-      line2: customerInfo.shippingAddress_line2 || "",
-      city: customerInfo.shippingAddress_city || "",
-      state: customerInfo.shippingAddress_state || "",
-      postal_code: customerInfo.shippingAddress_postcode || "",
-      country: "AU",
+    const contact = {
+      name: cleanString(customerInfo.name || userData.name),
+      email: cleanEmail(customerInfo.email || userData.email || request.auth?.token?.email),
+      phone: cleanString(customerInfo.phone || userData.phone),
     };
 
+    const shippingAddress = normalizeShippingAddress(customerInfo);
     const billingAddress = customerInfo.billingAddress
-      ? {
-        line1: customerInfo.billingAddress.line1 || "",
-        line2: customerInfo.billingAddress.line2 || "",
-        city: customerInfo.billingAddress.city || "",
-        state: customerInfo.billingAddress.state || "",
-        postal_code:
-        customerInfo.billingAddress.postal_code ||
-        customerInfo.billingAddress.postcode ||
-        "",
-        country: "AU",
-      }
+      ? normalizeBillingAddress(customerInfo)
       : shippingAddress;
+
+    if (hasPhysicalItems) {
+      assertPhysicalCheckoutDetails({ contact, shippingAddress });
+    }
   
     if (!stripeCustomerId) {
       const customer = await stripe.customers.create({
-        email: customerInfo.email || userData.email || request.auth?.token?.email,
-        name: customerInfo.name || userData.name || "",
-        phone: customerInfo.phone || userData.phone || "",
+        email: contact.email,
+        name: contact.name,
+        phone: contact.phone,
         shipping: {
-          name: customerInfo.name || userData.name || "",
-          phone: customerInfo.phone || userData.phone || "",
+          name: contact.name,
+          phone: contact.phone,
           address: shippingAddress,
         },
         metadata: {
@@ -212,12 +269,12 @@ const createCheckoutSessionHandler = async (request) => {
       );
     } else {
       await stripe.customers.update(stripeCustomerId, {
-        email: customerInfo.email || userData.email || request.auth?.token?.email,
-        name: customerInfo.name || userData.name || "",
-        phone: customerInfo.phone || userData.phone || "",
+        email: contact.email,
+        name: contact.name,
+        phone: contact.phone,
         shipping: {
-          name: customerInfo.name || userData.name || "",
-          phone: customerInfo.phone || userData.phone || "",
+          name: contact.name,
+          phone: contact.phone,
           address: shippingAddress,
         },
         metadata: {
@@ -232,9 +289,9 @@ const createCheckoutSessionHandler = async (request) => {
       shippingCost: shippingCost.toString(),
       saveAsDefaultShipping: saveAsDefaultShipping ? "true" : "false",
       ...(referrerId && { referrer_uid: referrerId }),
-      ...(customerInfo.name && { customer_name: customerInfo.name }),
-      ...(customerInfo.email && { customer_email: customerInfo.email }),
-      ...(customerInfo.phone && { customer_phone: customerInfo.phone }),
+      ...(contact.name && { customer_name: contact.name }),
+      ...(contact.email && { customer_email: contact.email }),
+      ...(contact.phone && { customer_phone: contact.phone }),
       products: validatedItems.map((p) => `${p.type}:${p.name} x${p.quantity}`).join("; "),
     };
 
@@ -317,13 +374,20 @@ const createCheckoutSessionHandler = async (request) => {
     if (saveAsDefaultShipping) {
       await userRef.set(
         {
-          name: customerInfo.name || userData.name || "",
-          phone: customerInfo.phone || userData.phone || "",
-          address: customerInfo.shippingAddress_line1 || "",
+          name: contact.name,
+          email: contact.email,
+          phone: contact.phone,
+          address: shippingAddress.line1 || "",
           billingAddress: billingAddress.line1 || "",
           defaultShippingAddress: shippingAddress,
           defaultBillingAddress: billingAddress,
-          checkoutProfile: customerInfo,
+          defaultShippingContact: contact,
+          checkoutProfile: {
+            ...customerInfo,
+            name: contact.name,
+            email: contact.email,
+            phone: contact.phone,
+          },
         },
         { merge: true },
       );
@@ -340,6 +404,10 @@ const createCheckoutSessionHandler = async (request) => {
     return { id: session.id, url: session.url };
 
   } catch (err) {
+    if (err instanceof HttpsError) {
+      throw err;
+    }
+
     console.error("Unable to create checkout session:", err);
 
     await db.collection("logs").add({
