@@ -176,8 +176,14 @@ export async function renderCartItems() {
   try {
     const fetchSettings = httpsCallable(functions, "getShippingTaxSettings");
     const settingsRes = await fetchSettings();
-    const { freeShippingMin = 0 } = settingsRes.data;
-    const shippingRate = settingsRes.data?.shippingZones?.find((z) => z.default)?.rate ?? 10;
+    const { freeShippingMin = 0 } = settingsRes.data || {};
+    const rawZones = settingsRes.data?.shippingZones;
+    const shippingZones = Array.isArray(rawZones)
+      ? rawZones
+      : rawZones && typeof rawZones === "object"
+        ? Object.values(rawZones)
+        : [];
+    const shippingRate = shippingZones.find((z) => z?.default)?.rate ?? shippingZones[0]?.rate ?? 10;
     let shippingCost = subtotal >= freeShippingMin ? 0 : shippingRate;
 
     if (shippingEl) shippingEl.textContent = `$${shippingCost.toFixed(2)}`;

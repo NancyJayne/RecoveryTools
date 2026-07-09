@@ -1,4 +1,3 @@
-
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
 
@@ -6,10 +5,30 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-/**
- * ✅ Get All Orders (Admin)
- * Supports filters by invoice number, customer name, and date range.
- */
+function timestampMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.seconds === "number") return value.seconds * 1000;
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function matchesName(order, name) {
+  if (!name) return true;
+  const normalizedName = String(name).trim().toLowerCase();
+  return String(order.userName || order.customerName || "")
+    .toLowerCase()
+    .includes(normalizedName);
+}
+
+function matchesDateRange(order, startDate, endDate) {
+  if (!startDate || !endDate) return true;
+  const start = new Date(startDate).getTime();
+  const end = new Date(endDate).getTime();
+  const purchasedAt = timestampMillis(order.purchasedAt || order.orderDate || order.createdAt);
+  return purchasedAt >= start && purchasedAt <= end;
+}
+
 export const getAllOrdersForAdmin = onCall(
   { region: "australia-southeast1" },
   async (request) => {
@@ -20,33 +39,29 @@ export const getAllOrdersForAdmin = onCall(
       throw new HttpsError("permission-denied", "Admin access required.");
     }
 
-    const { invoiceNumber, name, startDate, endDate } = request.data || {};
-    let query = admin.firestore().collection("orders");
+    const { invoiceNumber, name, startDate, endDate, referredBy } = request.data || {};
+    let ordersRef = admin.firestore().collection("orders");
 
     if (invoiceNumber) {
-      const doc = await query.doc(invoiceNumber).get();
-      if (!doc.exists) {
-        return { orders: [] };
-      }
+      const doc = await ordersRef.doc(invoiceNumber).get();
+      if (!doc.exists) return { orders: [] };
       return { orders: [{ id: doc.id, ...doc.data() }] };
     }
 
-    if (name) {
-      query = query
-        .where("userName", ">=", name)
-        .where("userName", "<=", name + "\uf8ff");
+    if (referredBy) {
+      ordersRef = ordersRef.where("referredBy", "==", referredBy);
     }
 
-    if (startDate && endDate) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      query = query
-        .where("purchasedAt", ">=", start)
-        .where("purchasedAt", "<=", end);
-    }
-
-    const snapshot = await query.orderBy("purchasedAt", "desc").limit(50).get();
-    const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const snapshot = await ordersRef.limit(200).get();
+    const orders = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter((order) => matchesName(order, name))
+      .filter((order) => matchesDateRange(order, startDate, endDate))
+      .sort((a, b) =>
+        timestampMillis(b.purchasedAt || b.orderDate || b.createdAt) -
+        timestampMillis(a.purchasedAt || a.orderDate || a.createdAt),
+      )
+      .slice(0, 50);
 
     return { orders };
   },

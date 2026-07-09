@@ -77,11 +77,12 @@ export const getFirestoreProducts = onCall(
         query = query.where("type", "==", normalizeStatus(type));
       }
 
-      const snapshot = await query.orderBy("name").get();
+      const snapshot = await query.get();
       const products = snapshot.docs
         .map(normalizeProduct)
         .filter((product) => includeHidden && isAdmin ? true : product.visible !== false)
-        .filter((product) => tag ? product.searchTags.includes(tag) : true);
+        .filter((product) => tag ? product.searchTags.includes(tag) : true)
+        .sort((a, b) => (a.name || a.title || "").localeCompare(b.name || b.title || ""));
 
       return { products };
     } catch (error) {

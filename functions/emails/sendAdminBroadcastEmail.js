@@ -13,12 +13,24 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import sgMail from "@sendgrid/mail";
 import { defineSecret } from "firebase-functions/params";
+import { logEmailEvent } from "../utils/emailLog.js";
 
 // Secret configured via `firebase functions:secrets:set SENDGRID_API_KEY`
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 
 // SendGrid recommends no more than 1000 messages per request
 const BATCH_SIZE = 1000;
+
+function useSendGridSandboxMode() {
+  if (process.env.SENDGRID_SANDBOX_MODE) {
+    return process.env.SENDGRID_SANDBOX_MODE === "true";
+  }
+  return process.env.FUNCTIONS_EMULATOR === "true";
+}
+
+function useLocalSendGridSandbox() {
+  return process.env.FUNCTIONS_EMULATOR === "true" && useSendGridSandboxMode();
+}
 
 const chunkArray = (array, size) => {
   const chunks = [];
@@ -46,26 +58,71 @@ const sendAdminBroadcastEmailHandler = async (request) => {
     throw new HttpsError("invalid-argument", "Missing subject or content.");
   }
 
-  sgMail.setApiKey(SENDGRID_API_KEY.value());
-
   const messages = recipients.map((email) => ({
     to: email,
     from: "hello@recoverytools.au",
     subject,
     html: htmlContent,
+    mailSettings: {
+      sandboxMode: {
+        enable: useSendGridSandboxMode(),
+      },
+    },
   }));
 
   const batches = chunkArray(messages, BATCH_SIZE);
 
   try {
+    if (useLocalSendGridSandbox()) {
+      await logEmailEvent({
+        type: "admin_broadcast",
+        status: "sandboxed",
+        to: recipients,
+        subject,
+        providerMode: "local-sandbox",
+        sentByUid: request.auth?.uid,
+        sentByEmail: request.auth?.token?.email,
+        metadata: {
+          recipientCount: recipients.length,
+        },
+      });
+      return { success: true, count: recipients.length, sandboxed: true };
+    }
+
+    sgMail.setApiKey(SENDGRID_API_KEY.value());
     let totalSent = 0;
     for (const batch of batches) {
       await sgMail.send(batch);
       totalSent += batch.length;
     }
+    await logEmailEvent({
+      type: "admin_broadcast",
+      status: "sent",
+      to: recipients,
+      subject,
+      providerMode: useSendGridSandboxMode() ? "sendgrid-sandbox" : "live",
+      sentByUid: request.auth?.uid,
+      sentByEmail: request.auth?.token?.email,
+      metadata: {
+        recipientCount: totalSent,
+      },
+    });
     return { success: true, count: totalSent };
   } catch (err) {
     console.error("SendGrid broadcast error:", err);
+    await logEmailEvent({
+      type: "admin_broadcast",
+      status: "failed",
+      to: recipients,
+      subject,
+      providerMode: useSendGridSandboxMode() ? "sendgrid-sandbox" : "live",
+      errorMessage: err.message || "Failed to send broadcast email.",
+      sentByUid: request.auth?.uid,
+      sentByEmail: request.auth?.token?.email,
+      metadata: {
+        recipientCount: recipients.length,
+      },
+    });
     throw new HttpsError("internal", "Failed to send broadcast email.");
   }
 };

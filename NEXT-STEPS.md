@@ -445,6 +445,22 @@ Current local testing has an awkward split:
 
 Send reset link email is not working. Verify the callable/export path, reCAPTCHA verification, SendGrid template/content, and whether the frontend is calling the intended reset function.
 
+### SendGrid Production Smoke Test
+
+Local emulator tracking emails are sandboxed/skipped so fulfilment testing is not blocked by SendGrid account status.
+
+Before deploy, run one real SendGrid smoke test:
+
+* Confirm `SENDGRID_API_KEY` is set in Firebase Secret Manager.
+* Confirm the sending address/domain, currently `hello@recoverytools.au`, is verified in SendGrid.
+* Confirm the SendGrid plan/account is allowed to send after the trial period.
+* Set `SENDGRID_SANDBOX_MODE=false` for the test environment if needed.
+* Create a test order with your own email as the customer recipient.
+* Mark the order as shipped with a tracking number from the admin Orders panel.
+* Confirm the email arrives and check SendGrid Activity for accepted/delivered/bounced status.
+
+Emulator/local sandbox confirms order and fulfilment data shape only; it does not prove real SendGrid delivery.
+
 ### Stripe Confirmation Failure
 
 Payment succeeds.
@@ -475,6 +491,20 @@ Review public vs private affiliate data.
 ### Admin Dashboard Layout
 
 Navigation/content layout issue.
+
+### Admin Packing And Shipping Workflow
+
+Admin Orders now shows order items, assignment/last-updated details, fulfilment status, tracking number, tracking email status, and the admin badge for new unassigned orders. Admin Emails now shows confirmation/tracking/broadcast email logs.
+
+Next improvements:
+
+* Add a dedicated Claim order button so admins can assign themselves before changing status.
+* Add Unassigned / Mine / Packing / Shipped / Complete filter tabs.
+* Add a print packing slip button with items, recipient details, phone/email, and notes.
+* Add copy buttons for address, tracking number, order ID, and customer email.
+* Add a simple order timeline so every status change is visible, not just the latest update.
+* Add an automated review request email approximately two weeks after an order is marked delivered.
+* Add a returns/complaints workflow so admins can record return requests, complaint notes, resolution status, and customer follow-up.
 
 ### Profile Role Display
 

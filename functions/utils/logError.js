@@ -14,8 +14,8 @@ if (!admin.apps.length) {
  */
 export const logError = onCall(
   { region: "australia-southeast1" },
-  async (data, context) => {
-    const { errorMessage, errorStack, source, userAction, metadata = {} } = data;
+  async (request) => {
+    const { errorMessage, errorStack, source, userAction, metadata = {} } = request.data || {};
 
     if (!errorMessage || typeof errorMessage !== "string") {
       throw new HttpsError("invalid-argument", "Missing or invalid error message.");
@@ -29,7 +29,7 @@ export const logError = onCall(
         source: source || "unspecified",
         action: userAction || "unknown",
         metadata,
-        userId: context.auth?.uid || null,
+        userId: request.auth?.uid || null,
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
       });
 

@@ -1,17 +1,14 @@
 // Admin order fulfilment, shipping tracking, notes, and filters.
 import { db, functions } from "../utils/firebase-config.js";
 import {
-  collection,
   doc,
   getDoc,
-  getDocs,
-  query,
-  where,
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { showToast } from "../utils/utils.js";
+import { refreshAdminOrderAlertBadge } from "./admin-order-alerts.js";
 
 const ORDER_GRID_ID = "globalOrdersGrid";
 const FULFILMENT_STEPS = [
@@ -54,6 +51,18 @@ function orderName(order) {
   return order.userName || order.customerName || order.shippingName || "Unknown";
 }
 
+function orderInvoiceId(order) {
+  return order.invoiceNumber || order.invoiceId || order.id;
+}
+
+function assignedAdmin(order) {
+  return order.assignedAdminName || order.assignedAdminEmail || "";
+}
+
+function lastUpdatedAdmin(order) {
+  return order.lastFulfilmentUpdatedByName || order.lastFulfilmentUpdatedByEmail || assignedAdmin(order);
+}
+
 function currentFulfilmentStatus(order) {
   const status = String(order.fulfilmentStatus || order.status || "new").toLowerCase();
   if (status === "paid" || status === "pending" || status === "approved") return "new";
@@ -66,10 +75,83 @@ function trackingValue(order) {
   return order.trackingNumber || order.tracking || order.trackingId || "";
 }
 
+function trackingEmailStatus(order) {
+  if (order.trackingEmailSentAt) {
+    return `sent for ${escapeHTML(order.trackingEmailSentFor || trackingValue(order))}`;
+  }
+  if (order.trackingEmailSandboxedAt) {
+    return `sandboxed locally for ${escapeHTML(order.trackingEmailSandboxedFor || trackingValue(order))}`;
+  }
+  if (order.trackingEmailError) {
+    return `failed: ${escapeHTML(order.trackingEmailError)}`;
+  }
+  return "not sent";
+}
+
 function formattedDate(timestamp) {
   if (!timestamp) return "-";
+  if (timestamp.toDate) return timestamp.toDate().toLocaleDateString();
   if (timestamp.seconds) return new Date(timestamp.seconds * 1000).toLocaleDateString();
+  if (timestamp._seconds) return new Date(timestamp._seconds * 1000).toLocaleDateString();
+  const parsed = new Date(timestamp);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toLocaleDateString();
   return "-";
+}
+
+function orderUpdatedDate(order) {
+  return formattedDate(order.updatedAt || order.purchasedAt || order.orderDate || order.createdAt);
+}
+
+function orderPurchasedDate(order) {
+  return formattedDate(order.purchasedAt || order.orderDate || order.createdAt);
+}
+
+function itemName(item) {
+  return item.name || item.productTitle || item.title || item.description || item.productId || "Item";
+}
+
+function itemQuantity(item) {
+  const quantity = Number(item.quantity || 1);
+  return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+}
+
+function itemLineTotal(item) {
+  const total = Number(item.lineTotal ?? item.amount_total ?? item.price ?? item.unitPrice ?? 0);
+  return Number.isFinite(total) ? total : 0;
+}
+
+function orderItems(order) {
+  if (Array.isArray(order.products) && order.products.length) return order.products;
+  if (Array.isArray(order.items) && order.items.length) return order.items;
+  if (order.itemsSummary) {
+    return String(order.itemsSummary)
+      .split(";")
+      .map((summary) => summary.trim())
+      .filter(Boolean)
+      .map((summary) => ({ name: summary, quantity: 1 }));
+  }
+  return [];
+}
+
+function renderOrderItems(order) {
+  const items = orderItems(order);
+  if (!items.length) {
+    return `<p class="text-xs text-gray-400">No line items found.</p>`;
+  }
+
+  return `
+    <ul class="space-y-1">
+      ${items.map((item) => `
+        <li class="flex items-start justify-between gap-3 text-xs">
+          <span>
+            <span class="font-medium text-gray-100">${escapeHTML(itemName(item))}</span>
+            <span class="text-gray-400">x${itemQuantity(item)}</span>
+          </span>
+          <span class="text-gray-300">$${itemLineTotal(item).toFixed(2)}</span>
+        </li>
+      `).join("")}
+    </ul>
+  `;
 }
 
 function renderFulfilmentSteps(order) {
@@ -102,6 +184,7 @@ function orderMatchesSearch(order, term) {
     orderEmail(order),
     order.customerPhone,
     order.shippingPhone,
+    ...orderItems(order).map((item) => itemName(item)),
     trackingValue(order),
   ].join(" ").toLowerCase();
   return haystack.includes(term);
@@ -134,14 +217,21 @@ export function setupOrderManagement() {
 }
 
 export async function loadAllOrdersForAdmin() {
-  let q = collection(db, "orders");
-  if (filterRef) {
-    q = query(q, where("referredBy", "==", filterRef));
+  const grid = document.getElementById(ORDER_GRID_ID);
+  if (grid) grid.textContent = "Loading orders...";
+
+  try {
+    const getAllOrders = httpsCallable(functions, "getAllOrdersForAdmin");
+    const result = await getAllOrders({ referredBy: filterRef || undefined });
+    const rawOrders = Array.isArray(result.data?.orders) ? result.data.orders : [];
+    allOrders = await attachUserDetails(rawOrders);
+    renderOrderGrid(allOrders);
+  } catch (err) {
+    console.error("Failed to load admin orders:", err);
+    allOrders = [];
+    if (grid) grid.textContent = "Failed to load orders.";
+    showToast(err.message || "Error loading orders", "error");
   }
-  const snapshot = await getDocs(q);
-  const rawOrders = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-  allOrders = await attachUserDetails(rawOrders);
-  renderOrderGrid(allOrders);
 }
 
 async function attachUserDetails(orders) {
@@ -178,11 +268,13 @@ export function renderOrderGrid(orders) {
   if (!grid) return;
   grid.innerHTML = "";
 
+  if (!orders.length) {
+    grid.textContent = "No orders found.";
+    return;
+  }
+
   orders.forEach((data) => {
     const fulfilmentStatus = currentFulfilmentStatus(data);
-    const trackingEmailStatus = data.trackingEmailSentAt
-      ? `sent for ${escapeHTML(data.trackingEmailSentFor || trackingValue(data))}`
-      : "not sent";
     const div = document.createElement("div");
     div.className = `order-card bg-gray-800 p-4 rounded mb-4 ${formatStatusClass(fulfilmentStatus)}`;
     div.setAttribute("data-order-id", data.id);
@@ -196,7 +288,10 @@ export function renderOrderGrid(orders) {
       <div class="space-y-3">
         <div class="flex items-start justify-between gap-3">
           <div>
-            <div class="font-semibold">Invoice ${escapeHTML(data.id)}</div>
+            <div class="font-semibold leading-snug">
+              Invoice
+              <span class="block text-xs text-gray-300 break-all">${escapeHTML(orderInvoiceId(data))}</span>
+            </div>
             <a href="/admin/crm?uid=${escapeHTML(orderUserId(data))}" class="text-blue-400 hover:underline text-sm">
               ${escapeHTML(orderName(data))}
             </a>
@@ -209,7 +304,18 @@ export function renderOrderGrid(orders) {
 
         <div class="grid grid-cols-2 gap-2 text-sm">
           <div><strong>Total:</strong> $${Number(data.total || 0).toFixed(2)}</div>
-          <div><strong>Updated:</strong> ${formattedDate(data.updatedAt)}</div>
+          <div><strong>Ordered:</strong> ${orderPurchasedDate(data)}</div>
+          <div><strong>Updated:</strong> ${orderUpdatedDate(data)}</div>
+        </div>
+
+        <div class="rounded border border-gray-700 bg-gray-900/60 p-3 text-xs text-gray-300">
+          <div><strong>Assigned:</strong> ${escapeHTML(assignedAdmin(data) || "Unassigned")}</div>
+          <div><strong>Last updated by:</strong> ${escapeHTML(lastUpdatedAdmin(data) || "-")}</div>
+        </div>
+
+        <div class="rounded border border-gray-700 bg-gray-900/60 p-3">
+          <div class="text-xs uppercase tracking-wide text-gray-400 mb-2">Items purchased</div>
+          ${renderOrderItems(data)}
         </div>
 
         <div class="flex flex-wrap gap-3 border-y border-gray-700 py-3">
@@ -236,7 +342,7 @@ export function renderOrderGrid(orders) {
         </label>
 
         <div class="text-xs text-gray-400">
-          Tracking email: ${trackingEmailStatus}
+          Tracking email: ${trackingEmailStatus(data)}
         </div>
 
         <textarea
@@ -289,11 +395,18 @@ export function renderOrderGrid(orders) {
           dueDate,
         });
 
-        showToast(
-          result.data?.trackingEmailSent ? "Order updated and tracking email sent" : "Order updated",
-          "success",
-        );
+        if (result.data?.trackingEmailSandboxed) {
+          showToast("Order updated and tracking email sandboxed locally", "success");
+        } else if (result.data?.trackingEmailError) {
+          showToast(`Order updated, but email failed: ${result.data.trackingEmailError}`, "error", 6000);
+        } else {
+          showToast(
+            result.data?.trackingEmailSent ? "Order updated and tracking email sent" : "Order updated",
+            "success",
+          );
+        }
         await loadAllOrdersForAdmin();
+        await refreshAdminOrderAlertBadge();
       } catch (err) {
         console.error("Failed to update fulfilment:", err);
         showToast(err.message || "Error updating order", "error");

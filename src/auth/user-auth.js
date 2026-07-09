@@ -5,6 +5,7 @@ import { setupRoleUI } from "./user-roles.js"; // Role UI setup
 import { showToast } from "../utils/utils.js";
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { unlockCourseContent, refreshProfileCourses } from "../profile/profile-utils.js"; // or wherever these live
+import { clearAdminOrderAlertBadge } from "../admin/admin-order-alerts.js";
 
 const fallbackAvatarUrl =
   "https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FProfile.png?alt=media&token=261b1542-dc99-44ce-9089-6342e0ee6db9";
@@ -22,6 +23,7 @@ function updateHeaderUI(user) {
     authBtns?.classList.remove("hidden");
     avatarWrap?.classList.add("hidden");
     if (avatarImg) avatarImg.src = fallbackAvatarUrl;
+    clearAdminOrderAlertBadge();
   }
 }
 

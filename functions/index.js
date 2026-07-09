@@ -19,6 +19,7 @@ export { sendWorkshopTicketEmail } from "./emails/sendWorkshopTicketEmail.js";
 export { sendContactMessage } from "./emails/sendContactMessage.js";
 export { sendPasswordReset } from "./emails/sendPasswordReset.js";
 export { sendWelcomeEmail } from "./emails/sendWelcomeEmail.js";
+export { getEmailLogs } from "./emails/getEmailLogs.js";
 
 
 // Orders
@@ -26,6 +27,7 @@ export { confirmStripePurchase } from "./orders/confirmStripePurchase.js";
 export { createCheckoutSession } from "./orders/createCheckoutSession.js";
 export { getUserOrders } from "./orders/getUserOrders.js";
 export { getAllOrdersForAdmin } from "./orders/getAllOrdersForAdmin.js";
+export { getAdminOrderAlerts } from "./orders/getAdminOrderAlerts.js";
 export { generateOrderPDF } from "./orders/generateOrderPDF.js";
 export { getOrderByInvoiceID } from "./orders/getOrderByInvoiceID.js";
 export { updateOrderFulfilment } from "./orders/updateOrderFulfilment.js";

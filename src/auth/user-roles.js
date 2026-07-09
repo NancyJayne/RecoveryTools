@@ -1,4 +1,8 @@
 import { auth } from "../utils/firebase-config.js";
+import {
+  clearAdminOrderAlertBadge,
+  refreshAdminOrderAlertBadge,
+} from "../admin/admin-order-alerts.js";
 
 /**
  * Get the current user's roles from custom claims.
@@ -45,6 +49,12 @@ export function setupRoleUI(user) {
         .getElementById("adminAccessLink")
         ?.classList.toggle("hidden", !roles.admin);
 
+      if (roles.admin) {
+        refreshAdminOrderAlertBadge();
+      } else {
+        clearAdminOrderAlertBadge();
+      }
+
       document
         .getElementById("therapistAccessLink")
         ?.classList.toggle("hidden", !roles.therapist);
@@ -67,5 +77,6 @@ export function setupRoleUI(user) {
     })
     .catch((err) => {
       console.error("Error reading role claims:", err);
+      clearAdminOrderAlertBadge();
     });
 }

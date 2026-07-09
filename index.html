@@ -102,6 +102,13 @@
         <a href="/profile" data-tab="profileSection" class="tab-link" aria-label="Profile">
           <img id="headerAvatar" src="" alt="User Avatar" class="h-10 w-10 rounded-full border-2 border-white object-cover">
         </a>
+        <a
+          id="adminOrderAlertBadge"
+          href="/admin/orders"
+          class="router-link hidden absolute -top-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-red-600 text-white text-xs font-bold leading-5 text-center shadow"
+          title="Unassigned orders"
+          aria-label="Unassigned admin orders"
+        >0</a>
       </div>
 
       <!-- Cart -->
@@ -872,6 +879,8 @@
       <div id="adminDashboardSection" class="admin-tab hidden">
         <h2 class="text-2xl font-semibold">Admin Dashboard</h2>
         <p class="text-gray-400">Welcome, admin. Choose a section from the sidebar to begin.</p>
+      </div>
+
         <div id="commissionRatesPanel" class="admin-section hidden">
   <h2 class="text-2xl font-bold mb-4">Affiliate Commission Rates</h2>
   <form id="commissionRatesForm" class="space-y-4 max-w-md">
@@ -950,9 +959,6 @@
           <!-- Order cards will be dynamically injected here -->
         </div>
       </div>
-
-      </div>  
-            </div>
 
       <div id="adminWorkshopApprovals" class="admin-tab hidden">
         <h2 class="text-2xl font-semibold">Workshop Approvals</h2>

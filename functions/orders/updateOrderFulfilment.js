@@ -2,6 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import admin from "firebase-admin";
 import sgMail from "@sendgrid/mail";
+import { logEmailEvent } from "../utils/emailLog.js";
 
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 
@@ -32,6 +33,15 @@ function displayStatus(status) {
     .join(" ");
 }
 
+function adminDisplayName(request) {
+  return (
+    cleanString(request.auth?.token?.name) ||
+    cleanString(request.auth?.token?.email) ||
+    cleanString(request.auth?.uid) ||
+    "Admin"
+  );
+}
+
 function trackingUrl(trackingNumber, carrier) {
   const tracking = encodeURIComponent(trackingNumber);
   if (cleanString(carrier).toLowerCase().includes("australia post")) {
@@ -58,20 +68,28 @@ function recipientName(order) {
   );
 }
 
+function useSendGridSandboxMode() {
+  if (process.env.SENDGRID_SANDBOX_MODE) {
+    return process.env.SENDGRID_SANDBOX_MODE === "true";
+  }
+  return process.env.FUNCTIONS_EMULATOR === "true";
+}
+
+function useLocalSendGridSandbox() {
+  return process.env.FUNCTIONS_EMULATOR === "true" && useSendGridSandboxMode();
+}
+
 async function sendTrackingEmail({ orderId, order, trackingNumber, shippingCarrier, shippingUrl }) {
   const to = recipientEmail(order);
   if (!to) {
     throw new HttpsError("failed-precondition", "Order has no customer email for tracking notification.");
   }
 
-  sgMail.setApiKey(SENDGRID_API_KEY.value());
-
   const carrierLine = shippingCarrier ? `<p><strong>Carrier:</strong> ${shippingCarrier}</p>` : "";
   const trackingLink = shippingUrl
     ? `<p><a href="${shippingUrl}" target="_blank" rel="noopener">Track your parcel</a></p>`
     : "";
-
-  await sgMail.send({
+  const message = {
     to,
     from: "hello@recoverytools.au",
     subject: `Your Recovery Tools order ${orderId} has shipped`,
@@ -85,7 +103,26 @@ async function sendTrackingEmail({ orderId, order, trackingNumber, shippingCarri
       <a href="mailto:hello@recoverytools.au">hello@recoverytools.au</a>.</p>
       <p>- Recovery Tools Team</p>
     `,
-  });
+    mailSettings: {
+      sandboxMode: {
+        enable: useSendGridSandboxMode(),
+      },
+    },
+  };
+
+  if (useLocalSendGridSandbox()) {
+    console.info("SendGrid sandbox email skipped locally.", {
+      orderId,
+      to,
+      subject: message.subject,
+      trackingNumber,
+    });
+    return { sandboxed: true };
+  }
+
+  sgMail.setApiKey(SENDGRID_API_KEY.value());
+  await sgMail.send(message);
+  return { sandboxed: false };
 }
 
 const updateOrderFulfilmentHandler = async (request) => {
@@ -106,6 +143,9 @@ const updateOrderFulfilmentHandler = async (request) => {
   const cleanStatus = cleanString(fulfilmentStatus).toLowerCase();
   const cleanTracking = cleanString(trackingNumber);
   const cleanCarrier = cleanString(shippingCarrier) || "Australia Post";
+  const adminUid = cleanString(request.auth?.uid);
+  const adminEmail = cleanString(request.auth?.token?.email);
+  const adminName = adminDisplayName(request);
 
   if (!cleanOrderId) {
     throw new HttpsError("invalid-argument", "Missing order ID.");
@@ -151,7 +191,18 @@ const updateOrderFulfilmentHandler = async (request) => {
     note: cleanString(adminNotes),
     dueDate: cleanString(dueDate) || null,
     updatedAt: now,
+    lastFulfilmentUpdatedAt: now,
+    lastFulfilmentUpdatedByUid: adminUid,
+    lastFulfilmentUpdatedByEmail: adminEmail,
+    lastFulfilmentUpdatedByName: adminName,
   };
+
+  if (!cleanString(order.assignedAdminUid)) {
+    updateData.assignedAdminUid = adminUid;
+    updateData.assignedAdminEmail = adminEmail;
+    updateData.assignedAdminName = adminName;
+    updateData.assignedAt = now;
+  }
 
   if (cleanStatus === "packing" && !order.packingStartedAt) updateData.packingStartedAt = now;
   if (cleanStatus === "packed" && !order.packedAt) updateData.packedAt = now;
@@ -159,16 +210,84 @@ const updateOrderFulfilmentHandler = async (request) => {
   if (cleanStatus === "delivered" && !order.deliveredAt) updateData.deliveredAt = now;
   if (cleanStatus === "completed" && !order.completedAt) updateData.completedAt = now;
 
+  let trackingEmailSent = false;
+  let trackingEmailSandboxed = false;
+  let trackingEmailError = "";
+
   if (shouldSendTrackingEmail) {
-    await sendTrackingEmail({
-      orderId: cleanOrderId,
-      order,
-      trackingNumber: cleanTracking,
-      shippingCarrier: cleanCarrier,
-      shippingUrl: cleanShippingUrl,
-    });
-    updateData.trackingEmailSentAt = now;
-    updateData.trackingEmailSentFor = cleanTracking;
+    try {
+      const emailResult = await sendTrackingEmail({
+        orderId: cleanOrderId,
+        order,
+        trackingNumber: cleanTracking,
+        shippingCarrier: cleanCarrier,
+        shippingUrl: cleanShippingUrl,
+      });
+      trackingEmailSandboxed = !!emailResult?.sandboxed;
+
+      if (trackingEmailSandboxed) {
+        updateData.trackingEmailSandboxedAt = now;
+        updateData.trackingEmailSandboxedFor = cleanTracking;
+        updateData.trackingEmailError = "";
+        await logEmailEvent({
+          type: "tracking",
+          status: "sandboxed",
+          to: recipientEmail(order),
+          subject: `Your Recovery Tools order ${cleanOrderId} has shipped`,
+          orderId: cleanOrderId,
+          userId: cleanString(order.userId || order.buyerUid || order.uid),
+          providerMode: "local-sandbox",
+          sentByUid: adminUid,
+          sentByEmail: adminEmail,
+          metadata: {
+            trackingNumber: cleanTracking,
+            shippingCarrier: cleanCarrier,
+          },
+        });
+      } else {
+        trackingEmailSent = true;
+        updateData.trackingEmailSentAt = now;
+        updateData.trackingEmailSentFor = cleanTracking;
+        updateData.trackingEmailError = "";
+        await logEmailEvent({
+          type: "tracking",
+          status: "sent",
+          to: recipientEmail(order),
+          subject: `Your Recovery Tools order ${cleanOrderId} has shipped`,
+          orderId: cleanOrderId,
+          userId: cleanString(order.userId || order.buyerUid || order.uid),
+          providerMode: useSendGridSandboxMode() ? "sendgrid-sandbox" : "live",
+          sentByUid: adminUid,
+          sentByEmail: adminEmail,
+          metadata: {
+            trackingNumber: cleanTracking,
+            shippingCarrier: cleanCarrier,
+          },
+        });
+      }
+    } catch (err) {
+      trackingEmailError = err.message || "Tracking email could not be sent.";
+      updateData.trackingEmailError = trackingEmailError;
+      updateData.trackingEmailFailedAt = now;
+      updateData.trackingEmailFailedFor = cleanTracking;
+      await logEmailEvent({
+        type: "tracking",
+        status: "failed",
+        to: recipientEmail(order),
+        subject: `Your Recovery Tools order ${cleanOrderId} has shipped`,
+        orderId: cleanOrderId,
+        userId: cleanString(order.userId || order.buyerUid || order.uid),
+        providerMode: useSendGridSandboxMode() ? "sendgrid-sandbox" : "live",
+        errorMessage: trackingEmailError,
+        sentByUid: adminUid,
+        sentByEmail: adminEmail,
+        metadata: {
+          trackingNumber: cleanTracking,
+          shippingCarrier: cleanCarrier,
+        },
+      });
+      console.error("Tracking email failed; fulfilment update will still be saved.", err);
+    }
   }
 
   const shipmentId = `${cleanOrderId}_primary`;
@@ -194,10 +313,31 @@ const updateOrderFulfilmentHandler = async (request) => {
     shippingCarrier: cleanCarrier,
     shippingUrl: cleanShippingUrl,
     updatedAt: now,
+    lastFulfilmentUpdatedAt: now,
+    lastFulfilmentUpdatedByUid: adminUid,
+    lastFulfilmentUpdatedByEmail: adminEmail,
+    lastFulfilmentUpdatedByName: adminName,
     createdAt: order.shipmentCreatedAt || now,
-    ...(shouldSendTrackingEmail && {
+    ...(!cleanString(order.assignedAdminUid) && {
+      assignedAdminUid: adminUid,
+      assignedAdminEmail: adminEmail,
+      assignedAdminName: adminName,
+      assignedAt: now,
+    }),
+    ...(trackingEmailSent && {
       trackingEmailSentAt: now,
       trackingEmailSentFor: cleanTracking,
+      trackingEmailError: "",
+    }),
+    ...(trackingEmailSandboxed && {
+      trackingEmailSandboxedAt: now,
+      trackingEmailSandboxedFor: cleanTracking,
+      trackingEmailError: "",
+    }),
+    ...(trackingEmailError && {
+      trackingEmailError,
+      trackingEmailFailedAt: now,
+      trackingEmailFailedFor: cleanTracking,
     }),
   }, { merge: true });
 
@@ -207,7 +347,9 @@ const updateOrderFulfilmentHandler = async (request) => {
     success: true,
     orderId: cleanOrderId,
     fulfilmentStatus: cleanStatus,
-    trackingEmailSent: shouldSendTrackingEmail,
+    trackingEmailSent,
+    trackingEmailSandboxed,
+    trackingEmailError,
   };
 };
 
