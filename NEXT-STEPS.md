@@ -1,172 +1,34 @@
-# Recovery Tools — Next Steps
+# Recovery Tools - Next Steps
 
-## Latest Session Handoff
+## Current Handoff
 
-Workbook-backed recovery product seeding is now implemented.
+Last confirmed state:
 
-Confirmed today:
+* Workbook-backed product seeding works from `Recovery Tools Master Database.xlsx`.
+* Shop products load from imported Firestore product data.
+* Stripe test checkout completes locally.
+* `confirmStripePurchase` creates orders after Stripe redirect.
+* Customer profile order history shows created orders.
+* Admin Orders shows order items, customer details, order totals, fulfilment status, tracking fields, assignment, and last-updated admin.
+* Admin can move orders through packing/shipping statuses.
+* Tracking email attempts are logged as sent, sandboxed, or failed.
+* Admin Emails shows order confirmation, tracking, and broadcast email logs.
+* Admin profile badge shows new unassigned physical orders and is hidden from non-admin users.
 
-* `functions/scripts/seedRecoveryProducts.js` reads `Recovery Tools Master Database (3).xlsx`.
-* Product seed data is joined from `ItemProduct`, `Items`, `ProductPrice`, `Inventory`, `ItemAsset`, and `Asset`.
-* `ItemProductID` is used as the Firestore `products/{productId}` document ID.
-* Active `ProductPrice` rows provide `price`, `retailPrice`, sale fields, and Stripe ID placeholders.
-* Inventory rows are summed into `stock`.
-* Product images are resolved through `ItemAsset -> Asset.FileURL`.
-* `references` and `referenceStatus` are carried through from `Items`.
-* `--dry-run` validates the generated product documents without writing to Firestore.
-* ESLint passed for `functions/scripts/seedRecoveryProducts.js`.
-
-Useful commands:
-
-```powershell
-cd "C:\Users\hello\Firebase project\functions"
-node scripts/seedRecoveryProducts.js --dry-run --workbook "C:\Users\hello\Downloads\Recovery Tools Master Database (3).xlsx"
-node scripts/seedRecoveryProducts.js --workbook "C:\Users\hello\Downloads\Recovery Tools Master Database (3).xlsx"
-```
-
-Remaining spreadsheet checks before a live upload:
-
-* Keep `ProductPrice.Status` set to `Active` for the price row to import.
-* Keep `ItemProduct.ItemProductID` stable; changing it creates a new Firestore product document.
-* Replace placeholder/fallback image behavior only after every product has a production `Asset.FileURL`.
-* Standardize `Reference Status` values: `Not required`, `Needs source`, `Draft source`, `Verified`.
-
-Stripe checkout is now completing locally through the confirmation screen.
-
-Confirmed today:
-
-* Product/course data imports display in shop and course sections.
-* Product images, prices, descriptions, and cart add flow work from imported `products`.
-* Stripe test payment succeeds.
-* Return to `/checkout?success=true&session_id=...` succeeds.
-* `confirmStripePurchase` now returns an order summary.
-* Cart clears after confirmation.
-* Checkout success removes the `Confirm and Pay` controls so users cannot click payment again.
-
-Tomorrow verify in Firestore Emulator UI:
+Latest useful commits:
 
 ```text
-orders/{checkoutSessionId}
-users/{uid}/orders/{checkoutSessionId}
-orderItems/{checkoutSessionId}_1
-customerAddresses/{checkoutSessionId}_billing
-customerAddresses/{checkoutSessionId}_shipping
-stripeEvents/{stripeEventId}
-userAccess/{userId}_{accessType}_{accessId} for digital/access products
+95b09ebe Next Steps update
+5e26666c Improve admin fulfilment and email logging
+7e490f38 Import recovery products from workbook
+74c125d2 Add fulfilment tracking and checkout contact validation
 ```
 
-Known tomorrow checks:
+## Start Here Today
 
-* Confirm whether the Stripe webhook writes the new collections during local testing.
-* Confirm whether `confirmStripePurchase` writes only the legacy order shape or needs to share the webhook writer.
-* Fix affiliate list rule warning from cart: `Property admin is undefined on object`.
-* Later: guest checkout/auth flow, dedicated course detail page, and shop tag refinements.
+### 1. Standardize Stripe Test/Live Architecture
 
-## Current Status
-
-### Platform Foundation Complete
-
-✅ Firebase local development environment operational
-
-* Node 22
-* Firebase Emulator Suite
-* Vite build process
-* App Check
-* Firebase Auth
-* Firestore connectivity
-
-✅ User account system operational
-
-* Signup
-* Login
-* Logout
-* Profile page
-* Profile editing
-* Role architecture
-* Custom claims architecture
-
-✅ Shop operational
-
-* Product loading
-* Product detail pages
-* Add to cart
-* Cart drawer
-* Quantity controls
-* Pricing calculations
-* GST calculations
-* Shipping calculations
-
-✅ Stripe checkout operational
-
-* Checkout page
-* Stripe session creation
-* Stripe redirect
-* Stripe customer create/reuse
-* Customer details prefill
-* Shipping address prefill
-
-✅ Firebase Functions modernization complete
-
-* Functions v2 migration
-* Callable modernization
-* Role normalization
-* Payment validation
-* Idempotency protection
-
----
-
-# Current Blocker
-
-## Priority 0 — Complete Stripe Purchase Pipeline
-
-Current state:
-
-✅ Checkout session created successfully
-
-✅ Stripe test payment successful
-
-✅ Redirect back to Recovery Tools successful
-
-❌ confirmStripePurchase failing
-
-❌ Order not created
-
-❌ Cart not cleared
-
-❌ Order history empty
-
-Current error:
-
-```text
-401 Unauthorized
-User must be logged in with a valid session
-```
-
----
-
-## Priority 0A — Standardize Stripe Live/Test Architecture
-
-### Firebase Secret Manager
-
-Verify:
-
-```text
-STRIPE_SECRET_KEY
-STRIPE_SECRET_KEY_TEST
-```
-
-### Local Environment
-
-Verify:
-
-```env
-VITE_STRIPE_PUBLISHABLE_KEY
-VITE_STRIPE_PUBLISHABLE_KEY_TEST
-```
-
-### Backend Files To Update
-
-Review and standardize:
+Review and update:
 
 ```text
 functions/affiliates/createStripeConnectLink.js
@@ -174,123 +36,130 @@ functions/affiliates/createStripeLoginLink.js
 functions/orders/confirmStripePurchase.js
 functions/orders/createCheckoutSession.js
 functions/webhooks/handleStripeWebhook.js
-```
-
-Target:
-
-```text
-Local Emulator
-→ STRIPE_SECRET_KEY_TEST
-
-Production
-→ STRIPE_SECRET_KEY
-```
-
-### Frontend Files To Update
-
-Review:
-
-```text
-.env.example
 src/utils/firebase-config.js
+.env.example
 ```
 
 Target:
 
 ```text
-Localhost
-→ VITE_STRIPE_PUBLISHABLE_KEY_TEST
-
-Production
-→ VITE_STRIPE_PUBLISHABLE_KEY
+Local emulator / localhost -> Stripe test keys
+Production -> Stripe live keys
 ```
 
----
-
-## Priority 0B — Fix confirmStripePurchase
-
-Verify:
-
-### Stripe initialization
-
-Uses correct test key locally.
-
-### Authentication
-
-Confirm user auth state exists before:
+Verify secrets/env names:
 
 ```text
-confirmStripePurchase
+STRIPE_SECRET_KEY
+STRIPE_SECRET_KEY_TEST
+VITE_STRIPE_PUBLISHABLE_KEY
+VITE_STRIPE_PUBLISHABLE_KEY_TEST
 ```
 
-is called.
+### 2. Fix Password Reset
+
+Known issue:
+
+* Send reset link email is not working.
 
 Investigate:
 
 ```text
-shop-orders.js
-confirmStripePurchase.js
+src/auth/reset-password.js
+src/auth/auth-modal.js
+functions/emails/sendPasswordReset.js
+functions/users/authHelpers.js
+functions/index.js
+functions/utils/verifyRecaptchaToken.js
 ```
 
-Target flow:
+Check:
+
+* Frontend is calling the intended callable.
+* Callable export name is not conflicting with another reset function.
+* reCAPTCHA verification works in local/emulator mode.
+* SendGrid/template/content path is valid.
+* Email attempts should log to `emailLogs` when this is fixed.
+
+### 3. Run One Full Local V1 Test
+
+Use emulator mode and seeded products.
+
+Verify:
 
 ```text
-Stripe Payment
-→ Redirect
-→ Firebase Auth Restored
-→ confirmStripePurchase
-→ Firestore Order Created
-→ Cart Cleared
-→ Order History Updated
+Login as customer
+Add physical product to cart
+Create Stripe checkout session
+Complete Stripe test payment
+Return to checkout success page
+Order created in Firestore
+Customer profile shows order
+Admin badge appears for unassigned new order
+Admin Orders shows purchased item details
+Admin changes order to packing
+Admin marks order shipped with tracking
+Tracking email logs as sandboxed/sent
+Admin Emails shows confirmation and tracking logs
+Cart clears
 ```
 
----
+## V1 Launch Blockers
 
-## Priority 1 — Order System Verification
+Do these before any public launch:
 
-Once Stripe pipeline works verify:
+1. Standardize Stripe test/live key selection.
+2. Fix password reset.
+3. Decide V1 checkout auth rule.
+4. Run a real SendGrid production smoke test.
+5. Run one complete production-style Stripe test purchase.
+6. Confirm public navigation hides unfinished features.
+7. Polish V1 product content, product images, shipping text, returns text, and policy links.
+
+## V1 Checkout Auth Decision
+
+Recommended V1 approach:
 
 ```text
-orders/{orderId}
-users/{uid}/orders/{orderId}
+Require customers to log in before checkout.
 ```
 
-Confirm storage of:
+Reason:
 
-* Order Number
-* User
-* Products
-* Totals
-* Shipping Address
-* Billing Address
-* Stripe IDs
-* Affiliate Data
-* Referral Data
+* Current order confirmation and profile order history depend on Firebase Auth.
+* Guest checkout needs more account-linking work.
+* A clear login-before-checkout rule is safer for V1.
 
----
+Later guest checkout plan:
 
-## Priority 1A — Finish V1 Core Operations
+* If checkout email matches an existing user, prompt login before creating the Stripe checkout session.
+* If checkout email does not match a user, create a Firebase Auth user/profile or offer account creation before payment.
+* Preserve cart contents and entered checkout details through login/signup.
+* Continue to Stripe checkout once authenticated.
 
-Complete these before narrowing the public site to the V1 shop launch:
+## SendGrid Production Smoke Test
 
-* Finish checkout confirmation and order creation.
-* Verify shipping address, billing address, order item, and fulfilment data writes.
-* Verify admin order flow for packing, shipping, tracking number, and status updates.
-* Finalise the customer profile: profile details, addresses, order history, update profile, and change password.
-* Finalise the admin profile/admin access flow so admin users can manage the shop and orders without exposing unfinished areas to customers.
+Local emulator email sends are sandboxed/skipped so fulfilment testing is not blocked by SendGrid account status.
 
----
+Before deploy:
 
-## Priority 1B — V1 Shop-Only Public Launch Scope
+* Confirm `SENDGRID_API_KEY` is set in Firebase Secret Manager.
+* Confirm `hello@recoverytools.au` or the sending domain is verified in SendGrid.
+* Confirm the SendGrid plan/account can send after the trial period.
+* Set `SENDGRID_SANDBOX_MODE=false` for the test environment if needed.
+* Create a test order with your own email as the customer recipient.
+* Confirm the order confirmation email arrives.
+* Mark the order as shipped with a tracking number.
+* Confirm the tracking email arrives.
+* Check SendGrid Activity for accepted, delivered, bounced, or blocked status.
 
-Goal:
+Emulator/local sandbox confirms the app flow and data shape only. It does not prove real SendGrid delivery.
 
-```text
-Launch Version 1 as a usable shop first.
-Keep courses, workshops, Anato-me, and programs in development, but hidden from public users.
-```
+## V1 Public Scope
 
-Public V1 navigation should show:
+Launch as a shop-first webapp.
+
+Public navigation for V1:
 
 * Home
 * Shop
@@ -310,247 +179,26 @@ Implementation plan:
 
 1. Add a central feature visibility config for public sections.
 2. Hide disabled sections from desktop and mobile navigation.
-3. Add route guards so direct visits to disabled routes redirect to `/shop` or a simple unavailable page.
-4. Hide unfinished profile tabs from customers:
-   * My Courses
-   * My Workshops
-   * My Programs
-5. Keep admin/internal build paths available so these features can continue being developed.
-6. Add an About page.
+3. Add route guards so direct visits to disabled routes redirect to `/shop` or an unavailable page.
+4. Hide unfinished profile tabs from customers.
+5. Keep admin/internal build paths available for continued development.
+6. Add or polish the About page.
 7. Add policy links that open the policy PDFs already included in the database.
-8. Make public shop queries show only V1-ready products, such as active/visible shop products.
-9. Keep courses, workshops, Anato-me, and programs in the database/codebase with draft/hidden visibility until they are ready to introduce.
+8. Make public shop queries show only V1-ready products.
 
-Do not delete the existing course, workshop, Anato-me, or program code. Treat them as built-but-hidden features controlled by visibility flags.
+Do not delete course, workshop, Anato-me, or program code. Treat them as built-but-hidden features controlled by visibility flags.
 
----
+## Admin Packing And Shipping Workflow
 
-## Current Website/Firebase Implementation Focus
+Current:
 
-Work on these next while the spreadsheet remains the prototype and initial seed source:
-
-1. Extend the workbook import beyond product seeding into plans, blueprints, assets, prices, and access rows.
-2. Update Firestore rules for the target collections.
-3. Build admin update functions for products, prices, assets, orders, shipping, and users.
-4. Build the user profile update flow that writes back to `users/{userId}`.
-5. Build the Stripe webhook flow that writes `Orders`, `OrderItem`, `CustomerAddresses`, `StripeEvents`, and `User Access`.
-6. Add an admin-only import validation screen or report before any live workbook upload.
-
----
-
-## Priority 2 — Order Architecture
-
-Design:
-
-```text
-paymentStatus
-fulfillmentStatus
-accessStatus
-```
-
-Implement:
-
-* Pending
-* Paid
-* Packing
-* Shipped
-* Delivered
-* Complete
-* Refunded
-
----
-
-## Priority 3 — Unlock Engine
-
-Implement:
-
-```text
-Product
-→ Plan
-→ Blueprint
-→ Item
-→ Additional Plan
-```
-
-Create:
-
-```text
-userAccess
-```
-
-collection.
-
-Implement:
-
-```js
-grantAccess(uid, sourceProductId)
-```
-
----
-
-## Priority 4 — Order Fulfillment
-
-Admin workflow:
-
-```text
-Pending
-Packing
-Ready For Pickup
-Shipped
-Delivered
-Completed
-```
-
-Add:
-
-* Tracking numbers
-* Click & Collect
-* Australia Post integration (future)
-
----
-
-## Priority 5 — Digital Delivery
-
-Implement:
-
-* Order confirmations
-* Access emails
-* Workshop emails
-* Membership emails
-
----
-
-## Priority 6 — Tax Invoices
-
-Implement:
-
-```js
-generateOrderPDF()
-```
-
-Include:
-
-* ABN
-* GST
-* Invoice Number
-* Order Number
-
----
-
-## Priority 7 — Review Automation
-
-Physical:
-
-```text
-Delivered
-→ Wait 7 days
-→ Review email
-```
-
-Digital:
-
-```text
-Access granted
-→ Wait 7–14 days
-→ Review email
-```
-
----
-
-## Priority 8 — Returns
-
-Implement:
-
-```text
-returns/{returnId}
-```
-
-Workflow:
-
-```text
-Request
-Approve
-Receive
-Refund
-```
-
----
-
-## Priority 9 — Membership Engine
-
-Reuse existing unlock architecture for:
-
-* Memberships
-* Exercise Library
-* Recovery Plans
-* Audio Library
-
----
-
-## Known Issues
-
-### Local Admin Login vs Product Seed Workflow
-
-Current local testing has an awkward split:
-
-* Real Firebase mode allows signup/login and admin claims, but checkout needs seeded/imported products.
-* Emulator mode can use seeded products and seeded admin users, but requires `VITE_USE_FIREBASE_EMULATORS=true` and the Firebase emulators running.
-* Confirm the preferred local workflow so admin login, product seed data, checkout, and order creation all target the same Firebase environment.
-
-### Password Reset Email
-
-Send reset link email is not working. Verify the callable/export path, reCAPTCHA verification, SendGrid template/content, and whether the frontend is calling the intended reset function.
-
-### SendGrid Production Smoke Test
-
-Local emulator tracking emails are sandboxed/skipped so fulfilment testing is not blocked by SendGrid account status.
-
-Before deploy, run one real SendGrid smoke test:
-
-* Confirm `SENDGRID_API_KEY` is set in Firebase Secret Manager.
-* Confirm the sending address/domain, currently `hello@recoverytools.au`, is verified in SendGrid.
-* Confirm the SendGrid plan/account is allowed to send after the trial period.
-* Set `SENDGRID_SANDBOX_MODE=false` for the test environment if needed.
-* Create a test order with your own email as the customer recipient.
-* Mark the order as shipped with a tracking number from the admin Orders panel.
-* Confirm the email arrives and check SendGrid Activity for accepted/delivered/bounced status.
-
-Emulator/local sandbox confirms order and fulfilment data shape only; it does not prove real SendGrid delivery.
-
-### Stripe Confirmation Failure
-
-Payment succeeds.
-
-Order confirmation fails.
-
-Order not created.
-
-Cart not cleared.
-
-Primary investigation tomorrow.
-
-### Guest Checkout Auth Flow
-
-Checkout currently fails with `401 Unauthorized` if a customer adds items to cart while logged out and then enters checkout details.
-
-Later fix:
-
-* If checkout email matches an existing user, prompt login before creating the Stripe checkout session.
-* If checkout email does not match a user, create a new Firebase Auth user/profile or offer account creation before payment.
-* Preserve cart contents and entered checkout details through login/signup.
-* Then continue to Stripe checkout once authenticated.
-
-### Affiliate Collection Access
-
-Review public vs private affiliate data.
-
-### Admin Dashboard Layout
-
-Navigation/content layout issue.
-
-### Admin Packing And Shipping Workflow
-
-Admin Orders now shows order items, assignment/last-updated details, fulfilment status, tracking number, tracking email status, and the admin badge for new unassigned orders. Admin Emails now shows confirmation/tracking/broadcast email logs.
+* Admin Orders shows order items.
+* Admin Orders shows assigned admin and last-updated admin.
+* Admin Orders supports fulfilment status updates.
+* Admin Orders supports tracking number and carrier.
+* Admin tracking email status shows sent, sandboxed locally, failed, or not sent.
+* Admin badge shows new unassigned physical orders.
+* Admin Emails shows confirmation, tracking, and broadcast email logs.
 
 Next improvements:
 
@@ -562,6 +210,55 @@ Next improvements:
 * Add an automated review request email approximately two weeks after an order is marked delivered.
 * Add a returns/complaints workflow so admins can record return requests, complaint notes, resolution status, and customer follow-up.
 
+## Workbook Product Import
+
+Current:
+
+* `functions/scripts/seedRecoveryProducts.js` reads `Recovery Tools Master Database.xlsx`.
+* Product seed data joins `ItemProduct`, `Items`, `ProductPrice`, `Inventory`, `ItemAsset`, and `Asset`.
+* `ItemProductID` is the Firestore `products/{productId}` document ID.
+* Active `ProductPrice` rows provide price, retail price, sale fields, and Stripe ID placeholders.
+* Inventory rows are summed into `stock`.
+* Product images resolve through `ItemAsset -> Asset.FileURL`.
+* `references` and `referenceStatus` are carried through from `Items`.
+* `--dry-run` validates generated product documents without writing to Firestore.
+
+Useful commands:
+
+```powershell
+cd "C:\Users\hello\Firebase project\functions"
+node scripts/seedRecoveryProducts.js --dry-run --workbook "C:\Users\hello\Downloads\Recovery Tools Master Database.xlsx"
+node scripts/seedRecoveryProducts.js --workbook "C:\Users\hello\Downloads\Recovery Tools Master Database.xlsx"
+```
+
+Remaining spreadsheet checks before live upload:
+
+* Keep `ProductPrice.Status` set to `Active` for the price row to import.
+* Keep `ItemProduct.ItemProductID` stable; changing it creates a new Firestore product document.
+* Replace placeholder/fallback image behavior after every product has a production `Asset.FileURL`.
+* Standardize `Reference Status` values: `Not required`, `Needs source`, `Draft source`, `Verified`.
+* Fill `ProductPrice.stripeProductId` and `ProductPrice.stripePriceId` once Stripe products/prices exist.
+* Add seed rows for your own admin user in `Users` and `Admin` if workbook-backed user seeding is kept.
+
+## Remaining Known Issues
+
+### Local Admin Login vs Product Seed Workflow
+
+Confirm the preferred local workflow so admin login, product seed data, checkout, and order creation all target the same Firebase environment.
+
+Current working approach:
+
+```text
+VITE_USE_FIREBASE_EMULATORS=true
+Firebase emulators running
+Seeded products
+Seeded admin user/custom claims
+```
+
+### Affiliate Collection Access
+
+Review public vs private affiliate data and fix any Firestore rule warnings.
+
 ### Profile Role Display
 
 Role rendering inconsistency.
@@ -571,8 +268,6 @@ Role rendering inconsistency.
 Full address rendering incomplete.
 
 ### Shop Filters
-
-Still required.
 
 Refine visible filter tags at top of shop:
 
@@ -587,75 +282,55 @@ Stability
 
 Courses currently display in the Courses section, but clicking a course opens the shared shop product detail page.
 
-Build a dedicated course detail page with:
+Build a dedicated course detail page later with:
 
-* More detailed course information than physical product pages
-* Course-specific layout and copy sections
-* Add to cart / buy flow that preserves referral tracking
-* Access course button for users who already have `userAccess`
-* Correct handling of affiliate commission values from the new imported product/order structure
+* Course-specific layout and copy sections.
+* Add to cart / buy flow that preserves referral tracking.
+* Access course button for users who already have `userAccess`.
+* Correct handling of affiliate commission values from the imported product/order structure.
 
 ### Placeholder Assets
 
-Replace temporary images.
+Replace temporary product and page images.
 
----
+## Later Architecture Backlog
 
-## Later Spreadsheet Cleanup
+Order status model:
 
-Do these after the website/Firebase work is underway:
+```text
+paymentStatus
+fulfilmentStatus
+accessStatus
+```
 
-1. Fill `ProductPrice.stripeProductId` and `ProductPrice.stripePriceId` once Stripe products/prices exist.
-2. Decide whether blank `ProductPrice` formula rows should stay; import currently only uses active rows with `ItemProductID`.
-3. Add status values consistently; import currently normalizes common casing such as `ACTIVE`/`Active`.
-4. Add seed rows for your own admin user in `Users` and `Admin`.
-5. Fill `Reference Status` consistently for Items and Blueprints.
-6. Add `Features` fields if the product detail bullet list should be populated from the workbook.
+Future order states:
 
----
+```text
+Pending
+Paid
+Packing
+Packed
+Shipped
+Delivered
+Completed
+Refunded
+Cancelled
+```
 
-## Next Session
+Future collections/workflows:
 
-### Startup
+* `userAccess` unlock engine for digital products.
+* Stripe webhook writer for final production order reconciliation.
+* Tax invoice PDF generation with ABN, GST, invoice number, and order number.
+* Review automation after delivery/access.
+* Returns workflow in `returns/{returnId}`.
+* Membership engine for memberships, exercise library, recovery plans, and audio library.
 
-```bash
+## End Of Session Checklist
+
+```powershell
 npm run build
-npm run emulators
-npm run dev
-```
-
-### First Task
-
-Review and update:
-
-```text
-functions/affiliates/createStripeConnectLink.js
-functions/affiliates/createStripeLoginLink.js
-functions/orders/confirmStripePurchase.js
-functions/orders/createCheckoutSession.js
-functions/webhooks/handleStripeWebhook.js
-
-src/utils/firebase-config.js
-.env.example
-```
-
-### Then
-
-Run complete Stripe test purchase.
-
-Verify:
-
-```text
-Order Created
-Order History Updated
-Cart Cleared
-```
-
-### End Of Session
-
-```bash
 git status
-git add .
-git commit -m "Standardize Stripe test/live architecture"
-git push
+git add <changed files>
+git commit -m "<clear scoped message>"
 ```
