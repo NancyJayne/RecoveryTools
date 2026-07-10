@@ -269,6 +269,62 @@ Confirm storage of:
 
 ---
 
+## Priority 1A — Finish V1 Core Operations
+
+Complete these before narrowing the public site to the V1 shop launch:
+
+* Finish checkout confirmation and order creation.
+* Verify shipping address, billing address, order item, and fulfilment data writes.
+* Verify admin order flow for packing, shipping, tracking number, and status updates.
+* Finalise the customer profile: profile details, addresses, order history, update profile, and change password.
+* Finalise the admin profile/admin access flow so admin users can manage the shop and orders without exposing unfinished areas to customers.
+
+---
+
+## Priority 1B — V1 Shop-Only Public Launch Scope
+
+Goal:
+
+```text
+Launch Version 1 as a usable shop first.
+Keep courses, workshops, Anato-me, and programs in development, but hidden from public users.
+```
+
+Public V1 navigation should show:
+
+* Home
+* Shop
+* About
+* Cart/checkout
+* Profile
+* Policy links
+
+Hide from public navigation until ready:
+
+* Courses
+* Workshops
+* Anato-me
+* Programs
+
+Implementation plan:
+
+1. Add a central feature visibility config for public sections.
+2. Hide disabled sections from desktop and mobile navigation.
+3. Add route guards so direct visits to disabled routes redirect to `/shop` or a simple unavailable page.
+4. Hide unfinished profile tabs from customers:
+   * My Courses
+   * My Workshops
+   * My Programs
+5. Keep admin/internal build paths available so these features can continue being developed.
+6. Add an About page.
+7. Add policy links that open the policy PDFs already included in the database.
+8. Make public shop queries show only V1-ready products, such as active/visible shop products.
+9. Keep courses, workshops, Anato-me, and programs in the database/codebase with draft/hidden visibility until they are ready to introduce.
+
+Do not delete the existing course, workshop, Anato-me, or program code. Treat them as built-but-hidden features controlled by visibility flags.
+
+---
+
 ## Current Website/Firebase Implementation Focus
 
 Work on these next while the spreadsheet remains the prototype and initial seed source:
