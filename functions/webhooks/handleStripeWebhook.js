@@ -2,9 +2,12 @@ import { onRequest } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
 import stripeLib from "stripe";
 import { defineSecret } from "firebase-functions/params";
+import { stripeSecretValue, stripeWebhookSecretValue } from "../utils/stripeEnvironment.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
+const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
+const STRIPE_WEBHOOK_SECRET_TEST = defineSecret("STRIPE_WEBHOOK_SECRET_TEST");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -302,15 +305,39 @@ async function markStripeEvent({ event, status, errorMessage = "", extra = {} })
 export const handleStripeWebhook = onRequest(
   {
     region: "australia-southeast1",
-    secrets: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET],
+    secrets: [
+      STRIPE_SECRET_KEY,
+      STRIPE_SECRET_KEY_TEST,
+      STRIPE_WEBHOOK_SECRET,
+      STRIPE_WEBHOOK_SECRET_TEST,
+    ],
   },
   async (req, res) => {
     const sig = req.headers["stripe-signature"];
-    const stripe = stripeLib(STRIPE_SECRET_KEY.value());
-    const endpointSecret = STRIPE_WEBHOOK_SECRET.value();
+    const stripe = stripeLib(stripeSecretValue({
+      liveSecret: STRIPE_SECRET_KEY,
+      testSecret: STRIPE_SECRET_KEY_TEST,
+    }));
+    const endpointSecret = stripeWebhookSecretValue({
+      liveSecret: STRIPE_WEBHOOK_SECRET,
+      testSecret: STRIPE_WEBHOOK_SECRET_TEST,
+    });
     let event;
 
     try {
+      if (!endpointSecret) {
+        console.error("Stripe webhook secret is missing.", {
+          stripeMode: process.env.STRIPE_MODE || "auto",
+          functionsEmulator: process.env.FUNCTIONS_EMULATOR === "true",
+        });
+        return res.status(500).send("Webhook secret is not configured.");
+      }
+
+      if (!req.rawBody) {
+        console.error("Stripe webhook rawBody is missing.");
+        return res.status(400).send("Webhook Error: raw body is missing");
+      }
+
       event = stripe.webhooks.constructEvent(req.rawBody, sig, endpointSecret);
     } catch (err) {
       console.error("Webhook signature verification failed.", err);

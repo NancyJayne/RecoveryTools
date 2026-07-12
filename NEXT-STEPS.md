@@ -14,6 +14,8 @@ Last confirmed state:
 * Tracking email attempts are logged as sent, sandboxed, or failed.
 * Admin Emails shows order confirmation, tracking, and broadcast email logs.
 * Admin profile badge shows new unassigned physical orders and is hidden from non-admin users.
+* Stripe secret selection is standardized for local/test vs production/live.
+* Password reset now uses the email-sending callable and logs reset email attempts.
 
 Latest useful commits:
 
@@ -24,11 +26,11 @@ Latest useful commits:
 74c125d2 Add fulfilment tracking and checkout contact validation
 ```
 
-## Start Here Today
+## Completed Today
 
-### 1. Standardize Stripe Test/Live Architecture
+### Stripe Test/Live Architecture
 
-Review and update:
+Updated:
 
 ```text
 functions/affiliates/createStripeConnectLink.js
@@ -38,50 +40,49 @@ functions/orders/createCheckoutSession.js
 functions/webhooks/handleStripeWebhook.js
 src/utils/firebase-config.js
 .env.example
+functions/utils/stripeEnvironment.js
 ```
 
-Target:
+Current behaviour:
 
 ```text
 Local emulator / localhost -> Stripe test keys
 Production -> Stripe live keys
 ```
 
-Verify secrets/env names:
+Required secret/env names:
 
 ```text
 STRIPE_SECRET_KEY
 STRIPE_SECRET_KEY_TEST
+STRIPE_WEBHOOK_SECRET
+STRIPE_WEBHOOK_SECRET_TEST
 VITE_STRIPE_PUBLISHABLE_KEY
 VITE_STRIPE_PUBLISHABLE_KEY_TEST
 ```
 
-### 2. Fix Password Reset
+### Password Reset
 
-Known issue:
-
-* Send reset link email is not working.
-
-Investigate:
+Updated:
 
 ```text
 src/auth/reset-password.js
-src/auth/auth-modal.js
 functions/emails/sendPasswordReset.js
-functions/users/authHelpers.js
-functions/index.js
-functions/utils/verifyRecaptchaToken.js
 ```
 
-Check:
+Current behaviour:
 
-* Frontend is calling the intended callable.
-* Callable export name is not conflicting with another reset function.
-* reCAPTCHA verification works in local/emulator mode.
-* SendGrid/template/content path is valid.
-* Email attempts should log to `emailLogs` when this is fixed.
+```text
+Customer reset form calls sendPasswordReset.
+Live reset emails use SendGrid template d-96f4ed75c9ed4114a4ff41cb0516e22b.
+Local emulator reset emails are sandboxed/skipped and logged.
+Reset email attempts are written to emailLogs.
+Admin users can still receive the generated reset link in the callable response.
+```
 
-### 3. Run One Full Local V1 Test
+## Start Here Next
+
+### Run One Full Local V1 Test
 
 Use emulator mode and seeded products.
 
@@ -108,13 +109,12 @@ Cart clears
 
 Do these before any public launch:
 
-1. Standardize Stripe test/live key selection.
-2. Fix password reset.
-3. Decide V1 checkout auth rule.
-4. Run a real SendGrid production smoke test.
-5. Run one complete production-style Stripe test purchase.
-6. Confirm public navigation hides unfinished features.
-7. Polish V1 product content, product images, shipping text, returns text, and policy links.
+1. Run a full local V1 checkout/reset/admin fulfilment test after restarting emulators.
+2. Decide V1 checkout auth rule.
+3. Run a real SendGrid production smoke test.
+4. Run one complete production-style Stripe test purchase.
+5. Confirm public navigation hides unfinished features.
+6. Polish V1 product content, product images, shipping text, returns text, and policy links.
 
 ## V1 Checkout Auth Decision
 

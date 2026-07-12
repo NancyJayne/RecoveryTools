@@ -22,7 +22,7 @@ const auth = getAuth();
 const usersToSeed = [
   {
     uid: "uid-admin",
-    email: "admin@recoverytools.au",
+    email: "hello@recoverytools.au",
     password: "secureTest123",
     displayName: "Admin User",
     roles: {
@@ -86,7 +86,7 @@ async function resetCollections(collections) {
 
 async function ensureAuthUser(user) {
   try {
-    const existingUser = await auth.getUserByEmail(user.email);
+    const existingUser = await auth.getUser(user.uid);
 
     if (existingUser.uid !== user.uid) {
       console.warn(

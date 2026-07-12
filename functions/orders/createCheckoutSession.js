@@ -4,6 +4,7 @@ import admin from "firebase-admin";
 import stripeLib from "stripe";
 import { defineSecret } from "firebase-functions/params";
 import fetch from "node-fetch";
+import { appBaseUrl, stripeSecretValue } from "../utils/stripeEnvironment.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -13,13 +14,13 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-const verifyRecaptcha = async (token, context) => {
+const verifyRecaptcha = async (token) => {
   if (!token) throw new HttpsError("invalid-argument", "Missing reCAPTCHA token");
 
   const recaptchaSecret =
     process.env.FUNCTIONS_EMULATOR === "true"
       ? process.env.RECAPTCHA_SECRET_KEY
-      : context.secrets.RECAPTCHA_SECRET_KEY;
+      : RECAPTCHA_SECRET_KEY.value();
 
   const res = await fetch("https://www.google.com/recaptcha/api/siteverify", {
     method: "POST",
@@ -123,15 +124,13 @@ const createCheckoutSessionHandler = async (request) => {
   }
 
   if (process.env.FUNCTIONS_EMULATOR !== "true") {
-    await verifyRecaptcha(token, request);
+    await verifyRecaptcha(token);
   }
 
-  const stripeSecretKey =
-    process.env.FUNCTIONS_EMULATOR === "true"
-      ? STRIPE_SECRET_KEY_TEST.value()
-      : STRIPE_SECRET_KEY.value();
-
-  const stripe = stripeLib(stripeSecretKey);
+  const stripe = stripeLib(stripeSecretValue({
+    liveSecret: STRIPE_SECRET_KEY,
+    testSecret: STRIPE_SECRET_KEY_TEST,
+  }));
 
   const db = admin.firestore();
 
@@ -295,19 +294,13 @@ const createCheckoutSessionHandler = async (request) => {
       products: validatedItems.map((p) => `${p.type}:${p.name} x${p.quantity}`).join("; "),
     };
 
+    const baseUrl = appBaseUrl();
     const sessionConfig = {
       mode: "payment",
       payment_method_types: ["card"],
       line_items: lineItems,
-      success_url:
-  process.env.FUNCTIONS_EMULATOR === "true"
-    ? "http://localhost:5173/checkout?success=true&session_id={CHECKOUT_SESSION_ID}"
-    : "https://recoverytools.au/checkout?success=true&session_id={CHECKOUT_SESSION_ID}",
-
-      cancel_url:
-    process.env.FUNCTIONS_EMULATOR === "true"
-      ? "http://localhost:5173/cart"
-      : "https://recoverytools.au/cart",
+      success_url: `${baseUrl}/checkout?success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/cart`,
       metadata,
 
       customer: stripeCustomerId,

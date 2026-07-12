@@ -1,7 +1,12 @@
 // index.js (cleaned)
 import admin from "firebase-admin";
 import dotenv from "dotenv";
-dotenv.config();
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const functionsDir = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: resolve(functionsDir, "../.env") });
+dotenv.config({ path: resolve(functionsDir, ".env"), override: true });
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -10,7 +15,6 @@ if (!admin.apps.length) {
 
 // ✅ Export Functions
 // Email functions
-export { sendTransactionalEmail } from "./emails/sendTransactionalEmail.js";
 export { sendAffiliateWelcomeEmail } from "./emails/sendAffiliateWelcomeEmail.js";
 export { sendAdminBroadcastEmail } from "./emails/sendAdminBroadcastEmail.js";
 export { onNewReview } from "./emails/onNewReview.js";

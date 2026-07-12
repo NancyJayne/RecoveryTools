@@ -7,7 +7,9 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-const bucket = getStorage().bucket();
+function invoiceBucket() {
+  return getStorage().bucket();
+}
 
 /**
  * 🔒 Server-side utility: Generate & upload invoice PDF for a given order
@@ -34,7 +36,7 @@ export async function generateOrderPDF(invoiceId, orderData) {
   pdfDoc.text(`Date: ${orderData.purchasedAt?.toDate().toLocaleString() || "N/A"}`);
   pdfDoc.end();
 
-  const file = bucket.file(fileName);
+  const file = invoiceBucket().file(fileName);
   const uploadStream = file.createWriteStream({ contentType: "application/pdf" });
   pdfStream.pipe(uploadStream);
 

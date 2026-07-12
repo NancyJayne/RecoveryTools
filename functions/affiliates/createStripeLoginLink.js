@@ -2,8 +2,10 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import admin from "firebase-admin";
 import stripeLib from "stripe";
+import { stripeSecretValue } from "../utils/stripeEnvironment.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
+const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -12,7 +14,7 @@ if (!admin.apps.length) {
 export const createStripeLoginLink = onCall(
   {
     region: "australia-southeast1",
-    secrets: [STRIPE_SECRET_KEY],
+    secrets: [STRIPE_SECRET_KEY, STRIPE_SECRET_KEY_TEST],
   },
   async (request) => {
     const uid = request.auth?.uid;
@@ -24,7 +26,10 @@ export const createStripeLoginLink = onCall(
       );
     }
 
-    const stripe = stripeLib(STRIPE_SECRET_KEY.value());
+    const stripe = stripeLib(stripeSecretValue({
+      liveSecret: STRIPE_SECRET_KEY,
+      testSecret: STRIPE_SECRET_KEY_TEST,
+    }));
 
     const userDocRef = admin.firestore().collection("users").doc(uid);
     const userDoc = await userDocRef.get();

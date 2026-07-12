@@ -5,6 +5,7 @@ import { defineSecret } from "firebase-functions/params";
 import sgMail from "@sendgrid/mail";
 import { generateOrderPDF } from "../utils/generateOrderPDFServer.js";
 import { logEmailEvent } from "../utils/emailLog.js";
+import { stripeSecretValue } from "../utils/stripeEnvironment.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -113,6 +114,54 @@ async function sendOrderConfirmationEmail({ orderId, orderData, to, userName, us
   return { sandboxed: false };
 }
 
+async function recordOrderConfirmationEmail({ orderRef, orderId, orderData, to, userName, userId }) {
+  if (
+    orderData.confirmationEmailSentAt ||
+    orderData.confirmationEmailSandboxedAt
+  ) {
+    return;
+  }
+
+  try {
+    const emailResult = await sendOrderConfirmationEmail({
+      orderId,
+      orderData,
+      to,
+      userName,
+      userId,
+    });
+    await orderRef.set({
+      confirmationEmailError: "",
+      ...(emailResult.sandboxed
+        ? {
+          confirmationEmailSandboxedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }
+        : {
+          confirmationEmailSentAt: admin.firestore.FieldValue.serverTimestamp(),
+        }),
+    }, { merge: true });
+  } catch (err) {
+    const errorMessage = err.message || "Order confirmation email could not be sent.";
+    console.error("Order confirmation email failed; order is still confirmed.", err);
+    await Promise.all([
+      orderRef.set({
+        confirmationEmailError: errorMessage,
+        confirmationEmailFailedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true }),
+      logEmailEvent({
+        type: "order_confirmation",
+        status: "failed",
+        to,
+        subject: `Your Recovery Tools receipt - Order ${orderId}`,
+        orderId,
+        userId,
+        providerMode: useSendGridSandboxMode() ? "sendgrid-sandbox" : "live",
+        errorMessage,
+      }),
+    ]);
+  }
+}
+
 const confirmStripePurchaseHandler = async (request) => {
   const { sessionId } = request.data || {};
   const uid = request.auth?.uid;
@@ -121,12 +170,10 @@ const confirmStripePurchaseHandler = async (request) => {
     throw new HttpsError("unauthenticated", "User must be logged in with a valid session.");
   }
 
-  const stripeSecretKey =
-    process.env.FUNCTIONS_EMULATOR === "true"
-      ? STRIPE_SECRET_KEY_TEST.value()
-      : STRIPE_SECRET_KEY.value();
-
-  const stripe = stripeLib(stripeSecretKey);
+  const stripe = stripeLib(stripeSecretValue({
+    liveSecret: STRIPE_SECRET_KEY,
+    testSecret: STRIPE_SECRET_KEY_TEST,
+  }));
 
   const session = await stripe.checkout.sessions.retrieve(sessionId, {
     expand: [
@@ -190,7 +237,17 @@ const confirmStripePurchaseHandler = async (request) => {
   const existingOrder = await orderRef.get();
 
   if (existingOrder.exists) {
-    return existingOrder.data();
+    const existingOrderData = existingOrder.data();
+    await recordOrderConfirmationEmail({
+      orderRef,
+      orderId: invoiceNumber,
+      orderData: existingOrderData,
+      to: existingOrderData.customerEmail || existingOrderData.userEmail || "",
+      userName: existingOrderData.customerName || existingOrderData.userName || "Customer",
+      userId: existingOrderData.userId || existingOrderData.buyerUid || uid,
+    });
+    const refreshedOrder = await orderRef.get();
+    return refreshedOrder.data();
   }
   const customerDetails = session.customer_details || {};
   const shippingDetails = session.shipping_details || session.shipping || {};
@@ -280,44 +337,14 @@ const confirmStripePurchaseHandler = async (request) => {
   }
   await batch.commit();
 
-  try {
-    const emailResult = await sendOrderConfirmationEmail({
-      orderId: invoiceNumber,
-      orderData,
-      to: customerEmail,
-      userName: customerName,
-      userId: uid,
-    });
-    await orderRef.set({
-      confirmationEmailError: "",
-      ...(emailResult.sandboxed
-        ? {
-          confirmationEmailSandboxedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }
-        : {
-          confirmationEmailSentAt: admin.firestore.FieldValue.serverTimestamp(),
-        }),
-    }, { merge: true });
-  } catch (err) {
-    const errorMessage = err.message || "Order confirmation email could not be sent.";
-    console.error("Order confirmation email failed; order is still confirmed.", err);
-    await Promise.all([
-      orderRef.set({
-        confirmationEmailError: errorMessage,
-        confirmationEmailFailedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true }),
-      logEmailEvent({
-        type: "order_confirmation",
-        status: "failed",
-        to: customerEmail,
-        subject: `Your Recovery Tools receipt - Order ${invoiceNumber}`,
-        orderId: invoiceNumber,
-        userId: uid,
-        providerMode: useSendGridSandboxMode() ? "sendgrid-sandbox" : "live",
-        errorMessage,
-      }),
-    ]);
-  }
+  await recordOrderConfirmationEmail({
+    orderRef,
+    orderId: invoiceNumber,
+    orderData,
+    to: customerEmail,
+    userName: customerName,
+    userId: uid,
+  });
 
   // 🔓 Unlock purchased content and issue tickets
   await Promise.all(
