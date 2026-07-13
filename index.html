@@ -9,11 +9,11 @@
     <link rel="canonical" id="canonicalUrl" href="https://recoverytools.au/" />
     
     <title id="pageTitle">Recovery Tools</title>
-    <link rel="icon" href="/assets/favicon.ico" type="image/x-icon" />
+    <link id="faviconIco" rel="icon" href="/assets/favicon.ico" type="image/x-icon" />
     <link rel="manifest" href="/manifest.json" />
 
   <base href="/" /> 
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link id="faviconSvg" rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
@@ -67,7 +67,15 @@
   <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
     <!-- Logo -->
     <div class="text-xl font-bold tracking-wide">
-      <a href="/" data-tab="homeSection" class="tab-link">Recovery Tools</a>
+      <a href="/" data-tab="homeSection" class="tab-link flex items-center gap-2">
+        <img
+          id="headerBusinessLogo"
+          src="https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FRecoveryToolsLogo.png?alt=media&token=ef83d768-30db-4889-a550-188f49b1ba2d"
+          alt=""
+          class="h-8 w-8 rounded-full border border-[#407471] object-contain"
+        >
+        <span id="headerBusinessName">Recovery Tools</span>
+      </a>
     </div>
 
     <!-- Mobile Toggle -->
@@ -78,11 +86,9 @@
     <!-- Desktop Navigation -->
     <nav id="mainNav" class="hidden md:flex space-x-6 items-center">
       <a href="/" data-tab="homeSection" class="tab-link hover:text-[#63d6b2]">Home</a>
-      <a href="/shop" data-tab="shopSection" class="tab-link hover:text-[#63d6b2]">Shop</a>
-      <a href="/programs" data-tab="programsSection" class="tab-link hover:text-[#63d6b2]">Programs</a>
-      <a href="/anato-me" data-tab="anato-meSection" class="tab-link hover:text-[#63d6b2]">Anato-me</a>
-      <a href="/workshops" data-tab="workshopsSection" class="tab-link hover:text-[#63d6b2]">Workshops</a>
-      <a href="/courses" data-tab="coursesSection" class="tab-link hover:text-[#63d6b2]">Courses</a>
+      <a href="/shop" data-tab="shopSection" class="tab-link hover:text-[#63d6b2]">Marketplace</a>
+      <a href="/anato-me" data-tab="anato-meSection" class="tab-link hover:text-[#63d6b2]">Library</a>
+      <a href="/about" data-tab="aboutSection" class="tab-link hover:text-[#63d6b2]">About</a>
     </nav>
 
 <!-- Auth + Cart Controls -->
@@ -122,11 +128,9 @@
   <!-- Mobile Nav (Slide-down) -->
   <div id="mobileNav" class="mobile-nav md:hidden">
     <a href="/" data-tab="homeSection" class="tab-link hover:text-[#63d6b2]">Home</a>
-    <a href="/shop" data-tab="shopSection" class="tab-link hover:text-[#63d6b2]">Shop</a>
-    <a href="/programs" data-tab="programsSection" class="tab-link hover:text-[#63d6b2]">Programs</a>
-    <a href="/anato-me" data-tab="anato-meSection" class="tab-link hover:text-[#63d6b2]">Anato-me</a>
-    <a href="/workshops" data-tab="workshopsSection" class="tab-link hover:text-[#63d6b2]">Workshops</a>
-    <a href="/courses" data-tab="coursesSection" class="tab-link hover:text-[#63d6b2]">Courses</a>
+    <a href="/shop" data-tab="shopSection" class="tab-link hover:text-[#63d6b2]">Marketplace</a>
+    <a href="/anato-me" data-tab="anato-meSection" class="tab-link hover:text-[#63d6b2]">Library</a>
+    <a href="/about" data-tab="aboutSection" class="tab-link hover:text-[#63d6b2]">About</a>
   </div>
 </header>
 
@@ -258,15 +262,17 @@
 <!-- Shop Section -->
 <section id="shopSection" class="tab-content hidden p-6">
   <div class="bg-black text-white font-sans">
-  <h2 class="text-2xl font-semibold mb-4">Shop</h2>
+  <h2 class="text-2xl font-semibold mb-1">Marketplace</h2>
+  <p class="mb-4 text-sm text-gray-400">Acquire tools, courses, workshops, and programs.</p>
   
   <div class="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
   <!-- 🔎 Filter -->
   <div class="flex flex-wrap items-center gap-3">
-    <button class="filter-tag text-sm bg-gray-700 hover:bg-[#407471] px-3 py-1 rounded text-white" data-filter="featured">Featured</button>
-    <button class="filter-tag text-sm bg-gray-700 hover:bg-[#407471] px-3 py-1 rounded text-white" data-filter="backpain">Back Pain</button>
-    <button class="filter-tag text-sm bg-gray-700 hover:bg-[#407471] px-3 py-1 rounded text-white" data-filter="mobility">Mobility</button>
-    <button class="filter-tag text-sm bg-gray-700 hover:bg-[#407471] px-3 py-1 rounded text-white" data-filter="all">Show All</button>
+    <button class="filter-tag text-sm bg-[#407471] px-3 py-1 rounded text-white" data-filter="all">Show All</button>
+    <button class="filter-tag text-sm bg-gray-700 hover:bg-[#407471] px-3 py-1 rounded text-white" data-filter="tools">Tools</button>
+    <button class="filter-tag text-sm bg-gray-700 hover:bg-[#407471] px-3 py-1 rounded text-white" data-filter="courses">Courses</button>
+    <button class="filter-tag text-sm bg-gray-700 hover:bg-[#407471] px-3 py-1 rounded text-white" data-filter="workshops">Workshops</button>
+    <button class="filter-tag text-sm bg-gray-700 hover:bg-[#407471] px-3 py-1 rounded text-white" data-filter="programs">Programs</button>
   </div>
 
   <!-- 🔃 Sort -->
@@ -865,20 +871,175 @@
       <h2 class="text-xl font-semibold text-purple-300 mb-4">Admin Menu</h2>
       <a href="/admin" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Dashboard</a>
       <a href="/admin/orders" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Orders</a>
-      <a href="/admin/workshops" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Workshops</a>
-      <a href="/admin/courses" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Courses</a>
-      <a href="/admin/affiliates" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Affiliates</a>
-      <a href="/admin/anato-me" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Anato-Me</a>
+      <a href="/admin/approvals" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Approvals</a>
       <a href="/admin/crm" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">CRM</a>
+      <a href="/admin/content-controls" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Content Controls</a>
+      <a href="/admin/builder" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Builder</a>
       <a href="/admin/emails" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Emails</a>
+      <a href="/admin/reviews" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Reviews & Feedback</a>
+      <a href="/admin/business" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Business Settings</a>
       <a href="/profile" class="text-sm mt-6 text-blue-400 hover:underline">← Back to Profile</a>
     </aside>
 
     <!-- Content Panel -->
-    <div class="flex-1 space-y-6">
+    <div class="flex-1 min-w-0 space-y-6">
       <div id="adminDashboardSection" class="admin-tab hidden">
         <h2 class="text-2xl font-semibold">Admin Dashboard</h2>
         <p class="text-gray-400">Welcome, admin. Choose a section from the sidebar to begin.</p>
+      </div>
+
+      <div id="adminApprovalsSection" class="admin-tab hidden">
+        <div class="mb-4">
+          <h2 class="text-2xl font-semibold">Approvals</h2>
+          <p class="text-sm text-gray-400">Review content, role requests, product reviews, and customer feedback that still needs an admin decision.</p>
+        </div>
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <a href="/admin/workshops" class="admin-link rounded border border-gray-700 bg-gray-900/50 p-4 hover:border-[#407471]">
+            <h3 class="font-semibold text-white">Workshop approvals</h3>
+            <p class="mt-2 text-sm text-gray-400">Approve submitted workshop content before it is published.</p>
+          </a>
+          <a href="/admin/courses" class="admin-link rounded border border-gray-700 bg-gray-900/50 p-4 hover:border-[#407471]">
+            <h3 class="font-semibold text-white">Course approvals</h3>
+            <p class="mt-2 text-sm text-gray-400">Approve course content, updates, and course templates.</p>
+          </a>
+          <a href="/admin/affiliates" class="admin-link rounded border border-gray-700 bg-gray-900/50 p-4 hover:border-[#407471]">
+            <h3 class="font-semibold text-white">Affiliate requests</h3>
+            <p class="mt-2 text-sm text-gray-400">Review users who have requested affiliate access.</p>
+          </a>
+          <a href="/admin/crm" class="admin-link rounded border border-gray-700 bg-gray-900/50 p-4 hover:border-[#407471]">
+            <h3 class="font-semibold text-white">Therapist requests</h3>
+            <p class="mt-2 text-sm text-gray-400">Review therapist access requests and account role changes.</p>
+          </a>
+          <a href="/admin/reviews" class="admin-link rounded border border-gray-700 bg-gray-900/50 p-4 hover:border-[#407471]">
+            <h3 class="font-semibold text-white">Review approvals</h3>
+            <p class="mt-2 text-sm text-gray-400">Approve, hide, or archive customer product reviews.</p>
+          </a>
+          <a href="/admin/reviews" class="admin-link rounded border border-gray-700 bg-gray-900/50 p-4 hover:border-[#407471]">
+            <h3 class="font-semibold text-white">Feedback queue</h3>
+            <p class="mt-2 text-sm text-gray-400">Check customer feedback, returns, replacements, and complaints.</p>
+          </a>
+        </div>
+      </div>
+
+      <div id="adminContentControlsSection" class="admin-tab hidden">
+        <div class="mb-4">
+          <h2 class="text-2xl font-semibold">Content Controls</h2>
+          <p class="text-sm text-gray-400">
+            Filter and manage Items, Blueprints, Plans, and Campaigns without exposing raw database collections.
+          </p>
+        </div>
+        <div class="mb-5 rounded border border-gray-700 bg-gray-900/50 p-4">
+          <div id="contentControlsPrimaryFilters" class="mb-4 flex flex-wrap gap-2 text-sm">
+            <button type="button" class="content-primary-filter rounded bg-[#407471] px-3 py-2 text-white" data-primary-filter="all">All</button>
+            <button type="button" class="content-primary-filter rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-primary-filter="items">Items</button>
+            <button type="button" class="content-primary-filter rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-primary-filter="blueprints">Blueprints</button>
+            <button type="button" class="content-primary-filter rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-primary-filter="plans">Plans</button>
+            <button type="button" class="content-primary-filter rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-primary-filter="campaigns">Campaigns</button>
+          </div>
+          <div class="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_220px_180px]">
+            <label class="block text-sm">
+              Search
+              <input
+                id="contentControlsSearch"
+                type="search"
+                class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                placeholder="Name, ID, SKU, tag..."
+              >
+            </label>
+            <label class="block text-sm">
+              <span id="contentControlsSecondaryLabel">Type</span>
+              <select id="contentControlsSecondaryFilter" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+            </label>
+            <label class="block text-sm">
+              Add filter
+              <select id="contentControlsAddFilter" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                <option value="">Select filter...</option>
+              </select>
+            </label>
+          </div>
+          <div id="contentControlsFilterChips" class="mt-3 flex flex-wrap gap-2 text-xs"></div>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <button id="refreshContentControlsBtn" type="button" class="rounded bg-gray-700 px-3 py-2 text-sm text-white hover:bg-gray-600">
+              Refresh
+            </button>
+            <a href="/admin/builder" class="admin-link rounded border border-gray-700 px-3 py-2 text-sm text-white hover:border-[#407471]">
+              Create new item
+            </a>
+          </div>
+        </div>
+
+        <div id="contentControlsSummary" class="mb-3 text-sm text-gray-400"></div>
+        <div id="contentControlsList" class="space-y-4 text-sm">Loading content controls...</div>
+
+        <aside
+          id="contentQuickEditDrawer"
+          class="fixed inset-y-0 right-0 z-50 hidden w-full max-w-xl overflow-y-auto border-l border-gray-700 bg-gray-950 p-5 shadow-2xl"
+        >
+          <div class="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h3 class="text-xl font-semibold text-white">Quick Edit</h3>
+              <p id="contentQuickEditMeta" class="mt-1 break-all text-xs text-gray-400"></p>
+            </div>
+            <button id="closeContentQuickEditBtn" type="button" class="rounded bg-gray-800 px-3 py-2 text-sm text-white hover:bg-gray-700">
+              Close
+            </button>
+          </div>
+
+          <form id="contentQuickEditForm" class="space-y-4 text-sm">
+            <input id="quickEditRecordId" type="hidden">
+            <input id="quickEditRecordType" type="hidden">
+
+            <section class="rounded border border-gray-700 bg-gray-900/60 p-4">
+              <h4 class="mb-3 font-semibold text-white">Core content</h4>
+              <label class="block">
+                Name
+                <input id="quickEditName" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+              </label>
+              <div class="mt-3 grid gap-3 md:grid-cols-2">
+                <label class="block">
+                  Content status
+                  <select id="quickEditStatus" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                </label>
+                <label class="block">
+                  Publish status
+                  <select id="quickEditPublishStatus" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                </label>
+                <label class="block">
+                  Approval status
+                  <select id="quickEditApprovalStatus" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                </label>
+                <label class="block">
+                  Visibility
+                  <select id="quickEditVisibility" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                </label>
+              </div>
+              <label class="mt-3 block">
+                Owner
+                <input id="quickEditOwner" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+              </label>
+              <label class="mt-3 block">
+                Tags
+                <input id="quickEditTags" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Comma separated">
+              </label>
+            </section>
+
+            <section id="quickEditTypeSection" class="rounded border border-gray-700 bg-gray-900/60 p-4">
+              <h4 class="mb-3 font-semibold text-white">Classification</h4>
+              <div id="quickEditTypeFields" class="grid gap-3 md:grid-cols-2"></div>
+            </section>
+
+            <section id="quickEditRelationshipSummary" class="rounded border border-gray-700 bg-gray-900/60 p-4 text-gray-300"></section>
+
+            <div class="flex flex-wrap justify-end gap-3">
+              <button type="button" id="cancelContentQuickEditBtn" class="rounded bg-gray-700 px-4 py-2 text-white hover:bg-gray-600">
+                Cancel
+              </button>
+              <button type="submit" class="rounded bg-[#407471] px-4 py-2 text-white hover:bg-[#305a56]">
+                Save changes
+              </button>
+            </div>
+          </form>
+        </aside>
       </div>
 
         <div id="commissionRatesPanel" class="admin-section hidden">
@@ -900,7 +1061,8 @@
   </form>
 </div>
 <div id="productManagerPanel" class="admin-section hidden">
-  <h2 class="text-2xl font-bold mb-4">Manage Products</h2>
+  <h2 class="text-2xl font-bold mb-2">Products & Inventory</h2>
+  <p class="mb-4 text-sm text-gray-400">Create simple products, hide or archive discontinued listings, and manually adjust tracked stock.</p>
 
   <form id="addProductForm" class="space-y-4 max-w-xl">
     <input type="text" id="add-name" class="input w-full" placeholder="Product Name" required />
@@ -936,12 +1098,65 @@
 </div>
 
 
-      <div id="adminOrdersSection" class="admin-section hidden">
-        <h2 class="text-2xl font-bold mb-4">Orders</h2>
+      <div id="adminOrdersSection" class="admin-section hidden w-full min-w-0">
+        <div class="mb-4 flex items-center gap-3">
+          <h2 class="text-2xl font-bold">Orders</h2>
+          <button
+            id="orderProcessHelpBtn"
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-full bg-gray-700 text-sm font-bold text-white hover:bg-gray-600"
+            aria-label="Show order process help"
+            title="Order process help"
+          >
+            ?
+          </button>
+        </div>
         <button id="clearFilterBtn" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm">Clear Filter</button>
+
+        <div
+          id="orderProcessHelpModal"
+          class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="orderProcessHelpTitle"
+        >
+          <div class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded bg-gray-900 p-5 text-gray-100 shadow-xl">
+            <div class="mb-4 flex items-start justify-between gap-4">
+              <h3 id="orderProcessHelpTitle" class="text-xl font-semibold">Order Process</h3>
+              <button
+                id="orderProcessHelpCloseBtn"
+                type="button"
+                class="rounded bg-gray-700 px-3 py-1 text-sm text-white hover:bg-gray-600"
+              >
+                Close
+              </button>
+            </div>
+
+            <ol class="space-y-3 text-sm leading-6">
+              <li><strong>New:</strong> paid order is waiting to be claimed, packed, or reviewed.</li>
+              <li><strong>Packing / Packed:</strong> prepare the items and check recipient details.</li>
+              <li><strong>Shipped:</strong> add the tracking number first. The customer tracking email is sent here.</li>
+              <li><strong>Delivered:</strong> sends the review/returns email and starts the 14-day completion window.</li>
+              <li><strong>Returns, swaps, complaints:</strong> set the follow-up status and add notes. Open issues block auto-complete.</li>
+              <li><strong>Resolved:</strong> add resolution notes. A delivered order can then re-enter the completion window.</li>
+              <li><strong>Completed:</strong> closes the order. Completed orders are archived after 30 days.</li>
+              <li><strong>Archive:</strong> use Archive now or Unarchive order to correct the active order queue.</li>
+              <li><strong>Timeline:</strong> records admin changes, auto-complete, archive, and unarchive events.</li>
+            </ol>
+
+            <div class="mt-5 rounded border border-gray-700 bg-gray-800 p-3 text-sm text-gray-300">
+              Use <strong>Open returns/swaps/complaints</strong> as the daily exception queue.
+              Use <strong>Show archived</strong> only when you need older completed orders.
+            </div>
+          </div>
+        </div>
       
         <div class="flex flex-col md:flex-row justify-between items-center gap-4 mt-4">
           <input type="text" id="orderSearchInput" placeholder="Search by name, phone, email or invoice" class="input w-full md:w-1/2 bg-gray-700 text-white placeholder-gray-400 px-3 py-2 rounded">
+          <label class="inline-flex items-center gap-2 text-sm text-gray-300">
+            <input type="checkbox" id="showArchivedOrdersToggle" class="accent-[#407471]">
+            Show archived
+          </label>
           <button id="exportOrdersBtn" class="bg-[#407471] text-white px-4 py-2 rounded hover:bg-[#305a56]">Export to CSV</button>
         </div>
       
@@ -953,9 +1168,12 @@
           <button class="filter-btn" data-status="shipped">Shipped</button>
           <button class="filter-btn" data-status="delivered">Delivered</button>
           <button class="filter-btn" data-status="completed">Completed</button>
+          <button id="openIssuesFilterBtn" class="bg-gray-700 text-white px-3 py-1 rounded" type="button">
+            Open returns/swaps/complaints
+          </button>
         </div>
       
-        <div id="globalOrdersGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        <div id="globalOrdersGrid" class="grid w-full grid-cols-1 xl:grid-cols-2 gap-6">
           <!-- Order cards will be dynamically injected here -->
         </div>
       </div>
@@ -990,6 +1208,588 @@
             </div>
             <button type="submit" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">Send Broadcast</button>
           </form>
+        </div>
+
+        <div id="adminReviewsFeedbackSection" class="admin-tab hidden">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-2xl font-semibold">Reviews & Feedback</h2>
+              <p class="text-sm text-gray-400">Approve product reviews and read order feedback/help requests.</p>
+            </div>
+            <button
+              id="refreshReviewsFeedbackBtn"
+              type="button"
+              class="rounded bg-gray-700 px-3 py-2 text-sm text-white hover:bg-gray-600"
+            >
+              Refresh
+            </button>
+          </div>
+
+          <div class="grid gap-6 2xl:grid-cols-2">
+            <section class="rounded border border-gray-700 bg-gray-900/50 p-4">
+              <h3 class="text-lg font-semibold">Product reviews</h3>
+              <p class="mb-4 text-xs text-gray-400">New shop reviews stay hidden until approved here.</p>
+              <div id="adminProductReviewsList" class="space-y-3 text-sm">Loading product reviews...</div>
+            </section>
+
+            <section class="rounded border border-gray-700 bg-gray-900/50 p-4">
+              <h3 class="text-lg font-semibold">Order feedback & help</h3>
+              <p class="mb-4 text-xs text-gray-400">
+                General order feedback, returns, swaps, damaged items, and complaints submitted by customers.
+              </p>
+              <div id="adminOrderFeedbackList" class="space-y-3 text-sm">Loading order feedback...</div>
+            </section>
+          </div>
+        </div>
+
+        <div id="adminContentBuilderSection" class="admin-tab hidden">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-2xl font-semibold">Content Builder</h2>
+              <p class="text-sm text-gray-400">
+                Add master items, blueprints, plans, and campaigns while checking for similar existing records first.
+              </p>
+            </div>
+            <button
+              id="refreshContentBuilderBtn"
+              type="button"
+              class="rounded bg-gray-700 px-3 py-2 text-sm text-white hover:bg-gray-600"
+            >
+              Refresh
+            </button>
+          </div>
+
+          <div id="contentBuilderStepBar" class="mb-4 grid gap-2 text-sm md:grid-cols-5">
+            <button type="button" class="builder-step-btn rounded bg-[#407471] px-3 py-2 text-white" data-builder-step="1">1. Type & Template</button>
+            <button type="button" class="builder-step-btn rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="2">2. Details</button>
+            <button type="button" class="builder-step-btn rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="3">3. Build</button>
+            <button type="button" class="builder-step-btn rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="4">4. Relationships</button>
+            <button type="button" class="builder-step-btn rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="5">5. Review</button>
+          </div>
+
+          <div id="contentBuilderFilterBar" class="mb-4 flex flex-wrap gap-2 text-sm">
+            <button type="button" class="builder-filter-btn rounded bg-[#407471] px-3 py-1 text-white" data-builder-filter="item">Items</button>
+            <button type="button" class="builder-filter-btn rounded bg-gray-700 px-3 py-1 text-white hover:bg-[#407471]" data-builder-filter="blueprint">Blueprints</button>
+            <button type="button" class="builder-filter-btn rounded bg-gray-700 px-3 py-1 text-white hover:bg-[#407471]" data-builder-filter="plan">Plans</button>
+            <button type="button" class="builder-filter-btn rounded bg-gray-700 px-3 py-1 text-white hover:bg-[#407471]" data-builder-filter="campaign">Campaigns</button>
+          </div>
+
+          <div id="contentBuilderEditBanner" class="mb-4 hidden rounded border border-[#407471]/70 bg-[#0f2b29]/40 p-3 text-sm text-gray-100">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <strong id="contentBuilderEditTitle">Editing content record</strong>
+                <p id="contentBuilderEditMeta" class="mt-1 break-all text-xs text-gray-300"></p>
+              </div>
+              <button id="newContentBuilderRecordBtn" type="button" class="rounded border border-gray-500 px-3 py-2 text-xs text-white hover:border-[#407471]">
+                Create new instead
+              </button>
+            </div>
+          </div>
+
+          <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <form id="contentBuilderForm" class="space-y-4 rounded border border-gray-700 bg-gray-900/50 p-4">
+              <div class="builder-step-panel grid gap-4 md:grid-cols-2" data-builder-panel="1">
+                <label class="block text-sm">
+                  Record type
+                  <select id="contentRecordType" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                    <option value="item">Item</option>
+                    <option value="blueprint">Blueprint</option>
+                    <option value="plan">Plan</option>
+                    <option value="campaign">Campaign</option>
+                  </select>
+                </label>
+                <label class="block text-sm">
+                  Type
+                  <select id="contentType" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                </label>
+              </div>
+
+              <div class="builder-step-panel grid gap-4 md:grid-cols-2" data-builder-panel="1">
+                <label class="block text-sm">
+                  Template
+                  <select id="contentTemplate" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                </label>
+                <label class="block text-sm">
+                  Status
+                  <select id="contentStatus" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                </label>
+              </div>
+
+              <section class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3" data-builder-panel="2">
+                <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-300">Main identity</h3>
+                <div class="mt-3 grid gap-4 md:grid-cols-2">
+                  <label class="block text-sm">
+                    Name
+                    <input id="contentName" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" required>
+                  </label>
+                  <label class="block text-sm">
+                    Optional ID
+                    <input id="contentId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Leave blank to auto-generate">
+                  </label>
+                </div>
+              </section>
+
+              <label class="builder-step-panel block text-sm" data-builder-panel="2">
+                Short description
+                <textarea id="contentShortDescription" class="mt-1 h-20 w-full rounded bg-gray-800 px-3 py-2 text-white"></textarea>
+              </label>
+
+              <label class="builder-step-panel block text-sm" data-builder-panel="2">
+                Long description / notes
+                <textarea id="contentLongDescription" class="mt-1 h-28 w-full rounded bg-gray-800 px-3 py-2 text-white"></textarea>
+              </label>
+
+              <section class="builder-step-panel block text-sm" data-builder-panel="2">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <span>Tags</span>
+                  <button id="addContentTagBtn" type="button" class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7] hover:bg-[#153b38]">
+                    Add another tag
+                  </button>
+                </div>
+                <input id="contentTags" type="hidden">
+                <div id="contentTagRows" class="mt-2 space-y-2"></div>
+                <p class="mt-2 text-xs text-gray-400">
+                  Select an existing tag where possible, or choose Add new tag to create one.
+                </p>
+              </section>
+
+              <section id="templateGuidedFields" class="builder-step-panel rounded border border-[#407471]/60 bg-[#0f2b29]/30 p-3 text-sm" data-builder-panel="3"></section>
+
+              <div id="itemSpecificFields" class="builder-step-panel grid gap-3 rounded border border-gray-700 bg-gray-950/40 p-3 text-sm md:grid-cols-2" data-builder-panel="3">
+                <label class="block">
+                  Item kind
+                  <select id="contentItemKind" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                </label>
+                <label class="block">
+                  Category
+                  <select id="contentCategoryId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input id="contentWebsiteVisible" type="checkbox" class="accent-[#407471]">
+                  Website visible
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input id="contentIsShopProduct" type="checkbox" class="accent-[#407471]">
+                  Shop product
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input id="contentSoldByRecoveryTools" type="checkbox" class="accent-[#407471]" checked>
+                  Sold by Recovery Tools
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input id="contentRequiresShipping" type="checkbox" class="accent-[#407471]">
+                  Requires shipping
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input id="contentInventoryTracked" type="checkbox" class="accent-[#407471]">
+                  Track inventory
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input id="contentRequiresCalendar" type="checkbox" class="accent-[#407471]">
+                  Needs calendar
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input id="contentRequiresSessionTime" type="checkbox" class="accent-[#407471]">
+                  Needs session time
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input id="contentTracksSeats" type="checkbox" class="accent-[#407471]">
+                  Track tickets/seats
+                </label>
+                <label class="block">
+                  Seats / tickets
+                  <input id="contentSeatCapacity" type="number" min="0" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+                <label class="block">
+                  Asset title
+                  <input id="contentAssetTitle" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+                <label class="block">
+                  Upload assets
+                  <input id="contentAssetFile" type="file" accept="image/*,application/pdf,video/*" multiple class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+              </div>
+
+              <section id="itemProductRelationshipFields" class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="3">
+                <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 class="font-semibold text-white">Shop product relationship</h3>
+                    <p class="mt-1 text-xs text-gray-400">
+                      Controls Marketplace display, checkout pricing, shipping behaviour, variants, and inventory.
+                    </p>
+                  </div>
+                  <span id="contentProductRelationStatus" class="rounded bg-gray-800 px-2 py-1 text-xs text-gray-300">
+                    No linked product
+                  </span>
+                </div>
+                <div class="grid gap-3 md:grid-cols-2">
+                  <label class="block">
+                    Product ID
+                    <input id="contentProductId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Auto-created if blank">
+                  </label>
+                  <label class="block">
+                    SKU
+                    <input id="contentProductSku" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                  </label>
+                  <label class="block">
+                    Shop status
+                    <select id="contentProductShopStatus" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                      <option value="draft">Draft</option>
+                      <option value="active">Active</option>
+                      <option value="archived">Archived</option>
+                    </select>
+                  </label>
+                  <label class="block">
+                    Effective shop price
+                    <input id="contentProductPrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                  </label>
+                  <label class="block">
+                    Stock
+                    <input id="contentProductStock" type="number" min="0" step="1" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                  </label>
+                </div>
+                <div class="mt-3 grid gap-3 md:grid-cols-2">
+                  <label class="inline-flex items-center gap-2">
+                    <input id="contentProductVisible" type="checkbox" class="accent-[#407471]">
+                    Visible in Marketplace
+                  </label>
+                  <label class="inline-flex items-center gap-2">
+                    <input id="contentProductFeatured" type="checkbox" class="accent-[#407471]">
+                    Featured
+                  </label>
+                  <label class="inline-flex items-center gap-2">
+                    <input id="contentProductArchived" type="checkbox" class="accent-[#407471]">
+                    Archived
+                  </label>
+                </div>
+                <label class="mt-3 block">
+                  Variants
+                  <textarea
+                    id="contentProductVariants"
+                    class="mt-1 h-28 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                    placeholder="One per line: Variant ID | Name | Colour | Size/weight | SKU | Price override | Stock | Status"
+                  ></textarea>
+                </label>
+                <div class="mt-3 rounded border border-gray-800 bg-gray-900/60 p-3">
+                  <h4 class="text-sm font-semibold text-white">Current assets</h4>
+                  <div id="contentCurrentAssetsList" class="mt-2 space-y-2 text-xs text-gray-300">
+                    No assets linked.
+                  </div>
+                </div>
+              </section>
+
+              <div id="advancedContentFields" class="builder-step-panel space-y-3 rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="4">
+                <label class="block">
+                  Linked item IDs
+                  <input id="contentLinkedItemIds" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="ITEM-EXAMPLE, ITEM-OTHER">
+                </label>
+                <label class="block">
+                  Linked blueprint IDs
+                  <input id="contentLinkedBlueprintIds" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="BLUEPRINT-EXAMPLE">
+                </label>
+                <label class="block">
+                  Linked plan IDs
+                  <input id="contentLinkedPlanIds" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="PLAN-EXAMPLE">
+                </label>
+                <div class="grid gap-3 md:grid-cols-2">
+                  <label class="block">
+                    Audience
+                    <input id="contentAudience" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                  </label>
+                  <label class="block">
+                    Goal
+                    <input id="contentGoal" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                  </label>
+                </div>
+              </div>
+
+              <section id="contentRelationshipReview" class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="4">
+                <h3 class="font-semibold text-white">Relationships</h3>
+                <p class="mt-1 text-xs text-gray-400">
+                  Review linked product, pricing, variants, inventory, assets, and content connections before publishing.
+                </p>
+                <div id="contentRelationshipSummary" class="mt-3 grid gap-3 md:grid-cols-2"></div>
+              </section>
+
+              <div id="contentDuplicateWarning" class="builder-step-panel hidden rounded border border-yellow-500/60 bg-yellow-900/30 p-3 text-sm text-yellow-100" data-builder-panel="5"></div>
+
+              <section id="contentReviewPublishPanel" class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="5">
+                <h3 class="font-semibold text-white">Review & publish</h3>
+                <p class="mt-1 text-xs text-gray-400">
+                  Check the content and shop-product state before saving.
+                </p>
+                <div id="contentReviewSummary" class="mt-3 grid gap-3 md:grid-cols-2"></div>
+              </section>
+
+              <div class="builder-step-panel flex flex-wrap gap-3" data-builder-panel="5">
+                <button id="saveContentBuilderBtn" type="submit" class="rounded bg-[#407471] px-4 py-2 text-white hover:bg-[#305a56]">
+                  Save draft
+                </button>
+                <button id="saveContinueContentBtn" type="button" class="rounded bg-blue-700 px-4 py-2 text-white hover:bg-blue-600">
+                  Save and continue
+                </button>
+                <button id="confirmDuplicateContentBtn" type="button" class="hidden rounded bg-yellow-600 px-4 py-2 text-white hover:bg-yellow-700">
+                  Save anyway
+                </button>
+              </div>
+
+              <div class="flex flex-wrap justify-between gap-3 border-t border-gray-700 pt-4">
+                <button id="builderBackStepBtn" type="button" class="rounded bg-gray-700 px-4 py-2 text-white hover:bg-gray-600">
+                  Back
+                </button>
+                <button id="builderNextStepBtn" type="button" class="rounded bg-[#407471] px-4 py-2 text-white hover:bg-[#305a56]">
+                  Next
+                </button>
+              </div>
+            </form>
+
+            <aside class="space-y-4">
+              <section class="rounded border border-gray-700 bg-gray-900/50 p-4">
+                <h3 class="text-lg font-semibold">Similar records</h3>
+                <p class="mb-3 text-xs text-gray-400">Updates as you type so duplicates are easier to catch.</p>
+                <div id="contentSimilarList" class="space-y-2 text-sm text-gray-300">Start typing a name.</div>
+              </section>
+
+              <section class="rounded border border-gray-700 bg-gray-900/50 p-4">
+                <h3 class="text-lg font-semibold">Current items, blueprints & plans</h3>
+                <p class="mb-3 text-xs text-gray-400">Use these IDs when linking campaign or plan records.</p>
+                <div id="contentReferenceLists" class="space-y-4 text-sm text-gray-300">Loading...</div>
+              </section>
+
+              <section class="rounded border border-gray-700 bg-gray-900/50 p-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 class="text-lg font-semibold">Template tool</h3>
+                    <p class="mt-1 text-xs text-gray-400">Create and edit reusable Builder templates separately.</p>
+                  </div>
+                  <button
+                    id="toggleTemplateToolBtn"
+                    type="button"
+                    class="rounded bg-gray-700 px-3 py-2 text-xs text-white hover:bg-gray-600"
+                  >
+                    Open
+                  </button>
+                </div>
+              </section>
+
+              <section id="contentTemplateToolSection" class="hidden rounded border border-gray-700 bg-gray-900/50 p-4">
+                <h3 class="text-lg font-semibold">Template Manager</h3>
+                <p class="mb-3 text-xs text-gray-400">
+                  Add reusable templates like 30 min, 60 min, recovery only, or future campaign formats.
+                </p>
+                <form id="contentTemplateForm" class="space-y-3 text-sm">
+                  <label class="block">
+                    Template area
+                    <select id="templateRecordType" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                      <option value="item">Item</option>
+                      <option value="blueprint">Blueprint</option>
+                      <option value="plan">Plan</option>
+                      <option value="campaign">Campaign</option>
+                    </select>
+                  </label>
+                  <label class="block">
+                    Applies to type
+                    <select id="templateAppliesTo" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                  </label>
+                  <label class="block">
+                    Template name
+                    <input id="templateName" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" required>
+                  </label>
+                  <div id="itemTemplateDefaults" class="grid gap-2">
+                    <label class="block">
+                      Default item kind
+                      <select id="templateItemKind" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                    </label>
+                    <label class="block">
+                      Default category
+                      <select id="templateCategoryId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                    </label>
+                    <label class="inline-flex items-center gap-2">
+                      <input id="templateRequiresShipping" type="checkbox" class="accent-[#407471]">
+                      Requires shipping
+                    </label>
+                    <label class="inline-flex items-center gap-2">
+                      <input id="templateInventoryTracked" type="checkbox" class="accent-[#407471]">
+                      Track inventory
+                    </label>
+                    <label class="inline-flex items-center gap-2">
+                      <input id="templateIsShopProduct" type="checkbox" class="accent-[#407471]">
+                      Shop product
+                    </label>
+                  </div>
+                  <div id="planTemplateDefaults" class="grid gap-2">
+                  <label class="block">
+                    Duration minutes
+                    <input id="templateDurationMinutes" type="number" min="0" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                  </label>
+                    <label class="block">
+                      Size label
+                      <input id="templateSizeLabel" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                    </label>
+                  </div>
+                  <div id="sessionTemplateDefaults" class="grid gap-2">
+                    <label class="inline-flex items-center gap-2">
+                      <input id="templateRequiresCalendar" type="checkbox" class="accent-[#407471]">
+                      Needs calendar
+                    </label>
+                    <label class="inline-flex items-center gap-2">
+                      <input id="templateTracksSeats" type="checkbox" class="accent-[#407471]">
+                      Track tickets/seats
+                    </label>
+                  </div>
+                  <label class="inline-flex items-center gap-2">
+                    <input id="templateIsDefault" type="checkbox" class="accent-[#407471]">
+                    Default for this type
+                  </label>
+                  <button type="submit" class="rounded bg-gray-700 px-3 py-2 text-white hover:bg-gray-600">
+                    Save template
+                  </button>
+                </form>
+              </section>
+            </aside>
+          </div>
+        </div>
+
+        <div id="adminBusinessSettingsSection" class="admin-tab hidden">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-2xl font-semibold">Business Settings</h2>
+              <p class="text-sm text-gray-400">
+                Used on receipts, invoices, order emails, and Recovery Tools business contact content.
+              </p>
+            </div>
+            <button
+              id="refreshBusinessSettingsBtn"
+              type="button"
+              class="rounded bg-gray-700 px-3 py-2 text-sm text-white hover:bg-gray-600"
+            >
+              Refresh
+            </button>
+          </div>
+
+          <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <form id="businessSettingsForm" class="space-y-4 rounded border border-gray-700 bg-gray-900/50 p-4">
+              <label class="block text-sm">
+                Business name
+                <input id="businessName" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" required>
+              </label>
+              <label class="block text-sm">
+                ABN
+                <input id="businessAbn" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" required>
+              </label>
+              <label class="block text-sm">
+                Address
+                <textarea
+                  id="businessAddress"
+                  class="mt-1 min-h-28 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                  required
+                ></textarea>
+              </label>
+              <div class="grid gap-4 md:grid-cols-2">
+                <label class="block text-sm">
+                  Phone
+                  <input id="businessPhone" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+                <label class="block text-sm">
+                  Email
+                  <input id="businessEmail" type="email" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" required>
+                </label>
+              </div>
+              <label class="block text-sm">
+                Logo item ID
+                <input id="businessLogoItemId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+              </label>
+              <label class="block text-sm">
+                Current logo URL
+                <input id="businessLogoUrl" type="url" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+              </label>
+              <label class="block text-sm">
+                Upload logo
+                <input id="businessLogoFile" type="file" accept="image/*" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+              </label>
+              <label class="block text-sm">
+                Favicon item ID
+                <input id="businessFaviconItemId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+              </label>
+              <label class="block text-sm">
+                Current favicon URL
+                <input id="businessFaviconUrl" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+              </label>
+              <label class="block text-sm">
+                Upload favicon
+                <input id="businessFaviconFile" type="file" accept="image/*,.ico,.svg" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+              </label>
+              <div class="grid gap-4 md:grid-cols-2">
+                <label class="block text-sm">
+                  SEO title
+                  <input id="businessSeoTitle" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+                <label class="block text-sm">
+                  SEO description
+                  <input id="businessSeoDescription" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+              </div>
+              <label class="block text-sm">
+                About page heading
+                <input id="businessAboutTitle" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+              </label>
+              <label class="block text-sm">
+                About page copy
+                <textarea id="businessAboutDescription" class="mt-1 min-h-32 w-full rounded bg-gray-800 px-3 py-2 text-white"></textarea>
+              </label>
+              <label class="block text-sm">
+                About page photo URL
+                <input id="businessAboutImageUrl" type="url" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                <input id="businessAboutImageFile" type="file" accept="image/*" class="mt-2 w-full rounded bg-gray-800 px-3 py-2 text-white">
+              </label>
+              <div class="grid gap-4 md:grid-cols-2">
+                <label class="block text-sm">
+                  Terms item ID
+                  <input id="businessTermsItemId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+                <label class="block text-sm">
+                  Terms PDF URL
+                  <input id="businessTermsPdfUrl" type="url" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                  <input id="businessTermsPdfFile" type="file" accept="application/pdf" class="mt-2 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+                <label class="block text-sm">
+                  Privacy item ID
+                  <input id="businessPrivacyItemId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+                <label class="block text-sm">
+                  Privacy PDF URL
+                  <input id="businessPrivacyPdfUrl" type="url" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                  <input id="businessPrivacyPdfFile" type="file" accept="application/pdf" class="mt-2 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+                <label class="block text-sm">
+                  Support item ID
+                  <input id="businessSupportItemId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+                <label class="block text-sm">
+                  Support PDF URL
+                  <input id="businessSupportPdfUrl" type="url" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                  <input id="businessSupportPdfFile" type="file" accept="application/pdf" class="mt-2 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+                <label class="block text-sm">
+                  Commerce item ID
+                  <input id="businessCommerceItemId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+                <label class="block text-sm">
+                  Commerce PDF URL
+                  <input id="businessCommercePdfUrl" type="url" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                  <input id="businessCommercePdfFile" type="file" accept="application/pdf" class="mt-2 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+              </div>
+              <button type="submit" class="rounded bg-[#407471] px-4 py-2 font-semibold text-white hover:bg-[#305a56]">
+                Save business settings
+              </button>
+            </form>
+
+            <aside class="rounded border border-gray-700 bg-gray-900/50 p-4">
+              <h3 class="mb-3 text-lg font-semibold">Preview</h3>
+              <div id="businessSettingsPreview" class="text-sm text-gray-300">Loading business settings...</div>
+            </aside>
+          </div>
         </div>
 
         <div id="adminAffiliateStats" class="admin-tab hidden">
@@ -1066,7 +1866,12 @@
 
       <!-- Anato-Me Section -->
     <section id="anato-meSection" class="tab-content hidden p-6">
-      <h2 class="text-3xl font-bold mb-6">Anato-Me Episodes</h2>
+      <h2 class="text-3xl font-bold mb-2">Library</h2>
+      <p class="mb-4 text-sm text-gray-400">Learn something from free Recovery Tools resources.</p>
+      <div class="mb-6 flex flex-wrap gap-3">
+        <button class="text-sm bg-[#407471] px-3 py-1 rounded text-white" type="button">Anato-me episodes</button>
+      </div>
+      <h3 class="text-2xl font-semibold mb-6">Anato-Me Episodes</h3>
       <div class="mb-4">
         <label for="storyModeSelect" class="mr-2 font-medium">View Mode:</label>
 <select id="storyModeSelect" class="border p-1 rounded">
@@ -1396,10 +2201,10 @@
   <div class="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
 
     <div class="flex items-center space-x-3">
-      <img src="https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FRecoveryToolsLogo.png?alt=media&token=ef83d768-30db-4889-a550-188f49b1ba2d"
+      <img id="footerBusinessLogo" src="https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FRecoveryToolsLogo.png?alt=media&token=ef83d768-30db-4889-a550-188f49b1ba2d"
            alt="Recovery Tools Logo"
            class="h-9 w-9 rounded-full border border-[#407471]">
-      <span class="text-base font-semibold tracking-wide">Recovery Tools</span>
+      <span id="footerBusinessName" class="text-base font-semibold tracking-wide">Recovery Tools</span>
     </div>
 
     <div class="flex flex-wrap justify-center md:justify-end space-x-4">
@@ -1412,7 +2217,7 @@
   </div>
   <div class="mt-6 text-center text-gray-400 leading-relaxed px-4 max-w-7xl mx-auto">
     &copy; 2025 <a href="https://recoverytools.au" class="text-[#407471] hover:underline">recoverytools.au</a>. All rights reserved.<br>
-    Recovery Tools — ABN 40833440028. All prices include GST where applicable.
+    <span id="footerBusinessLegal">Recovery Tools - ABN 40833440028.</span> All prices include GST where applicable.
   </div>
 </footer>
 

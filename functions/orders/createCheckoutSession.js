@@ -161,13 +161,39 @@ const createCheckoutSessionHandler = async (request) => {
       .get();
     const commissionRates = settingsSnap.exists ? settingsSnap.data() : {};
 
+    const variantIds = cart
+      .map((item) => cleanString(item.variantId))
+      .filter(Boolean);
+    const variantDocs = await Promise.all(
+      variantIds.map((variantId) => db.collection("itemVariants").doc(variantId).get()),
+    );
+    const variantMap = Object.fromEntries(
+      variantDocs
+        .filter((variantDoc) => variantDoc.exists)
+        .map((variantDoc) => [variantDoc.id, variantDoc.data() || {}]),
+    );
+
     const validatedItems = productDocs.map((doc, i) => {
       if (!doc.exists) throw new HttpsError("not-found", `Product not found: ${productIds[i]}`);
 
       const data = doc.data();
+      const shopStatus = cleanString(data.shopStatus).toLowerCase();
+      if (data.archived === true || data.visible === false || shopStatus === "archived") {
+        throw new HttpsError("failed-precondition", `${data.name || doc.id} is no longer available.`);
+      }
       const quantity = cart[i].quantity || 1;
-      const price = data.onSale && data.salePrice ? data.salePrice : data.price ?? data.priceFrom;
-      const name = data.name || data.title || doc.id;
+      const variantId = cleanString(cart[i].variantId);
+      const variant = variantId ? variantMap[variantId] : null;
+      if (variantId && (!variant || variant.productId !== doc.id)) {
+        throw new HttpsError("invalid-argument", `Invalid variant for: ${data.name || doc.id}`);
+      }
+      const productPrice = data.onSale && data.salePrice
+        ? data.salePrice
+        : data.price ?? data.priceFrom;
+      const price = variant?.priceOverride ?? productPrice;
+      const baseName = data.name || data.title || doc.id;
+      const variantName = variant?.name || [variant?.colour, variant?.size].filter(Boolean).join(" / ");
+      const name = variantName ? `${baseName} - ${variantName}` : baseName;
 
       if (!price || isNaN(price)) throw new HttpsError("invalid-argument", `Invalid price for: ${name}`);
 
@@ -176,8 +202,8 @@ const createCheckoutSessionHandler = async (request) => {
         name,
         image: firstImage(data),
         itemId: data.itemId || null,
-        variantId: cart[i].variantId || null,
-        sku: data.sku || null,
+        variantId: variantId || null,
+        sku: variant?.sku || data.sku || null,
         accessType: data.accessType || null,
         relatedPlanId: data.relatedPlanId || null,
         relatedCourseId: data.relatedCourseId || null,
@@ -220,7 +246,7 @@ const createCheckoutSessionHandler = async (request) => {
       quantity: item.quantity,
     }));
 
-    const shippingCost = 1000;
+    const shippingCost = hasPhysicalItems ? 1000 : 0;
 
     const userRef = db.collection("users").doc(uid);
     const userSnap = await userRef.get();
@@ -309,26 +335,6 @@ const createCheckoutSessionHandler = async (request) => {
         enabled: true,
       },
 
-      shipping_address_collection: {
-        allowed_countries: ["AU"],
-      },
-
-      shipping_options: [
-        {
-          shipping_rate_data: {
-            type: "fixed_amount",
-            fixed_amount: {
-              amount: shippingCost,
-              currency: "aud",
-            },
-            display_name: "Standard Shipping",
-            delivery_estimate: {
-              minimum: { unit: "business_day", value: 2 },
-              maximum: { unit: "business_day", value: 5 },
-            },
-          },
-        },
-      ],
     };
 
     const primaryAccount = validatedItems[0]?.stripeAccountId;
@@ -343,7 +349,7 @@ const createCheckoutSessionHandler = async (request) => {
       };
     }
 
-    if (collectShipping) {
+    if (collectShipping && hasPhysicalItems) {
       sessionConfig.shipping_address_collection = {
         allowed_countries: ["AU"],
       };

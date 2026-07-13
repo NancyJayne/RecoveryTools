@@ -52,6 +52,8 @@ export const createProduct = onCall(
       visible,
       websiteVisible,
       shopStatus,
+      requiresShipping,
+      inventoryTracked,
       creatorId,
     } = request.data || {};
 
@@ -68,6 +70,9 @@ export const createProduct = onCall(
       const fallbackImage = image || imageUrl || normalizedImages[0] || "";
       const normalizedDescription = description || shortDescription || longDescription || "";
       const isVisible = visible ?? websiteVisible ?? true;
+      const normalizedType = normalizeStatus(type, "tool");
+      const defaultRequiresShipping = !["course", "workshop", "program", "digital", "session"].includes(normalizedType);
+      const normalizedRequiresShipping = requiresShipping ?? defaultRequiresShipping;
 
       const productRef = await admin.firestore().collection("products").add({
         name: productName,
@@ -78,7 +83,9 @@ export const createProduct = onCall(
         shortDescription: shortDescription || normalizedDescription,
         longDescription: longDescription || normalizedDescription,
         stock: Number(stock ?? 0),
-        type: normalizeStatus(type, "tool"),
+        type: normalizedType,
+        requiresShipping: normalizedRequiresShipping,
+        inventoryTracked: inventoryTracked ?? normalizedRequiresShipping,
         image: fallbackImage,
         imageUrl: fallbackImage,
         images: normalizedImages.length ? normalizedImages : fallbackImage ? [fallbackImage] : [],

@@ -2,226 +2,295 @@
 
 ## Current Handoff
 
-Last confirmed state:
+Last updated after the July 13 build session.
 
-* Workbook-backed product seeding works from `Recovery Tools Master Database.xlsx`.
-* Shop products load from imported Firestore product data.
-* Stripe test checkout completes locally.
-* `confirmStripePurchase` creates orders after Stripe redirect.
-* Customer profile order history shows created orders.
-* Admin Orders shows order items, customer details, order totals, fulfilment status, tracking fields, assignment, and last-updated admin.
-* Admin can move orders through packing/shipping statuses.
-* Tracking email attempts are logged as sent, sandboxed, or failed.
-* Admin Emails shows order confirmation, tracking, and broadcast email logs.
-* Admin profile badge shows new unassigned physical orders and is hidden from non-admin users.
-* Stripe secret selection is standardized for local/test vs production/live.
-* Password reset now uses the email-sending callable and logs reset email attempts.
+The app is now moving from a basic shop into a scalable marketplace/admin system. The current architecture supports physical products, digital products, sessions, courses, workshops, programs, assets, policies, order fulfilment, customer feedback, reviews, and admin business settings.
 
-Latest useful commits:
+## Confirmed Working Recently
 
-```text
-95b09ebe Next Steps update
-5e26666c Improve admin fulfilment and email logging
-7e490f38 Import recovery products from workbook
-74c125d2 Add fulfilment tracking and checkout contact validation
-```
+* Stripe test checkout can complete locally through the listener/emulators.
+* Stripe webhook listener returned `200` for checkout events once the correct local endpoint and webhook secret were used.
+* Password reset works end to end in emulator and sends through SendGrid when sandbox mode is disabled.
+* Order confirmation email sends and logs email status.
+* Tracking email sends and logs email status.
+* Admin can see orders, purchased items, customer details, fulfilment status, tracking, assigned admin, and latest updater.
+* Admin dashboard counts open orders, new/unassigned orders, and open returns/complaints.
+* Admin can update fulfilment status and tracking details.
+* Delivered orders can send review/returns/help follow-up email.
+* Customer profile order history shows invoice, tracking/review/help links, and purchased product lines.
+* Invoice PDF generation works and now uses central business settings data.
+* Customer order help form submits into the website rather than using `mailto:`.
+* Product reviews can be submitted and reviewed/approved by admin.
+* Admin Reviews & Feedback shows product reviews and order help/feedback requests.
+* Business Settings can update Recovery Tools business details for generated content.
+* Policy pages can render from database-managed policy assets/URLs.
+* Marketplace category tags display on product cards so tools/courses/workshops/programs are easier to distinguish.
+* Content Builder hides the shop product relationship tool unless `Shop product` is selected.
+* Content Builder tags are now chosen from existing tags, with an add-new option and repeatable tag rows.
 
-## Completed Today
+## Major Work Completed Since Last Proper Update
 
-### Stripe Test/Live Architecture
+### Admin Order Lifecycle
 
-Updated:
+Added or improved:
 
-```text
-functions/affiliates/createStripeConnectLink.js
-functions/affiliates/createStripeLoginLink.js
-functions/orders/confirmStripePurchase.js
-functions/orders/createCheckoutSession.js
-functions/webhooks/handleStripeWebhook.js
-src/utils/firebase-config.js
-.env.example
-functions/utils/stripeEnvironment.js
-```
+* Packing, packed, shipped, delivered, completed fulfilment flow.
+* Open returns/swaps/complaints queue.
+* Customer follow-up status and notes.
+* Delivered follow-up email with review and help links.
+* Auto-complete support for delivered orders after the waiting period when there is no open customer issue.
+* Archive support for completed orders.
+* Manual archive/unarchive action.
+* Order timeline/audit data for status, archive, auto-complete, and customer issue changes.
+* Admin process help modal.
 
-Current behaviour:
+Still to polish:
 
-```text
-Local emulator / localhost -> Stripe test keys
-Production -> Stripe live keys
-```
+* Dedicated Claim order button.
+* Filter tabs for Unassigned / Mine / Packing / Shipped / Complete.
+* Print packing slip button.
+* Copy buttons for address, tracking number, order ID, and customer email.
 
-Required secret/env names:
+### Email Logging
 
-```text
-STRIPE_SECRET_KEY
-STRIPE_SECRET_KEY_TEST
-STRIPE_WEBHOOK_SECRET
-STRIPE_WEBHOOK_SECRET_TEST
-VITE_STRIPE_PUBLISHABLE_KEY
-VITE_STRIPE_PUBLISHABLE_KEY_TEST
-```
+Current:
 
-### Password Reset
+* Email logs show confirmation, tracking, review/follow-up, password reset, and broadcast-style attempts where wired.
+* Statuses distinguish sent, sandboxed, and failed.
+* Local sandbox mode avoids blocking the app during emulator testing.
 
-Updated:
+Production smoke test still needed:
 
-```text
-src/auth/reset-password.js
-functions/emails/sendPasswordReset.js
-```
+* Send real password reset.
+* Send real order confirmation.
+* Send real tracking email.
+* Send real delivered/review/help email.
+* Confirm SendGrid Activity shows requests and delivery outcomes.
 
-Current behaviour:
+### Reviews, Feedback, Returns, Complaints
 
-```text
-Customer reset form calls sendPasswordReset.
-Live reset emails use SendGrid template d-96f4ed75c9ed4114a4ff41cb0516e22b.
-Local emulator reset emails are sandboxed/skipped and logged.
-Reset email attempts are written to emailLogs.
-Admin users can still receive the generated reset link in the callable response.
-```
+Current:
+
+* Product reviews are submitted through the shop product page.
+* New reviews remain hidden until admin approval.
+* Admin Reviews & Feedback shows reviews and customer order help submissions.
+* Customer order help supports feedback, return, replacement, damaged item, and complaint-style requests.
+* Open returns/complaints are counted on the admin dashboard.
+
+Next:
+
+* Add stronger admin filters for review status and issue type.
+* Add customer-visible status updates for submitted help requests.
+* Add reply/follow-up email actions from the admin issue card.
+
+### Business Settings
+
+Current:
+
+* Admin Business Settings manages central Recovery Tools details:
+  * business name
+  * ABN
+  * address
+  * phone
+  * email
+  * logo URL
+  * policy URLs
+  * about/SEO-style content fields
+* Header logo/name and invoice data can use this central profile.
+* About page content is connected to business settings.
+
+Next:
+
+* Consider adding favicon/OG image management to Business Settings.
+* Add richer About page sections once final copy is ready.
+* Keep policy PDFs as database assets/itemAssets where possible, with Business Settings only selecting which asset/URL is current.
+
+### Content Builder
+
+Current:
+
+* Admin Content Builder can create:
+  * items
+  * assets
+  * itemAssets
+  * shop-ready products
+* Item fulfilment types include:
+  * Physical Product
+  * Digital Product
+  * Session
+* Supports category/kind fields so shop products, policies, tests, digital assets, and sessions can be distinguished.
+* Supports template defaults and custom templates.
+* Supports uploaded assets/images.
+* Uses one effective shop price field that maps back to the workbook-backed `ProductPrice.EffectiveShopPrice` data shape.
+* Supports SKU, effective price, stock, variants, visibility, featured state, and archive state for shop products.
+* Variants can include colour, size/weight, SKU, price override, and stock.
+* Shop product relationship fields are hidden unless `Shop product` is selected, so digital assets/policies/non-shop items are cleaner to create.
+* Tags are selected from existing tags or added one at a time to reduce redundant tag values.
+
+Next:
+
+* Test creating one physical product, one digital product, and one session from Content Builder.
+* Add a better template editor layout once the data shape feels right.
+* Add duplicate warnings by category/type, not just broad title similarity.
+* Add a separate, fuller Template Manager view if template editing starts crowding the Builder.
+* Confirm Builder-created products seed/export cleanly against `Recovery Tools Master Database.xlsx`.
+
+### Products, Marketplace, Inventory
+
+Current:
+
+* Public shop can show more than physical tools.
+* Products can be physical, digital, session/course/workshop/program-style listings.
+* Product cards show a type/category label so mixed featured products are easier to scan.
+* Digital/session products do not need shipping.
+* Inventory tracking can be disabled for digital/session products.
+* Products can be activated, hidden, or archived.
+* Hidden/archived products are excluded from public shop results.
+* Checkout blocks stale-cart purchases for hidden/archived products.
+* Variant selection works in product detail and cart.
+* Checkout validates selected variants server-side.
+* Paid order confirmation now decrements stock automatically for tracked products and variants.
+* Admin Products & Inventory lets admin manually update product or variant stock.
+
+Next:
+
+* Retest a paid purchase and confirm stock decrements in:
+  * `products.stock`
+  * `itemVariants.stock`
+  * `inventory.stockQty`
+* Decide low-stock thresholds and add admin warnings.
+* Add out-of-stock hiding rules if wanted.
+* Add stock movement/audit log later if inventory accuracy becomes important.
+
+### Public Navigation
+
+Current header target:
+
+* Home
+* Marketplace - acquire something
+  * Shop
+  * Courses
+  * Workshops
+  * Programs
+* Library - learn something
+  * Anato-me
+  * future free resources
+* About
+* Profile
+
+Next:
+
+* Visually test the desktop dropdown and mobile menu.
+* Decide whether V1 should show all Marketplace/Library sublinks or hide unfinished sections with feature flags.
+* Add a proper Marketplace landing/filter page later so `/shop`, `/courses`, `/workshops`, and `/programs` feel like filtered views of one marketplace.
 
 ## Start Here Next
 
-### Run One Full Local V1 Test
+### 1. Restart And Retest The Latest Changes
 
-Use emulator mode and seeded products.
+Restart:
 
-Verify:
-
-```text
-Login as customer
-Add physical product to cart
-Create Stripe checkout session
-Complete Stripe test payment
-Return to checkout success page
-Order created in Firestore
-Customer profile shows order
-Admin badge appears for unassigned new order
-Admin Orders shows purchased item details
-Admin changes order to packing
-Admin marks order shipped with tracking
-Tracking email logs as sandboxed/sent
-Admin Emails shows confirmation and tracking logs
-Cart clears
+```powershell
+firebase emulators:start
+npm run dev
+stripe listen --forward-to http://127.0.0.1:5001/recovery-tools/australia-southeast1/handleStripeWebhook
 ```
+
+Then verify:
+
+* Admin menu shows Products & Inventory.
+* Admin can edit stock manually.
+* Admin Builder hides product relationship fields until `Shop product` is selected.
+* Admin Builder tag picker shows existing tags and allows one new tag at a time.
+* Create or select a tracked physical product with stock.
+* Buy it through Stripe test checkout.
+* Confirm order is created.
+* Confirm product stock decrements once.
+* Confirm variant stock decrements if a variant was purchased.
+* Refresh checkout success/profile and confirm stock does not decrement a second time.
+* Hide a product and confirm it disappears from the public shop.
+* Archive a product and confirm stale cart checkout is blocked.
+* Buy a digital/session product and confirm no shipping is required.
+
+### 2. Content Builder Dry Run
+
+Create one test record for each:
+
+* Physical product with image, price, stock, and variant.
+* Digital product with PDF/image asset and no shipping.
+* Session product with seat/ticket fields and no shipping.
+
+Confirm:
+
+* Firestore product shape is correct.
+* `ProductPrice.EffectiveShopPrice` is the value used for public product price and cart price.
+* Shop display is correct.
+* Cart and checkout do not break.
+* Inventory only tracks what should be tracked.
+* Non-shop items do not create/update product relationship data.
+* Tags are not duplicated when saving existing/new tags.
+
+### 3. Full Order Lifecycle Test
+
+Run one order through:
+
+* New
+* Packing
+* Packed
+* Shipped with tracking
+* Delivered
+* Customer review
+* Customer help/feedback request
+* Resolve issue
+* Completed
+* Archived
+
+Confirm dashboard counts update after each relevant step.
 
 ## V1 Launch Blockers
 
-Do these before any public launch:
+Do these before public launch:
 
-1. Run a full local V1 checkout/reset/admin fulfilment test after restarting emulators.
-2. Decide V1 checkout auth rule.
-3. Run a real SendGrid production smoke test.
-4. Run one complete production-style Stripe test purchase.
-5. Confirm public navigation hides unfinished features.
-6. Polish V1 product content, product images, shipping text, returns text, and policy links.
+1. Run a full local V1 test from product creation through order archive.
+2. Run a real SendGrid production smoke test.
+3. Run one complete Stripe test purchase against deployed functions.
+4. Decide V1 public navigation visibility.
+5. Confirm policies open correctly in deployed mode.
+6. Confirm PDF invoice links work from email and profile.
+7. Confirm admin-only routes do not redirect incorrectly.
+8. Confirm stock cannot decrement twice for the same paid order.
+9. Polish product images, product copy, shipping text, returns text, and About page copy.
 
-## V1 Checkout Auth Decision
+## V1 Public Scope Decision
 
-Recommended V1 approach:
-
-```text
-Require customers to log in before checkout.
-```
-
-Reason:
-
-* Current order confirmation and profile order history depend on Firebase Auth.
-* Guest checkout needs more account-linking work.
-* A clear login-before-checkout rule is safer for V1.
-
-Later guest checkout plan:
-
-* If checkout email matches an existing user, prompt login before creating the Stripe checkout session.
-* If checkout email does not match a user, create a Firebase Auth user/profile or offer account creation before payment.
-* Preserve cart contents and entered checkout details through login/signup.
-* Continue to Stripe checkout once authenticated.
-
-## SendGrid Production Smoke Test
-
-Local emulator email sends are sandboxed/skipped so fulfilment testing is not blocked by SendGrid account status.
-
-Before deploy:
-
-* Confirm `SENDGRID_API_KEY` is set in Firebase Secret Manager.
-* Confirm `hello@recoverytools.au` or the sending domain is verified in SendGrid.
-* Confirm the SendGrid plan/account can send after the trial period.
-* Set `SENDGRID_SANDBOX_MODE=false` for the test environment if needed.
-* Create a test order with your own email as the customer recipient.
-* Confirm the order confirmation email arrives.
-* Mark the order as shipped with a tracking number.
-* Confirm the tracking email arrives.
-* Check SendGrid Activity for accepted, delivered, bounced, or blocked status.
-
-Emulator/local sandbox confirms the app flow and data shape only. It does not prove real SendGrid delivery.
-
-## V1 Public Scope
-
-Launch as a shop-first webapp.
-
-Public navigation for V1:
+Recommended V1:
 
 * Home
-* Shop
+* Marketplace
 * About
 * Cart/checkout
 * Profile
 * Policy links
 
-Hide from public navigation until ready:
+Keep unfinished areas built but hidden if they are not ready:
 
 * Courses
 * Workshops
 * Anato-me
 * Programs
+* Library extras
 
-Implementation plan:
-
-1. Add a central feature visibility config for public sections.
-2. Hide disabled sections from desktop and mobile navigation.
-3. Add route guards so direct visits to disabled routes redirect to `/shop` or an unavailable page.
-4. Hide unfinished profile tabs from customers.
-5. Keep admin/internal build paths available for continued development.
-6. Add or polish the About page.
-7. Add policy links that open the policy PDFs already included in the database.
-8. Make public shop queries show only V1-ready products.
-
-Do not delete course, workshop, Anato-me, or program code. Treat them as built-but-hidden features controlled by visibility flags.
-
-## Admin Packing And Shipping Workflow
-
-Current:
-
-* Admin Orders shows order items.
-* Admin Orders shows assigned admin and last-updated admin.
-* Admin Orders supports fulfilment status updates.
-* Admin Orders supports tracking number and carrier.
-* Admin tracking email status shows sent, sandboxed locally, failed, or not sent.
-* Admin badge shows new unassigned physical orders.
-* Admin Emails shows confirmation, tracking, and broadcast email logs.
-
-Next improvements:
-
-* Add a dedicated Claim order button so admins can assign themselves before changing status.
-* Add Unassigned / Mine / Packing / Shipped / Complete filter tabs.
-* Add a print packing slip button with items, recipient details, phone/email, and notes.
-* Add copy buttons for address, tracking number, order ID, and customer email.
-* Add a simple order timeline so every status change is visible, not just the latest update.
-* Add an automated review request email approximately two weeks after an order is marked delivered.
-* Add a returns/complaints workflow so admins can record return requests, complaint notes, resolution status, and customer follow-up.
+Use feature flags/visibility controls rather than deleting code.
 
 ## Workbook Product Import
 
 Current:
 
-* `functions/scripts/seedRecoveryProducts.js` reads `Recovery Tools Master Database.xlsx`.
-* Product seed data joins `ItemProduct`, `Items`, `ProductPrice`, `Inventory`, `ItemAsset`, and `Asset`.
-* `ItemProductID` is the Firestore `products/{productId}` document ID.
-* Active `ProductPrice` rows provide price, retail price, sale fields, and Stripe ID placeholders.
-* Inventory rows are summed into `stock`.
-* Product images resolve through `ItemAsset -> Asset.FileURL`.
-* `references` and `referenceStatus` are carried through from `Items`.
-* `--dry-run` validates generated product documents without writing to Firestore.
+* Workbook source file name: `Recovery Tools Master Database.xlsx`.
+* Import supports item/product/price/inventory/assets relationships.
+* `ItemProductID` should stay stable because it maps to Firestore product docs.
+* Inventory rows can seed stock.
+* Assets and itemAssets remain the preferred architecture for reusable files like logos, policies, PDFs, and images.
 
 Useful commands:
 
@@ -231,106 +300,44 @@ node scripts/seedRecoveryProducts.js --dry-run --workbook "C:\Users\hello\Downlo
 node scripts/seedRecoveryProducts.js --workbook "C:\Users\hello\Downloads\Recovery Tools Master Database.xlsx"
 ```
 
-Remaining spreadsheet checks before live upload:
+Remaining workbook checks:
 
-* Keep `ProductPrice.Status` set to `Active` for the price row to import.
-* Keep `ItemProduct.ItemProductID` stable; changing it creates a new Firestore product document.
-* Replace placeholder/fallback image behavior after every product has a production `Asset.FileURL`.
-* Standardize `Reference Status` values: `Not required`, `Needs source`, `Draft source`, `Verified`.
-* Fill `ProductPrice.stripeProductId` and `ProductPrice.stripePriceId` once Stripe products/prices exist.
-* Add seed rows for your own admin user in `Users` and `Admin` if workbook-backed user seeding is kept.
+* Keep `ProductPrice.Status` active for prices that should import.
+* Keep `ItemProduct.ItemProductID` stable.
+* Add production asset URLs for all products/policies.
+* Standardize reference status values.
+* Add Stripe product/price IDs later if the workbook remains the Stripe source of truth.
 
-## Remaining Known Issues
+## Known Issues / Watch List
 
-### Local Admin Login vs Product Seed Workflow
+* Some text encoding in older files still shows corrupted symbols in comments/toasts.
+* Need to verify admin route redirects after the new navigation changes.
+* Need to verify policy PDF preview/download in deployed mode, not only local.
+* Need to verify order help link after login in deployed mode.
+* Need SendGrid production delivery confirmation, not just local logs.
+* Need low-stock and out-of-stock admin warnings.
+* Need product/session/course detail pages to feel unified under Marketplace.
 
-Confirm the preferred local workflow so admin login, product seed data, checkout, and order creation all target the same Firebase environment.
+## Validation Commands Used Recently
 
-Current working approach:
+```powershell
+node --check functions/orders/confirmStripePurchase.js
+node --check functions/products/updateProductInventory.js
+node --check src/admin/admin-products.js
+node --check src/admin/admin-navigation.js
 
-```text
-VITE_USE_FIREBASE_EMULATORS=true
-Firebase emulators running
-Seeded products
-Seeded admin user/custom claims
+node .\node_modules\eslint\bin\eslint.js functions/orders/confirmStripePurchase.js functions/products/updateProductInventory.js functions/index.js src/admin/admin-products.js src/admin/admin-navigation.js
+
+node .\node_modules\tailwindcss\lib\cli.js -i .\src\style.css -o .\public\output.css --minify
+node .\node_modules\vite\bin\vite.js build
 ```
-
-### Affiliate Collection Access
-
-Review public vs private affiliate data and fix any Firestore rule warnings.
-
-### Profile Role Display
-
-Role rendering inconsistency.
-
-### Profile Address Display
-
-Full address rendering incomplete.
-
-### Shop Filters
-
-Refine visible filter tags at top of shop:
-
-```text
-Featured
-Pain
-Mobility
-Stability
-```
-
-### Course Detail Page
-
-Courses currently display in the Courses section, but clicking a course opens the shared shop product detail page.
-
-Build a dedicated course detail page later with:
-
-* Course-specific layout and copy sections.
-* Add to cart / buy flow that preserves referral tracking.
-* Access course button for users who already have `userAccess`.
-* Correct handling of affiliate commission values from the imported product/order structure.
-
-### Placeholder Assets
-
-Replace temporary product and page images.
-
-## Later Architecture Backlog
-
-Order status model:
-
-```text
-paymentStatus
-fulfilmentStatus
-accessStatus
-```
-
-Future order states:
-
-```text
-Pending
-Paid
-Packing
-Packed
-Shipped
-Delivered
-Completed
-Refunded
-Cancelled
-```
-
-Future collections/workflows:
-
-* `userAccess` unlock engine for digital products.
-* Stripe webhook writer for final production order reconciliation.
-* Tax invoice PDF generation with ABN, GST, invoice number, and order number.
-* Review automation after delivery/access.
-* Returns workflow in `returns/{returnId}`.
-* Membership engine for memberships, exercise library, recovery plans, and audio library.
 
 ## End Of Session Checklist
 
 ```powershell
-npm run build
 git status
+git diff --check
+npm run build
 git add <changed files>
 git commit -m "<clear scoped message>"
 ```

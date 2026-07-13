@@ -28,10 +28,16 @@ export const getUserRoleWithPermissions = onCall(
 
       const userData = doc.data() || {};
 
-      const {
-        roles = {},
-        permissions = {},
-      } = userData;
+      const claimRoles = {
+        admin: request.auth.token?.admin === true,
+        affiliate: request.auth.token?.affiliate === true,
+        therapist: request.auth.token?.therapist === true,
+      };
+      const roles = {
+        ...(userData.roles || {}),
+        ...claimRoles,
+      };
+      const permissions = userData.permissions || {};
 
       return { uid, roles, permissions };
     } catch (err) {

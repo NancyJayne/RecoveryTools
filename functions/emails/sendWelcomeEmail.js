@@ -2,6 +2,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import sgMail from "@sendgrid/mail";
+import { getBusinessProfile } from "../utils/businessProfile.js";
 
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 
@@ -27,10 +28,11 @@ export const sendWelcomeEmail = onCall(
 
     const templateId = "d-d2b2f4878eb14c8bb61dc5fbd0deff7a";
     sgMail.setApiKey(SENDGRID_API_KEY.value());
+    const business = await getBusinessProfile();
 
     const msg = {
       to,
-      from: "hello@recoverytools.au",
+      from: business.email,
       templateId,
       dynamic_template_data: {
         first_name: firstName,

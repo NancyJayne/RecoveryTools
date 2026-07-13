@@ -6,6 +6,7 @@ import sgMail from "@sendgrid/mail";
 import { generateOrderPDF } from "../utils/generateOrderPDFServer.js";
 import { logEmailEvent } from "../utils/emailLog.js";
 import { stripeSecretValue } from "../utils/stripeEnvironment.js";
+import { getBusinessProfile } from "../utils/businessProfile.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -28,6 +29,14 @@ function normalizeAddress(address = {}) {
     postcode: address.postal_code || address.postcode || "",
     country: address.country || "",
   };
+}
+
+function slugify(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toUpperCase();
 }
 
 function addressDoc({ addressId, orderId, userId, type, name, email, phone, address }) {
@@ -56,7 +65,8 @@ function useLocalSendGridSandbox() {
 }
 
 async function sendOrderConfirmationEmail({ orderId, orderData, to, userName, userId }) {
-  const subject = `Your Recovery Tools receipt - Order ${orderId}`;
+  const business = await getBusinessProfile();
+  const subject = `Your ${business.name} receipt - Order ${orderId}`;
 
   if (!to) {
     throw new Error("Order has no customer email for confirmation.");
@@ -83,15 +93,15 @@ async function sendOrderConfirmationEmail({ orderId, orderData, to, userName, us
   const pdfUrl = await generateOrderPDF(orderId, orderData);
   const msg = {
     to,
-    from: "hello@recoverytools.au",
+    from: business.email,
     subject,
     html: `
       <p>Hi ${userName || "Customer"},</p>
       <p>Thanks for your order. You can download your receipt below:</p>
       <p><a href="${pdfUrl}" target="_blank" rel="noopener">Download Invoice PDF</a></p>
       <p>If you have any questions, reply to this email or contact us at
-      <a href="mailto:hello@recoverytools.au">hello@recoverytools.au</a>.</p>
-      <p>- Recovery Tools Team</p>
+      <a href="mailto:${business.email}">${business.email}</a>.</p>
+      <p>- ${business.name} Team</p>
     `,
     mailSettings: {
       sandboxMode: {
@@ -123,9 +133,11 @@ async function recordOrderConfirmationEmail({ orderRef, orderId, orderData, to, 
   }
 
   try {
+    const savedOrderSnap = await orderRef.get();
+    const savedOrderData = savedOrderSnap.exists ? savedOrderSnap.data() : orderData;
     const emailResult = await sendOrderConfirmationEmail({
       orderId,
-      orderData,
+      orderData: savedOrderData,
       to,
       userName,
       userId,
@@ -142,6 +154,7 @@ async function recordOrderConfirmationEmail({ orderRef, orderId, orderData, to, 
     }, { merge: true });
   } catch (err) {
     const errorMessage = err.message || "Order confirmation email could not be sent.";
+    const business = await getBusinessProfile();
     console.error("Order confirmation email failed; order is still confirmed.", err);
     await Promise.all([
       orderRef.set({
@@ -152,7 +165,7 @@ async function recordOrderConfirmationEmail({ orderRef, orderId, orderData, to, 
         type: "order_confirmation",
         status: "failed",
         to,
-        subject: `Your Recovery Tools receipt - Order ${orderId}`,
+        subject: `Your ${business.name} receipt - Order ${orderId}`,
         orderId,
         userId,
         providerMode: useSendGridSandboxMode() ? "sendgrid-sandbox" : "live",
@@ -208,6 +221,7 @@ const confirmStripePurchaseHandler = async (request) => {
     item.price.product?.metadata?.firebaseProductId ||
     item.price.metadata?.firebaseProductId ||
     stripeProductId;
+      const metadata = item.price.product?.metadata || item.price.metadata || {};
       const productDoc = await admin.firestore().collection("products").doc(productId).get();
       const product = productDoc.data() || {};
       const type = product.type || "tool";
@@ -219,7 +233,10 @@ const confirmStripePurchaseHandler = async (request) => {
         price: item.amount_subtotal / 100,
         lineTotal: item.amount_total / 100,
         type,
+        variantId: metadata.variantId || "",
+        sku: metadata.sku || product.sku || "",
         requiresShipping: product.requiresShipping !== false,
+        inventoryTracked: product.inventoryTracked === true,
         creatorId: product.creatorId || null,
         affiliatePercent: commissionRates[type] ?? 0.1,
       };
@@ -284,6 +301,9 @@ const confirmStripePurchaseHandler = async (request) => {
       address: shippingDetails.address || null,
     },
     total,
+    amountPaid: total,
+    totalPaid: total,
+    outstandingAmount: 0,
     gst,
 
     billingAddress: customerDetails.address || null,
@@ -306,36 +326,114 @@ const confirmStripePurchaseHandler = async (request) => {
   };
 
   const db = admin.firestore();
-  const batch = db.batch();
-  batch.set(orderRef, orderData);
-  batch.set(
-    db.collection("users").doc(uid).collection("orders").doc(invoiceNumber),
-    orderData,
-  );
-  batch.set(db.collection("customerAddresses").doc(billingAddressId), addressDoc({
-    addressId: billingAddressId,
-    orderId: invoiceNumber,
-    userId: uid,
-    type: "billing",
-    name: customerName,
-    email: customerEmail,
-    phone: customerPhone,
-    address: customerDetails.address,
-  }), { merge: true });
+  const transactionResult = await db.runTransaction(async (transaction) => {
+    const existingOrderSnap = await transaction.get(orderRef);
+    if (existingOrderSnap.exists) {
+      return { created: false, orderData: existingOrderSnap.data() };
+    }
 
-  if (hasPhysicalItems) {
-    batch.set(db.collection("customerAddresses").doc(shippingAddressId), addressDoc({
-      addressId: shippingAddressId,
+    const trackedItems = enrichedProducts.filter((item) => item.inventoryTracked);
+    const productRefs = trackedItems.map((item) => db.collection("products").doc(item.productId));
+    const variantRefs = trackedItems
+      .filter((item) => item.variantId)
+      .map((item) => db.collection("itemVariants").doc(item.variantId));
+    const [productSnaps, variantSnaps] = await Promise.all([
+      Promise.all(productRefs.map((ref) => transaction.get(ref))),
+      Promise.all(variantRefs.map((ref) => transaction.get(ref))),
+    ]);
+    const productStock = new Map(productSnaps.map((snap) => [snap.id, Number(snap.data()?.stock ?? 0)]));
+    const variantStock = new Map(variantSnaps.map((snap) => [snap.id, Number(snap.data()?.stock ?? 0)]));
+
+    trackedItems.forEach((item) => {
+      const quantity = Number(item.quantity || 0);
+      if (!quantity) return;
+
+      const availableProductStock = productStock.get(item.productId) ?? 0;
+      if (availableProductStock < quantity) {
+        throw new HttpsError("failed-precondition", `${item.name} does not have enough stock left.`);
+      }
+
+      if (item.variantId) {
+        const availableVariantStock = variantStock.get(item.variantId) ?? 0;
+        if (availableVariantStock < quantity) {
+          throw new HttpsError("failed-precondition", `${item.name} does not have enough variant stock left.`);
+        }
+      }
+    });
+
+    transaction.set(orderRef, orderData);
+    transaction.set(
+      db.collection("users").doc(uid).collection("orders").doc(invoiceNumber),
+      orderData,
+    );
+    transaction.set(db.collection("customerAddresses").doc(billingAddressId), addressDoc({
+      addressId: billingAddressId,
       orderId: invoiceNumber,
       userId: uid,
-      type: "shipping",
-      name: shippingDetails.name || customerName,
+      type: "billing",
+      name: customerName,
       email: customerEmail,
       phone: customerPhone,
-      address: shippingDetails.address,
+      address: customerDetails.address,
     }), { merge: true });
+
+    if (hasPhysicalItems) {
+      transaction.set(db.collection("customerAddresses").doc(shippingAddressId), addressDoc({
+        addressId: shippingAddressId,
+        orderId: invoiceNumber,
+        userId: uid,
+        type: "shipping",
+        name: shippingDetails.name || customerName,
+        email: customerEmail,
+        phone: customerPhone,
+        address: shippingDetails.address,
+      }), { merge: true });
+    }
+
+    trackedItems.forEach((item) => {
+      const quantity = Number(item.quantity || 0);
+      if (!quantity) return;
+
+      transaction.update(db.collection("products").doc(item.productId), {
+        stock: admin.firestore.FieldValue.increment(-quantity),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      const inventoryId = item.variantId
+        ? `INV-${slugify(item.variantId)}`
+        : `INV-${slugify(item.productId)}`;
+      transaction.set(db.collection("inventory").doc(inventoryId), {
+        inventoryId,
+        productId: item.productId,
+        variantId: item.variantId || "",
+        stockQty: admin.firestore.FieldValue.increment(-quantity),
+        lastOrderId: invoiceNumber,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      if (item.variantId) {
+        transaction.update(db.collection("itemVariants").doc(item.variantId), {
+          stock: admin.firestore.FieldValue.increment(-quantity),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+    });
+
+    return { created: true, orderData };
+  });
+
+  if (!transactionResult.created) {
+    await recordOrderConfirmationEmail({
+      orderRef,
+      orderId: invoiceNumber,
+      orderData: transactionResult.orderData,
+      to: transactionResult.orderData.customerEmail || transactionResult.orderData.userEmail || "",
+      userName: transactionResult.orderData.customerName || transactionResult.orderData.userName || "Customer",
+      userId: transactionResult.orderData.userId || transactionResult.orderData.buyerUid || uid,
+    });
+    const refreshedOrder = await orderRef.get();
+    return refreshedOrder.data();
   }
-  await batch.commit();
 
   await recordOrderConfirmationEmail({
     orderRef,

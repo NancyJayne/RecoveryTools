@@ -5,7 +5,7 @@ import { initFirebase, auth } from "./utils/firebase-config.js";
 import { setupAuthState } from "./auth/user-auth.js";
 import { getUserRole } from "./auth/user-roles.js";
 import { showAuthModal } from "./auth/auth-modal.js";
-import { showResetPasswordForm } from "./auth/reset-password.js";
+import { showCompletePasswordResetForm, showResetPasswordForm } from "./auth/reset-password.js";
 
 function hasRole(roleValue, targetRole) {
   if (!roleValue) return false;
@@ -98,7 +98,13 @@ export async function initAppEntry() {
   // Handle direct links to auth modal paths
   if (cleanPath === "/signup") return showAuthModal("signup");
   if (cleanPath === "/login") return showAuthModal("login");
-  if (cleanPath === "/reset") return showResetPasswordForm();
+  if (cleanPath === "/reset") {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "resetPassword") {
+      return showCompletePasswordResetForm(params.get("oobCode"));
+    }
+    return showResetPasswordForm();
+  }
 
   await loadModuleByPath(cleanPath, userRole);
 }
@@ -130,6 +136,12 @@ export async function loadModuleByPath(path, role) {
     await safeImport(
       () => import("./shop/shop-orders.js"),
       "Checkout Success",
+    );
+    break;
+  case path.startsWith("/order-issue"):
+    await safeImport(
+      () => import("./orders/order-issue.js"),
+      "Order Issue",
     );
     break;
   case path.startsWith("/shop"):

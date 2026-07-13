@@ -3,6 +3,18 @@ import { showTabContent } from "../utils/utils.js";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../utils/firebase-config.js";
 import { showProductDetail } from "../shop/shop-products.js";
+import { productTypeLabel } from "../shop/shop-products.js";
+
+function productTags(product) {
+  return [
+    ...(Array.isArray(product.tags) ? product.tags : []),
+    ...(Array.isArray(product.tagIds) ? product.tagIds : []),
+  ].map((tag) => String(tag).toLowerCase());
+}
+
+function isFeatured(product) {
+  return product.featured === true || productTags(product).includes("featured");
+}
 
 export function initHomepage() {
   setupShopNowCTA();
@@ -57,8 +69,10 @@ async function renderFeaturedTools() {
 
   try {
     const getProducts = httpsCallable(functions, "getFirestoreProducts");
-    const res = await getProducts({ type: "tool", tag: "featured" });
-    const products = Array.isArray(res.data?.products) ? res.data.products : [];
+    const res = await getProducts({});
+    const products = (Array.isArray(res.data?.products) ? res.data.products : [])
+      .filter(isFeatured)
+      .slice(0, 4);
 
     container.innerHTML = "";
 
@@ -73,9 +87,13 @@ async function renderFeaturedTools() {
     products.forEach((data) => {
       const tile = document.createElement("div");
       tile.className =
-        "bg-gray-900 p-4 rounded shadow text-center cursor-pointer hover:shadow-lg transition";
+        "relative bg-gray-900 p-4 rounded shadow text-center cursor-pointer hover:shadow-lg transition";
       tile.dataset.productId = data.id;
       tile.dataset.productFull = JSON.stringify(data);
+
+      const typeBadge = document.createElement("span");
+      typeBadge.className = "absolute right-2 top-2 rounded bg-[#407471] px-2 py-1 text-xs font-semibold text-white";
+      typeBadge.textContent = productTypeLabel(data);
 
       const img = document.createElement("img");
       img.loading = "lazy";
@@ -95,7 +113,7 @@ async function renderFeaturedTools() {
       price.className = "text-green-400 font-bold mt-2";
       price.textContent = `$${Number(data.price ?? data.priceFrom ?? 0).toFixed(2)}`;
 
-      tile.append(img, name, desc, price);
+      tile.append(typeBadge, img, name, desc, price);
       tile.addEventListener("click", () => showProductDetail(data));
 
       container.appendChild(tile);

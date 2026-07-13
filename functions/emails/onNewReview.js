@@ -2,6 +2,7 @@ import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
 import admin from "firebase-admin";
 import sgMail from "@sendgrid/mail";
+import { getBusinessProfile } from "../utils/businessProfile.js";
 
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 
@@ -27,12 +28,13 @@ export const onNewReview = onDocumentCreated(
 
       const productSnap = await admin.firestore().doc(`products/${productId}`).get();
       const product = productSnap.exists ? productSnap.data() : { name: productId };
+      const business = await getBusinessProfile();
 
       const approvalLink = `https://recoverytools.au/admin/reviews?product=${productId}&review=${reviewId}`;
 
       await sgMail.send({
-        to: "hello@recoverytools.au",
-        from: "hello@recoverytools.au",
+        to: business.email,
+        from: business.email,
         subject: "🔔 New Product Review Awaiting Approval",
         html: `
           <p>A new review was submitted for <strong>${product.name}</strong>.</p>

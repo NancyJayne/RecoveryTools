@@ -14,6 +14,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import sgMail from "@sendgrid/mail";
 import { defineSecret } from "firebase-functions/params";
 import { logEmailEvent } from "../utils/emailLog.js";
+import { getBusinessProfile } from "../utils/businessProfile.js";
 
 // Secret configured via `firebase functions:secrets:set SENDGRID_API_KEY`
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
@@ -58,9 +59,10 @@ const sendAdminBroadcastEmailHandler = async (request) => {
     throw new HttpsError("invalid-argument", "Missing subject or content.");
   }
 
+  const business = await getBusinessProfile();
   const messages = recipients.map((email) => ({
     to: email,
-    from: "hello@recoverytools.au",
+    from: business.email,
     subject,
     html: htmlContent,
     mailSettings: {

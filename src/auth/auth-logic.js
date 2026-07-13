@@ -18,6 +18,24 @@ import { httpsCallable } from "firebase/functions";
 import { showToast } from "../utils/utils.js";
 import { executeRecaptcha } from "../utils/verifyRecaptchaToken.js";
 
+const AUTH_RETURN_TO_KEY = "recovery_auth_return_to";
+
+function safeAuthRedirectPath() {
+  const fallback = "/profile";
+  const storedPath = sessionStorage.getItem(AUTH_RETURN_TO_KEY);
+  sessionStorage.removeItem(AUTH_RETURN_TO_KEY);
+
+  if (!storedPath) return fallback;
+
+  try {
+    const url = new URL(storedPath, window.location.origin);
+    if (url.origin !== window.location.origin) return fallback;
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function handleSignup(email, password, name) {
   try {
     if (!email || !password || !name) {
@@ -66,7 +84,7 @@ export async function handleSignup(email, password, name) {
     }
 
     showToast("Signup successful!", "success");
-    window.location.href = "/profile";
+    window.location.href = safeAuthRedirectPath();
     return user;
   } catch (err) {
     console.error("Signup error:", err);
@@ -81,7 +99,7 @@ export async function handleLogin(email, password) {
     const userCred = await signInWithEmailAndPassword(auth, email, password);
 
     showToast("Login successful!", "success");
-    window.location.href = "/profile";
+    window.location.href = safeAuthRedirectPath();
     return userCred.user;
   } catch (err) {
     console.error("Login error:", err);

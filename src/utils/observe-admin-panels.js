@@ -14,6 +14,10 @@ const importMap = {
   "./admin/admin-crm.js": () => import("../admin/admin-crm.js"),
   "./admin/admin-anatoMe.js": () => import("../admin/admin-anatoMe.js"),
   "./admin/admin-emails.js": () => import("../admin/admin-emails.js"),
+  "./admin/admin-reviews-feedback.js": () => import("../admin/admin-reviews-feedback.js"),
+  "./admin/admin-business-settings.js": () => import("../admin/admin-business-settings.js"),
+  "./admin/admin-content-builder.js": () => import("../admin/admin-content-builder.js"),
+  "./admin/admin-content-controls.js": () => import("../admin/admin-content-controls.js"),
 };
 
 export function observeAdminPanel(tabId, importPath, methodName, maxRetries = 3) {

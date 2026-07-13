@@ -4,6 +4,7 @@ import { defineSecret } from "firebase-functions/params";
 import admin from "firebase-admin";
 import sgMail from "@sendgrid/mail";
 import fetch from "node-fetch";
+import { getBusinessProfile } from "../utils/businessProfile.js";
 
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 const RECAPTCHA_SECRET_KEY = defineSecret("RECAPTCHA_SECRET_KEY");
@@ -72,10 +73,11 @@ const sendContactMessageHandler = async (request) => {
   const safeName = escapeHTML(name);
   const safeEmail = escapeHTML(email);
   const safeMessage = escapeHTML(message).replace(/\n/g, "<br>");
+  const business = await getBusinessProfile();
 
   const msg = {
-    to: "hello@recoverytools.au",
-    from: "no-reply@recoverytools.au",
+    to: business.email,
+    from: business.email,
     replyTo: safeEmail,
     subject: `📬 Contact Message from ${safeName || "Unknown Sender"}`,
     text: `Name: ${name}\nEmail: ${email}\nMessage:\n${message}`,

@@ -14,6 +14,73 @@ import { httpsCallable } from "firebase/functions";
 import { showToast } from "../utils/utils.js";
 import { updatePassword } from "firebase/auth";
 
+function trackingUrl(order) {
+  const trackingNumber = order.trackingNumber || order.tracking || order.trackingId;
+  if (order.shippingUrl) return order.shippingUrl;
+  if (!trackingNumber) return "";
+  return `https://auspost.com.au/mypost/track/#/details/${encodeURIComponent(trackingNumber)}`;
+}
+
+function orderIssueUrl(invoiceId, type = "return_requested", rating = "") {
+  const params = new URLSearchParams({ order: invoiceId, type });
+  if (rating) params.set("rating", rating);
+  return `/order-issue?${params.toString()}`;
+}
+
+function orderItems(order) {
+  if (Array.isArray(order.products)) return order.products;
+  if (Array.isArray(order.items)) return order.items;
+  return [];
+}
+
+function itemName(item) {
+  return item.name || item.productTitle || item.title || item.productId || "Item";
+}
+
+function itemQuantity(item) {
+  const quantity = Number(item.quantity || 1);
+  return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+}
+
+function itemProductId(item) {
+  return item.productId || item.id || item.slug || "";
+}
+
+function productReviewUrl(item) {
+  const productId = itemProductId(item);
+  if (!productId) return "";
+  return `/shop/${encodeURIComponent(productId)}?review=1`;
+}
+
+function renderOrderItems(order) {
+  const items = orderItems(order);
+  if (!items.length) {
+    return `<p class="mt-3 text-sm text-gray-400">No item details found.</p>`;
+  }
+  const reviewClass = "router-link bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-xs";
+
+  return `
+    <div class="mt-3 rounded border border-gray-700 bg-gray-900/50 p-3">
+      <div class="mb-2 text-xs uppercase tracking-wide text-gray-400">Items purchased</div>
+      <div class="space-y-2">
+        ${items.map((item) => {
+    const reviewUrl = productReviewUrl(item);
+    return `
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div class="text-sm text-gray-200">
+                ${itemName(item)} <span class="text-gray-400">x${itemQuantity(item)}</span>
+              </div>
+              ${reviewUrl
+    ? `<a href="${reviewUrl}" class="${reviewClass}">Review</a>`
+    : ""}
+            </div>
+          `;
+  }).join("")}
+      </div>
+    </div>
+  `;
+}
+
 export async function getUserProfile(uid) {
   const userRef = doc(db, "users", uid);
   const snapshot = await getDoc(userRef);
@@ -88,11 +155,33 @@ export async function loadOrderReceipts() {
         downloadInvoice(invoiceId),
       );
 
+      const actionWrap = document.createElement("div");
+      actionWrap.className = "flex flex-wrap gap-2 sm:justify-end";
+      actionWrap.appendChild(downloadBtn);
+
+      const trackingHref = trackingUrl(order);
+      if (trackingHref) {
+        const trackingLink = document.createElement("a");
+        trackingLink.className = "bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm";
+        trackingLink.href = trackingHref;
+        trackingLink.target = "_blank";
+        trackingLink.rel = "noopener";
+        trackingLink.textContent = "Track order";
+        actionWrap.appendChild(trackingLink);
+      }
+
+      const issueLink = document.createElement("a");
+      issueLink.className = "router-link bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm";
+      issueLink.href = orderIssueUrl(invoiceId, "feedback");
+      issueLink.textContent = "Request help";
+      actionWrap.appendChild(issueLink);
+
       const row = document.createElement("div");
-      row.className = "flex justify-between items-center";
-      row.append(left, downloadBtn);
+      row.className = "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between";
+      row.append(left, actionWrap);
 
       card.appendChild(row);
+      card.insertAdjacentHTML("beforeend", renderOrderItems(order));
       grid.appendChild(card);
     });
   } catch (err) {

@@ -20,11 +20,24 @@ const FULFILMENT_STEPS = [
   { value: "completed", label: "Completed" },
 ];
 
+const CUSTOMER_FOLLOW_UP_OPTIONS = [
+  { value: "none", label: "No customer issue" },
+  { value: "return_requested", label: "Return requested" },
+  { value: "exchange_requested", label: "Swap requested" },
+  { value: "complaint_open", label: "Complaint open" },
+  { value: "resolved", label: "Resolved" },
+];
+
+const FIELD_CLASS = "mt-1 w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white";
+
 const urlParams = new URLSearchParams(window.location.search);
 const filterOrderId = urlParams.get("filter");
 const filterRef = urlParams.get("ref");
+const filterIssues = urlParams.get("issues");
 
 let allOrders = [];
+let showArchivedOrders = false;
+let showOpenIssuesOnly = filterIssues === "open";
 
 function formatStatusClass(status) {
   return `status-${(status || "unknown").toLowerCase().replace(/\s+/g, "-")}`;
@@ -88,6 +101,32 @@ function trackingEmailStatus(order) {
   return "not sent";
 }
 
+function reviewRequestEmailStatus(order) {
+  if (order.reviewRequestEmailSentAt) {
+    return "sent";
+  }
+  if (order.reviewRequestEmailSandboxedAt) {
+    return "sandboxed locally";
+  }
+  if (order.reviewRequestEmailError) {
+    return `failed: ${escapeHTML(order.reviewRequestEmailError)}`;
+  }
+  return "not sent";
+}
+
+function customerFollowUpStatus(order) {
+  return String(order.customerFollowUpStatus || "none").toLowerCase();
+}
+
+function renderCustomerFollowUpOptions(order) {
+  const current = customerFollowUpStatus(order);
+  return CUSTOMER_FOLLOW_UP_OPTIONS.map((option) => `
+    <option value="${option.value}" ${current === option.value ? "selected" : ""}>
+      ${option.label}
+    </option>
+  `).join("");
+}
+
 function formattedDate(timestamp) {
   if (!timestamp) return "-";
   if (timestamp.toDate) return timestamp.toDate().toLocaleDateString();
@@ -96,6 +135,17 @@ function formattedDate(timestamp) {
   const parsed = new Date(timestamp);
   if (!Number.isNaN(parsed.getTime())) return parsed.toLocaleDateString();
   return "-";
+}
+
+function formattedDateTime(timestamp) {
+  if (!timestamp) return "-";
+  let date = null;
+  if (timestamp.toDate) date = timestamp.toDate();
+  else if (timestamp.seconds) date = new Date(timestamp.seconds * 1000);
+  else if (timestamp._seconds) date = new Date(timestamp._seconds * 1000);
+  else date = new Date(timestamp);
+  if (!date || Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString();
 }
 
 function orderUpdatedDate(order) {
@@ -190,7 +240,68 @@ function orderMatchesSearch(order, term) {
   return haystack.includes(term);
 }
 
+function timelineItems(order) {
+  return Array.isArray(order.timeline)
+    ? [...order.timeline].sort((a, b) => {
+      const aTime = a?.at?.seconds || 0;
+      const bTime = b?.at?.seconds || 0;
+      return bTime - aTime;
+    })
+    : [];
+}
+
+function renderTimeline(order) {
+  const items = timelineItems(order).slice(0, 6);
+  if (!items.length) {
+    return `<p class="text-xs text-gray-400">No timeline entries yet.</p>`;
+  }
+
+  return `
+    <ol class="space-y-2">
+      ${items.map((item) => `
+        <li class="border-l border-gray-700 pl-3 text-xs">
+          <div class="text-gray-100">${escapeHTML(item.label || item.type || "Update")}</div>
+          <div class="text-gray-500">
+            ${formattedDateTime(item.at)}
+            ${item.byName || item.byEmail ? ` by ${escapeHTML(item.byName || item.byEmail)}` : ""}
+          </div>
+        </li>
+      `).join("")}
+    </ol>
+  `;
+}
+
+function setupOrderProcessHelp() {
+  const modal = document.getElementById("orderProcessHelpModal");
+  const openBtn = document.getElementById("orderProcessHelpBtn");
+  const closeBtn = document.getElementById("orderProcessHelpCloseBtn");
+  if (!modal || !openBtn || !closeBtn || modal.dataset.bound === "true") return;
+
+  const openModal = () => {
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+    closeBtn.focus();
+  };
+
+  const closeModal = () => {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+    openBtn.focus();
+  };
+
+  openBtn.addEventListener("click", openModal);
+  closeBtn.addEventListener("click", closeModal);
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) closeModal();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !modal.classList.contains("hidden")) closeModal();
+  });
+  modal.dataset.bound = "true";
+}
+
 export function setupOrderManagement() {
+  setupOrderProcessHelp();
   document.getElementById("viewGlobalOrdersBtn")?.addEventListener("click", loadAllOrdersForAdmin);
   document.getElementById("exportOrdersBtn")?.addEventListener("click", () => {
     showToast("Exporting to CSV (not implemented)", "info");
@@ -213,6 +324,23 @@ export function setupOrderManagement() {
     renderOrderGrid(term ? allOrders.filter((order) => orderMatchesSearch(order, term)) : allOrders);
   });
 
+  document.getElementById("showArchivedOrdersToggle")?.addEventListener("change", (event) => {
+    showArchivedOrders = event.target.checked;
+    if (showArchivedOrders && showOpenIssuesOnly) {
+      showOpenIssuesOnly = false;
+      document.getElementById("openIssuesFilterBtn")?.classList.remove("active");
+      showToast("Open issues filter cleared for archived orders.", "info");
+    }
+    loadAllOrdersForAdmin();
+  });
+
+  document.getElementById("openIssuesFilterBtn")?.addEventListener("click", () => {
+    showOpenIssuesOnly = !showOpenIssuesOnly;
+    document.getElementById("openIssuesFilterBtn")?.classList.toggle("active", showOpenIssuesOnly);
+    loadAllOrdersForAdmin();
+  });
+  document.getElementById("openIssuesFilterBtn")?.classList.toggle("active", showOpenIssuesOnly);
+
   if (document.getElementById(ORDER_GRID_ID)) loadAllOrdersForAdmin();
 }
 
@@ -222,7 +350,11 @@ export async function loadAllOrdersForAdmin() {
 
   try {
     const getAllOrders = httpsCallable(functions, "getAllOrdersForAdmin");
-    const result = await getAllOrders({ referredBy: filterRef || undefined });
+    const result = await getAllOrders({
+      referredBy: filterRef || undefined,
+      includeArchived: showArchivedOrders,
+      issueOnly: showOpenIssuesOnly,
+    });
     const rawOrders = Array.isArray(result.data?.orders) ? result.data.orders : [];
     allOrders = await attachUserDetails(rawOrders);
     renderOrderGrid(allOrders);
@@ -269,7 +401,9 @@ export function renderOrderGrid(orders) {
   grid.innerHTML = "";
 
   if (!orders.length) {
-    grid.textContent = "No orders found.";
+    grid.textContent = showOpenIssuesOnly
+      ? "No open returns, swaps, or complaints found."
+      : "No orders found.";
     return;
   }
 
@@ -277,6 +411,7 @@ export function renderOrderGrid(orders) {
     const fulfilmentStatus = currentFulfilmentStatus(data);
     const div = document.createElement("div");
     div.className = `order-card bg-gray-800 p-4 rounded mb-4 ${formatStatusClass(fulfilmentStatus)}`;
+    if (data.archived === true) div.classList.add("opacity-75");
     div.setAttribute("data-order-id", data.id);
 
     if (data.id === filterOrderId) {
@@ -298,7 +433,7 @@ export function renderOrderGrid(orders) {
             <div class="text-xs text-gray-400">${escapeHTML(orderEmail(data))}</div>
           </div>
           <span class="text-xs uppercase tracking-wide bg-gray-700 px-2 py-1 rounded">
-            ${escapeHTML(fulfilmentStatus)}
+            ${escapeHTML(data.archived === true ? "archived" : fulfilmentStatus)}
           </span>
         </div>
 
@@ -344,6 +479,37 @@ export function renderOrderGrid(orders) {
         <div class="text-xs text-gray-400">
           Tracking email: ${trackingEmailStatus(data)}
         </div>
+        <div class="text-xs text-gray-400">
+          Review/returns email: ${reviewRequestEmailStatus(data)}
+        </div>
+
+        <label class="block text-xs text-gray-300">
+          Return / swap / complaint status
+          <select
+            class="customerFollowUpInput mt-1 w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white"
+            data-id="${data.id}"
+          >
+            ${renderCustomerFollowUpOptions(data)}
+          </select>
+        </label>
+
+        <label class="block text-xs text-gray-300">
+          Return / complaint notes
+          <textarea
+            class="customerFollowUpNotesInput ${FIELD_CLASS}"
+            data-id="${data.id}"
+            placeholder="Customer issue, requested outcome, item condition, next step..."
+          >${escapeHTML(data.customerFollowUpNotes || "")}</textarea>
+        </label>
+
+        <label class="block text-xs text-gray-300">
+          Resolution notes
+          <textarea
+            class="customerFollowUpResolutionInput ${FIELD_CLASS}"
+            data-id="${data.id}"
+            placeholder="Refund, replacement, swap, complaint outcome..."
+          >${escapeHTML(data.customerFollowUpResolution || "")}</textarea>
+        </label>
 
         <textarea
           class="orderNoteInput w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white text-sm"
@@ -367,6 +533,19 @@ export function renderOrderGrid(orders) {
         >
           Save fulfilment
         </button>
+
+        <button
+          class="archive-order-btn w-full bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded"
+          data-id="${data.id}"
+          data-archive="${data.archived === true ? "false" : "true"}"
+        >
+          ${data.archived === true ? "Unarchive order" : "Archive now"}
+        </button>
+
+        <details class="rounded border border-gray-700 bg-gray-900/60 p-3">
+          <summary class="cursor-pointer text-xs uppercase tracking-wide text-gray-400">Order timeline</summary>
+          <div class="mt-3">${renderTimeline(data)}</div>
+        </details>
       </div>
     `;
     grid.appendChild(div);
@@ -379,6 +558,12 @@ export function renderOrderGrid(orders) {
       const shippingCarrier = document.querySelector(`.shippingCarrierInput[data-id='${orderId}']`)?.value.trim();
       const adminNotes = document.querySelector(`.orderNoteInput[data-id='${orderId}']`)?.value.trim();
       const dueDate = document.querySelector(`.orderDueDateInput[data-id='${orderId}']`)?.value;
+      const customerFollowUpStatus =
+        document.querySelector(`.customerFollowUpInput[data-id='${orderId}']`)?.value || "none";
+      const customerFollowUpNotes =
+        document.querySelector(`.customerFollowUpNotesInput[data-id='${orderId}']`)?.value.trim();
+      const customerFollowUpResolution =
+        document.querySelector(`.customerFollowUpResolutionInput[data-id='${orderId}']`)?.value.trim();
       const fulfilmentStatus =
         document.querySelector(`input[name='fulfilment-${orderId}']:checked`)?.value || "new";
 
@@ -393,9 +578,18 @@ export function renderOrderGrid(orders) {
           shippingCarrier,
           adminNotes,
           dueDate,
+          customerFollowUpStatus,
+          customerFollowUpNotes,
+          customerFollowUpResolution,
         });
 
-        if (result.data?.trackingEmailSandboxed) {
+        if (result.data?.reviewRequestEmailSandboxed) {
+          showToast("Order updated and review email sandboxed locally", "success");
+        } else if (result.data?.reviewRequestEmailError) {
+          showToast(`Order updated, but review email failed: ${result.data.reviewRequestEmailError}`, "error", 6000);
+        } else if (result.data?.reviewRequestEmailSent) {
+          showToast("Order updated and review email sent", "success");
+        } else if (result.data?.trackingEmailSandboxed) {
           showToast("Order updated and tracking email sandboxed locally", "success");
         } else if (result.data?.trackingEmailError) {
           showToast(`Order updated, but email failed: ${result.data.trackingEmailError}`, "error", 6000);
@@ -405,6 +599,9 @@ export function renderOrderGrid(orders) {
             "success",
           );
         }
+        if (showOpenIssuesOnly && customerFollowUpStatus === "resolved") {
+          showToast("Resolved order removed from the open issues queue.", "info", 5000);
+        }
         await loadAllOrdersForAdmin();
         await refreshAdminOrderAlertBadge();
       } catch (err) {
@@ -413,6 +610,38 @@ export function renderOrderGrid(orders) {
       } finally {
         btn.disabled = false;
         btn.textContent = "Save fulfilment";
+      }
+    });
+  });
+
+  document.querySelectorAll(".archive-order-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const orderId = btn.dataset.id;
+      const shouldArchive = btn.dataset.archive === "true";
+      const confirmed = confirm(
+        shouldArchive
+          ? "Archive this order now? It will move out of the active orders view."
+          : "Unarchive this order and return it to the active orders view?",
+      );
+      if (!confirmed) return;
+
+      try {
+        btn.disabled = true;
+        btn.textContent = shouldArchive ? "Archiving..." : "Unarchiving...";
+        const updateArchive = httpsCallable(functions, "updateOrderArchive");
+        await updateArchive({
+          orderId,
+          archived: shouldArchive,
+          reason: shouldArchive ? "manual_admin_archive" : "manual_admin_unarchive",
+        });
+        showToast(shouldArchive ? "Order archived" : "Order unarchived", "success");
+        await loadAllOrdersForAdmin();
+      } catch (err) {
+        console.error("Failed to update archive status:", err);
+        showToast(err.message || "Error updating archive status", "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = shouldArchive ? "Archive now" : "Unarchive order";
       }
     });
   });
@@ -439,14 +668,19 @@ export async function saveOrderNote(orderId) {
 export function updateStatusFilter(filter) {
   showToast(`Filtering by: ${filter}`, "info");
   const normalizedFilter = String(filter || "All").toLowerCase();
-  const filteredOrders = normalizedFilter === "all"
-    ? allOrders
-    : allOrders.filter((order) => {
+  let filteredOrders = allOrders;
+
+  if (normalizedFilter === "open-issues") {
+    filteredOrders = allOrders.filter((order) => order.customerFollowUpOpen === true);
+  } else if (normalizedFilter !== "all") {
+    filteredOrders = allOrders.filter((order) => {
       const fulfilmentStatus = currentFulfilmentStatus(order);
       return (
         fulfilmentStatus === normalizedFilter ||
         String(order.status || "").toLowerCase() === normalizedFilter
       );
     });
+  }
+
   renderOrderGrid(filteredOrders);
 }

@@ -35,8 +35,19 @@ export async function renderProductReviews(productId) {
       return;
     }
 
-    snapshot.forEach((doc) => {
-      const { userName, comment, rating } = doc.data();
+    const visibleReviews = snapshot.docs
+      .map((doc) => doc.data())
+      .filter((review) => review.visible === true);
+
+    if (!visibleReviews.length) {
+      container.innerHTML += `
+        <p class="italic text-gray-500">No approved reviews yet. Be the first to leave one below!</p>
+      `;
+      return;
+    }
+
+    visibleReviews.forEach((review) => {
+      const { userName, comment, rating } = review;
       const reviewEl = document.createElement("div");
       reviewEl.className = "mb-4";
 

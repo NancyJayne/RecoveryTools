@@ -29,6 +29,17 @@ function matchesDateRange(order, startDate, endDate) {
   return purchasedAt >= start && purchasedAt <= end;
 }
 
+function customerFollowUpStatus(order) {
+  return String(order.customerFollowUpStatus || "none").toLowerCase().trim();
+}
+
+function hasOpenCustomerIssue(order) {
+  const status = customerFollowUpStatus(order);
+  if (["return_requested", "exchange_requested", "complaint_open"].includes(status)) return true;
+  if (["none", "resolved"].includes(status)) return false;
+  return order.customerFollowUpOpen === true;
+}
+
 export const getAllOrdersForAdmin = onCall(
   { region: "australia-southeast1" },
   async (request) => {
@@ -39,13 +50,28 @@ export const getAllOrdersForAdmin = onCall(
       throw new HttpsError("permission-denied", "Admin access required.");
     }
 
-    const { invoiceNumber, name, startDate, endDate, referredBy } = request.data || {};
+    const {
+      invoiceNumber,
+      name,
+      startDate,
+      endDate,
+      referredBy,
+      includeArchived = false,
+      issueOnly = false,
+    } = request.data || {};
     let ordersRef = admin.firestore().collection("orders");
 
     if (invoiceNumber) {
       const doc = await ordersRef.doc(invoiceNumber).get();
       if (!doc.exists) return { orders: [] };
-      return { orders: [{ id: doc.id, ...doc.data() }] };
+      const order = { id: doc.id, ...doc.data() };
+      if (includeArchived ? order.archived !== true : order.archived === true) {
+        return { orders: [] };
+      }
+      if (issueOnly && !hasOpenCustomerIssue(order)) {
+        return { orders: [] };
+      }
+      return { orders: [order] };
     }
 
     if (referredBy) {
@@ -55,6 +81,8 @@ export const getAllOrdersForAdmin = onCall(
     const snapshot = await ordersRef.limit(200).get();
     const orders = snapshot.docs
       .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter((order) => includeArchived ? order.archived === true : order.archived !== true)
+      .filter((order) => issueOnly ? hasOpenCustomerIssue(order) : true)
       .filter((order) => matchesName(order, name))
       .filter((order) => matchesDateRange(order, startDate, endDate))
       .sort((a, b) =>

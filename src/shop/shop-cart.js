@@ -58,7 +58,11 @@ document.addEventListener("keydown", (e) => {
 
 export function addToCart(item) {
   const cart = JSON.parse(localStorage.getItem("recovery_cart") || "[]");
-  const existingItem = cart.find((i) => i.id === item.id && i.type === item.type);
+  const existingItem = cart.find((i) =>
+    i.id === item.id &&
+    i.type === item.type &&
+    (i.variantId || "") === (item.variantId || ""),
+  );
 
   if (existingItem) {
     existingItem.quantity += item.quantity || 1;
@@ -69,6 +73,10 @@ export function addToCart(item) {
       price: item.price,
       quantity: item.quantity || 1,
       type: item.type || "tool",
+      requiresShipping: item.requiresShipping === true,
+      variantId: item.variantId || "",
+      variantName: item.variantName || "",
+      sku: item.sku || "",
       creatorId: item.creatorId || "admin",
       affiliatePercent:
         item.affiliatePercent ??
@@ -93,6 +101,7 @@ export async function renderCartItems() {
   if (!container || !subtotalEl) return;
 
   let cart = JSON.parse(localStorage.getItem("recovery_cart") || "[]");
+  const hasShippingItems = cart.some((item) => item.requiresShipping === true);
   const typePriority = { tool: 1, course: 2, workshop: 3 };
   cart.sort((a, b) => (typePriority[a.type] || 99) - (typePriority[b.type] || 99));
 
@@ -174,19 +183,23 @@ export async function renderCartItems() {
   subtotalEl.textContent = `$${subtotal.toFixed(2)}`;
 
   try {
-    const fetchSettings = httpsCallable(functions, "getShippingTaxSettings");
-    const settingsRes = await fetchSettings();
-    const { freeShippingMin = 0 } = settingsRes.data || {};
-    const rawZones = settingsRes.data?.shippingZones;
-    const shippingZones = Array.isArray(rawZones)
-      ? rawZones
-      : rawZones && typeof rawZones === "object"
-        ? Object.values(rawZones)
-        : [];
-    const shippingRate = shippingZones.find((z) => z?.default)?.rate ?? shippingZones[0]?.rate ?? 10;
-    let shippingCost = subtotal >= freeShippingMin ? 0 : shippingRate;
+    if (!hasShippingItems) {
+      if (shippingEl) shippingEl.textContent = "$0.00";
+    } else {
+      const fetchSettings = httpsCallable(functions, "getShippingTaxSettings");
+      const settingsRes = await fetchSettings();
+      const { freeShippingMin = 0 } = settingsRes.data || {};
+      const rawZones = settingsRes.data?.shippingZones;
+      const shippingZones = Array.isArray(rawZones)
+        ? rawZones
+        : rawZones && typeof rawZones === "object"
+          ? Object.values(rawZones)
+          : [];
+      const shippingRate = shippingZones.find((z) => z?.default)?.rate ?? shippingZones[0]?.rate ?? 10;
+      const shippingCost = subtotal >= freeShippingMin ? 0 : shippingRate;
 
-    if (shippingEl) shippingEl.textContent = `$${shippingCost.toFixed(2)}`;
+      if (shippingEl) shippingEl.textContent = `$${shippingCost.toFixed(2)}`;
+    }
   } catch (err) {
     console.error("Shipping estimate error:", err);
     if (shippingEl) shippingEl.textContent = "$0.00";

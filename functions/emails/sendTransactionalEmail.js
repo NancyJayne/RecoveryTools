@@ -3,6 +3,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import sgMail from "@sendgrid/mail";
 import { defineSecret } from "firebase-functions/params";
+import { getBusinessProfile } from "../utils/businessProfile.js";
 
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 
@@ -16,10 +17,11 @@ export async function sendTransactionalEmail({
   }
 
   sgMail.setApiKey(SENDGRID_API_KEY.value());
+  const business = await getBusinessProfile();
 
   const msg = {
     to,
-    from: "hello@recoverytools.au",
+    from: business.email,
     templateId,
     dynamic_template_data: dynamicTemplateData,
   };

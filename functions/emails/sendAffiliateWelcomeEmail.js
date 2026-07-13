@@ -2,6 +2,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import sgMail from "@sendgrid/mail";
 import { defineSecret } from "firebase-functions/params";
+import { getBusinessProfile } from "../utils/businessProfile.js";
 
 // Define secret
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
@@ -21,16 +22,17 @@ const sendAffiliateWelcomeEmailHandler = async (request) => {
   }
 
   sgMail.setApiKey(SENDGRID_API_KEY.value());
+  const business = await getBusinessProfile();
 
   const msg = {
     to: email,
-    from: "hello@recoverytools.au",
-    subject: "Welcome to the RecoveryTools Affiliate Program!",
+    from: business.email,
+    subject: `Welcome to the ${business.name} Affiliate Program!`,
     html: `
       <h2>Welcome, ${name}!</h2>
       <p>You're now part of our affiliate team. Start sharing and earning by using your dashboard:</p>
       <a href="https://recoverytools.au/affiliate">Visit Affiliate Dashboard</a>
-      <p>Need help? Reach out anytime at hello@recoverytools.au</p>
+      <p>Need help? Reach out anytime at ${business.email}</p>
     `,
   };
 

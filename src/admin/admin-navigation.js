@@ -27,18 +27,25 @@ export function initAdminNavigation(role) {
   const map = {
     "/admin": "adminDashboardSection",
     "/admin/orders": "adminOrdersSection",
+    "/admin/approvals": "adminApprovalsSection",
+    "/admin/content-controls": "adminContentControlsSection",
+    "/admin/builder": "adminContentBuilderSection",
+    "/admin/products": "productManagerPanel",
     "/admin/workshops": "adminWorkshopApprovals",
     "/admin/courses": "pendingCourseApprovals",
     "/admin/affiliates": "adminAffiliateStats",
     "/admin/anato-me": "anatoMeForm",
     "/admin/emails": "adminEmailSection",
+    "/admin/reviews": "adminReviewsFeedbackSection",
+    "/admin/business": "adminBusinessSettingsSection",
+    "/admin/content": "adminContentBuilderSection",
     "/admin/crm": "userRoleManager",
   };
 
   function showByPath(path) {
     if (!path.startsWith("/admin")) return;
 
-    const clean = path.replace(/\/?$/, "");
+    const clean = path.split("?")[0].replace(/\/?$/, "");
     const tabId = map[clean] || "adminDashboardSection";
 
     container.querySelectorAll(".admin-tab, .admin-section").forEach((el) => {

@@ -5,6 +5,7 @@ import { defineSecret } from "firebase-functions/params";
 import admin from "firebase-admin";
 import { generateOrderPDF } from "../utils/generateOrderPDFServer.js";
 import { logEmailEvent } from "../utils/emailLog.js";
+import { getBusinessProfile } from "../utils/businessProfile.js";
 
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 
@@ -34,7 +35,8 @@ const sendOrderEmailWithPDFHandler = async (request) => {
     throw new HttpsError("invalid-argument", "Missing required email or invoiceId");
   }
 
-  const subject = `Your Receipt - Order ${invoiceId}`;
+  const business = await getBusinessProfile();
+  const subject = `Your ${business.name} receipt - Order ${invoiceId}`;
   const orderRef = admin.firestore().collection("orders").doc(invoiceId);
 
   try {
@@ -68,15 +70,15 @@ const sendOrderEmailWithPDFHandler = async (request) => {
     const pdfUrl = await generateOrderPDF(invoiceId, order);
     const msg = {
       to,
-      from: "hello@recoverytools.au",
+      from: business.email,
       subject,
       html: `
         <p>Hi ${userName},</p>
         <p>Thanks for your order. You can download your receipt below:</p>
         <p><a href="${pdfUrl}" target="_blank" rel="noopener">Download Invoice PDF</a></p>
         <p>If you have any questions, reply to this email or contact us at
-        <a href="mailto:hello@recoverytools.au">hello@recoverytools.au</a>.</p>
-        <p>- Recovery Tools Team</p>
+        <a href="mailto:${business.email}">${business.email}</a>.</p>
+        <p>- ${business.name} Team</p>
       `,
       mailSettings: {
         sandboxMode: {

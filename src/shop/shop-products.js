@@ -11,6 +11,8 @@ import { setPageMeta } from "../utils/seo-utils.js";
 import { showToast, showTabContent } from "../utils/utils.js";
 
 const PRODUCT_PLACEHOLDER = "/images/product-placeholder.png";
+let allMarketplaceProducts = [];
+let activeMarketplaceFilter = "all";
 
 function asMoney(value) {
   const amount = Number(value ?? 0);
@@ -38,6 +40,17 @@ function getProductPrice(product) {
   return Number(product.onSale && product.salePrice ? product.salePrice : product.price ?? product.priceFrom ?? 0);
 }
 
+function getVariantLabel(variant) {
+  return variant.name ||
+    [variant.colour, variant.size].filter(Boolean).join(" / ") ||
+    variant.sku ||
+    "Variant";
+}
+
+function getVariantPrice(product, variant) {
+  return Number(variant?.priceOverride ?? getProductPrice(product));
+}
+
 function getProductTags(product) {
   return [
     ...(Array.isArray(product.tags) ? product.tags : []),
@@ -49,6 +62,139 @@ function isFeatured(product) {
   return product.featured === true || getProductTags(product).includes("featured");
 }
 
+function productCategory(product) {
+  const values = [
+    product.categoryId,
+    product.type,
+    product.itemType,
+    product.itemKind,
+  ]
+    .map((value) => String(value || "").toLowerCase())
+    .join(" ");
+
+  if (values.includes("course")) return "courses";
+  if (values.includes("workshop") || values.includes("webinar") || values.includes("session")) return "workshops";
+  if (values.includes("program") || values.includes("plan")) return "programs";
+  return "tools";
+}
+
+function categoryLabel(category) {
+  return {
+    tools: "Tools",
+    courses: "Courses",
+    workshops: "Workshops",
+    programs: "Programs",
+  }[category] || "Marketplace";
+}
+
+export function productTypeLabel(product) {
+  return categoryLabel(productCategory(product)).replace(/s$/, "");
+}
+
+function sortProducts(products) {
+  const sortValue = document.getElementById("sortSelect")?.value || "name";
+  return [...products].sort((a, b) => {
+    if (sortValue === "priceLow") return getProductPrice(a) - getProductPrice(b);
+    if (sortValue === "priceHigh") return getProductPrice(b) - getProductPrice(a);
+    return getProductName(a).localeCompare(getProductName(b));
+  });
+}
+
+function setActiveFilterButton() {
+  document.querySelectorAll(".filter-tag").forEach((button) => {
+    const isActive = button.dataset.filter === activeMarketplaceFilter;
+    button.classList.toggle("bg-[#407471]", isActive);
+    button.classList.toggle("bg-gray-700", !isActive);
+  });
+}
+
+function renderMarketplaceProducts(products) {
+  const shopGrid = document.getElementById("shopGrid");
+  if (!shopGrid) return;
+
+  shopGrid.innerHTML = "";
+  const categories = activeMarketplaceFilter === "all"
+    ? ["tools", "courses", "workshops", "programs"]
+    : [activeMarketplaceFilter];
+
+  let renderedCount = 0;
+  categories.forEach((category) => {
+    const categoryProducts = sortProducts(products.filter((product) => productCategory(product) === category));
+    if (!categoryProducts.length) return;
+
+    const section = document.createElement("section");
+    section.className = "col-span-full";
+
+    const heading = document.createElement("h3");
+    heading.className = "mb-4 mt-2 text-xl font-semibold text-white";
+    heading.textContent = categoryLabel(category);
+    section.appendChild(heading);
+
+    const grid = document.createElement("div");
+    grid.className = "grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
+    categoryProducts.forEach((product) => {
+      const tile = createProductTile(product);
+      if (tile) {
+        grid.appendChild(tile);
+        renderedCount++;
+      }
+    });
+    section.appendChild(grid);
+    shopGrid.appendChild(section);
+  });
+
+  if (!renderedCount) {
+    shopGrid.innerHTML = `<p class="text-gray-400">No marketplace items found.</p>`;
+  }
+}
+
+function setupMarketplaceControls() {
+  document.querySelectorAll(".filter-tag").forEach((button) => {
+    if (button.dataset.bound === "true") return;
+    button.dataset.bound = "true";
+    button.addEventListener("click", () => {
+      activeMarketplaceFilter = button.dataset.filter || "all";
+      setActiveFilterButton();
+      renderMarketplaceProducts(allMarketplaceProducts);
+    });
+  });
+
+  const sortSelect = document.getElementById("sortSelect");
+  if (sortSelect && sortSelect.dataset.bound !== "true") {
+    sortSelect.dataset.bound = "true";
+    sortSelect.addEventListener("change", () => renderMarketplaceProducts(allMarketplaceProducts));
+  }
+  setActiveFilterButton();
+}
+
+function routeProductKey() {
+  const [, section, productKey] = window.location.pathname.split("/");
+  if (section !== "shop" || !productKey) return "";
+  return decodeURIComponent(productKey);
+}
+
+function productMatchesRoute(product, key) {
+  return key && [product.id, product.slug, product.productId].filter(Boolean).includes(key);
+}
+
+function maybeOpenProductFromRoute(products) {
+  const key = routeProductKey();
+  if (!key) return false;
+
+  const product = products.find((candidate) => productMatchesRoute(candidate, key));
+  if (!product) return false;
+
+  showProductDetail(product, { preserveUrl: true });
+
+  if (new URLSearchParams(window.location.search).get("review") === "1") {
+    setTimeout(() => {
+      document.getElementById("reviewForm")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document.getElementById("reviewRating")?.focus();
+    }, 250);
+  }
+
+  return true;
+}
 
 export async function loadProducts() {
   const shopGrid = document.getElementById("shopGrid");
@@ -62,21 +208,22 @@ export async function loadProducts() {
 
   try {
     const getProducts = httpsCallable(functions, "getFirestoreProducts");
-    const res = await getProducts({ type: "tool" });
+    const res = await getProducts({});
     const products = Array.isArray(res.data?.products) ? res.data.products : [];
+    allMarketplaceProducts = products;
 
 
     shopGrid.innerHTML = "";
 
     if (products.length === 0) {
-      shopGrid.innerHTML = `<p class="text-gray-400">No tools available.</p>`;
+      shopGrid.innerHTML = `<p class="text-gray-400">No marketplace items available.</p>`;
       return;
     }
 
-    products.forEach((product) => {
-      const tile = createProductTile(product);
-      if (tile) shopGrid.appendChild(tile);
-    });
+    setupMarketplaceControls();
+    renderMarketplaceProducts(products);
+
+    maybeOpenProductFromRoute(products);
 
   } catch (error) {
     console.error("Error loading products:", error);
@@ -121,6 +268,11 @@ export function createProductTile(product) {
   wrapper.dataset.productStock = product.stock ?? 0;
   wrapper.dataset.productFull = JSON.stringify(product);
 
+  const typeBadge = document.createElement("span");
+  typeBadge.textContent = productTypeLabel(product);
+  typeBadge.className = "absolute right-2 top-2 rounded bg-[#407471] px-2 py-1 text-xs font-semibold text-white";
+  wrapper.appendChild(typeBadge);
+
   if (isFeatured(product)) {
     const badge = document.createElement("span");
     badge.textContent = "★ Featured";
@@ -158,7 +310,12 @@ export function createProductTile(product) {
   wrapper.appendChild(shortDesc);
   wrapper.appendChild(price);
 
-  if (product.stock === 0) {
+  const tracksInventory = product.inventoryTracked !== false;
+  const variantStock = Array.isArray(product.variants)
+    ? product.variants.reduce((sum, variant) => sum + Number(variant.stock ?? 0), 0)
+    : 0;
+  const availableStock = product.variants?.length ? variantStock : Number(product.stock ?? 0);
+  if (tracksInventory && availableStock === 0) {
     const overlay = document.createElement("div");
     overlay.className = "absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center rounded";
     overlay.innerHTML = `<span class="text-white font-semibold text-lg">Out of Stock</span>`;
@@ -168,12 +325,14 @@ export function createProductTile(product) {
   return wrapper;
 }
 
-export function showProductDetail(product) {
+export function showProductDetail(product, options = {}) {
   const detail = document.getElementById("productDetailContainer");
   if (detail.dataset.currentId === product.id) return;
   const productName = getProductName(product);
   const productImage = getProductImage(product);
-  const finalPrice = getProductPrice(product);
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  let selectedVariant = variants.find((variant) => Number(variant.stock ?? 0) > 0) || variants[0] || null;
+  let finalPrice = getVariantPrice(product, selectedVariant);
 
   detail.dataset.currentId = product.id;
   detail.innerHTML = "";
@@ -208,15 +367,18 @@ export function showProductDetail(product) {
   title.className = "text-2xl font-bold mb-2";
 
   const price = document.createElement("span");
-  price.innerHTML =
-  product.onSale && product.salePrice
-    ? `<span class="line-through text-gray-500 mr-2">
-         ${asMoney(product.price)}
-       </span><span class="text-green-400 font-bold">
-         ${asMoney(finalPrice)}
-       </span>`
-    : asMoney(finalPrice);
-
+  function updatePriceDisplay() {
+    finalPrice = getVariantPrice(product, selectedVariant);
+    price.innerHTML =
+      product.onSale && product.salePrice && !selectedVariant?.priceOverride
+        ? `<span class="line-through text-gray-500 mr-2">
+             ${asMoney(product.price)}
+           </span><span class="text-green-400 font-bold">
+             ${asMoney(finalPrice)}
+           </span>`
+        : asMoney(finalPrice);
+  }
+  updatePriceDisplay();
   price.className = "text-green-400 text-xl font-bold mb-2";
 
 
@@ -238,6 +400,33 @@ export function showProductDetail(product) {
 
   const priceWrap = document.createElement("div");
   priceWrap.className = "flex flex-col gap-4 mb-4";
+
+  let variantSelect = null;
+  if (variants.length) {
+    const variantLabel = document.createElement("label");
+    variantLabel.className = "text-sm text-gray-300";
+    variantLabel.textContent = "Choose option";
+
+    variantSelect = document.createElement("select");
+    variantSelect.className = "mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white";
+    variants.forEach((variant) => {
+      const option = document.createElement("option");
+      option.value = variant.variantId || variant.id;
+      option.textContent = `${getVariantLabel(variant)} - ${asMoney(getVariantPrice(product, variant))}`;
+      variantSelect.appendChild(option);
+    });
+    variantSelect.addEventListener("change", () => {
+      selectedVariant = variants.find((variant) =>
+        (variant.variantId || variant.id) === variantSelect.value,
+      ) || null;
+      updatePriceDisplay();
+      updateAddButtonState();
+    });
+
+    variantLabel.appendChild(variantSelect);
+    if (selectedVariant) variantSelect.value = selectedVariant.variantId || selectedVariant.id;
+    priceWrap.appendChild(variantLabel);
+  }
 
   const qtyWrap = document.createElement("div");
   qtyWrap.className = "flex items-center gap-4";
@@ -272,25 +461,36 @@ export function showProductDetail(product) {
 
   const btn = document.createElement("button");
   btn.className = "bg-[#407471] text-white px-4 py-2 rounded w-fit";
-  btn.textContent = product.stock === 0 ? "Out of Stock" : "Add to Cart";
-  btn.disabled = product.stock === 0;
-  if (!btn.disabled) {
-    btn.addEventListener("click", () => {
-      addToCart({
-        id: product.id,
-        name: productName,
-        price: finalPrice,
-        quantity,
-        type: product.type || "tool",
-        creatorId: product.creatorId,
-        affiliatePercent: product.affiliatePercent,
-        image: productImage,
-      });
-    });
-
-  } else {
-    btn.classList.add("opacity-50", "cursor-not-allowed");
+  function currentStock() {
+    return selectedVariant ? Number(selectedVariant.stock ?? 0) : Number(product.stock ?? 0);
   }
+
+  function updateAddButtonState() {
+    const tracksInventory = product.inventoryTracked !== false;
+    const isOutOfStock = tracksInventory && currentStock() === 0;
+    btn.textContent = isOutOfStock ? "Out of Stock" : "Add to Cart";
+    btn.disabled = isOutOfStock;
+    btn.classList.toggle("opacity-50", isOutOfStock);
+    btn.classList.toggle("cursor-not-allowed", isOutOfStock);
+  }
+  updateAddButtonState();
+  btn.addEventListener("click", () => {
+    if (btn.disabled) return;
+    addToCart({
+      id: product.id,
+      name: selectedVariant ? `${productName} - ${getVariantLabel(selectedVariant)}` : productName,
+      price: finalPrice,
+      quantity,
+      type: product.type || "tool",
+      requiresShipping: product.requiresShipping !== false,
+      variantId: selectedVariant?.variantId || selectedVariant?.id || "",
+      variantName: selectedVariant ? getVariantLabel(selectedVariant) : "",
+      sku: selectedVariant?.sku || product.sku || "",
+      creatorId: product.creatorId,
+      affiliatePercent: product.affiliatePercent,
+      image: productImage,
+    });
+  });
 
   priceWrap.appendChild(qtyWrap);
   priceWrap.appendChild(btn);
@@ -365,7 +565,9 @@ export function showProductDetail(product) {
   renderRelatedSuggestions(product);
 
   const productSlug = product.slug || product.id;
-  window.history.pushState({}, "", `/shop/${productSlug}`);
+  if (!options.preserveUrl) {
+    window.history.pushState({}, "", `/shop/${productSlug}`);
+  }
 
   setPageMeta({
     title: `${productName} | Recovery Tools`,
@@ -384,6 +586,7 @@ export function injectProductSchema(product) {
   const productName = getProductName(product);
   const productImage = getProductImage(product);
   const finalPrice = getProductPrice(product);
+  const isOutOfStock = product.inventoryTracked !== false && product.stock === 0;
 
   const script = document.createElement("script");
   script.type = "application/ld+json";
@@ -399,7 +602,7 @@ export function injectProductSchema(product) {
       "@type": "Offer",
       "priceCurrency": "AUD",
       "price": finalPrice,
-      "availability": product.stock > 0 ? "InStock" : "OutOfStock",
+      "availability": isOutOfStock ? "OutOfStock" : "InStock",
       "url": `https://recoverytools.au/shop/${productSlug}`,
     },
   });

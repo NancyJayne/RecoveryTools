@@ -123,6 +123,13 @@ export function setupAuthModal() {
   });
 
   resetForm?.addEventListener("submit", async (e) => {
+    if (
+      e.target?.id === "passwordResetForm" ||
+      e.target?.id === "passwordResetCompleteForm"
+    ) {
+      return;
+    }
+
     e.preventDefault();
     const email = document.getElementById("resetEmail")?.value;
     if (!email) {

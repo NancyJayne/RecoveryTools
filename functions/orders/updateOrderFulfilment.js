@@ -3,6 +3,8 @@ import { defineSecret } from "firebase-functions/params";
 import admin from "firebase-admin";
 import sgMail from "@sendgrid/mail";
 import { logEmailEvent } from "../utils/emailLog.js";
+import { appBaseUrl } from "../utils/stripeEnvironment.js";
+import { getBusinessProfile } from "../utils/businessProfile.js";
 
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 
@@ -18,6 +20,20 @@ const FULFILMENT_STEPS = new Set([
   "delivered",
   "completed",
   "cancelled",
+]);
+
+const CUSTOMER_FOLLOW_UP_STATUSES = new Set([
+  "none",
+  "return_requested",
+  "exchange_requested",
+  "complaint_open",
+  "resolved",
+]);
+
+const OPEN_CUSTOMER_FOLLOW_UP_STATUSES = new Set([
+  "return_requested",
+  "exchange_requested",
+  "complaint_open",
 ]);
 
 function cleanString(value) {
@@ -50,6 +66,15 @@ function trackingUrl(trackingNumber, carrier) {
   return "";
 }
 
+function escapeHtml(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function recipientEmail(order) {
   return (
     cleanString(order.customerEmail) ||
@@ -68,6 +93,117 @@ function recipientName(order) {
   );
 }
 
+function orderItems(order) {
+  if (Array.isArray(order.products) && order.products.length) return order.products;
+  if (Array.isArray(order.items) && order.items.length) return order.items;
+  if (order.itemsSummary) {
+    return String(order.itemsSummary)
+      .split(";")
+      .map((summary) => summary.trim())
+      .filter(Boolean)
+      .map((summary) => ({ name: summary, quantity: 1 }));
+  }
+  return [];
+}
+
+function itemName(item) {
+  return cleanString(item.name) ||
+    cleanString(item.productTitle) ||
+    cleanString(item.title) ||
+    cleanString(item.description) ||
+    cleanString(item.productId) ||
+    "Item";
+}
+
+function itemQuantity(item) {
+  const quantity = Number(item.quantity || 1);
+  return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+}
+
+function itemProductPath(item) {
+  const productId = cleanString(item.productId) || cleanString(item.id) || cleanString(item.slug);
+  return productId ? `${appBaseUrl()}/shop/${encodeURIComponent(productId)}` : `${appBaseUrl()}/shop`;
+}
+
+function orderIssueUrl(orderId, params = {}) {
+  const url = new URL("/order-issue", appBaseUrl());
+  url.searchParams.set("order", orderId);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") {
+      url.searchParams.set(key, String(value));
+    }
+  });
+  return url.toString();
+}
+
+function feedbackUrl({ orderId, rating }) {
+  return orderIssueUrl(orderId, { type: "feedback", rating });
+}
+
+function autoCompleteAfterDeliveryDate() {
+  return admin.firestore.Timestamp.fromMillis(Date.now() + 14 * 24 * 60 * 60 * 1000);
+}
+
+function archiveAfterCompleteDate() {
+  return admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000);
+}
+
+function compactObject(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entryValue]) => entryValue !== undefined && entryValue !== ""),
+  );
+}
+
+function timelineEntry({ type, label, at, byUid, byEmail, byName, metadata = {} }) {
+  return compactObject({
+    type,
+    label,
+    at,
+    byUid,
+    byEmail,
+    byName,
+    metadata: compactObject(metadata),
+  });
+}
+
+function renderCompletionItemList(order) {
+  const items = orderItems(order);
+  if (!items.length) {
+    return "<p>No line items were found on this order.</p>";
+  }
+
+  return `
+    <ul>
+      ${items.map((item) => `
+        <li>
+          <strong>${escapeHtml(itemName(item))}</strong>
+          x${itemQuantity(item)}
+          - <a href="${itemProductPath(item)}" target="_blank" rel="noopener">leave a product review</a>
+        </li>
+      `).join("")}
+    </ul>
+  `;
+}
+
+function renderRatingLinks(orderId) {
+  const ratingStyle = [
+    "display:inline-block",
+    "margin-right:6px",
+    "padding:8px 10px",
+    "border:1px solid #407471",
+    "border-radius:4px",
+    "text-decoration:none",
+    "color:#407471",
+  ].join(";");
+
+  return [1, 2, 3, 4, 5].map((rating) => `
+    <a href="${feedbackUrl({ orderId, rating })}" target="_blank" rel="noopener"
+      style="${ratingStyle}">
+      ${rating} &#9733;
+    </a>
+  `).join("");
+}
+
 function useSendGridSandboxMode() {
   if (process.env.SENDGRID_SANDBOX_MODE) {
     return process.env.SENDGRID_SANDBOX_MODE === "true";
@@ -80,6 +216,7 @@ function useLocalSendGridSandbox() {
 }
 
 async function sendTrackingEmail({ orderId, order, trackingNumber, shippingCarrier, shippingUrl }) {
+  const business = await getBusinessProfile();
   const to = recipientEmail(order);
   if (!to) {
     throw new HttpsError("failed-precondition", "Order has no customer email for tracking notification.");
@@ -91,8 +228,8 @@ async function sendTrackingEmail({ orderId, order, trackingNumber, shippingCarri
     : "";
   const message = {
     to,
-    from: "hello@recoverytools.au",
-    subject: `Your Recovery Tools order ${orderId} has shipped`,
+    from: business.email,
+    subject: `Your ${business.name} order ${orderId} has shipped`,
     html: `
       <p>Hi ${recipientName(order)},</p>
       <p>Your order has been packed and is on its way.</p>
@@ -100,8 +237,8 @@ async function sendTrackingEmail({ orderId, order, trackingNumber, shippingCarri
       <p><strong>Tracking number:</strong> ${trackingNumber}</p>
       ${trackingLink}
       <p>If you have any questions, reply to this email or contact us at
-      <a href="mailto:hello@recoverytools.au">hello@recoverytools.au</a>.</p>
-      <p>- Recovery Tools Team</p>
+      <a href="mailto:${business.email}">${business.email}</a>.</p>
+      <p>- ${business.name} Team</p>
     `,
     mailSettings: {
       sandboxMode: {
@@ -125,6 +262,55 @@ async function sendTrackingEmail({ orderId, order, trackingNumber, shippingCarri
   return { sandboxed: false };
 }
 
+async function sendReviewRequestEmail({ orderId, order }) {
+  const business = await getBusinessProfile();
+  const to = recipientEmail(order);
+  if (!to) {
+    throw new HttpsError("failed-precondition", "Order has no customer email for review request.");
+  }
+
+  const message = {
+    to,
+    from: business.email,
+    subject: `How did your ${business.name} order ${orderId} go?`,
+    html: `
+      <p>Hi ${escapeHtml(recipientName(order))},</p>
+      <p>Your order has now been marked as delivered. Thank you for shopping with ${business.name}.</p>
+      <p><strong>Items in this order:</strong></p>
+      ${renderCompletionItemList(order)}
+      <p><strong>How did we do?</strong></p>
+      <p>${renderRatingLinks(orderId)}</p>
+      <p>If you want to send extra feedback or need help with a return, replacement, damaged item,
+      or complaint, use this link so we can keep it connected to your order:</p>
+      <p>
+        <a href="${orderIssueUrl(orderId, { type: "feedback" })}" target="_blank" rel="noopener">
+          Request help or send order feedback
+        </a>
+      </p>
+      <p>You can also reply to this email if you prefer.</p>
+      <p>- ${business.name} Team</p>
+    `,
+    mailSettings: {
+      sandboxMode: {
+        enable: useSendGridSandboxMode(),
+      },
+    },
+  };
+
+  if (useLocalSendGridSandbox()) {
+    console.info("SendGrid sandbox review request email skipped locally.", {
+      orderId,
+      to,
+      subject: message.subject,
+    });
+    return { sandboxed: true };
+  }
+
+  sgMail.setApiKey(SENDGRID_API_KEY.value());
+  await sgMail.send(message);
+  return { sandboxed: false };
+}
+
 const updateOrderFulfilmentHandler = async (request) => {
   if (!request.auth?.token?.admin) {
     throw new HttpsError("permission-denied", "Only admins can update order fulfilment.");
@@ -137,6 +323,9 @@ const updateOrderFulfilmentHandler = async (request) => {
     shippingCarrier = "Australia Post",
     adminNotes,
     dueDate,
+    customerFollowUpStatus,
+    customerFollowUpNotes,
+    customerFollowUpResolution,
   } = request.data || {};
 
   const cleanOrderId = cleanString(orderId);
@@ -167,6 +356,26 @@ const updateOrderFulfilmentHandler = async (request) => {
   }
 
   const order = orderSnap.data();
+  const business = await getBusinessProfile();
+  const trackingEmailSubject = `Your ${business.name} order ${cleanOrderId} has shipped`;
+  const reviewRequestEmailSubject = `How did your ${business.name} order ${cleanOrderId} go?`;
+  const existingFollowUpStatus = cleanString(order.customerFollowUpStatus).toLowerCase() || "none";
+  const cleanFollowUpStatus = cleanString(customerFollowUpStatus).toLowerCase() || existingFollowUpStatus;
+  const cleanFollowUpNotes = cleanString(customerFollowUpNotes);
+  const cleanFollowUpResolution = cleanString(customerFollowUpResolution);
+
+  if (!CUSTOMER_FOLLOW_UP_STATUSES.has(cleanFollowUpStatus)) {
+    throw new HttpsError("invalid-argument", "Invalid customer follow-up status.");
+  }
+
+  if (cleanStatus === "completed" && OPEN_CUSTOMER_FOLLOW_UP_STATUSES.has(cleanFollowUpStatus)) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Resolve the return, swap, or complaint before marking the order completed.",
+    );
+  }
+
+  const previousStatus = cleanString(order.fulfilmentStatus || order.status).toLowerCase();
   const previousTracking = cleanString(order.trackingNumber || order.tracking || order.trackingId);
   const cleanShippingUrl = cleanTracking ? trackingUrl(cleanTracking, cleanCarrier) : cleanString(order.shippingUrl);
   const shouldSendTrackingEmail =
@@ -176,8 +385,15 @@ const updateOrderFulfilmentHandler = async (request) => {
       previousTracking !== cleanTracking ||
       !order.trackingEmailSentAt
     );
+  const shouldSendReviewRequestEmail =
+    cleanStatus === "delivered" &&
+    previousStatus !== "delivered" &&
+    !order.reviewRequestEmailSentAt &&
+    !order.reviewRequestEmailSandboxedAt;
 
   const now = admin.firestore.FieldValue.serverTimestamp();
+  const timelineAt = admin.firestore.Timestamp.now();
+  const timelineEntries = [];
   const updateData = {
     fulfilmentStatus: cleanStatus,
     status: displayStatus(cleanStatus),
@@ -190,6 +406,10 @@ const updateOrderFulfilmentHandler = async (request) => {
     adminNotes: cleanString(adminNotes),
     note: cleanString(adminNotes),
     dueDate: cleanString(dueDate) || null,
+    customerFollowUpStatus: cleanFollowUpStatus,
+    customerFollowUpOpen: OPEN_CUSTOMER_FOLLOW_UP_STATUSES.has(cleanFollowUpStatus),
+    customerFollowUpNotes: cleanFollowUpNotes,
+    customerFollowUpResolution: cleanFollowUpResolution,
     updatedAt: now,
     lastFulfilmentUpdatedAt: now,
     lastFulfilmentUpdatedByUid: adminUid,
@@ -204,15 +424,77 @@ const updateOrderFulfilmentHandler = async (request) => {
     updateData.assignedAt = now;
   }
 
+  if (previousStatus !== cleanStatus) {
+    timelineEntries.push(timelineEntry({
+      type: "fulfilment_status",
+      label: `Status changed from ${previousStatus || "unknown"} to ${cleanStatus}`,
+      at: timelineAt,
+      byUid: adminUid,
+      byEmail: adminEmail,
+      byName: adminName,
+      metadata: {
+        previousStatus,
+        fulfilmentStatus: cleanStatus,
+      },
+    }));
+  }
+
   if (cleanStatus === "packing" && !order.packingStartedAt) updateData.packingStartedAt = now;
   if (cleanStatus === "packed" && !order.packedAt) updateData.packedAt = now;
   if (cleanStatus === "shipped" && !order.shippedAt) updateData.shippedAt = now;
   if (cleanStatus === "delivered" && !order.deliveredAt) updateData.deliveredAt = now;
+  if (cleanStatus === "delivered" && !order.autoCompleteAfter) {
+    updateData.autoCompleteAfter = autoCompleteAfterDeliveryDate();
+    updateData.autoCompleteReason = "no_customer_follow_up_after_delivery";
+  }
+  if (OPEN_CUSTOMER_FOLLOW_UP_STATUSES.has(cleanFollowUpStatus)) {
+    updateData.autoCompleteAfter = null;
+    updateData.autoCompleteReason = `blocked_${cleanFollowUpStatus}`;
+    updateData.autoCompleteBlockedAt = now;
+  }
+  if (cleanFollowUpStatus !== existingFollowUpStatus) {
+    updateData.customerFollowUpUpdatedAt = now;
+    timelineEntries.push(timelineEntry({
+      type: "customer_follow_up",
+      label: `Customer follow-up changed from ${existingFollowUpStatus} to ${cleanFollowUpStatus}`,
+      at: timelineAt,
+      byUid: adminUid,
+      byEmail: adminEmail,
+      byName: adminName,
+      metadata: {
+        previousCustomerFollowUpStatus: existingFollowUpStatus,
+        customerFollowUpStatus: cleanFollowUpStatus,
+      },
+    }));
+  }
+  if (cleanFollowUpStatus === "resolved" && OPEN_CUSTOMER_FOLLOW_UP_STATUSES.has(existingFollowUpStatus)) {
+    updateData.customerFollowUpResolvedAt = now;
+    if (cleanStatus === "delivered" && !order.completedAt) {
+      updateData.autoCompleteAfter = autoCompleteAfterDeliveryDate();
+      updateData.autoCompleteReason = "customer_follow_up_resolved";
+    }
+  }
   if (cleanStatus === "completed" && !order.completedAt) updateData.completedAt = now;
+  if (cleanStatus === "completed") {
+    updateData.autoCompleteAfter = null;
+  }
+  if (
+    cleanStatus === "completed" &&
+    !order.archiveAfter &&
+    !OPEN_CUSTOMER_FOLLOW_UP_STATUSES.has(cleanFollowUpStatus)
+  ) {
+    updateData.archiveAfter = archiveAfterCompleteDate();
+  }
+  if (timelineEntries.length) {
+    updateData.timeline = admin.firestore.FieldValue.arrayUnion(...timelineEntries);
+  }
 
   let trackingEmailSent = false;
   let trackingEmailSandboxed = false;
   let trackingEmailError = "";
+  let reviewRequestEmailSent = false;
+  let reviewRequestEmailSandboxed = false;
+  let reviewRequestEmailError = "";
 
   if (shouldSendTrackingEmail) {
     try {
@@ -233,7 +515,7 @@ const updateOrderFulfilmentHandler = async (request) => {
           type: "tracking",
           status: "sandboxed",
           to: recipientEmail(order),
-          subject: `Your Recovery Tools order ${cleanOrderId} has shipped`,
+          subject: trackingEmailSubject,
           orderId: cleanOrderId,
           userId: cleanString(order.userId || order.buyerUid || order.uid),
           providerMode: "local-sandbox",
@@ -253,7 +535,7 @@ const updateOrderFulfilmentHandler = async (request) => {
           type: "tracking",
           status: "sent",
           to: recipientEmail(order),
-          subject: `Your Recovery Tools order ${cleanOrderId} has shipped`,
+          subject: trackingEmailSubject,
           orderId: cleanOrderId,
           userId: cleanString(order.userId || order.buyerUid || order.uid),
           providerMode: useSendGridSandboxMode() ? "sendgrid-sandbox" : "live",
@@ -274,7 +556,7 @@ const updateOrderFulfilmentHandler = async (request) => {
         type: "tracking",
         status: "failed",
         to: recipientEmail(order),
-        subject: `Your Recovery Tools order ${cleanOrderId} has shipped`,
+        subject: trackingEmailSubject,
         orderId: cleanOrderId,
         userId: cleanString(order.userId || order.buyerUid || order.uid),
         providerMode: useSendGridSandboxMode() ? "sendgrid-sandbox" : "live",
@@ -287,6 +569,64 @@ const updateOrderFulfilmentHandler = async (request) => {
         },
       });
       console.error("Tracking email failed; fulfilment update will still be saved.", err);
+    }
+  }
+
+  if (shouldSendReviewRequestEmail) {
+    try {
+      const emailResult = await sendReviewRequestEmail({
+        orderId: cleanOrderId,
+        order,
+      });
+      reviewRequestEmailSandboxed = !!emailResult?.sandboxed;
+
+      if (reviewRequestEmailSandboxed) {
+        updateData.reviewRequestEmailSandboxedAt = now;
+        updateData.reviewRequestEmailError = "";
+        await logEmailEvent({
+          type: "review_request",
+          status: "sandboxed",
+          to: recipientEmail(order),
+          subject: reviewRequestEmailSubject,
+          orderId: cleanOrderId,
+          userId: cleanString(order.userId || order.buyerUid || order.uid),
+          providerMode: "local-sandbox",
+          sentByUid: adminUid,
+          sentByEmail: adminEmail,
+        });
+      } else {
+        reviewRequestEmailSent = true;
+        updateData.reviewRequestEmailSentAt = now;
+        updateData.reviewRequestEmailError = "";
+        await logEmailEvent({
+          type: "review_request",
+          status: "sent",
+          to: recipientEmail(order),
+          subject: reviewRequestEmailSubject,
+          orderId: cleanOrderId,
+          userId: cleanString(order.userId || order.buyerUid || order.uid),
+          providerMode: useSendGridSandboxMode() ? "sendgrid-sandbox" : "live",
+          sentByUid: adminUid,
+          sentByEmail: adminEmail,
+        });
+      }
+    } catch (err) {
+      reviewRequestEmailError = err.message || "Review request email could not be sent.";
+      updateData.reviewRequestEmailError = reviewRequestEmailError;
+      updateData.reviewRequestEmailFailedAt = now;
+      await logEmailEvent({
+        type: "review_request",
+        status: "failed",
+        to: recipientEmail(order),
+        subject: reviewRequestEmailSubject,
+        orderId: cleanOrderId,
+        userId: cleanString(order.userId || order.buyerUid || order.uid),
+        providerMode: useSendGridSandboxMode() ? "sendgrid-sandbox" : "live",
+        errorMessage: reviewRequestEmailError,
+        sentByUid: adminUid,
+        sentByEmail: adminEmail,
+      });
+      console.error("Review request email failed; fulfilment update will still be saved.", err);
     }
   }
 
@@ -312,6 +652,8 @@ const updateOrderFulfilmentHandler = async (request) => {
     trackingId: cleanTracking,
     shippingCarrier: cleanCarrier,
     shippingUrl: cleanShippingUrl,
+    customerFollowUpStatus: cleanFollowUpStatus,
+    customerFollowUpOpen: OPEN_CUSTOMER_FOLLOW_UP_STATUSES.has(cleanFollowUpStatus),
     updatedAt: now,
     lastFulfilmentUpdatedAt: now,
     lastFulfilmentUpdatedByUid: adminUid,
@@ -339,6 +681,37 @@ const updateOrderFulfilmentHandler = async (request) => {
       trackingEmailFailedAt: now,
       trackingEmailFailedFor: cleanTracking,
     }),
+    ...(reviewRequestEmailSent && {
+      reviewRequestEmailSentAt: now,
+      reviewRequestEmailError: "",
+    }),
+    ...(reviewRequestEmailSandboxed && {
+      reviewRequestEmailSandboxedAt: now,
+      reviewRequestEmailError: "",
+    }),
+    ...(reviewRequestEmailError && {
+      reviewRequestEmailError,
+      reviewRequestEmailFailedAt: now,
+    }),
+    ...(updateData.autoCompleteAfter && {
+      autoCompleteAfter: updateData.autoCompleteAfter,
+      autoCompleteReason: updateData.autoCompleteReason,
+    }),
+    ...(updateData.autoCompleteAfter === null && {
+      autoCompleteAfter: null,
+      ...(updateData.autoCompleteReason && {
+        autoCompleteReason: updateData.autoCompleteReason,
+      }),
+      ...(cleanString(updateData.autoCompleteReason).startsWith("blocked_") && {
+        autoCompleteBlockedAt: now,
+      }),
+    }),
+    ...(updateData.archiveAfter && {
+      archiveAfter: updateData.archiveAfter,
+    }),
+    ...(updateData.customerFollowUpResolvedAt && {
+      customerFollowUpResolvedAt: now,
+    }),
   }, { merge: true });
 
   await batch.commit();
@@ -350,6 +723,9 @@ const updateOrderFulfilmentHandler = async (request) => {
     trackingEmailSent,
     trackingEmailSandboxed,
     trackingEmailError,
+    reviewRequestEmailSent,
+    reviewRequestEmailSandboxed,
+    reviewRequestEmailError,
   };
 };
 

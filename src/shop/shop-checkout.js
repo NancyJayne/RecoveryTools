@@ -31,6 +31,10 @@ function itemLineTotal(item) {
   return asDollars(item.price || item.unitPrice) * Number(item.quantity || 1);
 }
 
+function itemRequiresShipping(item) {
+  return item.requiresShipping === true;
+}
+
 async function waitForAuth() {
   if (auth?.currentUser) return auth.currentUser;
 
@@ -168,6 +172,7 @@ export async function setupCheckoutPage() {
   if (!confirmBtn) return;
 
   const cart = getCurrentCart();
+  const hasShippingItems = cart.some(itemRequiresShipping);
   if (!cart.length) {
     summaryContainer.innerHTML =
       "<p class='text-red-500'>Your cart is empty.</p>";
@@ -340,7 +345,9 @@ export async function setupCheckoutPage() {
     `;
     shippingGroup.appendChild(div);
   });
-  form.appendChild(shippingGroup);
+  if (hasShippingItems) {
+    form.appendChild(shippingGroup);
+  }
 
   const toggleWrapper = document.createElement("div");
   toggleWrapper.className = "mt-6";
@@ -355,7 +362,9 @@ export async function setupCheckoutPage() {
       <span class="ml-2">Billing address same as shipping</span>
     </label>
   `;
-  form.appendChild(toggleWrapper);
+  if (hasShippingItems) {
+    form.appendChild(toggleWrapper);
+  }
 
   const billingContainer = document.createElement("div");
   billingContainer.id = "billingAddressContainer";
@@ -382,7 +391,9 @@ export async function setupCheckoutPage() {
   });
 
   billingContainer.appendChild(billingGroup);
-  form.appendChild(billingContainer);
+  if (hasShippingItems) {
+    form.appendChild(billingContainer);
+  }
 
   // 🔄 Toggle billing section visibility
   const toggleCheckbox = form.querySelector("#sameAsShipping");
@@ -416,7 +427,9 @@ export async function setupCheckoutPage() {
   </label>
 `;
 
-  form.appendChild(saveDefaultWrapper);
+  if (hasShippingItems) {
+    form.appendChild(saveDefaultWrapper);
+  }
 
   // -------------------------------
   // Order Summary
@@ -461,7 +474,7 @@ export async function setupCheckoutPage() {
     cartSummary.appendChild(createFieldRow(labelText, formatCurrency(totalPrice)));
   });
 
-  const shippingCost = 10;
+  const shippingCost = hasShippingItems ? 10 : 0;
   const gst = (subtotal + shippingCost) / 11;
   const total = subtotal + shippingCost;
 
@@ -484,7 +497,7 @@ export async function setupCheckoutPage() {
     const formData = new FormData(form);
     const customerInfo = Object.fromEntries(formData.entries());
     const phoneDigits = String(customerInfo.phone || "").replace(/\D/g, "");
-    if (!phoneDigits || phoneDigits.length < 8) {
+    if (hasShippingItems && (!phoneDigits || phoneDigits.length < 8)) {
       showToast("Enter a recipient phone number for parcel delivery.", "error");
       form.querySelector("#phone")?.focus();
       confirmBtn.disabled = false;
@@ -495,7 +508,9 @@ export async function setupCheckoutPage() {
     const saveAsDefaultShipping =
   form.querySelector("#saveAsDefaultShipping")?.checked || false;
 
-    if (form.querySelector("#sameAsShipping")?.checked) {
+    if (!hasShippingItems) {
+      customerInfo.billingAddress = {};
+    } else if (form.querySelector("#sameAsShipping")?.checked) {
       customerInfo.billingAddress = {
         line1: customerInfo.shippingAddress_line1,
         line2: customerInfo.shippingAddress_line2,
@@ -521,7 +536,7 @@ export async function setupCheckoutPage() {
       const response = await createCheckout({
         cart,
         referrerId: localStorage.getItem("referrer_uid") || null,
-        collectShipping: true,
+        collectShipping: hasShippingItems,
         customerInfo,
         saveAsDefaultShipping,
         token,

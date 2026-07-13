@@ -5,6 +5,8 @@ import sgMail from "@sendgrid/mail";
 import fetch from "node-fetch";
 import { defineSecret } from "firebase-functions/params";
 import { logEmailEvent } from "../utils/emailLog.js";
+import { appBaseUrl } from "../utils/stripeEnvironment.js";
+import { getBusinessProfile } from "../utils/businessProfile.js";
 
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 const RECAPTCHA_SECRET_KEY = defineSecret("RECAPTCHA_SECRET_KEY");
@@ -70,9 +72,33 @@ async function findUserIdByEmail(email) {
   }
 }
 
+function appPasswordResetLink(firebaseResetLink) {
+  try {
+    const firebaseUrl = new URL(firebaseResetLink);
+    const oobCode = firebaseUrl.searchParams.get("oobCode");
+    if (!oobCode) return firebaseResetLink;
+
+    const resetUrl = new URL("/reset", appBaseUrl());
+    resetUrl.searchParams.set("mode", "resetPassword");
+    resetUrl.searchParams.set("oobCode", oobCode);
+
+    const apiKey = firebaseUrl.searchParams.get("apiKey");
+    const lang = firebaseUrl.searchParams.get("lang");
+    if (apiKey) resetUrl.searchParams.set("apiKey", apiKey);
+    if (lang) resetUrl.searchParams.set("lang", lang);
+
+    return resetUrl.toString();
+  } catch (err) {
+    console.warn("Failed to convert Firebase reset link to app reset link:", err);
+    return firebaseResetLink;
+  }
+}
+
 async function sendResetEmail({ email, resetLink, request }) {
-  const subject = "Reset Your Password | Recovery Tools";
+  const business = await getBusinessProfile();
+  const subject = `Reset Your Password | ${business.name}`;
   const userId = await findUserIdByEmail(email);
+  const resetUrl = appPasswordResetLink(resetLink);
 
   if (useLocalSendGridSandbox()) {
     await logEmailEvent({
@@ -85,16 +111,16 @@ async function sendResetEmail({ email, resetLink, request }) {
       sentByUid: request.auth?.uid,
       sentByEmail: request.auth?.token?.email,
     });
-    console.info("SendGrid password reset skipped locally.", { email, resetLink });
+    console.info("SendGrid password reset skipped locally.", { email, resetUrl });
     return { sandboxed: true };
   }
 
   const message = {
     to: email,
-    from: "hello@recoverytools.au",
+    from: business.email,
     templateId: PASSWORD_RESET_TEMPLATE_ID,
     dynamic_template_data: {
-      reset_url: resetLink,
+      reset_url: resetUrl,
       subject,
     },
     mailSettings: {
@@ -144,17 +170,18 @@ export const sendPasswordReset = onCall(
         success: true,
         sandboxed: result.sandboxed,
         resetLink: isAdmin(request) || process.env.FUNCTIONS_EMULATOR === "true"
-          ? resetLink
+          ? appPasswordResetLink(resetLink)
           : undefined,
       };
     } catch (error) {
       const errorMessage = error.message || "Failed to send reset email.";
+      const business = await getBusinessProfile();
       console.error("Password reset email error:", error);
       await logEmailEvent({
         type: "password_reset",
         status: "failed",
         to: cleanTo,
-        subject: "Reset Your Password | Recovery Tools",
+        subject: `Reset Your Password | ${business.name}`,
         providerMode: useSendGridSandboxMode() ? "sendgrid-sandbox" : "live",
         errorMessage,
         sentByUid: request.auth?.uid,

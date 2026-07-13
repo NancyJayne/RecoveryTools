@@ -35,6 +35,11 @@ export { getAdminOrderAlerts } from "./orders/getAdminOrderAlerts.js";
 export { generateOrderPDF } from "./orders/generateOrderPDF.js";
 export { getOrderByInvoiceID } from "./orders/getOrderByInvoiceID.js";
 export { updateOrderFulfilment } from "./orders/updateOrderFulfilment.js";
+export { maintainOrderLifecycle } from "./orders/maintainOrderLifecycle.js";
+export { updateOrderArchive } from "./orders/updateOrderArchive.js";
+export { submitOrderIssue } from "./orders/submitOrderIssue.js";
+export { getOrderIssuesForAdmin } from "./orders/getOrderIssuesForAdmin.js";
+export { updateOrderIssueStatus } from "./orders/updateOrderIssueStatus.js";
 
 // Referrals
 export { logReferralEvent } from "./referrals/logReferralEvent.js";
@@ -65,6 +70,7 @@ export { getAffiliatePerformance } from "./admin/getAffiliatePerformance.js";
 // Products
 export { createProduct } from "./products/createProduct.js";
 export { updateProduct } from "./products/updateProduct.js";
+export { updateProductInventory } from "./products/updateProductInventory.js";
 export { deleteProduct } from "./products/deleteProduct.js";
 export { getFirestoreProducts } from "./products/getFirestoreProducts.js";
 
@@ -80,6 +86,14 @@ export { getShippingTaxSettings } from "./admin/getShippingTaxSettings.js";
 export { updateShippingTaxSettings } from "./admin/updateShippingTaxSettings.js";
 export { getUserDashboardStats } from "./admin/getUserDashboardStats.js";
 export { approveReview } from "./admin/approveReview.js";
+export { getAdminProductReviews } from "./admin/getAdminProductReviews.js";
+export { getBusinessSettings } from "./admin/getBusinessSettings.js";
+export { updateBusinessSettings } from "./admin/updateBusinessSettings.js";
+export { getContentBuilderData } from "./admin/getContentBuilderData.js";
+export { createContentBuilderRecord } from "./admin/createContentBuilderRecord.js";
+export { upsertContentBuilderTemplate } from "./admin/upsertContentBuilderTemplate.js";
+export { updateContentControlRecord } from "./admin/updateContentControlRecord.js";
+export { submitProductReview } from "./reviews/submitProductReview.js";
 export { deleteCourse } from "./courses/deleteCourse.js";
 export { deleteWorkshop } from "./workshops/deleteWorkshop.js";
 

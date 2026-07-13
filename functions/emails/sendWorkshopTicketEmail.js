@@ -1,6 +1,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import sgMail from "@sendgrid/mail";
 import { defineSecret } from "firebase-functions/params";
+import { getBusinessProfile } from "../utils/businessProfile.js";
 
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 
@@ -14,10 +15,11 @@ export async function sendWorkshopTicketEmail({
   }
 
   sgMail.setApiKey(SENDGRID_API_KEY.value());
+  const business = await getBusinessProfile();
 
   const msg = {
     to,
-    from: "hello@recoverytools.au",
+    from: business.email,
     subject: `Your Ticket for ${workshopName}`,
     html: `
       <p>Hi there,</p>
