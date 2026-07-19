@@ -81,11 +81,15 @@ service cloud.firestore {
       allow update: if isAdmin() || (isOwner(userId) && userCanUpdateOwnProfile());
       allow delete: if isAdmin();
 
-      match /purchases/{purchaseId} {
-        allow read: if isOwner(userId) || isAdmin();
-        allow write: if false;
+        match /purchases/{purchaseId} {
+          allow read: if isOwner(userId) || isAdmin();
+          allow write: if false;
+        }
+
+        match /notes/{noteId} {
+          allow read, write: if isAdmin();
+        }
       }
-    }
 
     // Public/catalogue master data
     match /items/{itemId} {
@@ -114,6 +118,39 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    match /productLinks/{productLinkId} {
+      allow read: if isActiveStatus() || isPrivilegedContentEditor();
+      allow write: if isAdmin();
+    }
+
+    match /productOptions/{productOptionId} {
+      allow read: if isActiveStatus() || isPrivilegedContentEditor();
+      allow write: if isAdmin();
+    }
+
+    match /productOptionValues/{productOptionValueId} {
+      allow read: if isActiveStatus() || isPrivilegedContentEditor();
+      allow write: if isAdmin();
+    }
+
+    match /productVariants/{productVariantId} {
+      allow read: if isActiveStatus() || isPrivilegedContentEditor();
+      allow write: if isAdmin();
+    }
+
+    match /productVariantValues/{productVariantValueId} {
+      allow read: if isActiveStatus() || isPrivilegedContentEditor();
+      allow write: if isAdmin();
+    }
+
+    match /productComponents/{productComponentId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /productAccessGrants/{productAccessGrantId} {
+      allow read, write: if isAdmin();
+    }
+
     match /itemVariants/{variantId} {
       allow read: if isPublicVisible() || isPrivilegedContentEditor();
       allow write: if isAdmin();
@@ -121,6 +158,16 @@ service cloud.firestore {
 
     match /assets/{assetId} {
       allow read: if isPublicVisible() || isPrivilegedContentEditor();
+      allow write: if isAdmin();
+    }
+
+    match /entityAssets/{entityAssetId} {
+      allow read: if isActiveStatus() || isActiveDisplayStatus() || isPrivilegedContentEditor();
+      allow write: if isAdmin();
+    }
+
+    match /assetRenditions/{assetRenditionId} {
+      allow read: if isActiveStatus() || isPrivilegedContentEditor();
       allow write: if isAdmin();
     }
 
@@ -189,6 +236,13 @@ service cloud.firestore {
       allow get: if isAdmin() || (signedIn() && request.auth.uid == resource.data.userId);
       allow list: if isAdmin() || (signedIn() && request.auth.uid == resource.data.userId);
       allow write: if isAdmin();
+    }
+
+    match /sharedCarts/{sharedCartId} {
+      allow get: if resource.data.active == true;
+      allow list: if isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if false;
     }
 
     // Contact Form

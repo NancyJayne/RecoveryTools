@@ -49,6 +49,11 @@ export const updateProductInventory = onCall(
     try {
       const db = admin.firestore();
       const now = admin.firestore.FieldValue.serverTimestamp();
+      const canonicalVariantDocs = await Promise.all(normalizedVariants.map((variant) =>
+        db.collection("productVariants").doc(variant.variantId).get()));
+      const canonicalVariantIds = new Set(
+        canonicalVariantDocs.filter((doc) => doc.exists).map((doc) => doc.id),
+      );
       await db.runTransaction(async (transaction) => {
         const productRef = db.collection("products").doc(cleanProductId);
         const productSnap = await transaction.get(productRef);
@@ -82,9 +87,12 @@ export const updateProductInventory = onCall(
         }
 
         normalizedVariants.forEach((variant) => {
-          const variantRef = db.collection("itemVariants").doc(variant.variantId);
+          const isCanonical = canonicalVariantIds.has(variant.variantId);
+          const variantRef = db
+            .collection(isCanonical ? "productVariants" : "itemVariants")
+            .doc(variant.variantId);
           transaction.set(variantRef, {
-            stock: variant.stock,
+            [isCanonical ? "stockQuantity" : "stock"]: variant.stock,
             updatedAt: now,
           }, { merge: true });
 

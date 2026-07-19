@@ -5,6 +5,7 @@ import { httpsCallable } from "firebase/functions";
 import { onAuthStateChanged } from "firebase/auth";
 import { showToast } from "../utils/utils.js";
 import { handleSignOut } from "../auth/user-auth.js";
+import { applyRoleUI, getUserRole } from "../auth/user-roles.js";
 
 import {
   loadOrderReceipts,
@@ -45,6 +46,38 @@ function formatAddress(address) {
     .join(", ");
 }
 
+function isRetryableRoleError(error) {
+  return [
+    "functions/unauthenticated",
+    "functions/permission-denied",
+    "unauthenticated",
+    "permission-denied",
+  ].includes(error?.code);
+}
+
+async function loadProfileRoles(user) {
+  const getUserRoleWithPermissions = httpsCallable(functions, "getUserRoleWithPermissions");
+
+  try {
+    const result = await getUserRoleWithPermissions();
+    return result.data?.roles || {};
+  } catch (error) {
+    if (isRetryableRoleError(error)) {
+      try {
+        await user.getIdToken(true);
+        const result = await getUserRoleWithPermissions();
+        return result.data?.roles || {};
+      } catch (retryError) {
+        console.warn("Profile role refresh failed; using local role claims.", retryError);
+      }
+    } else {
+      console.warn("Profile role lookup failed; using local role claims.", error);
+    }
+
+    return getUserRole();
+  }
+}
+
 export async function setupProfilePage() {
   const profileSection = document.getElementById("profileSection");
   profileSection?.classList.remove("hidden");
@@ -65,21 +98,29 @@ export async function setupProfilePage() {
     return;
   }
 
+  const profileNameFallback = user.displayName || user.email || "My Profile";
+  document.querySelector("[data-profile-name]")?.replaceChildren(profileNameFallback);
+  document.querySelector("[data-profile-name-inline]")?.replaceChildren(profileNameFallback);
+  document.querySelectorAll("[data-profile-email]").forEach((element) => {
+    element.textContent = user.email || "Not set";
+  });
+  document.querySelector("[data-profile-role]")?.replaceChildren("user");
+
+  loadProfileRoles(user)
+    .then((roles) => {
+      applyRoleUI(roles);
+      const roleNames = Object.entries(roles)
+        .filter(([, enabled]) => enabled)
+        .map(([role]) => role);
+      document.querySelector("[data-profile-role]")?.replaceChildren(
+        roleNames.length ? roleNames.join(", ") : "user",
+      );
+    })
+    .catch((roleError) => {
+      console.warn("Could not load profile roles.", roleError);
+    });
+
   try {
-    // Load user roles
-    const getUserRoleWithPermissions = httpsCallable(functions, "getUserRoleWithPermissions");
-    const result = await getUserRoleWithPermissions();
-    const { roles = {} } = result.data || {};
-
-    if (roles.admin) document.getElementById("adminAccessLink")?.classList.remove("hidden");
-    if (roles.therapist) document.getElementById("therapistAccessLink")?.classList.remove("hidden");
-    if (roles.affiliate) {
-      document.getElementById("affiliateAccessLink")?.classList.remove("hidden");
-      document.getElementById("affiliateAccessBtn")?.classList.remove("hidden");
-      document.getElementById("affiliateBadge")?.classList.remove("hidden");
-      document.getElementById("affiliateSignup")?.classList.add("hidden");
-    }
-
     // Load profile photo
     let photoURL = fallbackURL;
     let hasCustomPhoto = false;
@@ -106,15 +147,6 @@ export async function setupProfilePage() {
       const profilePhoneEl = document.querySelector("[data-profile-phone]");
       if (profilePhoneEl) {
         profilePhoneEl.textContent = userData?.phone || "Not added yet";
-      }
-
-      const profileRoleEl = document.querySelector("[data-profile-role]");
-      if (profileRoleEl) {
-        const roleNames = Object.entries(roles || {})
-          .filter(([, enabled]) => enabled)
-          .map(([role]) => role);
-
-        profileRoleEl.textContent = roleNames.length ? roleNames.join(", ") : "user";
       }
 
       const profileShippingEl = document.querySelector("[data-profile-shipping]");

@@ -1,6 +1,113 @@
 {
   "indexes": [
     {
+      "collectionGroup": "products",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "shopStatus", "order": "ASCENDING" },
+        { "fieldPath": "websiteVisible", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "products",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "marketplaceVisibility", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "products",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sellerUserId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "products",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "productType", "order": "ASCENDING" },
+        { "fieldPath": "shopStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "products",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "featured", "order": "ASCENDING" },
+        { "fieldPath": "sortOrder", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "productLinks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "productId", "order": "ASCENDING" },
+        { "fieldPath": "linkRole", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "productLinks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "linkedEntityType", "order": "ASCENDING" },
+        { "fieldPath": "linkedEntityId", "order": "ASCENDING" },
+        { "fieldPath": "linkRole", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "productLinks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "linkedEntityType", "order": "ASCENDING" },
+        { "fieldPath": "linkedEntityId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "entityAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "entityType", "order": "ASCENDING" },
+        { "fieldPath": "entityId", "order": "ASCENDING" },
+        { "fieldPath": "assetRole", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "entityAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "assetId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "entityAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "productVariantId", "order": "ASCENDING" },
+        { "fieldPath": "assetRole", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "productVariants",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "productId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "productVariants",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "productId", "order": "ASCENDING" },
+        { "fieldPath": "isDefault", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "courses",
       "queryScope": "COLLECTION",
       "fields": [

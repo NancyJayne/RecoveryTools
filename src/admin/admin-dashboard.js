@@ -16,18 +16,24 @@ function formatCurrency(value) {
   }).format(Number(value || 0));
 }
 
-function statTile({ label, value, href = "" }) {
+function statTile({ label, value, href = "", attention = false, note = "" }) {
+  const attentionClasses = attention
+    ? "border-purple-500 bg-purple-950/60 ring-1 ring-purple-500/60"
+    : "border-gray-700 bg-gray-800";
   const linkClasses = [
-    "router-link block min-h-32 rounded border border-gray-700 bg-gray-800 p-4",
-    "hover:border-[#407471] focus:outline-none focus:ring-2 focus:ring-[#407471]",
+    `router-link block min-h-32 rounded border p-4 ${attentionClasses}`,
+    "hover:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500",
   ].join(" ");
+  const labelColor = attention ? "text-purple-200" : "text-gray-400";
+  const noteColor = attention ? "text-purple-200" : "text-gray-500";
   const content = `
-    <div class="min-h-9 text-xs uppercase tracking-wide leading-snug text-gray-400">${label}</div>
+    <div class="min-h-9 text-xs uppercase tracking-wide leading-snug ${labelColor}">${label}</div>
     <div class="mt-3 min-w-0 break-words text-2xl font-semibold leading-tight text-white sm:text-3xl">${value}</div>
+    ${note ? `<div class="mt-2 text-xs ${noteColor}">${note}</div>` : ""}
   `;
 
   if (!href) {
-    return `<div class="min-h-32 rounded border border-gray-700 bg-gray-800 p-4">${content}</div>`;
+    return `<div class="min-h-32 rounded border p-4 ${attentionClasses}">${content}</div>`;
   }
 
   return `
@@ -41,26 +47,42 @@ function statTile({ label, value, href = "" }) {
 }
 
 function renderDashboard(container, stats = {}) {
-  const tiles = [
+  const actionTiles = [
+    statTile({
+      label: "New / unassigned",
+      value: Number(stats.newUnassignedOrders || 0),
+      href: "/admin/orders",
+      attention: Number(stats.newUnassignedOrders || 0) > 0,
+      note: "Orders waiting to be claimed",
+    }),
+    statTile({
+      label: "Open returns / complaints",
+      value: Number(stats.openCustomerIssues || 0),
+      href: "/admin/orders?issues=open",
+      attention: Number(stats.openCustomerIssues || 0) > 0,
+      note: "Customer issues needing follow-up",
+    }),
+    statTile({
+      label: "Pending approvals",
+      value: Number(stats.pendingApprovals || 0),
+      href: "/admin/approvals",
+      attention: Number(stats.pendingApprovals || 0) > 0,
+      note: "Submissions waiting for review",
+    }),
+  ].join("");
+
+  const overviewTiles = [
     statTile({
       label: "Open orders",
       value: Number(stats.openOrders || 0),
       href: "/admin/orders",
     }),
     statTile({
-      label: "New / unassigned",
-      value: Number(stats.newUnassignedOrders || 0),
+      label: "Due soon / overdue",
+      value: Number(stats.ordersDueSoon || 0),
       href: "/admin/orders",
-    }),
-    statTile({
-      label: "Open returns / complaints",
-      value: Number(stats.openCustomerIssues || 0),
-      href: "/admin/orders?issues=open",
-    }),
-    statTile({
-      label: "Pending approvals",
-      value: Number(stats.pendingApprovals || 0),
-      href: "/admin/approvals",
+      attention: Number(stats.ordersDueSoon || 0) > 0,
+      note: "Open orders due within 3 days",
     }),
     statTile({
       label: "Total orders",
@@ -69,10 +91,17 @@ function renderDashboard(container, stats = {}) {
     statTile({
       label: "Users",
       value: Number(stats.totalUsers || 0),
+      href: "/admin/crm",
     }),
     statTile({
       label: "Revenue",
       value: formatCurrency(stats.totalRevenue),
+    }),
+    statTile({
+      label: "Content drafts",
+      value: Number(stats.contentDrafts || 0),
+      href: "/admin/content?status=draft",
+      note: "Items, Blueprints and Plans",
     }),
   ].join("");
 
@@ -82,9 +111,23 @@ function renderDashboard(container, stats = {}) {
         <h1 class="text-3xl font-bold text-white">Admin Dashboard</h1>
       </div>
 
-      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        ${tiles}
-      </div>
+      <section aria-labelledby="dashboardAttentionHeading">
+        <h2 id="dashboardAttentionHeading" class="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-400">
+          Needs attention
+        </h2>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          ${actionTiles}
+        </div>
+      </section>
+
+      <section class="mt-8" aria-labelledby="dashboardOverviewHeading">
+        <h2 id="dashboardOverviewHeading" class="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-400">
+          Overview
+        </h2>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          ${overviewTiles}
+        </div>
+      </section>
     </div>
   `;
 }

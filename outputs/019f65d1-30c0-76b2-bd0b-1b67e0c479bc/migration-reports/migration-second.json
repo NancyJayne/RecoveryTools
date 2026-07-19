@@ -1,0 +1,141 @@
+{
+  "migrationVersion": "product-asset-v1",
+  "generatedAt": "2026-07-17T13:09:07.412Z",
+  "mode": "emulator-write",
+  "safety": "Additive merge only. No deletes. Legacy collections and order history are not modified.",
+  "summary": {
+    "create": 0,
+    "update": 0,
+    "unchanged": 86
+  },
+  "collections": {
+    "products": {
+      "proposed": 6,
+      "create": 0,
+      "update": 0,
+      "unchanged": 6
+    },
+    "productLinks": {
+      "proposed": 8,
+      "create": 0,
+      "update": 0,
+      "unchanged": 8
+    },
+    "items": {
+      "proposed": 6,
+      "create": 0,
+      "update": 0,
+      "unchanged": 6
+    },
+    "productAccessGrants": {
+      "proposed": 2,
+      "create": 0,
+      "update": 0,
+      "unchanged": 2
+    },
+    "plans": {
+      "proposed": 1,
+      "create": 0,
+      "update": 0,
+      "unchanged": 1
+    },
+    "productVariants": {
+      "proposed": 7,
+      "create": 0,
+      "update": 0,
+      "unchanged": 7
+    },
+    "productOptions": {
+      "proposed": 4,
+      "create": 0,
+      "update": 0,
+      "unchanged": 4
+    },
+    "productOptionValues": {
+      "proposed": 8,
+      "create": 0,
+      "update": 0,
+      "unchanged": 8
+    },
+    "productVariantValues": {
+      "proposed": 12,
+      "create": 0,
+      "update": 0,
+      "unchanged": 12
+    },
+    "assets": {
+      "proposed": 10,
+      "create": 0,
+      "update": 0,
+      "unchanged": 10
+    },
+    "assetRenditions": {
+      "proposed": 5,
+      "create": 0,
+      "update": 0,
+      "unchanged": 5
+    },
+    "entityAssets": {
+      "proposed": 17,
+      "create": 0,
+      "update": 0,
+      "unchanged": 17
+    }
+  },
+  "beforeCounts": {
+    "products": 6,
+    "productLinks": 8,
+    "productOptions": 4,
+    "productOptionValues": 8,
+    "productVariants": 7,
+    "productVariantValues": 12,
+    "productComponents": 0,
+    "productAccessGrants": 2,
+    "assets": 10,
+    "entityAssets": 17,
+    "assetRenditions": 5,
+    "items": 78,
+    "blueprints": 104,
+    "plans": 9,
+    "productPrices": 6,
+    "itemVariants": 22,
+    "itemAssets": 11
+  },
+  "afterCounts": {
+    "products": 6,
+    "productLinks": 8,
+    "productOptions": 4,
+    "productOptionValues": 8,
+    "productVariants": 7,
+    "productVariantValues": 12,
+    "productComponents": 0,
+    "productAccessGrants": 2,
+    "assets": 10,
+    "entityAssets": 17,
+    "assetRenditions": 5,
+    "items": 78,
+    "blueprints": 104,
+    "plans": 9,
+    "productPrices": 6,
+    "itemVariants": 22,
+    "itemAssets": 11
+  },
+  "legacyCounts": {
+    "productPrices": 6,
+    "itemVariants": 22,
+    "itemAssets": 11
+  },
+  "warnings": [
+    "Product PROD-COURSE-001 unlocks missing Plan COURSE-TRIGGER-BALL-BASICS.",
+    "Product PROD-CUPPING-SET unlocks missing Plan PLAN-CUPPING-BASICS.",
+    "Product PROD-CUPPING-SET unlocks missing Plan COURSE-CUPPING-BASICS.",
+    "Product PROD-EPSOM-SALT unlocks missing Plan PLAN-EPSOM-SOAKS.",
+    "Product PROD-EPSOM-SALT unlocks missing Plan COURSE-EPSOM-SOAKS.",
+    "Product PROD-HEAT-PATCHES-6PK unlocks missing Plan PLAN-HEAT-PATCHES.",
+    "Product PROD-HEAT-PATCHES-6PK unlocks missing Plan COURSE-HEAT-PATCHES.",
+    "Product PROD-MCT-BALM-01 unlocks missing Plan PLAN-MCT-BALM-USE.",
+    "Product PROD-MCT-BALM-01 unlocks missing Plan COURSE-MCT-BALM-USE.",
+    "Product PROD-TRIGGER-BALL-6CM unlocks missing Plan COURSE-TRIGGER-BALL-BASICS."
+  ],
+  "examples": []
+}

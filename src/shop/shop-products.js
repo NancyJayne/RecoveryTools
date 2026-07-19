@@ -58,6 +58,31 @@ function getProductTags(product) {
   ];
 }
 
+function formatProductDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : new Intl.DateTimeFormat("en-AU", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Australia/Brisbane",
+    }).format(date);
+}
+
+function productExperienceDetails(product) {
+  return [
+    ["Starts", formatProductDateTime(product.eventStartAt)],
+    ["Ends", formatProductDateTime(product.eventEndAt)],
+    ["Location", product.eventLocation],
+    ["Delivery", product.deliveryMode],
+    ["Instructor", product.instructor],
+    ["Tickets / seats", product.tracksSeats ? product.seatCapacity : ""],
+    ["Access", product.unlocksAccess ? product.accessType || "Included after purchase" : ""],
+    ["Certificate", product.issuesCertificate ? product.certificateName || "Included" : ""],
+  ].filter(([, value]) => value !== "" && value !== null && value !== undefined);
+}
+
 function isFeatured(product) {
   return product.featured === true || getProductTags(product).includes("featured");
 }
@@ -398,6 +423,18 @@ export function showProductDetail(product, options = {}) {
     featureList.appendChild(li);
   });
 
+  const experienceDetails = document.createElement("dl");
+  experienceDetails.className = "mb-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm";
+  productExperienceDetails(product).forEach(([label, value]) => {
+    const term = document.createElement("dt");
+    term.className = "font-semibold text-gray-300";
+    term.textContent = label;
+    const description = document.createElement("dd");
+    description.className = "text-gray-400";
+    description.textContent = String(value);
+    experienceDetails.append(term, description);
+  });
+
   const priceWrap = document.createElement("div");
   priceWrap.className = "flex flex-col gap-4 mb-4";
 
@@ -508,6 +545,7 @@ export function showProductDetail(product, options = {}) {
   content.appendChild(shortDesc);
   content.appendChild(longDesc);
   content.appendChild(featureList);
+  if (experienceDetails.children.length) content.appendChild(experienceDetails);
   content.appendChild(priceWrap);
   content.appendChild(backBtn);
 

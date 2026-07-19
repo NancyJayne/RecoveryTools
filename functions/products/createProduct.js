@@ -21,6 +21,19 @@ function asArray(value) {
   return Array.isArray(value) ? value.filter(Boolean) : [];
 }
 
+const PRODUCT_TYPES = new Set([
+  "Physical", "Digital Download", "Plan Access", "Course Access", "Workshop Registration",
+  "Program Access", "Service", "Bundle", "Membership", "Mixed",
+]);
+
+function legacyType(productType) {
+  if (productType === "Course Access") return "course";
+  if (productType === "Workshop Registration") return "workshop";
+  if (["Plan Access", "Program Access"].includes(productType)) return "program";
+  if (productType === "Digital Download") return "digital";
+  return "tool";
+}
+
 export const createProduct = onCall(
   { region: "australia-southeast1" },
   async (request) => {
@@ -55,6 +68,9 @@ export const createProduct = onCall(
       requiresShipping,
       inventoryTracked,
       creatorId,
+      productType,
+      status,
+      productId,
     } = request.data || {};
 
     const productName = String(name || "").trim();
@@ -69,15 +85,28 @@ export const createProduct = onCall(
       const normalizedMedia = asArray(media);
       const fallbackImage = image || imageUrl || normalizedImages[0] || "";
       const normalizedDescription = description || shortDescription || longDescription || "";
-      const isVisible = visible ?? websiteVisible ?? true;
-      const normalizedType = normalizeStatus(type, "tool");
+      const canonicalType = PRODUCT_TYPES.has(productType) ? productType :
+        PRODUCT_TYPES.has(type) ? type : "Physical";
+      const isVisible = visible === true || websiteVisible === true;
+      const normalizedType = legacyType(canonicalType);
       const defaultRequiresShipping = !["course", "workshop", "program", "digital", "session"].includes(normalizedType);
       const normalizedRequiresShipping = requiresShipping ?? defaultRequiresShipping;
-
-      const productRef = await admin.firestore().collection("products").add({
+      const db = admin.firestore();
+      const generatedId = String(productId || `PROD-${slugify(productName)}-${Date.now()}`).toUpperCase();
+      const productRef = db.collection("products").doc(generatedId);
+      const priceRef = db.collection("productPrices").doc(`PRICE-${generatedId}-BASE`);
+      const now = admin.firestore.FieldValue.serverTimestamp();
+      const normalizedStatus = normalizeStatus(status, "draft");
+      const batch = db.batch();
+      batch.create(productRef, {
+        productId: generatedId,
+        productName,
+        productType: canonicalType,
         name: productName,
         title: productName,
         price: numericPrice,
+        basePrice: numericPrice,
+        currency: "AUD",
         priceFrom: Number(priceFrom ?? numericPrice),
         description: normalizedDescription,
         shortDescription: shortDescription || normalizedDescription,
@@ -97,11 +126,36 @@ export const createProduct = onCall(
         sku: sku || null,
         visible: isVisible,
         websiteVisible: isVisible,
-        shopStatus: normalizeStatus(shopStatus, isVisible ? "active" : "draft"),
-        creatorId: creatorId || null,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: normalizedStatus,
+        shopStatus: normalizeStatus(shopStatus, normalizedStatus),
+        approvalStatus: normalizedStatus === "active" ? "approved" : "draft",
+        creatorId: creatorId || request.auth.uid,
+        creatorUserId: creatorId || request.auth.uid,
+        ownerUserId: request.auth.uid,
+        soldByRecoveryTools: true,
+        contentOrigin: "app",
+        managedByWorkbook: false,
+        createdAt: now,
+        updatedAt: now,
       });
+      batch.create(priceRef, {
+        priceId: priceRef.id,
+        productId: generatedId,
+        variantId: "",
+        currency: "AUD",
+        retailPrice: numericPrice,
+        salePrice: null,
+        onSale: false,
+        effectiveShopPrice: numericPrice,
+        gstIncluded: true,
+        gstAmount: Number((numericPrice / 11).toFixed(2)),
+        status: "active",
+        contentOrigin: "app",
+        managedByWorkbook: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await batch.commit();
 
       return { success: true, id: productRef.id };
     } catch (err) {

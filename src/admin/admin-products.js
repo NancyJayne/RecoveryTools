@@ -1,14 +1,17 @@
 import { httpsCallable } from "firebase/functions";
-import { functions } from "../utils/firebase-config.js";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { functions, storage } from "../utils/firebase-config.js";
 import { showTabContent, showToast } from "../utils/utils.js";
-import { attachDeleteHandlers } from "./admin-delete.js";
 
 const createProduct = httpsCallable(functions, "createProduct");
 const updateProduct = httpsCallable(functions, "updateProduct");
 const updateInventory = httpsCallable(functions, "updateProductInventory");
 const getProducts = httpsCallable(functions, "getFirestoreProducts");
+const getAdminAssets = httpsCallable(functions, "getAdminAssets");
+const upsertAdminAsset = httpsCallable(functions, "upsertAdminAsset");
 
 let cachedProducts = [];
+let cachedAssets = [];
 
 function asMoney(value) {
   const amount = Number(value ?? 0);
@@ -60,6 +63,8 @@ export function setupProductManager() {
   if (list) {
     loadProducts();
   }
+
+  setupAssetManager();
 
   const editForm = document.getElementById("editProductForm");
   if (editForm && editForm.dataset.bound !== "true") {
@@ -320,7 +325,6 @@ function renderProductManagerList(products) {
     container.appendChild(div);
   });
 
-  attachDeleteHandlers("productList", "product");
 }
 
 function normalized(value) {
@@ -595,7 +599,11 @@ function populateEditForm(product) {
   form["edit-id"].value = product.id;
   form["edit-name"].value = product.name || product.title || "";
   form["edit-price"].value = product.price ?? product.priceFrom ?? 0;
-  form["edit-type"].value = product.type || "tool";
+  form["edit-type"].value = product.productType || product.type || "Physical";
+  form["edit-status"].value = product.status || product.shopStatus || "draft";
+  form["edit-visible"].checked = product.websiteVisible === true || product.visible === true;
+  form["edit-shipping"].checked = product.requiresShipping === true;
+  form["edit-inventory"].checked = product.inventoryTracked === true;
   form["edit-stock"].value = product.stock ?? 0;
   form["edit-tags"].value = productTags(product).join(", ");
   form["edit-description"].value =
@@ -626,7 +634,9 @@ function getFormData(prefix) {
   const priceValue = parseFloat(document.getElementById(`${prefix}-price`)?.value);
   const stockValue = parseInt(document.getElementById(`${prefix}-stock`)?.value, 10);
   const price = Number.isFinite(priceValue) ? priceValue : 0;
-  const type = document.getElementById(`${prefix}-type`)?.value?.toLowerCase() || "tool";
+  const productType = document.getElementById(`${prefix}-type`)?.value || "Physical";
+  const status = document.getElementById(`${prefix}-status`)?.value || "draft";
+  const visible = document.getElementById(`${prefix}-visible`)?.checked === true;
   const stock = Number.isFinite(stockValue) ? stockValue : 0;
   const tagsValue = document.getElementById(`${prefix}-tags`)?.value || "";
   const tags = tagsValue.split(",").map((t) => t.trim()).filter(Boolean);
@@ -635,14 +645,210 @@ function getFormData(prefix) {
     name,
     price,
     priceFrom: price,
-    type,
+    productType,
+    type: productType,
     stock,
     tags,
     shortDescription: description,
     longDescription: description,
     description,
-    visible: true,
-    websiteVisible: true,
-    shopStatus: "active",
+    visible,
+    websiteVisible: visible,
+    status,
+    shopStatus: status,
+    requiresShipping: document.getElementById(`${prefix}-shipping`)?.checked === true,
+    inventoryTracked: document.getElementById(`${prefix}-inventory`)?.checked === true,
   };
+}
+
+function parseAssetRenditions(value = "") {
+  return String(value).split(/\r?\n/).map((line, index) => {
+    const [renditionName, purpose, fileUrl, width, height, defaultValue, status] =
+      line.split("|").map((part) => part.trim());
+    if (!renditionName || !fileUrl) return null;
+    return {
+      renditionName,
+      purpose,
+      fileUrl,
+      width: Number(width || 0) || null,
+      height: Number(height || 0) || null,
+      isDefault: ["yes", "true", "1"].includes(String(defaultValue).toLowerCase()),
+      status: status || "active",
+      sortOrder: index + 1,
+    };
+  }).filter(Boolean);
+}
+
+function serializeAssetRenditions(values = []) {
+  return values.map((rendition) => [
+    rendition.renditionName || rendition.name || "",
+    rendition.purpose || "",
+    rendition.fileUrl || rendition.url || "",
+    rendition.width || "",
+    rendition.height || "",
+    rendition.isDefault ? "yes" : "no",
+    rendition.status || "active",
+  ].join(" | ")).join("\n");
+}
+
+function resetAssetForm() {
+  const form = document.getElementById("assetManagerForm");
+  form?.reset();
+  form?.classList.add("hidden");
+  document.getElementById("assetManagerId").value = "";
+  document.getElementById("assetManagerFileUrl").value = "";
+  document.getElementById("assetManagerRenditions").value = "";
+  document.getElementById("assetManagerLinks").textContent = "No linked entities.";
+  document.getElementById("assetLinkEntityType").value = "";
+  document.getElementById("assetLinkEntityId").value = "";
+  document.getElementById("assetLinkRole").value = "";
+}
+
+function renderAssetLinks(links = []) {
+  const container = document.getElementById("assetManagerLinks");
+  if (!container) return;
+  if (!links.length) {
+    container.textContent = "No linked entities.";
+    return;
+  }
+  container.innerHTML = links.map((link) => `
+    <label class="flex items-start gap-2 rounded border border-gray-700 p-2">
+      <input class="asset-unlink-checkbox mt-1" type="checkbox" value="${escapeHTML(link.id)}">
+      <span>
+        <strong>${escapeHTML(link.entityType)} ${escapeHTML(link.entityId)}</strong>
+        <span class="block text-xs text-gray-400">
+          ${escapeHTML(link.assetRole || "Related")} | ${escapeHTML(link.fieldKey || "No field key")}
+        </span>
+        <span class="block text-xs text-red-300">Select to unlink when saving</span>
+      </span>
+    </label>
+  `).join("");
+}
+
+function openAssetForm(asset = null) {
+  const form = document.getElementById("assetManagerForm");
+  if (!form) return;
+  form.classList.remove("hidden");
+  document.getElementById("assetManagerId").value = asset?.id || asset?.assetId || "";
+  document.getElementById("assetManagerName").value = asset?.assetName || asset?.name || "";
+  document.getElementById("assetManagerType").value = asset?.assetType || "Document";
+  document.getElementById("assetManagerStatus").value = asset?.status || "draft";
+  document.getElementById("assetManagerVisibility").value = asset?.visibility || "private";
+  document.getElementById("assetManagerTitle").value = asset?.title || "";
+  document.getElementById("assetManagerDescription").value = asset?.description || "";
+  document.getElementById("assetManagerAltText").value = asset?.altText || "";
+  document.getElementById("assetManagerFileUrl").value = asset?.fileUrl || asset?.url || "";
+  document.getElementById("assetManagerRenditions").value = serializeAssetRenditions(asset?.renditions || []);
+  renderAssetLinks(asset?.links || []);
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function uploadAssetManagerFile(assetId) {
+  const file = document.getElementById("assetManagerFile")?.files?.[0];
+  if (!file) return document.getElementById("assetManagerFileUrl")?.value || "";
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, "-");
+  const storageRef = ref(storage, `assets/${assetId || Date.now()}/${Date.now()}-${safeName}`);
+  await uploadBytes(storageRef, file, { contentType: file.type || undefined });
+  return getDownloadURL(storageRef);
+}
+
+async function saveAsset(event) {
+  event.preventDefault();
+  const assetId = document.getElementById("assetManagerId")?.value || "";
+  const assetName = document.getElementById("assetManagerName")?.value.trim() || "";
+  if (!assetName) return;
+  try {
+    const fileUrl = await uploadAssetManagerFile(assetId || assetName);
+    if (!fileUrl) throw new Error("Choose a file for this Asset.");
+    await upsertAdminAsset({
+      assetId,
+      assetName,
+      assetType: document.getElementById("assetManagerType")?.value || "Document",
+      status: document.getElementById("assetManagerStatus")?.value || "draft",
+      visibility: document.getElementById("assetManagerVisibility")?.value || "private",
+      title: document.getElementById("assetManagerTitle")?.value || assetName,
+      description: document.getElementById("assetManagerDescription")?.value || "",
+      altText: document.getElementById("assetManagerAltText")?.value || "",
+      fileUrl,
+      renditions: parseAssetRenditions(document.getElementById("assetManagerRenditions")?.value),
+      replaceRenditions: true,
+      unlinkEntityAssetIds: [...document.querySelectorAll(".asset-unlink-checkbox:checked")]
+        .map((input) => input.value),
+      newLinks: document.getElementById("assetLinkEntityType")?.value &&
+          document.getElementById("assetLinkEntityId")?.value
+        ? [{
+          entityType: document.getElementById("assetLinkEntityType").value,
+          entityId: document.getElementById("assetLinkEntityId").value.trim(),
+          assetRole: document.getElementById("assetLinkRole")?.value.trim() || "Related",
+        }]
+        : [],
+    });
+    showToast("Asset saved", "success");
+    resetAssetForm();
+    await loadAssets();
+  } catch (error) {
+    console.error("Failed to save Asset:", error);
+    showToast(error.message || "Failed to save Asset", "error");
+  }
+}
+
+function renderAssets() {
+  const list = document.getElementById("assetManagerList");
+  if (!list) return;
+  if (!cachedAssets.length) {
+    list.textContent = "No reusable Assets found.";
+    return;
+  }
+  list.innerHTML = cachedAssets
+    .sort((left, right) => String(left.assetName || left.name).localeCompare(right.assetName || right.name))
+    .map((asset) => `
+      <article class="rounded border border-gray-700 bg-gray-900/50 p-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 class="font-semibold text-white">
+              ${escapeHTML(asset.assetName || asset.name || asset.id)}
+            </h3>
+            <p class="text-xs text-gray-400">
+              ${escapeHTML(asset.id)} | ${escapeHTML(asset.assetType || asset.type)}
+            </p>
+            <p class="mt-1 text-xs text-gray-400">
+              ${(asset.renditions || []).length} rendition(s) | ${escapeHTML(asset.status || "draft")}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="edit-asset rounded border border-gray-600 px-3 py-2 text-sm"
+            data-asset-id="${escapeHTML(asset.id)}"
+          >Edit</button>
+        </div>
+      </article>
+    `).join("");
+  list.querySelectorAll(".edit-asset").forEach((button) => {
+    button.addEventListener("click", () => {
+      openAssetForm(cachedAssets.find((asset) => asset.id === button.dataset.assetId));
+    });
+  });
+}
+
+async function loadAssets() {
+  const list = document.getElementById("assetManagerList");
+  if (list) list.textContent = "Loading Assets...";
+  try {
+    const response = await getAdminAssets();
+    cachedAssets = response.data?.assets || [];
+    renderAssets();
+  } catch (error) {
+    console.error("Failed to load Assets:", error);
+    if (list) list.textContent = "Assets could not be loaded.";
+  }
+}
+
+function setupAssetManager() {
+  const form = document.getElementById("assetManagerForm");
+  if (!form || form.dataset.bound === "true") return;
+  form.dataset.bound = "true";
+  form.addEventListener("submit", saveAsset);
+  document.getElementById("newAssetBtn")?.addEventListener("click", () => openAssetForm());
+  document.getElementById("cancelAssetBtn")?.addEventListener("click", resetAssetForm);
+  loadAssets();
 }

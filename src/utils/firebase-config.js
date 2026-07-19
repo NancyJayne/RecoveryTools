@@ -1,7 +1,12 @@
 // Firebase initialization using Vite environment variables.
 
 import { initializeApp } from "firebase/app";
-import { getAuth, connectAuthEmulator } from "firebase/auth";
+import {
+  browserLocalPersistence,
+  connectAuthEmulator,
+  getAuth,
+  setPersistence,
+} from "firebase/auth";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
@@ -10,10 +15,14 @@ import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 let app, auth, db, functions, storage;
 let appCheckInitialized = false;
 
+export function usesFirebaseEmulators() {
+  return import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true";
+}
+
 function isLocalStripeMode() {
   return (
     import.meta.env.VITE_STRIPE_MODE === "test" ||
-    import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true" ||
+    usesFirebaseEmulators() ||
     ["localhost", "127.0.0.1"].includes(location.hostname)
   );
 }
@@ -43,15 +52,37 @@ export async function initFirebase() {
     try {
       app = initializeApp(firebaseConfig);
       auth = getAuth(app);
+
+      // Auth must be connected before persistence or any other operation can
+      // restore a user and make its first network request.
+      if (usesFirebaseEmulators()) {
+        console.log("Connecting Firebase SDKs to local emulators...");
+        connectAuthEmulator(auth, "http://127.0.0.1:9100", {
+          disableWarnings: true,
+        });
+      }
+
       db = getFirestore(app);
       functions = getFunctions(app, "australia-southeast1");
       storage = getStorage(app);
+
+      if (usesFirebaseEmulators()) {
+        connectFirestoreEmulator(db, "127.0.0.1", 8080);
+        connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+        connectStorageEmulator(storage, "127.0.0.1", 9199);
+      }
+
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+      } catch (persistenceError) {
+        console.warn("Could not explicitly enable local auth persistence:", persistenceError);
+      }
     } catch (err) {
       console.error("Failed to initialize Firebase:", err);
       return { app, auth, db, functions, storage };
     }
 
-    if (!appCheckInitialized) {
+    if (!appCheckInitialized && !usesFirebaseEmulators()) {
       const isLocalhost = ["localhost", "127.0.0.1"].includes(location.hostname);
       const debugToken = import.meta.env.VITE_APPCHECK_DEBUG_TOKEN;
 
@@ -71,14 +102,6 @@ export async function initFirebase() {
       } else {
         console.warn("App Check was not initialized. Site key missing.");
       }
-    }
-
-    if (import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true") {
-      console.log("Connecting Firebase SDKs to local emulators...");
-      connectAuthEmulator(auth, "http://127.0.0.1:9100");
-      connectFirestoreEmulator(db, "127.0.0.1", 8080);
-      connectFunctionsEmulator(functions, "127.0.0.1", 5001);
-      connectStorageEmulator(storage, "127.0.0.1", 9199);
     }
   }
 

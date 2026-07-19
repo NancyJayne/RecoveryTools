@@ -1,5 +1,13 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
+import {
+  activePriceForProduct,
+  loadProductArchitecture,
+  mediaForProduct,
+  productDisplayName,
+  productDisplayType,
+  variantsForProduct,
+} from "../utils/productArchitecture.js";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -34,10 +42,14 @@ function positiveNumber(...values) {
   return 0;
 }
 
-function normalizeProduct(doc, variants = [], activePrice = null) {
+function normalizeProduct(doc, architecture) {
   const data = doc.data() || {};
+  const variants = variantsForProduct(doc.id, data.itemId || data.legacyItemId || "", architecture);
+  const activePrice = activePriceForProduct(doc.id, architecture);
+  const media = mediaForProduct(doc.id, data, architecture);
   const images = Array.isArray(data.images) ? data.images.filter(Boolean) : [];
-  const mediaImage = firstImageFromMedia(data.media);
+  const canonicalImages = media.filter((asset) => normalizeStatus(asset.type) === "image").map((asset) => asset.url);
+  const mediaImage = firstImageFromMedia(media);
   const image = images[0] || mediaImage || data.image || data.imageUrl || "";
   const price = positiveNumber(
     activePrice?.effectiveShopPrice,
@@ -62,8 +74,8 @@ function normalizeProduct(doc, variants = [], activePrice = null) {
     id: doc.id,
     productId: data.productId || doc.id,
     ...data,
-    title: data.title || data.name || "",
-    name: data.name || data.title || "",
+    title: productDisplayName(data),
+    name: productDisplayName(data),
     price,
     priceFrom: positiveNumber(data.priceFrom, price),
     retailPrice: positiveNumber(activePrice?.retailPrice, data.retailPrice, price),
@@ -72,12 +84,14 @@ function normalizeProduct(doc, variants = [], activePrice = null) {
     stock: Number(data.stock ?? 0),
     requiresShipping,
     inventoryTracked,
-    type: normalizeStatus(data.type || "tool"),
+    type: normalizeStatus(data.type || productDisplayType(data, "tool")),
+    productType: productDisplayType(data, "tool"),
     shopStatus: normalizeStatus(data.shopStatus || (visible ? "active" : "draft")),
     visible,
     archived: data.archived === true,
-    image,
-    images: images.length ? images : image ? [image] : [],
+    image: canonicalImages[0] || image,
+    images: canonicalImages.length ? canonicalImages : images.length ? images : image ? [image] : [],
+    media,
     tags: Array.isArray(data.tags) ? data.tags : [],
     tagIds: Array.isArray(data.tagIds) ? data.tagIds : [],
     searchTags,
@@ -101,42 +115,13 @@ export const getFirestoreProducts = onCall(
         query = query.where("type", "==", normalizeStatus(type));
       }
 
-      const [snapshot, variantsSnapshot] = await Promise.all([
+      const [snapshot, architecture] = await Promise.all([
         query.get(),
-        admin.firestore().collection("itemVariants").get(),
+        loadProductArchitecture(admin.firestore()),
       ]);
-      const pricesSnapshot = await admin.firestore().collection("productPrices").get();
-      const activePricesByProductId = new Map();
-      pricesSnapshot.docs.forEach((priceDoc) => {
-        const data = priceDoc.data() || {};
-        if (normalizeStatus(data.status) !== "active" || data.variantId || !data.productId) return;
-        activePricesByProductId.set(data.productId, { id: priceDoc.id, ...data });
-      });
-      const variantsByProductId = new Map();
-      variantsSnapshot.docs.forEach((variantDoc) => {
-        const data = variantDoc.data() || {};
-        if (normalizeStatus(data.status || "active") !== "active") return;
-        const productId = data.productId || "";
-        if (!productId) return;
-        if (!variantsByProductId.has(productId)) variantsByProductId.set(productId, []);
-        variantsByProductId.get(productId).push({
-          id: variantDoc.id,
-          variantId: data.variantId || variantDoc.id,
-          name: data.name || "",
-          colour: data.colour || "",
-          size: data.size || "",
-          sku: data.sku || "",
-          priceOverride: data.priceOverride ?? null,
-          stock: Number(data.stock ?? 0),
-        });
-      });
 
       const products = snapshot.docs
-        .map((doc) => normalizeProduct(
-          doc,
-          variantsByProductId.get(doc.id) || [],
-          activePricesByProductId.get(doc.id) || null,
-        ))
+        .map((doc) => normalizeProduct(doc, architecture))
         .filter((product) => includeHidden && isAdmin ? true : product.visible !== false)
         .filter((product) => tag ? product.searchTags.includes(tag) : true)
         .sort((a, b) => (a.name || a.title || "").localeCompare(b.name || b.title || ""));

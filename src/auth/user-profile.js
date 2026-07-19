@@ -21,9 +21,8 @@ function trackingUrl(order) {
   return `https://auspost.com.au/mypost/track/#/details/${encodeURIComponent(trackingNumber)}`;
 }
 
-function orderIssueUrl(invoiceId, type = "return_requested", rating = "") {
+function orderIssueUrl(invoiceId, type = "return_requested") {
   const params = new URLSearchParams({ order: invoiceId, type });
-  if (rating) params.set("rating", rating);
   return `/order-issue?${params.toString()}`;
 }
 

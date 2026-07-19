@@ -5,6 +5,14 @@ import stripeLib from "stripe";
 import { defineSecret } from "firebase-functions/params";
 import fetch from "node-fetch";
 import { appBaseUrl, stripeSecretValue } from "../utils/stripeEnvironment.js";
+import {
+  accessGrantsForProduct,
+  loadProductArchitecture,
+  mediaForProduct,
+  productDisplayName,
+  productDisplayType,
+  variantForProduct,
+} from "../utils/productArchitecture.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -105,6 +113,26 @@ function assertPhysicalCheckoutDetails({ contact, shippingAddress }) {
   }
 }
 
+function normalizedShippingZones(settings = {}) {
+  const rawZones = settings.shippingZones;
+  if (Array.isArray(rawZones)) return rawZones;
+  if (rawZones && typeof rawZones === "object") return Object.values(rawZones);
+  return [];
+}
+
+function shippingQuote(settings, subtotal, hasPhysicalItems) {
+  if (!hasPhysicalItems) return { costInCents: 0, label: "Shipping" };
+  const zones = normalizedShippingZones(settings);
+  const zone = zones.find((entry) => entry?.default) || zones[0] || {};
+  const rate = Math.max(0, Number(zone.rate ?? 10));
+  const freeShippingMin = Math.max(0, Number(settings.freeShippingMin || 0));
+  const isFree = freeShippingMin > 0 && subtotal >= freeShippingMin;
+  return {
+    costInCents: isFree ? 0 : Math.round(rate * 100),
+    label: isFree ? "Free Australian shipping" : zone.label || "Standard Australian shipping",
+  };
+}
+
 const createCheckoutSessionHandler = async (request) => {
   const uid = request.auth?.uid;
   const data = request.data || {};
@@ -160,18 +188,10 @@ const createCheckoutSessionHandler = async (request) => {
       .doc("affiliateCommissions")
       .get();
     const commissionRates = settingsSnap.exists ? settingsSnap.data() : {};
+    const shopSettingsSnap = await db.collection("settings").doc("shop").get();
+    const shopSettings = shopSettingsSnap.exists ? shopSettingsSnap.data() || {} : {};
 
-    const variantIds = cart
-      .map((item) => cleanString(item.variantId))
-      .filter(Boolean);
-    const variantDocs = await Promise.all(
-      variantIds.map((variantId) => db.collection("itemVariants").doc(variantId).get()),
-    );
-    const variantMap = Object.fromEntries(
-      variantDocs
-        .filter((variantDoc) => variantDoc.exists)
-        .map((variantDoc) => [variantDoc.id, variantDoc.data() || {}]),
-    );
+    const architecture = await loadProductArchitecture(db);
 
     const validatedItems = productDocs.map((doc, i) => {
       if (!doc.exists) throw new HttpsError("not-found", `Product not found: ${productIds[i]}`);
@@ -183,34 +203,41 @@ const createCheckoutSessionHandler = async (request) => {
       }
       const quantity = cart[i].quantity || 1;
       const variantId = cleanString(cart[i].variantId);
-      const variant = variantId ? variantMap[variantId] : null;
-      if (variantId && (!variant || variant.productId !== doc.id)) {
+      const variant = variantForProduct(doc.id, data.itemId || data.legacyItemId || "", variantId, architecture);
+      if (variantId && !variant) {
         throw new HttpsError("invalid-argument", `Invalid variant for: ${data.name || doc.id}`);
       }
       const productPrice = data.onSale && data.salePrice
         ? data.salePrice
-        : data.price ?? data.priceFrom;
+        : data.basePrice ?? data.price ?? data.priceFrom;
       const price = variant?.priceOverride ?? productPrice;
-      const baseName = data.name || data.title || doc.id;
+      const baseName = productDisplayName(data, doc.id);
       const variantName = variant?.name || [variant?.colour, variant?.size].filter(Boolean).join(" / ");
       const name = variantName ? `${baseName} - ${variantName}` : baseName;
+      const media = mediaForProduct(doc.id, data, architecture);
+      const image = media.find((asset) => asset.type === "image")?.url || firstImage(data);
+      const accessGrants = accessGrantsForProduct(doc.id, data, architecture);
 
       if (!price || isNaN(price)) throw new HttpsError("invalid-argument", `Invalid price for: ${name}`);
 
       return {
         id: doc.id,
         name,
-        image: firstImage(data),
+        image,
         itemId: data.itemId || null,
         variantId: variantId || null,
+        variantName: variantName || null,
         sku: variant?.sku || data.sku || null,
-        accessType: data.accessType || null,
-        relatedPlanId: data.relatedPlanId || null,
+        accessType: accessGrants[0]?.accessEntityType || data.accessType || null,
+        relatedPlanId: accessGrants.find((grant) => grant.accessEntityType === "Plan")?.accessEntityId ||
+          data.relatedPlanId || null,
         relatedCourseId: data.relatedCourseId || null,
         relatedWorkshopId: data.relatedWorkshopId || null,
         requiresShipping: data.requiresShipping !== false,
-        unlocksAccess: data.unlocksAccess === true,
+        unlocksAccess: accessGrants.length > 0 || data.unlocksAccess === true,
         type: data.type || "item",
+        productType: productDisplayType(data, "item"),
+        accessGrants,
         price,
         quantity,
         creatorId: data.creatorId || null,
@@ -232,8 +259,9 @@ const createCheckoutSessionHandler = async (request) => {
             firebaseProductId: item.id,
             itemId: item.itemId || "",
             variantId: item.variantId || "",
+            variantName: item.variantName || "",
             sku: item.sku || "",
-            productType: item.type || "item",
+            productType: item.productType || item.type || "item",
             accessType: item.accessType || "",
             relatedPlanId: item.relatedPlanId || "",
             relatedCourseId: item.relatedCourseId || "",
@@ -246,7 +274,12 @@ const createCheckoutSessionHandler = async (request) => {
       quantity: item.quantity,
     }));
 
-    const shippingCost = hasPhysicalItems ? 1000 : 0;
+    const subtotal = validatedItems.reduce(
+      (sum, item) => sum + Number(item.price) * Number(item.quantity),
+      0,
+    );
+    const shipping = shippingQuote(shopSettings, subtotal, hasPhysicalItems);
+    const shippingCost = shipping.costInCents;
 
     const userRef = db.collection("users").doc(uid);
     const userSnap = await userRef.get();
@@ -359,7 +392,7 @@ const createCheckoutSessionHandler = async (request) => {
           shipping_rate_data: {
             type: "fixed_amount",
             fixed_amount: { amount: shippingCost, currency: "aud" },
-            display_name: "Standard Shipping",
+            display_name: shipping.label,
             delivery_estimate: {
               minimum: { unit: "business_day", value: 2 },
               maximum: { unit: "business_day", value: 5 },

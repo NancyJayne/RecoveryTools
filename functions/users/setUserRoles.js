@@ -35,11 +35,16 @@ export const setUserRoles = onCall(
       };
 
       await admin.auth().setCustomUserClaims(uid, normalizedRoles);
+      await admin.firestore().collection("users").doc(uid).set({
+        roles: normalizedRoles,
+        rolesUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        rolesUpdatedBy: request.auth.uid,
+      }, { merge: true });
 
       return {
         success: true,
         uid,
-        roles,
+        roles: normalizedRoles,
         message: `Roles updated for UID: ${uid}`,
       };
     } catch (error) {

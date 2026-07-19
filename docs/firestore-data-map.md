@@ -47,6 +47,30 @@ the website/admin panel become the live source of truth.
 | `StripeEvents` | `stripeEvents` | `StripeEventID` | `webhook`, `system` |
 | `User Access` | `userAccess` | `UserAccessID` | `webhook`, `admin`, `system` |
 
+## Paid order snapshots
+
+New paid orders use two parallel representations during the compatibility period:
+
+- `orders.products` remains the legacy snapshot for older readers.
+- `orders.orderLines` is the immutable canonical snapshot and is marked by
+  `orderLineSchemaVersion: 2`.
+- `orderItems/{orderId}_{lineNumber}` stores each canonical line independently for
+  fulfilment, refund, reporting, and backup use.
+- Order, Product stock, selected ProductVariant stock, and ProductComponent inventory
+  deductions are committed transactionally. The root order is the replay lock.
+- A replay may restore missing `orderItems`, nested customer orders, addresses, and
+  `userAccess`, but it must never deduct inventory again.
+- Readers should prefer `orderLines` and fall back to `products` for historical orders.
+
+Canonical order lines preserve Product/variant identity, SKU, quantity, price/tax
+totals, shipping and inventory flags, seller/creator identity, access targets, and
+the component quantities required at purchase time. Later Product edits must not
+rewrite these historical values.
+
+`userAccess` uses deterministic IDs in the form
+`{userId}_{accessEntityType}_{accessEntityId}`. ProductAccessGrant duration settings
+are resolved to `expiresAt` when access is granted; permanent grants use `null`.
+
 ## items
 
 Source sheet: `Items`
@@ -115,7 +139,10 @@ blueprint, exercise, glossary item, or other content.
 
 ## products
 
-Source sheet: `ItemProduct`
+Source sheet: `ItemProduct` (legacy compatibility) or `Products` (canonical v10)
+
+A canonical `Products` row with the same ProductID takes precedence. `ItemProduct`
+remains readable during migration and must not be deleted before checkout/access parity passes.
 
 Purpose: sellable product listing shown in the shop.
 
@@ -293,7 +320,10 @@ Purpose: product options such as colour, size, volume, weight, or pack size.
 
 ## assets
 
-Source sheet: `Asset`
+Source sheet: `Asset` (legacy compatibility) or `Assets` (canonical v10)
+
+A canonical `Assets` row with the same AssetID takes precedence. The singular
+`Asset` sheet remains readable until EntityAssets migration is validated.
 
 Purpose: one row per actual media/file asset. The same asset can be linked to
 many items through `itemAssets`.
@@ -779,3 +809,37 @@ Purpose: records content access granted to a user.
 - `admin`: manual grants/revocations.
 - `system`: access code redemption and import.
 - `user`: read own access only.
+
+## Product and Asset runtime compatibility
+
+During the migration window, runtime Product reads use canonical-first adapters:
+
+- `productVariants` precedes `itemVariants` for a Product; Item-linked legacy variants remain a fallback.
+- `entityAssets` + `assets` + `assetRenditions` precede embedded Product media and image arrays.
+- `productAccessGrants` precedes legacy related Plan, Course, and Workshop fields.
+- Active, non-variant `productPrices` rows supply the canonical effective price before flat Product price fields.
+- The legacy Product `type` remains available for existing filters and commission settings; canonical `productType` is a separate field.
+
+Checkout, confirmation, Stripe webhook processing, admin Content Builder hydration,
+catalogue reads, and inventory editing all use this compatibility layer. Do not remove
+legacy collections until parity tests and the rollback gates in the migration plan pass.
+
+### Canonical admin writes
+
+Content Builder saves now create or update canonical Product identity fields and write
+`productLinks`, `productVariants`, `productAccessGrants`, and `entityAssets` where the
+corresponding relationship exists. Compatibility `itemVariants` and `itemAssets` writes
+remain during the migration window.
+
+`CreatesProduct = false` does not automatically remove existing ProductLinks. The
+explicit unlink action archives matching ProductLinks only; it never deletes the
+Product or linked Item, Blueprint, Plan, or Asset.
+
+The admin Asset Library treats `assets` as first-class records. Renditions are
+upserted in `assetRenditions`; omitted saved renditions are archived. Linked usage
+is read from `entityAssets`, and explicit link/unlink actions create or archive only
+the EntityAsset relationship. Asset files and linked entities are not deleted.
+
+Content editors may select an existing Product and a ProductLink role. This writes
+only the relationship (plus a Plan access grant for an access-delivery role) and
+does not overwrite the selected Product's commercial fields.

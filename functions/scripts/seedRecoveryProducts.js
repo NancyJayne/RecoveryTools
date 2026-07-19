@@ -317,7 +317,7 @@ function buildProductsFromWorkbook(workbookPath) {
       const images = itemAssets
         .filter((row) => optionalString(row.ItemID) === itemId)
         .map((row) => assetById.get(optionalString(row.AssetID)))
-        .filter((asset) => asset && String(asset.AssetType ?? "").toLowerCase().includes("image"))
+        .filter((asset) => asset && String(asset.Type ?? asset.AssetType ?? "").toLowerCase().includes("image"))
         .map((asset) => optionalString(asset.FileURL))
         .filter(Boolean);
 
@@ -330,8 +330,8 @@ function buildProductsFromWorkbook(workbookPath) {
         itemId,
         name: optionalString(product.ProductTitle) || optionalString(item["Item Name"]),
         productCategory: optionalString(item.CategoryID) || optionalString(product.ProductCategory),
-        type: optionalString(item.FirebaseType) || "tool",
-        productType: optionalString(item.ItemType),
+        type: optionalString(item.Type) || optionalString(item.FirebaseType) || "tool",
+        productType: optionalString(item.ItemType) || optionalString(item.Type),
         soldByRecoveryTools: isYes(item.SoldByRecoveryTools),
         isShopProduct: isYes(item.IsShopProduct),
         shopStatus,
@@ -396,6 +396,9 @@ function resolveProducts() {
 async function seedRecoveryProducts() {
   const dryRun = process.argv.includes("--dry-run");
   const products = resolveProducts();
+  let created = 0;
+  let updated = 0;
+  let preserved = 0;
 
   if (!products.length) {
     throw new Error("No recovery products found to seed.");
@@ -417,22 +420,42 @@ async function seedRecoveryProducts() {
       continue;
     }
 
-    await db.collection("products").doc(id).set(
-      {
-        ...data,
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
+    const ref = db.collection("products").doc(id);
+    const existing = await ref.get();
+    if (existing.exists) {
+      if (existing.data()?.managedByWorkbook === true) {
+        await ref.set({
+          ...data,
+          managedByWorkbook: true,
+          contentOrigin: "workbook",
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        updated += 1;
+        console.log(`Merged workbook product: ${id}`);
+      } else {
+        preserved += 1;
+        console.log(`Preserved app-owned product collision: ${id}`);
+      }
+      continue;
+    }
 
-    console.log(`Seeded product: ${id}`);
+    await ref.create({
+      ...data,
+      managedByWorkbook: true,
+      contentOrigin: "workbook",
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    created += 1;
+
+    console.log(`Created product: ${id}`);
   }
 
   console.log(
     dryRun
       ? `Dry run complete. ${products.length} products validated.`
-      : `Recovery products seeded successfully. ${products.length} products written.`,
+      : `Recovery products complete. ${created} created; ${updated} workbook-managed updated; ` +
+        `${preserved} app-owned collisions preserved.`,
   );
   process.exit(0);
 }

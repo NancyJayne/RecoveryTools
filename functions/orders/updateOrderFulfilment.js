@@ -94,6 +94,7 @@ function recipientName(order) {
 }
 
 function orderItems(order) {
+  if (Array.isArray(order.orderLines) && order.orderLines.length) return order.orderLines;
   if (Array.isArray(order.products) && order.products.length) return order.products;
   if (Array.isArray(order.items) && order.items.length) return order.items;
   if (order.itemsSummary) {
@@ -107,7 +108,8 @@ function orderItems(order) {
 }
 
 function itemName(item) {
-  return cleanString(item.name) ||
+  return cleanString(item.productName) ||
+    cleanString(item.name) ||
     cleanString(item.productTitle) ||
     cleanString(item.title) ||
     cleanString(item.description) ||

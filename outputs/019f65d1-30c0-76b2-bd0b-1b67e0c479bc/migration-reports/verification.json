@@ -1,0 +1,50 @@
+{
+  "verifiedAt": "2026-07-17T13:09:10.296Z",
+  "workbookPath": "C:\\Users\\hello\\Firebase project\\outputs\\019f65d1-30c0-76b2-bd0b-1b67e0c479bc\\Recovery Tools Master Database (10).xlsx",
+  "firstRun": {
+    "create": 63,
+    "update": 23,
+    "unchanged": 0
+  },
+  "secondRun": {
+    "create": 0,
+    "update": 0,
+    "unchanged": 86
+  },
+  "legacyBefore": {
+    "products": 6,
+    "productPrices": 6,
+    "itemVariants": 22,
+    "itemAssets": 11,
+    "assets": 10,
+    "orders": 0,
+    "orderItems": 0
+  },
+  "legacyAfter": {
+    "products": 6,
+    "productPrices": 6,
+    "itemVariants": 22,
+    "itemAssets": 11,
+    "assets": 10,
+    "orders": 0,
+    "orderItems": 0
+  },
+  "canonicalCounts": {
+    "productLinks": 8,
+    "productVariants": 7,
+    "entityAssets": 17
+  },
+  "warnings": [
+    "Product PROD-COURSE-001 unlocks missing Plan COURSE-TRIGGER-BALL-BASICS.",
+    "Product PROD-CUPPING-SET unlocks missing Plan PLAN-CUPPING-BASICS.",
+    "Product PROD-CUPPING-SET unlocks missing Plan COURSE-CUPPING-BASICS.",
+    "Product PROD-EPSOM-SALT unlocks missing Plan PLAN-EPSOM-SOAKS.",
+    "Product PROD-EPSOM-SALT unlocks missing Plan COURSE-EPSOM-SOAKS.",
+    "Product PROD-HEAT-PATCHES-6PK unlocks missing Plan PLAN-HEAT-PATCHES.",
+    "Product PROD-HEAT-PATCHES-6PK unlocks missing Plan COURSE-HEAT-PATCHES.",
+    "Product PROD-MCT-BALM-01 unlocks missing Plan PLAN-MCT-BALM-USE.",
+    "Product PROD-MCT-BALM-01 unlocks missing Plan COURSE-MCT-BALM-USE.",
+    "Product PROD-TRIGGER-BALL-6CM unlocks missing Plan COURSE-TRIGGER-BALL-BASICS."
+  ],
+  "errors": []
+}

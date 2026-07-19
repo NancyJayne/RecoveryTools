@@ -18,6 +18,7 @@ const importMap = {
   "./admin/admin-business-settings.js": () => import("../admin/admin-business-settings.js"),
   "./admin/admin-content-builder.js": () => import("../admin/admin-content-builder.js"),
   "./admin/admin-content-controls.js": () => import("../admin/admin-content-controls.js"),
+  "./admin/admin-approvals.js": () => import("../admin/admin-approvals.js"),
 };
 
 export function observeAdminPanel(tabId, importPath, methodName, maxRetries = 3) {
@@ -36,6 +37,10 @@ export function observeAdminPanel(tabId, importPath, methodName, maxRetries = 3)
   });
 
   observer.observe(target, { attributes: true, attributeFilter: ["class"] });
+  if (!target.classList.contains("hidden")) {
+    observer.disconnect();
+    queueMicrotask(attemptLoad);
+  }
 
   async function attemptLoad() {
     try {

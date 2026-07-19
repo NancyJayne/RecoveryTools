@@ -18,7 +18,6 @@ export const createUserProfile = region("australia-southeast1")
           name: displayName || "",
           displayName: displayName || "",
           photoURL: "",
-          roles: {},
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true },

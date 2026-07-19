@@ -34,8 +34,9 @@ export const getUserRoleWithPermissions = onCall(
         therapist: request.auth.token?.therapist === true,
       };
       const roles = {
-        ...(userData.roles || {}),
-        ...claimRoles,
+        admin: userData.roles?.admin === true || claimRoles.admin,
+        affiliate: userData.roles?.affiliate === true || claimRoles.affiliate,
+        therapist: userData.roles?.therapist === true || claimRoles.therapist,
       };
       const permissions = userData.permissions || {};
 

@@ -65,17 +65,7 @@ function selectedOptionHtml(currentType) {
   `).join("");
 }
 
-function ratingOptionHtml(currentRating) {
-  const rating = Number(currentRating || 0);
-  return `
-    <option value="">No rating</option>
-    ${[5, 4, 3, 2, 1].map((value) => `
-      <option value="${value}" ${value === rating ? "selected" : ""}>${value} out of 5</option>
-    `).join("")}
-  `;
-}
-
-function renderForm(section, { orderId, issueType, rating }) {
+function renderForm(section, { orderId, issueType }) {
   section.innerHTML = `
     <div class="mx-auto max-w-2xl px-6 py-10">
       <a href="/profile" class="router-link text-sm text-[#63d6b2] hover:underline">Back to profile</a>
@@ -102,16 +92,6 @@ function renderForm(section, { orderId, issueType, rating }) {
             class="mt-1 w-full rounded border border-gray-700 bg-gray-950 px-3 py-2 text-white"
           >
             ${selectedOptionHtml(issueType)}
-          </select>
-        </label>
-
-        <label class="block text-sm">
-          Rating
-          <select
-            id="orderIssueRating"
-            class="mt-1 w-full rounded border border-gray-700 bg-gray-950 px-3 py-2 text-white"
-          >
-            ${ratingOptionHtml(rating)}
           </select>
         </label>
 
@@ -201,7 +181,6 @@ function bindForm() {
       await submitOrderIssue({
         orderId: document.getElementById("orderIssueOrderId")?.value.trim(),
         issueType: document.getElementById("orderIssueType")?.value,
-        rating: document.getElementById("orderIssueRating")?.value,
         affectedItems: document.getElementById("orderIssueAffectedItems")?.value.trim(),
         preferredOutcome: document.getElementById("orderIssuePreferredOutcome")?.value.trim(),
         details: document.getElementById("orderIssueDetails")?.value.trim(),
@@ -227,7 +206,6 @@ export default async function initOrderIssuePage() {
   renderForm(section, {
     orderId: params.get("order") || "",
     issueType: params.get("type") || "feedback",
-    rating: params.get("rating") || "",
   });
   showOnly(section);
   bindForm();

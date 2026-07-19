@@ -19,7 +19,7 @@ export const updateShippingTaxSettings = onCall(
       );
     }
 
-    const data = request.data;
+    const data = request.data || {};
 
     const allowedFields = [
       "gstRate",
@@ -39,6 +39,32 @@ export const updateShippingTaxSettings = onCall(
       if (data[key] !== undefined) {
         updateData[key] = data[key];
       }
+    }
+
+    if (updateData.freeShippingMin !== undefined) {
+      const freeShippingMin = Number(updateData.freeShippingMin);
+      if (!Number.isFinite(freeShippingMin) || freeShippingMin < 0) {
+        throw new HttpsError("invalid-argument", "Free shipping threshold must be zero or more.");
+      }
+      updateData.freeShippingMin = freeShippingMin;
+    }
+
+    if (updateData.shippingZones !== undefined) {
+      if (!Array.isArray(updateData.shippingZones) || updateData.shippingZones.length !== 1) {
+        throw new HttpsError("invalid-argument", "Provide one Australian shipping rate.");
+      }
+      const zone = updateData.shippingZones[0] || {};
+      const rate = Number(zone.rate);
+      if (!Number.isFinite(rate) || rate < 0) {
+        throw new HttpsError("invalid-argument", "Shipping cost must be zero or more.");
+      }
+      updateData.shippingZones = [{
+        region: "AU",
+        label: String(zone.label || "Standard Australian shipping").trim(),
+        rate,
+        currency: "AUD",
+        default: true,
+      }];
     }
 
     if (Object.keys(updateData).length === 0) {

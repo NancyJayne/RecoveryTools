@@ -28,8 +28,10 @@ export function initAdminNavigation(role) {
     "/admin": "adminDashboardSection",
     "/admin/orders": "adminOrdersSection",
     "/admin/approvals": "adminApprovalsSection",
+    "/admin/content": "adminContentControlsSection",
     "/admin/content-controls": "adminContentControlsSection",
-    "/admin/builder": "adminContentBuilderSection",
+    "/admin/content/builder": "adminContentBuilderSection",
+    "/admin/builder": "adminContentControlsSection",
     "/admin/products": "productManagerPanel",
     "/admin/workshops": "adminWorkshopApprovals",
     "/admin/courses": "pendingCourseApprovals",
@@ -38,7 +40,6 @@ export function initAdminNavigation(role) {
     "/admin/emails": "adminEmailSection",
     "/admin/reviews": "adminReviewsFeedbackSection",
     "/admin/business": "adminBusinessSettingsSection",
-    "/admin/content": "adminContentBuilderSection",
     "/admin/crm": "userRoleManager",
   };
 

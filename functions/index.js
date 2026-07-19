@@ -33,6 +33,7 @@ export { getUserOrders } from "./orders/getUserOrders.js";
 export { getAllOrdersForAdmin } from "./orders/getAllOrdersForAdmin.js";
 export { getAdminOrderAlerts } from "./orders/getAdminOrderAlerts.js";
 export { generateOrderPDF } from "./orders/generateOrderPDF.js";
+export { generatePackingSlipPDF } from "./orders/generatePackingSlipPDF.js";
 export { getOrderByInvoiceID } from "./orders/getOrderByInvoiceID.js";
 export { updateOrderFulfilment } from "./orders/updateOrderFulfilment.js";
 export { maintainOrderLifecycle } from "./orders/maintainOrderLifecycle.js";
@@ -59,6 +60,7 @@ export { adminResetUserPassword } from "./users/adminResetUserPassword.js";
 export { adminCreateUser, sendPasswordReset as PasswordReset } from "./users/authHelpers.js";
 export { getUserByEmailOrUID } from "./users/getUserByEmailOrUID.js";
 export { searchUsersByName } from "./users/searchUsersByName.js";
+export { manageUserProfiles } from "./users/manageUserProfiles.js";
 
 // Affiliate
 export { createStripeConnectLink } from "./affiliates/createStripeConnectLink.js";
@@ -90,9 +92,12 @@ export { getAdminProductReviews } from "./admin/getAdminProductReviews.js";
 export { getBusinessSettings } from "./admin/getBusinessSettings.js";
 export { updateBusinessSettings } from "./admin/updateBusinessSettings.js";
 export { getContentBuilderData } from "./admin/getContentBuilderData.js";
+export { exportContentBackup } from "./admin/exportContentBackup.js";
 export { createContentBuilderRecord } from "./admin/createContentBuilderRecord.js";
 export { upsertContentBuilderTemplate } from "./admin/upsertContentBuilderTemplate.js";
 export { updateContentControlRecord } from "./admin/updateContentControlRecord.js";
+export { maintainContentLifecycle } from "./admin/maintainContentLifecycle.js";
+export { getAdminAssets, upsertAdminAsset } from "./admin/manageAssets.js";
 export { submitProductReview } from "./reviews/submitProductReview.js";
 export { deleteCourse } from "./courses/deleteCourse.js";
 export { deleteWorkshop } from "./workshops/deleteWorkshop.js";

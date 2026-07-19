@@ -48,8 +48,29 @@ function isOpenCustomerIssue(order) {
   return order.archived !== true && hasOpenCustomerIssue(order);
 }
 
+function dateValue(value) {
+  if (!value) return null;
+  if (typeof value.toDate === "function") return value.toDate();
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isDueSoon(order, now = new Date()) {
+  if (!isOpenOrder(order)) return false;
+  const dueDate = dateValue(order.dueDate);
+  if (!dueDate) return false;
+  const threeDaysFromNow = new Date(now.getTime() + (3 * 24 * 60 * 60 * 1000));
+  return dueDate <= threeDaysFromNow;
+}
+
+function isDraftContent(data = {}) {
+  return String(data.status || data.approvalStatus || "draft").toLowerCase().trim() === "draft";
+}
+
 function isPendingApproval(data = {}) {
+  const approvalStatus = String(data.approvalStatus || "").toLowerCase().trim();
   const status = String(data.status || "").toLowerCase().trim();
+  if (["awaiting-approval", "awaiting approval"].includes(approvalStatus)) return true;
   if (["approved", "hidden", "archived", "rejected", "inactive", "resolved"].includes(status)) {
     return false;
   }
@@ -85,6 +106,9 @@ export const getUserDashboardStats = onCall(
         therapistsSnap,
         reviewsSnap,
         orderIssuesSnap,
+        itemsSnap,
+        blueprintsSnap,
+        plansSnap,
       ] = await Promise.all([
         admin.firestore().collection("users").get(),
         admin.firestore().collection("orders").get(),
@@ -94,6 +118,9 @@ export const getUserDashboardStats = onCall(
         admin.firestore().collection("therapists").get(),
         admin.firestore().collectionGroup("reviews").get(),
         admin.firestore().collection("orderIssues").get(),
+        admin.firestore().collection("items").get(),
+        admin.firestore().collection("blueprints").get(),
+        admin.firestore().collection("plans").get(),
       ]);
 
       const orders = ordersSnap.docs.map((doc) => doc.data());
@@ -103,7 +130,11 @@ export const getUserDashboardStats = onCall(
       const pendingTherapistApprovals = therapistsSnap.docs.filter((doc) => isPendingApproval(doc.data())).length;
       const pendingReviewApprovals = reviewsSnap.docs.filter((doc) => isPendingApproval(doc.data())).length;
       const pendingFeedbackApprovals = orderIssuesSnap.docs.filter((doc) => isPendingFeedback(doc.data())).length;
+      const pendingContentApprovals = [itemsSnap, blueprintsSnap, plansSnap]
+        .flatMap((snapshot) => snapshot.docs)
+        .filter((doc) => isPendingApproval(doc.data())).length;
       const pendingApprovals =
+        pendingContentApprovals +
         pendingWorkshopApprovals +
         pendingCourseApprovals +
         pendingAffiliateApprovals +
@@ -116,6 +147,10 @@ export const getUserDashboardStats = onCall(
       const openOrders = orders.filter(isOpenOrder).length;
       const newUnassignedOrders = orders.filter(isNewUnassignedOrder).length;
       const openCustomerIssues = orders.filter(isOpenCustomerIssue).length;
+      const ordersDueSoon = orders.filter((order) => isDueSoon(order)).length;
+      const contentDrafts = [itemsSnap, blueprintsSnap, plansSnap]
+        .flatMap((snapshot) => snapshot.docs)
+        .filter((doc) => isDraftContent(doc.data())).length;
 
       return {
         totalUsers,
@@ -124,6 +159,8 @@ export const getUserDashboardStats = onCall(
         openOrders,
         newUnassignedOrders,
         openCustomerIssues,
+        ordersDueSoon,
+        contentDrafts,
         pendingApprovals,
         pendingWorkshopApprovals,
         pendingCourseApprovals,
@@ -131,6 +168,7 @@ export const getUserDashboardStats = onCall(
         pendingTherapistApprovals,
         pendingReviewApprovals,
         pendingFeedbackApprovals,
+        pendingContentApprovals,
       };
     } catch (err) {
       console.error("Dashboard stats error:", err);

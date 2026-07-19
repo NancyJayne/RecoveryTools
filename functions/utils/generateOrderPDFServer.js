@@ -65,13 +65,14 @@ function addressLines(address = {}) {
 }
 
 function products(orderData) {
+  if (Array.isArray(orderData.orderLines) && orderData.orderLines.length) return orderData.orderLines;
   if (Array.isArray(orderData.products)) return orderData.products;
   if (Array.isArray(orderData.items)) return orderData.items;
   return [];
 }
 
 function productName(product) {
-  return product.name || product.productTitle || product.title || product.description || "Item";
+  return product.productName || product.name || product.productTitle || product.title || product.description || "Item";
 }
 
 function productQuantity(product) {
@@ -328,5 +329,109 @@ export async function generateOrderPDF(invoiceId, orderData) {
     return emulatorStorageUrl(bucket.name, fileName, downloadToken);
   }
 
+  return firebaseStorageUrl(bucket.name, fileName, downloadToken);
+}
+
+function packingReference(item) {
+  const variant = item.variantName || item.productVariantName ||
+    item.productVariantId || item.variantId || "";
+  return [
+    variant ? `Variant: ${variant}` : "",
+    item.sku ? `SKU: ${item.sku}` : "",
+  ].filter(Boolean).join(" | ") || "-";
+}
+
+export async function generatePackingSlipPDF(invoiceId, orderData, overrides = {}) {
+  const business = await getBusinessProfile();
+  const fileName = `packing-slips/${invoiceId}.pdf`;
+  const pdfStream = new PassThrough();
+  const pdfDoc = new PDFDocument({ margin: 48, size: "A4" });
+  pdfDoc.pipe(pdfStream);
+
+  const logoBuffer = await loadLogoBuffer(business.logoUrl);
+  const left = pdfDoc.page.margins.left;
+  const width = pdfDoc.page.width - left - pdfDoc.page.margins.right;
+  const right = left + width;
+  const orderProducts = products(orderData);
+  const shippingLines = addressLines(orderData.shippingAddress || orderData.shipping?.address);
+  const dueDate = overrides.dueDate || orderData.dueDate || "Not set";
+  const notes = overrides.notes || orderData.adminNotes || orderData.note || "No packing notes";
+
+  if (logoBuffer) {
+    pdfDoc.image(logoBuffer, left, 42, { width: 48, height: 48, fit: [48, 48] });
+  }
+  pdfDoc.fontSize(20).fillColor("#111827").text(business.name, left + 60, 48, { width: 280 });
+  pdfDoc.fontSize(18).text("Packing slip", right - 180, 48, { width: 180, align: "right" });
+  pdfDoc.fontSize(9).fillColor("#4b5563").text(`Order ${invoiceId}`, right - 280, 78, {
+    width: 280,
+    align: "right",
+  });
+  pdfDoc.moveTo(left, 112).lineTo(right, 112).strokeColor("#d1d5db").stroke();
+
+  pdfDoc.fontSize(10).fillColor("#111827").text(`Order placed: ${formatInvoiceDate(
+    orderData.purchasedAt || orderData.orderDate || orderData.createdAt,
+  )}`, left, 132);
+  pdfDoc.text(`Due date: ${dueDate}`, left, 150);
+
+  drawAddressBlock(
+    pdfDoc,
+    "Recipient",
+    [customerName(orderData), ...shippingLines, customerPhone(orderData), customerEmail(orderData)],
+    left,
+    184,
+    width,
+  );
+
+  let tableY = Math.max(pdfDoc.y + 24, 300);
+  pdfDoc.rect(left, tableY, width, 24).fillColor("#e5f2ef").fill();
+  pdfDoc.fontSize(9).fillColor("#111827")
+    .text("Item", left + 8, tableY + 8, { width: 220 })
+    .text("Variant / SKU", left + 238, tableY + 8, { width: 210 })
+    .text("Qty", right - 44, tableY + 8, { width: 36, align: "right" });
+  tableY += 32;
+
+  orderProducts.forEach((item) => {
+    const rowHeight = Math.max(
+      pdfDoc.heightOfString(productName(item), { width: 220 }),
+      pdfDoc.heightOfString(packingReference(item), { width: 210 }),
+      14,
+    ) + 12;
+    pdfDoc.fontSize(10).fillColor("#111827")
+      .text(productName(item), left + 8, tableY, { width: 220 })
+      .text(packingReference(item), left + 238, tableY, { width: 210 })
+      .text(String(productQuantity(item)), right - 44, tableY, { width: 36, align: "right" });
+    tableY += rowHeight;
+    pdfDoc.moveTo(left, tableY - 5).lineTo(right, tableY - 5).strokeColor("#e5e7eb").stroke();
+  });
+
+  if (!orderProducts.length) {
+    pdfDoc.fontSize(10).text("No line items found.", left + 8, tableY);
+    tableY += 28;
+  }
+
+  pdfDoc.fontSize(11).fillColor("#111827").text("Packing notes", left, tableY + 20);
+  pdfDoc.rect(left, tableY + 40, width, 80).strokeColor("#d1d5db").stroke();
+  pdfDoc.fontSize(10).text(String(notes), left + 10, tableY + 50, { width: width - 20, height: 60 });
+  pdfDoc.end();
+
+  const bucket = invoiceBucket();
+  const file = bucket.file(fileName);
+  const downloadToken = randomUUID();
+  const uploadStream = file.createWriteStream({
+    contentType: "application/pdf",
+    metadata: {
+      contentDisposition: `inline; filename="packing-slip-${invoiceId}.pdf"`,
+      metadata: { firebaseStorageDownloadTokens: downloadToken },
+    },
+  });
+  pdfStream.pipe(uploadStream);
+  await new Promise((resolve, reject) => {
+    uploadStream.on("finish", resolve);
+    uploadStream.on("error", reject);
+  });
+
+  if (process.env.FUNCTIONS_EMULATOR === "true") {
+    return emulatorStorageUrl(bucket.name, fileName, downloadToken);
+  }
   return firebaseStorageUrl(bucket.name, fileName, downloadToken);
 }

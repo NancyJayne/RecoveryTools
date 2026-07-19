@@ -88,6 +88,88 @@ function trackingValue(order) {
   return order.trackingNumber || order.tracking || order.trackingId || "";
 }
 
+function customerIssueTypeLabel(type) {
+  return ({
+    feedback: "Order feedback",
+    return_requested: "Return requested",
+    exchange_requested: "Replacement or swap",
+    damaged_item: "Damaged item",
+    complaint_open: "Complaint",
+  })[type] || String(type || "Customer issue").replace(/_/g, " ");
+}
+
+function renderCustomerIssueDetails(order) {
+  const issue = order.latestCustomerIssue;
+  const status = customerFollowUpStatus(order);
+  const resolved = status === "resolved";
+  const panelClass = resolved
+    ? "border-green-700/70 bg-green-950/20"
+    : "border-amber-700/70 bg-amber-950/20";
+  const headingClass = resolved ? "text-green-200" : "text-amber-200";
+  return `
+    <div
+      class="customerIssueSubmission rounded border p-3 text-xs text-gray-200 ${panelClass}"
+      data-id="${order.id}"
+    >
+      <div class="customerIssueSubmissionHeading font-semibold ${headingClass}">
+        Latest customer submission: ${escapeHTML(customerIssueTypeLabel(issue?.issueType))}
+      </div>
+      <div class="mt-2 grid gap-2 sm:grid-cols-2">
+        <div><strong>Affected items:</strong> ${escapeHTML(issue?.affectedItems || "Not specified")}</div>
+        <div><strong>Preferred outcome:</strong> ${escapeHTML(issue?.preferredOutcome || "Not specified")}</div>
+        <div><strong>Customer:</strong> ${escapeHTML(issue?.customerName || issue?.customerEmail || "Unknown")}</div>
+      </div>
+      <div class="mt-2 whitespace-pre-wrap">
+        <strong>Customer message:</strong> ${escapeHTML(issue?.details || "No message supplied")}
+      </div>
+      <label class="mt-3 block text-xs text-gray-300">
+        Return / complaint notes
+        <textarea
+          class="customerFollowUpNotesInput ${FIELD_CLASS}"
+          data-id="${order.id}"
+          placeholder="Customer issue, requested outcome, item condition, next step..."
+        >${escapeHTML(order.customerFollowUpNotes || "")}</textarea>
+      </label>
+    </div>
+
+    <label class="block text-xs text-gray-300">
+      Resolution notes
+      <textarea
+        class="customerFollowUpResolutionInput ${FIELD_CLASS}"
+        data-id="${order.id}"
+        placeholder="Refund, replacement, swap, complaint outcome..."
+      >${escapeHTML(order.customerFollowUpResolution || "")}</textarea>
+    </label>
+  `;
+}
+
+function dateInputValue(value) {
+  if (!value) return "";
+  let date;
+  if (typeof value.toDate === "function") date = value.toDate();
+  else if (typeof value.seconds === "number") date = new Date(value.seconds * 1000);
+  else if (typeof value._seconds === "number") date = new Date(value._seconds * 1000);
+  else date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function defaultOrderDueDate(order) {
+  if (order.dueDate) return dateInputValue(order.dueDate) || String(order.dueDate);
+  const source = order.purchasedAt || order.orderDate || order.createdAt;
+  let date;
+  if (source?.toDate) date = source.toDate();
+  else if (typeof source?.seconds === "number") date = new Date(source.seconds * 1000);
+  else if (typeof source?._seconds === "number") date = new Date(source._seconds * 1000);
+  else date = new Date(source);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() + 14);
+  return dateInputValue(date);
+}
+
 function trackingEmailStatus(order) {
   if (order.trackingEmailSentAt) {
     return `sent for ${escapeHTML(order.trackingEmailSentFor || trackingValue(order))}`;
@@ -157,7 +239,24 @@ function orderPurchasedDate(order) {
 }
 
 function itemName(item) {
-  return item.name || item.productTitle || item.title || item.description || item.productId || "Item";
+  return item.productName || item.name || item.productTitle || item.title ||
+    item.description || item.productId || "Item";
+}
+
+function itemVariantName(item) {
+  return item.variantName || item.productVariantName || "";
+}
+
+function itemVariantId(item) {
+  return item.productVariantId || item.variantId || "";
+}
+
+function itemPackingReference(item) {
+  const variant = itemVariantName(item) || itemVariantId(item);
+  return [
+    variant ? `Variant: ${variant}` : "",
+    item.sku ? `SKU: ${item.sku}` : "",
+  ].filter(Boolean).join(" | ") || "-";
 }
 
 function itemQuantity(item) {
@@ -171,6 +270,7 @@ function itemLineTotal(item) {
 }
 
 function orderItems(order) {
+  if (Array.isArray(order.orderLines) && order.orderLines.length) return order.orderLines;
   if (Array.isArray(order.products) && order.products.length) return order.products;
   if (Array.isArray(order.items) && order.items.length) return order.items;
   if (order.itemsSummary) {
@@ -194,14 +294,173 @@ function renderOrderItems(order) {
       ${items.map((item) => `
         <li class="flex items-start justify-between gap-3 text-xs">
           <span>
-            <span class="font-medium text-gray-100">${escapeHTML(itemName(item))}</span>
-            <span class="text-gray-400">x${itemQuantity(item)}</span>
+            <span class="block">
+              <span class="font-medium text-gray-100">${escapeHTML(itemName(item))}</span>
+              <span class="text-gray-400">x${itemQuantity(item)}</span>
+            </span>
+            <span class="block text-gray-300">${escapeHTML(itemPackingReference(item))}</span>
           </span>
           <span class="text-gray-300">$${itemLineTotal(item).toFixed(2)}</span>
         </li>
       `).join("")}
     </ul>
   `;
+}
+
+function shippingAddressLines(order) {
+  const address = order.shippingAddress || order.shipping?.address || {};
+  if (typeof address === "string") return [address];
+  return [
+    address.line1,
+    address.line2,
+    [address.city, address.state, address.postal_code || address.postcode].filter(Boolean).join(" "),
+    address.country,
+  ].filter(Boolean);
+}
+
+function packingSlipHtml(order, values = {}) {
+  const items = orderItems(order);
+  const recipient = order.shippingName || order.customerName || orderName(order);
+  const phone = order.shippingPhone || order.customerPhone || "Not supplied";
+  const email = order.shippingEmail || order.customerEmail || orderEmail(order) || "Not supplied";
+  const addressLines = shippingAddressLines(order);
+  const notes = values.notes || order.adminNotes || order.note || "No packing notes";
+  const dueDate = values.dueDate || defaultOrderDueDate(order) || "Not set";
+  return `<!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <title>Packing slip ${escapeHTML(orderInvoiceId(order))}</title>
+        <style>
+          body { font: 14px Arial, sans-serif; color: #111; margin: 32px; }
+          h1 { margin: 0 0 4px; font-size: 24px; }
+          h2 { margin: 24px 0 8px; font-size: 16px; border-bottom: 1px solid #bbb; padding-bottom: 4px; }
+          .meta { color: #444; line-height: 1.5; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { padding: 8px 4px; border-bottom: 1px solid #ddd; text-align: left; vertical-align: top; }
+          th:last-child, td:last-child { text-align: right; }
+          .notes { white-space: pre-wrap; border: 1px solid #bbb; padding: 10px; min-height: 48px; }
+          @page { margin: 15mm; }
+          @media print { body { margin: 0; } }
+        </style>
+      </head>
+      <body>
+        <h1>Packing slip</h1>
+        <div class="meta">
+          <strong>Order:</strong> ${escapeHTML(orderInvoiceId(order))}<br>
+          <strong>Order placed:</strong> ${escapeHTML(orderPurchasedDate(order))}<br>
+          <strong>Due date:</strong> ${escapeHTML(dueDate)}
+        </div>
+        <h2>Recipient</h2>
+        <div class="meta">
+          <strong>${escapeHTML(recipient)}</strong><br>
+          ${addressLines.length
+    ? addressLines.map((line) => `${escapeHTML(line)}<br>`).join("")
+    : "Address not supplied<br>"}
+          <strong>Phone:</strong> ${escapeHTML(phone)}<br>
+          <strong>Email:</strong> ${escapeHTML(email)}
+        </div>
+        <h2>Items</h2>
+        <table>
+          <thead><tr><th>Item</th><th>SKU / variant</th><th>Quantity</th></tr></thead>
+          <tbody>
+            ${items.length ? items.map((item) => `
+              <tr>
+                <td>${escapeHTML(itemName(item))}</td>
+                <td>${escapeHTML(itemPackingReference(item))}</td>
+                <td>${itemQuantity(item)}</td>
+              </tr>
+            `).join("") : `<tr><td colspan="3">No line items found.</td></tr>`}
+          </tbody>
+        </table>
+        <h2>Packing notes</h2>
+        <div class="notes">${escapeHTML(notes)}</div>
+      </body>
+    </html>`;
+}
+
+function showPackingSlipPreview(order, values, pdfUrl) {
+  document.getElementById("packingSlipPreviewModal")?.remove();
+  const modal = document.createElement("div");
+  modal.id = "packingSlipPreviewModal";
+  modal.className = "fixed inset-0 z-[100] flex flex-col bg-black/80 p-4";
+  modal.innerHTML = `
+    <div class="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 rounded-t bg-gray-900 p-3">
+      <h2 class="font-semibold text-white">Packing slip preview</h2>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" data-packing-print disabled
+          class="rounded bg-[#407471] px-3 py-2 text-sm text-white disabled:opacity-50">Print</button>
+        <button type="button" data-packing-download
+          class="rounded bg-[#407471] px-3 py-2 text-sm text-white">Download PDF</button>
+        <button type="button" data-packing-close class="rounded bg-gray-700 px-3 py-2 text-sm text-white">Close</button>
+      </div>
+    </div>
+    <iframe title="Packing slip preview" class="mx-auto min-h-0 w-full max-w-5xl flex-1 rounded-b bg-white"></iframe>
+  `;
+  document.body.appendChild(modal);
+
+  const frame = modal.querySelector("iframe");
+  const printButton = modal.querySelector("[data-packing-print]");
+  frame.addEventListener("load", () => {
+    printButton.disabled = false;
+  }, { once: true });
+  frame.srcdoc = packingSlipHtml(order, values);
+  printButton?.addEventListener("click", () => {
+    frame.contentWindow?.focus();
+    frame.contentWindow?.print();
+  });
+  modal.querySelector("[data-packing-download]")?.addEventListener("click", async (event) => {
+    const downloadButton = event.currentTarget;
+    const originalText = downloadButton.textContent;
+    try {
+      downloadButton.disabled = true;
+      downloadButton.textContent = "Preparing download...";
+      const response = await fetch(pdfUrl);
+      if (!response.ok) throw new Error("PDF download failed.");
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = `packing-slip-${orderInvoiceId(order)}.pdf`;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } catch (err) {
+      console.error("Packing slip download failed:", err);
+      showToast("Could not download the packing slip PDF.", "error");
+    } finally {
+      downloadButton.disabled = false;
+      downloadButton.textContent = originalText;
+    }
+  });
+  modal.querySelector("[data-packing-close]")?.addEventListener("click", () => modal.remove());
+}
+
+async function printPackingSlip(order, button) {
+  const orderId = order.id;
+  const notes = document.querySelector(`.orderNoteInput[data-id='${orderId}']`)?.value.trim();
+  const dueDate = document.querySelector(`.orderDueDateInput[data-id='${orderId}']`)?.value;
+  const originalText = button?.textContent;
+  try {
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Preparing packing slip...";
+    }
+    const generatePackingSlipPDF = httpsCallable(functions, "generatePackingSlipPDF");
+    const result = await generatePackingSlipPDF({
+      invoiceId: order.id,
+      notes: notes || "",
+      dueDate: dueDate || "",
+    });
+    if (!result.data?.url) throw new Error("Packing slip URL was not returned.");
+    showPackingSlipPreview(order, { notes, dueDate }, result.data.url);
+  } catch (err) {
+    console.error("Packing slip generation failed:", err);
+    showToast(err.message || "Could not generate packing slip.", "error");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText || "View packing slip PDF";
+    }
+  }
 }
 
 function renderFulfilmentSteps(order) {
@@ -234,7 +493,12 @@ function orderMatchesSearch(order, term) {
     orderEmail(order),
     order.customerPhone,
     order.shippingPhone,
-    ...orderItems(order).map((item) => itemName(item)),
+    ...orderItems(order).flatMap((item) => [
+      itemName(item),
+      itemVariantName(item),
+      itemVariantId(item),
+      item.sku,
+    ]),
     trackingValue(order),
   ].join(" ").toLowerCase();
   return haystack.includes(term);
@@ -483,33 +747,24 @@ export function renderOrderGrid(orders) {
           Review/returns email: ${reviewRequestEmailStatus(data)}
         </div>
 
-        <label class="block text-xs text-gray-300">
-          Return / swap / complaint status
-          <select
-            class="customerFollowUpInput mt-1 w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white"
+        <section class="rounded border border-gray-700 bg-gray-900/60 p-3">
+          <label class="block text-xs text-gray-300">
+            Return / swap / complaint status
+            <select
+              class="customerFollowUpInput mt-1 w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white"
+              data-id="${data.id}"
+            >
+              ${renderCustomerFollowUpOptions(data)}
+            </select>
+          </label>
+
+          <div
+            class="customerIssueDetails mt-3 space-y-3 ${customerFollowUpStatus(data) === "none" ? "hidden" : ""}"
             data-id="${data.id}"
           >
-            ${renderCustomerFollowUpOptions(data)}
-          </select>
-        </label>
-
-        <label class="block text-xs text-gray-300">
-          Return / complaint notes
-          <textarea
-            class="customerFollowUpNotesInput ${FIELD_CLASS}"
-            data-id="${data.id}"
-            placeholder="Customer issue, requested outcome, item condition, next step..."
-          >${escapeHTML(data.customerFollowUpNotes || "")}</textarea>
-        </label>
-
-        <label class="block text-xs text-gray-300">
-          Resolution notes
-          <textarea
-            class="customerFollowUpResolutionInput ${FIELD_CLASS}"
-            data-id="${data.id}"
-            placeholder="Refund, replacement, swap, complaint outcome..."
-          >${escapeHTML(data.customerFollowUpResolution || "")}</textarea>
-        </label>
+            ${renderCustomerIssueDetails(data)}
+          </div>
+        </section>
 
         <textarea
           class="orderNoteInput w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white text-sm"
@@ -523,7 +778,7 @@ export function renderOrderGrid(orders) {
             type="date"
             class="orderDueDateInput mt-1 w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white"
             data-id="${data.id}"
-            value="${escapeHTML(data.dueDate || "")}"
+            value="${escapeHTML(defaultOrderDueDate(data))}"
           />
         </label>
 
@@ -532,6 +787,14 @@ export function renderOrderGrid(orders) {
           data-id="${data.id}"
         >
           Save fulfilment
+        </button>
+
+        <button
+          type="button"
+          class="print-packing-slip-btn w-full bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded"
+          data-id="${data.id}"
+        >
+          View packing slip PDF
         </button>
 
         <button
@@ -549,6 +812,31 @@ export function renderOrderGrid(orders) {
       </div>
     `;
     grid.appendChild(div);
+  });
+
+  document.querySelectorAll(".customerFollowUpInput").forEach((select) => {
+    select.addEventListener("change", () => {
+      const orderId = select.dataset.id;
+      const details = document.querySelector(`.customerIssueDetails[data-id='${orderId}']`);
+      const submission = document.querySelector(`.customerIssueSubmission[data-id='${orderId}']`);
+      const heading = submission?.querySelector(".customerIssueSubmissionHeading");
+      const hidden = select.value === "none";
+      details?.classList.toggle("hidden", hidden);
+      const resolved = select.value === "resolved";
+      submission?.classList.toggle("border-green-700/70", resolved);
+      submission?.classList.toggle("bg-green-950/20", resolved);
+      submission?.classList.toggle("border-amber-700/70", !resolved);
+      submission?.classList.toggle("bg-amber-950/20", !resolved);
+      heading?.classList.toggle("text-green-200", resolved);
+      heading?.classList.toggle("text-amber-200", !resolved);
+    });
+  });
+
+  document.querySelectorAll(".print-packing-slip-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const order = orders.find((entry) => entry.id === button.dataset.id);
+      if (order) await printPackingSlip(order, button);
+    });
   });
 
   document.querySelectorAll(".save-fulfilment-btn").forEach((btn) => {

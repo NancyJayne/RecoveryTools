@@ -134,7 +134,6 @@ function renderOrderIssues(issues) {
       </div>
       <div class="mt-3 text-sm text-gray-200">${escapeHTML(issue.details || "No message supplied.")}</div>
       <div class="mt-3 grid gap-1 text-xs text-gray-400 sm:grid-cols-2">
-        <div><strong class="text-gray-300">Rating:</strong> ${escapeHTML(starText(issue.rating))}</div>
         <div><strong class="text-gray-300">Submitted:</strong> ${escapeHTML(formatDate(issue.createdAt))}</div>
         <div><strong class="text-gray-300">Customer:</strong> ${escapeHTML(issue.customerName || "-")}</div>
         <div><strong class="text-gray-300">Email:</strong> ${escapeHTML(issue.customerEmail || "-")}</div>

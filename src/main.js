@@ -1,7 +1,11 @@
 // main.js – Core App Init for Recovery Tools
 
 import "./style.css";
-import { getRecaptchaSiteKey, auth } from "./utils/firebase-config.js";
+import {
+  auth,
+  getRecaptchaSiteKey,
+  usesFirebaseEmulators,
+} from "./utils/firebase-config.js";
 import { validateTokenFromURL } from "./auth/user-auth.js";
 import { setupAuthModal } from "./auth/auth-modal.js";
 import { setupRoleUI, getUserRole } from "./auth/user-roles.js";
@@ -16,7 +20,7 @@ import { initAppEntry } from "./app-entry.js";
 import { applyBusinessProfile } from "./utils/business-profile.js";
 
 const siteKey = getRecaptchaSiteKey();
-if (siteKey) loadRecaptchaScript(siteKey);
+if (siteKey && !usesFirebaseEmulators()) loadRecaptchaScript(siteKey);
 
 
 window.showToast = showToast;
@@ -130,6 +134,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   observeAdminPanel("productManagerPanel", "./admin/admin-products.js", "setupProductManager");
+  observeAdminPanel("adminApprovalsSection", "./admin/admin-approvals.js", "setupApprovalDashboard");
   observeAdminPanel("adminContentControlsSection", "./admin/admin-content-controls.js", "setupContentControls");
   observeAdminPanel("pendingCourseApprovals", "./admin/admin-course.js", "setupCourseApprovals");
   observeAdminPanel("adminWorkshopApprovals", "./admin/admin-workshops.js", "setupWorkshopManagement");

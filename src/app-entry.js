@@ -84,6 +84,7 @@ export function setupMobileMenuToggle() {
 
 export async function initAppEntry() {
   await initFirebase();
+  await auth?.authStateReady?.();
   await setupAuthState();
   userRole = await getUserRole();
 

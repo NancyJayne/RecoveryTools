@@ -26,6 +26,10 @@ function itemType(item) {
   return item.type || item.productType || "item";
 }
 
+function itemVariantName(item) {
+  return item.variantName || item.productVariantName || "";
+}
+
 function itemLineTotal(item) {
   if (item.lineTotal !== undefined) return Number(item.lineTotal || 0);
   return asDollars(item.price || item.unitPrice) * Number(item.quantity || 1);
@@ -33,6 +37,25 @@ function itemLineTotal(item) {
 
 function itemRequiresShipping(item) {
   return item.requiresShipping === true;
+}
+
+function normalizedShippingZones(settings = {}) {
+  const rawZones = settings.shippingZones;
+  if (Array.isArray(rawZones)) return rawZones;
+  if (rawZones && typeof rawZones === "object") return Object.values(rawZones);
+  return [];
+}
+
+function shippingQuote(settings, subtotal, hasShippingItems) {
+  if (!hasShippingItems) return { cost: 0, label: "Shipping" };
+  const zones = normalizedShippingZones(settings);
+  const zone = zones.find((entry) => entry?.default) || zones[0] || {};
+  const rate = Number(zone.rate ?? 10);
+  const freeShippingMin = Number(settings.freeShippingMin || 0);
+  return {
+    cost: freeShippingMin > 0 && subtotal >= freeShippingMin ? 0 : rate,
+    label: zone.label || "Standard Australian shipping",
+  };
 }
 
 async function waitForAuth() {
@@ -127,7 +150,14 @@ export async function setupCheckoutPage() {
           typeQty.className = "text-gray-400";
           typeQty.textContent = `${itemType(item).toUpperCase()} x${item.quantity}`;
 
-          left.append(name, typeQty);
+          left.appendChild(name);
+          if (itemVariantName(item)) {
+            const variant = document.createElement("div");
+            variant.className = "text-gray-300";
+            variant.textContent = `Variant: ${itemVariantName(item)}`;
+            left.appendChild(variant);
+          }
+          left.appendChild(typeQty);
 
           const right = document.createElement("div");
           right.textContent = formatCurrency(itemLineTotal(item));
@@ -181,6 +211,16 @@ export async function setupCheckoutPage() {
   }
 
   summaryContainer.innerHTML = "";
+
+  let shippingSettings = {};
+  if (hasShippingItems) {
+    try {
+      const getShippingTaxSettings = httpsCallable(functions, "getShippingTaxSettings");
+      shippingSettings = (await getShippingTaxSettings()).data || {};
+    } catch (error) {
+      console.error("Unable to load shipping settings:", error);
+    }
+  }
 
   const form = document.createElement("form");
   form.className = "space-y-4";
@@ -333,13 +373,14 @@ export async function setupCheckoutPage() {
       label: "Country",
       required: true,
       defaultValue: "Australia",
+      readonly: true,
     },
   ];
-  shippingFields.forEach(({ id, label, required, defaultValue }) => {
+  shippingFields.forEach(({ id, label, required, defaultValue, readonly }) => {
     const div = document.createElement("div");
     div.innerHTML = `
       <label for="${id}" class="block text-sm font-medium text-white">${label}</label>
-      <input type="text" name="${id}" id="${id}" ${required ? "required" : ""}
+      <input type="text" name="${id}" id="${id}" ${required ? "required" : ""} ${readonly ? "readonly" : ""}
         class="mt-1 block w-full bg-gray-800 border border-gray-700 text-white rounded-md px-3 py-2"
         value="${profileData[id] || defaultValue || ""}" />
     `;
@@ -470,16 +511,29 @@ export async function setupCheckoutPage() {
     const totalPrice = item.price * item.quantity;
     subtotal += totalPrice;
     const itemLabel = `${item.type?.toUpperCase() || "ITEM"} x${item.quantity}`;
-    const labelText = `${item.name} (${itemLabel})`;
-    cartSummary.appendChild(createFieldRow(labelText, formatCurrency(totalPrice)));
+    const row = createFieldRow(`${item.name} (${itemLabel})`, formatCurrency(totalPrice));
+    if (itemVariantName(item)) {
+      const variant = document.createElement("div");
+      variant.className = "text-xs font-normal text-gray-300";
+      variant.textContent = `Variant: ${itemVariantName(item)}`;
+      row.firstElementChild?.appendChild(variant);
+    }
+    cartSummary.appendChild(row);
   });
 
-  const shippingCost = hasShippingItems ? 10 : 0;
+  const shipping = shippingQuote(shippingSettings, subtotal, hasShippingItems);
+  const shippingCost = shipping.cost;
   const gst = (subtotal + shippingCost) / 11;
   const total = subtotal + shippingCost;
 
   cartSummary.appendChild(createFieldRow("Subtotal", formatCurrency(subtotal)));
-  cartSummary.appendChild(createFieldRow("Shipping", formatCurrency(shippingCost)));
+  cartSummary.appendChild(createFieldRow(shipping.label, formatCurrency(shippingCost)));
+  if (hasShippingItems) {
+    const shippingNotice = document.createElement("p");
+    shippingNotice.className = "mt-2 text-xs font-medium text-gray-300";
+    shippingNotice.textContent = "Physical products are shipped within Australia only.";
+    cartSummary.appendChild(shippingNotice);
+  }
   cartSummary.appendChild(createFieldRow("GST", formatCurrency(gst)));
   const totalRow = createFieldRow("Total", formatCurrency(total));
   totalRow.classList.add("text-lg", "font-bold", "text-white");

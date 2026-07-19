@@ -1,4 +1,8 @@
-import { functions, getRecaptchaSiteKey } from "./firebase-config.js";
+import {
+  functions,
+  getRecaptchaSiteKey,
+  usesFirebaseEmulators,
+} from "./firebase-config.js";
 import { httpsCallable } from "firebase/functions";
 import { loadRecaptchaScript } from "./loadRecaptcha.js";
 import { showToast } from "./utils.js";
@@ -10,6 +14,10 @@ const RECAPTCHA_ERROR_MSG = "reCAPTCHA verification failed or site key is missin
  */
 export async function executeRecaptcha(action = "submit_review") {
   try {
+    if (usesFirebaseEmulators()) {
+      return "firebase-emulator";
+    }
+
     const siteKey = getRecaptchaSiteKey();
     if (!siteKey) throw new Error(RECAPTCHA_ERROR_MSG);
 

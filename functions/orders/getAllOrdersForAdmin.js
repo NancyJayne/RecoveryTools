@@ -40,6 +40,20 @@ function hasOpenCustomerIssue(order) {
   return order.customerFollowUpOpen === true;
 }
 
+async function attachLatestCustomerIssues(db, orders) {
+  const issueIds = [...new Set(orders.map((order) => order.latestCustomerIssueId).filter(Boolean))];
+  if (!issueIds.length) return orders;
+  const snapshots = await Promise.all(issueIds.map((issueId) => db.collection("orderIssues").doc(issueId).get()));
+  const issuesById = new Map(snapshots.filter((snap) => snap.exists).map((snap) => [snap.id, {
+    id: snap.id,
+    ...snap.data(),
+  }]));
+  return orders.map((order) => ({
+    ...order,
+    latestCustomerIssue: issuesById.get(order.latestCustomerIssueId) || null,
+  }));
+}
+
 export const getAllOrdersForAdmin = onCall(
   { region: "australia-southeast1" },
   async (request) => {
@@ -59,7 +73,8 @@ export const getAllOrdersForAdmin = onCall(
       includeArchived = false,
       issueOnly = false,
     } = request.data || {};
-    let ordersRef = admin.firestore().collection("orders");
+    const db = admin.firestore();
+    let ordersRef = db.collection("orders");
 
     if (invoiceNumber) {
       const doc = await ordersRef.doc(invoiceNumber).get();
@@ -71,7 +86,7 @@ export const getAllOrdersForAdmin = onCall(
       if (issueOnly && !hasOpenCustomerIssue(order)) {
         return { orders: [] };
       }
-      return { orders: [order] };
+      return { orders: await attachLatestCustomerIssues(db, [order]) };
     }
 
     if (referredBy) {
@@ -91,6 +106,6 @@ export const getAllOrdersForAdmin = onCall(
       )
       .slice(0, 50);
 
-    return { orders };
+    return { orders: await attachLatestCustomerIssues(db, orders) };
   },
 );

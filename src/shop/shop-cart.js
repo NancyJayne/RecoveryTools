@@ -1,10 +1,28 @@
 // 🛒 shop-cart.js – Modular Cart Logic for Recovery Tools
 
 import { showToast } from "../utils/utils.js";
-import { functions } from "../utils/firebase-config.js";
+import { auth, db, functions } from "../utils/firebase-config.js";
 import { httpsCallable } from "firebase/functions";
+import { doc, getDoc } from "firebase/firestore";
 
-export function initCartUI() {
+async function loadSharedCart() {
+  const sharedCartId = new URLSearchParams(window.location.search).get("sharedCart");
+  if (!sharedCartId) return;
+  try {
+    const snapshot = await getDoc(doc(db, "sharedCarts", sharedCartId));
+    const data = snapshot.exists() ? snapshot.data() : null;
+    if (!data?.active || !Array.isArray(data.items) || !data.items.length) {
+      return showToast("This shared cart is no longer available.", "error");
+    }
+    setCart(data.items);
+    showToast("Shared cart loaded. Review it before checkout.", "success");
+  } catch (err) {
+    console.error("Unable to load shared cart:", err);
+    showToast("Unable to load the shared cart.", "error");
+  }
+}
+
+export async function initCartUI() {
   const openBtns = document.querySelectorAll(".open-cart-btn");
   const closeBtn = document.getElementById("closeCartBtn");
   const checkoutBtn = document.getElementById("cartCheckoutBtn");
@@ -37,7 +55,9 @@ export function initCartUI() {
     console.warn("⚠ cartCheckoutBtn not found when initCartUI ran");
   }
 
+  await loadSharedCart();
   renderCartItems();
+  updateCartCount();
 }
 
 export function openCartDrawer() {
@@ -97,6 +117,7 @@ export async function renderCartItems() {
   const container = document.getElementById("cartItemsContainer");
   const subtotalEl = document.getElementById("cartSubtotal");
   const shippingEl = document.getElementById("estimatedShippingCost");
+  const estimatedTotalEl = document.getElementById("cartEstimatedTotal");
   const affiliateSelect = document.getElementById("affiliateSelector");
   if (!container || !subtotalEl) return;
 
@@ -150,7 +171,12 @@ export async function renderCartItems() {
       details.className = "text-sm text-gray-400";
       details.textContent = `$${itemPrice.toFixed(2)} × ${item.quantity}`;
 
+      const variant = document.createElement("div");
+      variant.className = "text-xs text-gray-300";
+      variant.textContent = item.variantName ? `Variant: ${item.variantName}` : "";
+
       info.appendChild(name);
+      if (item.variantName) info.appendChild(variant);
       info.appendChild(details);
       left.appendChild(img);
       left.appendChild(info);
@@ -181,10 +207,14 @@ export async function renderCartItems() {
   });
 
   subtotalEl.textContent = `$${subtotal.toFixed(2)}`;
+  const showEstimatedTotal = (shippingCost) => {
+    if (estimatedTotalEl) estimatedTotalEl.textContent = `$${(subtotal + shippingCost).toFixed(2)}`;
+  };
 
   try {
     if (!hasShippingItems) {
       if (shippingEl) shippingEl.textContent = "$0.00";
+      showEstimatedTotal(0);
     } else {
       const fetchSettings = httpsCallable(functions, "getShippingTaxSettings");
       const settingsRes = await fetchSettings();
@@ -196,20 +226,26 @@ export async function renderCartItems() {
           ? Object.values(rawZones)
           : [];
       const shippingRate = shippingZones.find((z) => z?.default)?.rate ?? shippingZones[0]?.rate ?? 10;
-      const shippingCost = subtotal >= freeShippingMin ? 0 : shippingRate;
+      const hasFreeShippingThreshold = Number(freeShippingMin) > 0;
+      const shippingCost = hasFreeShippingThreshold && subtotal >= Number(freeShippingMin)
+        ? 0
+        : Number(shippingRate);
 
       if (shippingEl) shippingEl.textContent = `$${shippingCost.toFixed(2)}`;
+      showEstimatedTotal(shippingCost);
     }
   } catch (err) {
     console.error("Shipping estimate error:", err);
     if (shippingEl) shippingEl.textContent = "$0.00";
+    showEstimatedTotal(0);
   }
 
   const hasTools = cart.some((item) => item.type === "tool");
+  const canChooseAffiliate = hasTools && Boolean(auth?.currentUser);
   const affiliateBlock = affiliateSelect?.closest(".p-4.border-t");
-  if (affiliateBlock) affiliateBlock.style.display = hasTools ? "block" : "none";
+  if (affiliateBlock) affiliateBlock.style.display = canChooseAffiliate ? "block" : "none";
 
-  if (hasTools && affiliateSelect && !affiliateSelect.dataset.loaded) {
+  if (canChooseAffiliate && affiliateSelect && !affiliateSelect.dataset.loaded) {
     import("firebase/firestore").then(({ getDocs, collection, getFirestore }) => {
       const db = getFirestore();
       getDocs(collection(db, "affiliates"))

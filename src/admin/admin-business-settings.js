@@ -26,6 +26,10 @@ const FIELD_IDS = [
   "businessSupportPdfUrl",
   "businessCommerceItemId",
   "businessCommercePdfUrl",
+  "businessShippingRate",
+  "businessFreeShippingMin",
+  "businessShippingLabel",
+  "businessShippingPolicy",
 ];
 
 function escapeHTML(value = "") {
@@ -60,6 +64,41 @@ function setFormValues(business) {
   document.getElementById("businessSupportPdfUrl").value = business.supportPdfUrl || "";
   document.getElementById("businessCommerceItemId").value = business.commerceItemId || "";
   document.getElementById("businessCommercePdfUrl").value = business.commercePdfUrl || "";
+}
+
+function normalizedShippingZones(settings = {}) {
+  const rawZones = settings.shippingZones;
+  if (Array.isArray(rawZones)) return rawZones;
+  if (rawZones && typeof rawZones === "object") return Object.values(rawZones);
+  return [];
+}
+
+function setShippingFormValues(settings = {}) {
+  const zones = normalizedShippingZones(settings);
+  const defaultZone = zones.find((zone) => zone?.default) || zones[0] || {};
+  document.getElementById("businessShippingRate").value = Number(defaultZone.rate ?? 10).toFixed(2);
+  document.getElementById("businessFreeShippingMin").value = Number(settings.freeShippingMin || 0).toFixed(2);
+  document.getElementById("businessShippingLabel").value =
+    defaultZone.label || "Standard Australian shipping";
+  document.getElementById("businessShippingPolicy").value = settings.shippingPolicy || "";
+}
+
+function shippingFormData() {
+  const rate = Number(document.getElementById("businessShippingRate")?.value || 0);
+  const freeShippingMin = Number(document.getElementById("businessFreeShippingMin")?.value || 0);
+  const label = document.getElementById("businessShippingLabel")?.value.trim() ||
+    "Standard Australian shipping";
+  return {
+    freeShippingMin,
+    shippingPolicy: document.getElementById("businessShippingPolicy")?.value.trim() || "",
+    shippingZones: [{
+      region: "AU",
+      label,
+      rate,
+      currency: "AUD",
+      default: true,
+    }],
+  };
 }
 
 function formData() {
@@ -109,7 +148,7 @@ async function formDataWithUploads() {
   return data;
 }
 
-function updatePreview(business) {
+function updatePreview(business, shipping = shippingFormData()) {
   const preview = document.getElementById("businessSettingsPreview");
   if (!preview) return;
   const address = escapeHTML(business.address || "").replace(/\n/g, "<br>");
@@ -127,15 +166,28 @@ function updatePreview(business) {
         <div class="text-sm text-gray-300">${escapeHTML(business.email || "")}</div>
       </div>
     </div>
+    <div class="mt-4 border-t border-gray-700 pt-4">
+      <div class="font-semibold text-white">Australia-only shipping</div>
+      <div>Standard rate: $${Number(shipping.shippingZones?.[0]?.rate || 0).toFixed(2)}</div>
+      <div>${Number(shipping.freeShippingMin || 0) > 0
+    ? `Free from $${Number(shipping.freeShippingMin).toFixed(2)}`
+    : "Free shipping disabled"}</div>
+    </div>
   `;
 }
 
 async function loadBusinessSettings() {
   const getBusinessSettings = httpsCallable(functions, "getBusinessSettings");
-  const result = await getBusinessSettings();
+  const getShippingTaxSettings = httpsCallable(functions, "getShippingTaxSettings");
+  const [result, shippingResult] = await Promise.all([
+    getBusinessSettings(),
+    getShippingTaxSettings(),
+  ]);
   const business = result.data || {};
+  const shipping = shippingResult.data || {};
   setFormValues(business);
-  updatePreview(business);
+  setShippingFormValues(shipping);
+  updatePreview(business, shipping);
 }
 
 export async function setupBusinessSettings() {
@@ -159,10 +211,16 @@ export async function setupBusinessSettings() {
       saveButton.disabled = true;
       saveButton.textContent = "Saving...";
       const updateBusinessSettings = httpsCallable(functions, "updateBusinessSettings");
+      const updateShippingTaxSettings = httpsCallable(functions, "updateShippingTaxSettings");
       const data = await formDataWithUploads();
-      const result = await updateBusinessSettings(data);
+      const shipping = shippingFormData();
+      const [result] = await Promise.all([
+        updateBusinessSettings(data),
+        updateShippingTaxSettings(shipping),
+      ]);
       setFormValues(result.data?.business || data);
-      updatePreview(result.data?.business || data);
+      setShippingFormValues(shipping);
+      updatePreview(result.data?.business || data, shipping);
       showToast("Business settings saved", "success");
     } catch (err) {
       console.error("Failed to save business settings:", err);
