@@ -52,6 +52,11 @@ function canonicalFieldType(value) {
     "linked item list": "Linked Item List",
     "linked blueprint list": "Linked Blueprint List",
     "linked plan list": "Linked Plan List",
+    asset: "Asset",
+    "image asset": "Image Asset",
+    "video asset": "Video Asset",
+    "pdf asset": "PDF Asset",
+    "canva design asset": "Canva Design Asset",
   };
   return aliases[fieldType] || "";
 }
@@ -88,7 +93,7 @@ function cleanTemplateFields(value) {
     if (!fieldType) {
       throw new HttpsError("invalid-argument", `Select a valid input type for "${name}".`);
     }
-    if (fieldType.startsWith("Linked ") && !linkedTable) {
+    if ((fieldType.startsWith("Linked ") || fieldType.endsWith(" Asset") || fieldType === "Asset") && !linkedTable) {
       throw new HttpsError("invalid-argument", `Choose a LinkedTable for "${name}".`);
     }
     if (

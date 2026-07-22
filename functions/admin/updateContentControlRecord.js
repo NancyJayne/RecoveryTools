@@ -46,7 +46,52 @@ function slugify(value) {
     .toUpperCase();
 }
 
+function generatedProductSku(productId) {
+  const token = slugify(productId).replace(/^(PROD|PRODUCT|ITEM|BLUEPRINT|PLAN)-/, "");
+  return `RT-${token || "PRODUCT"}`;
+}
+
+function cleanAccessGrants(value) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).map((grant) => ({
+    accessEntityType: ["Item", "Blueprint", "Plan"].includes(cleanString(grant?.accessEntityType))
+      ? cleanString(grant.accessEntityType)
+      : "",
+    accessEntityId: cleanString(grant?.accessEntityId),
+    accessEntityVariantId: cleanString(grant?.accessEntityVariantId || grant?.entityVariantId),
+    productVariantId: cleanString(grant?.productVariantId),
+  })).filter((grant) => {
+    const key = `${grant.productVariantId}:${grant.accessEntityType}:${grant.accessEntityId}:` +
+      grant.accessEntityVariantId;
+    if (!grant.accessEntityType || !grant.accessEntityId || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function cleanVariantContentLinks(value) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).slice(0, 200).map((link) => ({
+    productVariantId: cleanString(link?.productVariantId),
+    entityType: ["Item", "Blueprint", "Plan"].includes(cleanString(link?.entityType))
+      ? cleanString(link.entityType)
+      : "",
+    entityId: cleanString(link?.entityId),
+    entityVariantId: cleanString(link?.entityVariantId),
+    linkRole: ["Represents", "ManufacturedFrom", "Unlocks"].includes(cleanString(link?.linkRole))
+      ? cleanString(link.linkRole)
+      : "Represents",
+    status: "active",
+  })).filter((link) => {
+    const key = `${link.productVariantId}:${link.entityType}:${link.entityId}:${link.entityVariantId}:${link.linkRole}`;
+    if (!link.productVariantId || !link.entityType || !link.entityId || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function asNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -135,6 +180,48 @@ function cleanTemplateFieldValues(value) {
   return output;
 }
 
+function cleanEntityVariants(value) {
+  return (Array.isArray(value) ? value : []).map((variant, index) => ({
+    entityVariantId: cleanString(variant?.entityVariantId) || `VARIANT-${index + 1}`,
+    name: cleanString(variant?.name) || `Variant ${index + 1}`,
+    templateId: cleanString(variant?.templateId),
+    templateVariantId: cleanString(variant?.templateVariantId),
+    durationMinutes: asNumber(variant?.durationMinutes),
+    sizeLabel: cleanString(variant?.sizeLabel),
+    intendedOutput: cleanString(variant?.intendedOutput),
+    reference: cleanString(variant?.reference),
+    references: [...new Set(cleanArray(variant?.references))],
+    owner: cleanString(variant?.owner),
+    ownerType: cleanString(variant?.ownerType),
+    templateFieldValues: cleanTemplateFieldValues(variant?.templateFieldValues),
+    behaviourDefaults: Object.fromEntries(Object.entries(variant?.behaviourDefaults || {})
+      .filter(([, enabled]) => typeof enabled === "boolean")),
+    shopEnabled: variant?.shopEnabled === true,
+    libraryVisible: variant?.libraryVisible === true,
+    stockQty: asNumber(variant?.stockQty),
+    reorderLevel: asNumber(variant?.reorderLevel),
+    inventoryUnit: cleanString(variant?.inventoryUnit),
+    inventoryLocation: cleanString(variant?.inventoryLocation),
+    unitCost: asNumber(variant?.unitCost),
+    costReference: cleanString(variant?.costReference),
+    linkedItemComponents: cleanItemComponents(variant?.linkedItemComponents),
+    estimatedUnitCost: asNumber(variant?.estimatedUnitCost) ?? 0,
+    status: cleanString(variant?.status) || "draft",
+    scheduledActiveAt: cleanString(variant?.scheduledActiveAt),
+    scheduledPauseAt: cleanString(variant?.scheduledPauseAt),
+    sortOrder: asNumber(variant?.sortOrder) ?? index + 1,
+  }));
+}
+
+function cleanItemComponents(value) {
+  return (Array.isArray(value) ? value : []).slice(0, 200).map((component) => ({
+    itemId: cleanString(component?.itemId),
+    quantity: asNumber(component?.quantity) ?? 0,
+    unitCost: asNumber(component?.unitCost) ?? 0,
+    estimatedCost: asNumber(component?.estimatedCost) ?? 0,
+  })).filter((component) => component.itemId && component.quantity > 0);
+}
+
 function cleanTemplateAssetLinks(value) {
   if (!Array.isArray(value)) return [];
   const seen = new Set();
@@ -199,13 +286,30 @@ function normalizeVariant(value, index, itemId, productId) {
     colour: cleanString(value.colour),
     size: cleanString(value.size),
     sku: cleanString(value.sku),
-    priceOverride: asNumber(value.priceOverride),
+    priceOverride: (asNumber(value.priceOverride) ?? 0) > 0 ? asNumber(value.priceOverride) : null,
     stock: asNumber(value.stock) ?? 0,
     status: cleanString(value.status || "active").toLowerCase(),
+    contentVariantId: cleanString(value.contentVariantId),
+    calendarBookingReference: cleanString(value.calendarBookingReference),
+    seatCapacity: asNumber(value.seatCapacity),
+    eventStartAt: cleanString(value.eventStartAt),
+    eventEndAt: cleanString(value.eventEndAt),
+    eventLocation: cleanString(value.eventLocation),
+    instructor: cleanString(value.instructor),
   };
 }
 
-async function updateProductRelation({ db, transaction, collection, recordId, updates, itemUpdate, request }) {
+async function updateProductRelation({
+  db,
+  transaction,
+  collection,
+  recordId,
+  updates,
+  itemUpdate,
+  request,
+  existingAccessGrantDocs = [],
+  existingVariantLinkDocs = [],
+}) {
   if (!["items", "blueprints", "plans"].includes(collection) ||
       !updates.productRelation || typeof updates.productRelation !== "object") return;
 
@@ -225,17 +329,44 @@ async function updateProductRelation({ db, transaction, collection, recordId, up
     blueprints: "Blueprint",
     plans: "Plan",
   }[collection];
+  const linkRole = cleanString(relation.linkRole) || "Represents";
+  const isManufacturingLink = collection === "blueprints" && linkRole === "ManufacturedFrom";
+  const accessTargets = cleanAccessGrants(relation.accessGrants);
+  const variantContentLinks = cleanVariantContentLinks(relation.variantContentLinks);
+  const desiredAccessGrantIds = new Set();
+  const desiredVariantLinkIds = new Set();
+  variantContentLinks.filter((link) => link.linkRole === "Unlocks").forEach((link) => {
+    accessTargets.push({
+      accessEntityType: link.entityType,
+      accessEntityId: link.entityId,
+      accessEntityVariantId: link.entityVariantId,
+      productVariantId: link.productVariantId,
+    });
+  });
   const productLinkId = `PRODUCTLINK-${slugify(productId)}-${linkedEntityType.toUpperCase()}-${slugify(recordId)}`;
+  const manufacturingBlueprintId = isManufacturingLink
+    ? recordId
+    : cleanString(relation.manufacturingBlueprintId);
+  const blueprintLinkId = manufacturingBlueprintId
+    ? `PRODUCTLINK-${slugify(productId)}-BLUEPRINT-${slugify(manufacturingBlueprintId)}`
+    : "";
   if (cleanString(relation.existingProductId) && productSnap.exists) {
+    if (!cleanString(productData.sku)) {
+      transaction.set(productRef, {
+        sku: cleanString(relation.sku) || generatedProductSku(productId),
+        updatedAt: now,
+        updatedByUid: request.auth.uid,
+      }, { merge: true });
+    }
     transaction.set(db.collection("productLinks").doc(productLinkId), {
       productLinkId,
       productId,
       linkedEntityType,
       linkedEntityId: recordId,
-      linkRole: cleanString(relation.linkRole) || "Represents",
+      linkRole,
       quantity: 1,
-      isPrimary: true,
-      sortOrder: 1,
+      isPrimary: !isManufacturingLink,
+      sortOrder: isManufacturingLink ? 2 : 1,
       required: true,
       variantSpecific: false,
       productVariantId: "",
@@ -246,14 +377,44 @@ async function updateProductRelation({ db, transaction, collection, recordId, up
       updatedByUid: request.auth.uid,
       createdAt: now,
     }, { merge: true });
-    if (collection === "plans" && ["Unlocks", "Delivers", "Represents"].includes(relation.linkRole)) {
-      const grantId = `ACCESSGRANT-${slugify(productId)}-${slugify(recordId)}`;
+    transaction.set(productRef, {
+      manufacturingBlueprintId,
+      estimatedUnitCost: asNumber(relation.estimatedUnitCost) ?? 0,
+      variantContentLinks,
+      updatedAt: now,
+      updatedByUid: request.auth.uid,
+    }, { merge: true });
+    if (isManufacturingLink) {
+      transaction.set(db.collection("productLinks").doc(blueprintLinkId), {
+        productLinkId: blueprintLinkId,
+        productId,
+        linkedEntityType: "Blueprint",
+        linkedEntityId: manufacturingBlueprintId,
+        linkRole: "ManufacturedFrom",
+        quantity: 1,
+        isPrimary: false,
+        sortOrder: 2,
+        required: true,
+        status: "active",
+        contentOrigin: "app",
+        managedByWorkbook: false,
+        updatedAt: now,
+        updatedByUid: request.auth.uid,
+        createdAt: now,
+      }, { merge: true });
+    }
+    accessTargets.forEach((grant) => {
+      const { accessEntityType, accessEntityId, accessEntityVariantId, productVariantId } = grant;
+      const grantId = `ACCESSGRANT-${slugify(productId)}-${slugify(productVariantId || "ALL")}-` +
+        `${slugify(accessEntityType)}-${slugify(accessEntityId)}-${slugify(accessEntityVariantId || "ALL")}`;
+      desiredAccessGrantIds.add(grantId);
       transaction.set(db.collection("productAccessGrants").doc(grantId), {
         productAccessGrantId: grantId,
         productId,
-        productVariantId: "",
-        accessEntityType: "Plan",
-        accessEntityId: recordId,
+        productVariantId: productVariantId || "",
+        accessEntityType,
+        accessEntityId,
+        accessEntityVariantId: accessEntityVariantId || "",
         grantTiming: "on-payment-confirmed",
         durationType: "permanent",
         durationValue: null,
@@ -265,8 +426,35 @@ async function updateProductRelation({ db, transaction, collection, recordId, up
         updatedByUid: request.auth.uid,
         createdAt: now,
       }, { merge: true });
-    }
+    });
+    variantContentLinks.forEach((link) => {
+      const linkId = `PRODUCTVARIANTLINK-${slugify(productId)}-${slugify(link.productVariantId)}-` +
+        `${slugify(link.entityType)}-${slugify(link.entityId)}-${slugify(link.entityVariantId || "ALL")}`;
+      desiredVariantLinkIds.add(linkId);
+      transaction.set(db.collection("productVariantContentLinks").doc(linkId), {
+        productVariantContentLinkId: linkId,
+        productId,
+        ...link,
+        contentOrigin: "app",
+        managedByWorkbook: false,
+        updatedAt: now,
+        updatedByUid: request.auth.uid,
+        createdAt: now,
+      }, { merge: true });
+    });
+    existingAccessGrantDocs.filter((doc) => !desiredAccessGrantIds.has(doc.id)).forEach((doc) => {
+      transaction.set(doc.ref, { status: "archived", updatedAt: now }, { merge: true });
+    });
+    existingVariantLinkDocs.filter((doc) => !desiredVariantLinkIds.has(doc.id)).forEach((doc) => {
+      transaction.set(doc.ref, { status: "archived", updatedAt: now }, { merge: true });
+    });
     return;
+  }
+  if (isManufacturingLink) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Choose an existing Product for a manufacturing/cost Blueprint.",
+    );
   }
   const priceId = cleanString(relation.activePriceId) ||
     cleanString(productData.activePriceId) ||
@@ -285,9 +473,10 @@ async function updateProductRelation({ db, transaction, collection, recordId, up
   const retailPrice = requestedRetailPrice ?? asNumber(priceData.retailPrice) ??
     asNumber(productData.retailPrice) ??
     existingEffectivePrice;
+  const storedSalePrice = asNumber(priceData.salePrice) ?? asNumber(productData.salePrice);
   const salePrice = relation.salePrice === null
     ? null
-    : asNumber(relation.salePrice) ?? asNumber(priceData.salePrice) ?? asNumber(productData.salePrice);
+    : asNumber(relation.salePrice) ?? (storedSalePrice > 0 ? storedSalePrice : null);
   const saleStartsAt = cleanString(relation.saleStartsAt) || cleanString(productData.saleStartsAt);
   const saleEndsAt = cleanString(relation.saleEndsAt) || cleanString(productData.saleEndsAt);
   const nowMs = Date.now();
@@ -307,22 +496,24 @@ async function updateProductRelation({ db, transaction, collection, recordId, up
   transaction.set(productRef, {
     productId,
     productName: name,
-    productType: collection === "plans"
+    productType: cleanString(relation.productType) || (collection === "plans"
       ? (cleanString(itemUpdate.type || itemData.type).toLowerCase() === "course" ? "Course Access" : "Plan Access")
-      : collection === "blueprints" ? "Digital Download" : canonicalProductType,
-    productCategoryId: itemUpdate.categoryId || itemData.categoryId || "",
+      : collection === "blueprints" ? "Digital Download" : canonicalProductType),
+    productCategoryId: cleanString(
+      relation.productCategoryId || productData.productCategoryId || productData.categoryId,
+    ),
     itemId: collection === "items" ? recordId : "",
     name,
     title: name,
-    type: legacyProductType,
+    type: cleanString(relation.productType) || legacyProductType,
     itemType: itemUpdate.type || itemData.type || itemData.itemType || "",
     itemKind: itemUpdate.itemKind || itemData.itemKind || "",
-    categoryId: itemUpdate.categoryId || itemData.categoryId || "",
+    categoryId: cleanString(relation.productCategoryId || productData.productCategoryId || productData.categoryId),
     templateId: cleanString(updates.templateId || itemData.templateId),
     templateFieldValues: cleanTemplateFieldValues(
       updates.templateFieldValues || itemData.templateFieldValues,
     ),
-    sku: cleanString(relation.sku),
+    sku: cleanString(relation.sku) || cleanString(productData.sku) || generatedProductSku(productId),
     shopStatus: cleanString(relation.shopStatus || "draft").toLowerCase(),
     visible: asBoolean(relation.visible),
     websiteVisible: asBoolean(relation.visible),
@@ -330,17 +521,22 @@ async function updateProductRelation({ db, transaction, collection, recordId, up
     featured: asBoolean(relation.featured),
     requiresShipping: asBoolean(relation.requiresShipping),
     inventoryTracked: asBoolean(relation.inventoryTracked),
+    manufacturingBlueprintId,
+    estimatedUnitCost: asNumber(relation.estimatedUnitCost) ?? 0,
+    variantContentLinks,
     unlocksAccess: updates.unlocksAccess === true,
     accessType: cleanString(updates.accessType),
     deliveryMode: cleanString(updates.deliveryMode),
-    requiresCalendar: updates.requiresCalendar === true,
-    requiresSessionTime: updates.requiresSessionTime === true,
-    tracksSeats: updates.tracksSeats === true,
+    requiresCalendar: relation.requiresCalendar === true,
+    requiresSessionTime: relation.requiresSessionTime === true,
+    tracksSeats: relation.tracksSeats === true,
+    requiresLocation: relation.requiresLocation === true,
+    requiresInstructor: relation.requiresInstructor === true,
     seatCapacity: asNumber(updates.seatCapacity),
     eventStartAt: cleanString(updates.eventStartAt),
     eventEndAt: cleanString(updates.eventEndAt),
     eventLocation: cleanString(updates.eventLocation),
-    instructor: cleanString(updates.instructor),
+    instructor: cleanString(relation.instructor || updates.instructor),
     issuesCertificate: updates.issuesCertificate === true,
     certificateName: cleanString(updates.certificateName),
     price: effectivePrice,
@@ -354,9 +550,11 @@ async function updateProductRelation({ db, transaction, collection, recordId, up
     onSale,
     saleStartsAt,
     saleEndsAt,
-    stock: variants.length
-      ? variants.reduce((sum, variant) => sum + Number(variant.stock || 0), 0)
-      : stock,
+    stock: asBoolean(relation.inventoryTracked)
+      ? (variants.length
+        ? variants.reduce((sum, variant) => sum + Number(variant.stock || 0), 0)
+        : stock)
+      : 0,
     hasVariants: variants.length > 0,
     updatedAt: now,
     updatedByUid: request.auth.uid,
@@ -369,7 +567,7 @@ async function updateProductRelation({ db, transaction, collection, recordId, up
     productId,
     linkedEntityType,
     linkedEntityId: recordId,
-    linkRole: cleanString(relation.linkRole) || "Represents",
+    linkRole,
     quantity: 1,
     isPrimary: true,
     sortOrder: 1,
@@ -383,15 +581,38 @@ async function updateProductRelation({ db, transaction, collection, recordId, up
     updatedByUid: request.auth.uid,
     createdAt: productData.createdAt || now,
   }, { merge: true });
+  if (isManufacturingLink) {
+    transaction.set(db.collection("productLinks").doc(blueprintLinkId), {
+      productLinkId: blueprintLinkId,
+      productId,
+      linkedEntityType: "Blueprint",
+      linkedEntityId: manufacturingBlueprintId,
+      linkRole: "ManufacturedFrom",
+      quantity: 1,
+      isPrimary: false,
+      sortOrder: 2,
+      required: true,
+      status: "active",
+      contentOrigin: "app",
+      managedByWorkbook: false,
+      updatedAt: now,
+      updatedByUid: request.auth.uid,
+      createdAt: now,
+    }, { merge: true });
+  }
 
-  if (collection === "plans") {
-    const grantId = `ACCESSGRANT-${slugify(productId)}-${slugify(recordId)}`;
+  accessTargets.forEach((grant) => {
+    const { accessEntityType, accessEntityId, accessEntityVariantId, productVariantId } = grant;
+    const grantId = `ACCESSGRANT-${slugify(productId)}-${slugify(productVariantId || "ALL")}-` +
+      `${slugify(accessEntityType)}-${slugify(accessEntityId)}-${slugify(accessEntityVariantId || "ALL")}`;
+    desiredAccessGrantIds.add(grantId);
     transaction.set(db.collection("productAccessGrants").doc(grantId), {
       productAccessGrantId: grantId,
       productId,
-      productVariantId: "",
-      accessEntityType: "Plan",
-      accessEntityId: recordId,
+      productVariantId: productVariantId || "",
+      accessEntityType,
+      accessEntityId,
+      accessEntityVariantId: accessEntityVariantId || "",
       grantTiming: "on-payment-confirmed",
       durationType: "permanent",
       durationValue: null,
@@ -403,7 +624,28 @@ async function updateProductRelation({ db, transaction, collection, recordId, up
       updatedByUid: request.auth.uid,
       createdAt: productData.createdAt || now,
     }, { merge: true });
-  }
+  });
+  variantContentLinks.forEach((link) => {
+    const linkId = `PRODUCTVARIANTLINK-${slugify(productId)}-${slugify(link.productVariantId)}-` +
+      `${slugify(link.entityType)}-${slugify(link.entityId)}-${slugify(link.entityVariantId || "ALL")}`;
+    desiredVariantLinkIds.add(linkId);
+    transaction.set(db.collection("productVariantContentLinks").doc(linkId), {
+      productVariantContentLinkId: linkId,
+      productId,
+      ...link,
+      contentOrigin: "app",
+      managedByWorkbook: false,
+      updatedAt: now,
+      updatedByUid: request.auth.uid,
+      createdAt: now,
+    }, { merge: true });
+  });
+  existingAccessGrantDocs.filter((doc) => !desiredAccessGrantIds.has(doc.id)).forEach((doc) => {
+    transaction.set(doc.ref, { status: "archived", updatedAt: now }, { merge: true });
+  });
+  existingVariantLinkDocs.filter((doc) => !desiredVariantLinkIds.has(doc.id)).forEach((doc) => {
+    transaction.set(doc.ref, { status: "archived", updatedAt: now }, { merge: true });
+  });
 
   transaction.set(priceRef, {
     priceId,
@@ -452,6 +694,7 @@ async function updateProductRelation({ db, transaction, collection, recordId, up
       variantCode: variant.variantId,
       sku: variant.sku,
       status: variant.status || "active",
+      contentVariantId: variant.contentVariantId,
       isDefault: index === 0,
       optionSummary: [variant.colour, variant.size].filter(Boolean).join(" / "),
       priceOverride: variant.priceOverride,
@@ -460,6 +703,12 @@ async function updateProductRelation({ db, transaction, collection, recordId, up
       inventoryTracked: asBoolean(relation.inventoryTracked),
       stockQuantity: variant.stock,
       stockStatus: variant.stock > 0 ? "in-stock" : "out-of-stock",
+      calendarBookingReference: variant.calendarBookingReference,
+      seatCapacity: variant.seatCapacity,
+      eventStartAt: variant.eventStartAt,
+      eventEndAt: variant.eventEndAt,
+      eventLocation: variant.eventLocation,
+      instructor: variant.instructor,
       sortOrder: index + 1,
       contentOrigin: "app",
       managedByWorkbook: false,
@@ -468,8 +717,9 @@ async function updateProductRelation({ db, transaction, collection, recordId, up
       createdAt: now,
     }, { merge: true });
 
+    const variantPriceId = `PRICE-${slugify(productId)}-${index + 1}`;
+    const variantPriceRef = db.collection("productPrices").doc(variantPriceId);
     if (variant.priceOverride !== null) {
-      const variantPriceId = `PRICE-${slugify(productId)}-${index + 1}`;
       transaction.set(db.collection("productPrices").doc(variantPriceId), {
         priceId: variantPriceId,
         productId,
@@ -485,6 +735,8 @@ async function updateProductRelation({ db, transaction, collection, recordId, up
         updatedAt: now,
         createdAt: now,
       }, { merge: true });
+    } else {
+      transaction.delete(variantPriceRef);
     }
 
     if (asBoolean(relation.inventoryTracked)) {
@@ -503,11 +755,15 @@ async function updateProductRelation({ db, transaction, collection, recordId, up
   });
 }
 
-async function prepareTemplateAssetSync(db, recordId, updates) {
+async function prepareTemplateAssetSync(db, collection, recordId, updates) {
   if (updates.hasAssetTemplateFields !== true) return null;
   const links = cleanTemplateAssetLinks(updates.templateAssetLinks);
+  const entityType = { items: "Item", blueprints: "Blueprint", plans: "Plan" }[collection];
+  if (!entityType) return null;
   const [relationsSnapshot, entityRelationsSnapshot, ...assetSnapshots] = await Promise.all([
-    db.collection("itemAssets").where("itemId", "==", recordId).get(),
+    collection === "items"
+      ? db.collection("itemAssets").where("itemId", "==", recordId).get()
+      : Promise.resolve({ docs: [] }),
     db.collection("entityAssets").where("entityId", "==", recordId).get(),
     ...links.map((link) => db.collection("assets").doc(link.assetId).get()),
   ]);
@@ -531,8 +787,10 @@ async function prepareTemplateAssetSync(db, recordId, updates) {
       data: doc.data() || {},
     })),
     entityRelations: entityRelationsSnapshot.docs
-      .filter((doc) => doc.data()?.entityType === "Item")
+      .filter((doc) => doc.data()?.entityType === entityType)
       .map((doc) => ({ id: doc.id, ref: doc.ref, data: doc.data() || {} })),
+    entityType,
+    collection,
   };
 }
 
@@ -570,7 +828,7 @@ function syncTemplateAssets({ transaction, db, recordId, sync, request }) {
       slugify(link.assetId),
     ].join("-");
     const asset = sync.assets.get(link.assetId) || {};
-    transaction.set(existing?.ref || db.collection("itemAssets").doc(relationId), {
+    if (sync.collection === "items") transaction.set(existing?.ref || db.collection("itemAssets").doc(relationId), {
       itemAssetId: relationId,
       itemId: recordId,
       assetId: link.assetId,
@@ -589,11 +847,12 @@ function syncTemplateAssets({ transaction, db, recordId, sync, request }) {
     }, { merge: true });
 
     const canonical = canonicalByAssetId.get(link.assetId);
-    const entityAssetId = canonical?.id || `ENTITYASSET-ITEM-${slugify(recordId)}-${slugify(link.assetId)}`;
+    const entityAssetId = canonical?.id ||
+      `ENTITYASSET-${sync.entityType.toUpperCase()}-${slugify(recordId)}-${slugify(link.assetId)}`;
     transaction.set(canonical?.ref || db.collection("entityAssets").doc(entityAssetId), {
       entityAssetId,
       assetId: link.assetId,
-      entityType: "Item",
+      entityType: sync.entityType,
       entityId: recordId,
       assetRole: link.fieldName,
       fieldKey: link.fieldKey,
@@ -654,7 +913,6 @@ export const updateContentControlRecord = onCall(
     applyString(update, updates, "scheduledPauseAt");
     applyString(update, updates, "owner");
     applyString(update, updates, "ownerType");
-    applyString(update, updates, "categoryId");
     applyString(update, updates, "type", TYPE_FIELD_BY_COLLECTION[collection]);
     applyString(update, updates, "template");
     applyString(update, updates, "templateId");
@@ -672,6 +930,8 @@ export const updateContentControlRecord = onCall(
     applyBoolean(update, updates, "requestedWebsiteVisible");
     applyBoolean(update, updates, "requestedProductVisible");
     applyBoolean(update, updates, "createsProduct");
+    applyBoolean(update, updates, "websiteVisible");
+    applyBoolean(update, updates, "websiteVisible", "visible");
     applyString(update, updates, "approvalStatus");
     if (update.status === "review") {
       update.approvalStatus = "awaiting-approval";
@@ -689,8 +949,38 @@ export const updateContentControlRecord = onCall(
     applyArray(update, updates, "linkedItemIds");
     applyArray(update, updates, "linkedBlueprintIds");
     applyArray(update, updates, "linkedPlanIds");
+    if (updates.linkedItemComponents !== undefined) {
+      update.linkedItemComponents = cleanItemComponents(updates.linkedItemComponents);
+    }
+    applyNumber(update, updates, "estimatedUnitCost");
     if (updates.templateFieldValues !== undefined) {
       update.templateFieldValues = cleanTemplateFieldValues(updates.templateFieldValues);
+    }
+    if (updates.entityVariants !== undefined) {
+      const existingVariants = new Map((Array.isArray(existing.entityVariants) ? existing.entityVariants : [])
+        .map((variant) => [cleanString(variant.entityVariantId), variant]));
+      const variantAuditTime = new Date().toISOString();
+      update.entityVariants = cleanEntityVariants(updates.entityVariants).map((variant) => {
+        const previous = existingVariants.get(variant.entityVariantId) || {};
+        const activating = variant.status === "active" && previous.status !== "active";
+        return {
+          ...previous,
+          ...variant,
+          owner: variant.owner || previous.owner || actor.owner,
+          ownerType: variant.ownerType || previous.ownerType || actor.ownerType,
+          createdByUid: previous.createdByUid || request.auth.uid,
+          createdByEmail: previous.createdByEmail || request.auth.token.email || "",
+          createdAt: previous.createdAt || variantAuditTime,
+          approvalStatus: variant.status === "review"
+            ? "awaiting-approval"
+            : variant.status === "active" ? "approved" : previous.approvalStatus || "draft",
+          approvedByUid: activating ? request.auth.uid : previous.approvedByUid || "",
+          approvedByEmail: activating
+            ? request.auth.token.email || ""
+            : previous.approvedByEmail || "",
+          approvedAt: activating ? variantAuditTime : previous.approvedAt || "",
+        };
+      });
     }
     if (updates.templateContent !== undefined) {
       update.templateContent = cleanTemplateContent(updates.templateContent);
@@ -705,12 +995,16 @@ export const updateContentControlRecord = onCall(
 
     if (collection === "items") {
       applyString(update, updates, "itemKind");
-      applyBoolean(update, updates, "websiteVisible");
-      applyBoolean(update, updates, "websiteVisible", "visible");
       applyBoolean(update, updates, "isShopProduct");
       applyBoolean(update, updates, "soldByRecoveryTools");
       applyBoolean(update, updates, "requiresShipping");
       applyBoolean(update, updates, "inventoryTracked");
+      applyNumber(update, updates, "stockQty");
+      applyNumber(update, updates, "reorderLevel");
+      applyString(update, updates, "inventoryUnit");
+      applyString(update, updates, "inventoryLocation");
+      applyNumber(update, updates, "unitCost");
+      applyString(update, updates, "costReference");
       applyBoolean(update, updates, "requiresCalendar");
       applyBoolean(update, updates, "requiresSessionTime");
       applyBoolean(update, updates, "tracksSeats");
@@ -732,15 +1026,48 @@ export const updateContentControlRecord = onCall(
       update.tags = cleanTags(updates.tags);
     }
 
-    const templateAssetSync = collection === "items"
-      ? await prepareTemplateAssetSync(db, recordId, updates)
+    const templateAssetSync = ["items", "blueprints", "plans"].includes(collection)
+      ? await prepareTemplateAssetSync(db, collection, recordId, updates)
       : null;
     const unlinkProductIds = new Set(cleanArray(updates.unlinkProductIds));
     const productLinksToUnlink = unlinkProductIds.size
       ? (await db.collection("productLinks").where("linkedEntityId", "==", recordId).get()).docs
         .filter((doc) => unlinkProductIds.has(cleanString(doc.data()?.productId)))
       : [];
+    const relationProductId = updates.productRelation
+      ? cleanString(updates.productRelation.productId || updates.productRelation.existingProductId) ||
+        cleanString(updates.productId) || `PROD-${slugify(recordId).replace(/^ITEM-/, "")}`
+      : "";
+    const [accessGrantSnapshot, variantLinkSnapshot] = relationProductId
+      ? await Promise.all([
+        db.collection("productAccessGrants").where("productId", "==", relationProductId).get(),
+        db.collection("productVariantContentLinks").where("productId", "==", relationProductId).get(),
+      ])
+      : [{ docs: [] }, { docs: [] }];
     await db.runTransaction(async (transaction) => {
+      if (collection === "items" && updates.createsProduct !== true &&
+          updates.inventoryTracked !== undefined) {
+        const inventoryRef = db.collection("inventory").doc(`INV-${slugify(recordId)}`);
+        transaction.set(inventoryRef, {
+          inventoryId: inventoryRef.id,
+          name: cleanString(updates.name) || cleanString(existing.name) || recordId,
+          itemId: recordId,
+          productId: "",
+          variantId: "",
+          stockQty: asNumber(updates.stockQty) ?? asNumber(existing.stockQty) ?? 0,
+          reorderLevel: asNumber(updates.reorderLevel),
+          unit: cleanString(updates.inventoryUnit),
+          location: cleanString(updates.inventoryLocation),
+          unitCost: asNumber(updates.unitCost),
+          costReference: cleanString(updates.costReference),
+          status: updates.inventoryTracked === true ? "active" : "not-tracked",
+          managedByWorkbook: false,
+          contentOrigin: "app",
+          updatedAt: now,
+          updatedByUid: request.auth.uid,
+          createdAt: now,
+        }, { merge: true });
+      }
       await updateProductRelation({
         db,
         transaction,
@@ -749,6 +1076,8 @@ export const updateContentControlRecord = onCall(
         updates,
         itemUpdate: update,
         request,
+        existingAccessGrantDocs: accessGrantSnapshot.docs,
+        existingVariantLinkDocs: variantLinkSnapshot.docs,
       });
       syncTemplateAssets({
         transaction,

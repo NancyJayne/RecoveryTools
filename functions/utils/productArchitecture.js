@@ -6,6 +6,12 @@ function status(value, fallback = "") {
   return cleanString(value || fallback).toLowerCase().replace(/\s+/g, "-");
 }
 
+function dateTimeValue(value) {
+  if (!value) return "";
+  const date = typeof value.toDate === "function" ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? cleanString(value) : date.toISOString().slice(0, 16);
+}
+
 function groupDocs(snapshot, key) {
   const grouped = new Map();
   snapshot.docs.forEach((doc) => {
@@ -80,6 +86,7 @@ export function activePriceForProduct(productId, architecture) {
 }
 
 function normalizedVariant(variant, sourceCollection) {
+  const numericPriceOverride = Number(variant.priceOverride);
   return {
     id: variant.id,
     variantId: variant.productVariantId || variant.variantId || variant.id,
@@ -88,18 +95,28 @@ function normalizedVariant(variant, sourceCollection) {
     colour: variant.colour || "",
     size: variant.size || "",
     sku: variant.sku || "",
-    priceOverride: variant.priceOverride ?? null,
+    priceOverride: Number.isFinite(numericPriceOverride) && numericPriceOverride > 0
+      ? numericPriceOverride
+      : null,
     stock: Number(variant.stockQuantity ?? variant.stock ?? 0),
     stockStatus: variant.stockStatus || "",
     isDefault: variant.isDefault === true,
     inventoryTracked: variant.inventoryTracked === true,
+    status: variant.status || "active",
+    contentVariantId: variant.contentVariantId || "",
+    calendarBookingReference: variant.calendarBookingReference || "",
+    seatCapacity: Number.isFinite(Number(variant.seatCapacity)) ? Number(variant.seatCapacity) : null,
+    eventStartAt: dateTimeValue(variant.eventStartAt),
+    eventEndAt: dateTimeValue(variant.eventEndAt),
+    eventLocation: variant.eventLocation || "",
+    instructor: variant.instructor || "",
     sourceCollection,
   };
 }
 
-export function variantsForProduct(productId, itemId, architecture) {
+export function variantsForProduct(productId, itemId, architecture, includeInactive = false) {
   const canonical = (architecture.canonicalVariantsByProductId.get(productId) || [])
-    .filter((variant) => status(variant.status, "active") === "active")
+    .filter((variant) => includeInactive || status(variant.status, "active") === "active")
     .map((variant) => normalizedVariant(variant, "productVariants"));
   if (canonical.length) return canonical;
 
@@ -109,7 +126,7 @@ export function variantsForProduct(productId, itemId, architecture) {
   ];
   const seen = new Set();
   return legacy
-    .filter((variant) => status(variant.status, "active") === "active")
+    .filter((variant) => includeInactive || status(variant.status, "active") === "active")
     .filter((variant) => {
       if (seen.has(variant.id)) return false;
       seen.add(variant.id);
@@ -211,8 +228,17 @@ function legacyAccessGrants(productId, product) {
 }
 
 export function accessGrantsForProduct(productId, product, architecture) {
+  const seen = new Set();
   const canonical = (architecture.accessGrantsByProductId.get(productId) || [])
     .filter((grant) => status(grant.status, "active") === "active")
+    .filter((grant) => {
+      const key = `${grant.productVariantId || "ALL"}:` +
+        `${grant.accessEntityType || grant.accessType}:${grant.accessEntityId || grant.accessId}:` +
+        `${grant.accessEntityVariantId || "ALL"}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
     .map((grant) => ({ ...grant, source: "canonical" }));
   if (canonical.length) return canonical;
   return legacyAccessGrants(productId, product);

@@ -205,7 +205,8 @@ async function productSnapshotFromLineItem(lineItem, commissionRates = {}, archi
     ? await admin.firestore().collection("products").doc(productId).get()
     : null;
   const product = productSnap?.exists ? productSnap.data() : {};
-  const accessGrants = accessGrantsForProduct(productId, product, architecture);
+  const accessGrants = accessGrantsForProduct(productId, product, architecture)
+    .filter((grant) => !grant.productVariantId || grant.productVariantId === variantId);
   const displayType = productDisplayType(product, metadata.productType || "item");
   const legacyType = product.type || metadata.productType || "item";
   const quantity = Number(lineItem.quantity || 1);
@@ -402,13 +403,16 @@ export async function writeCheckoutCompleted({ stripe, session, event }) {
     grants.forEach((grant) => {
       const accessType = grant.accessEntityType || grant.accessType;
       const accessId = grant.accessEntityId || grant.accessId;
+      const accessVariantId = grant.accessEntityVariantId || "";
       if (!userId || !accessType || !accessId) return;
-      const userAccessId = `${userId}_${accessType}_${accessId}`;
+      const userAccessId = `${userId}_${accessType}_${accessId}` +
+        (accessVariantId ? `_${accessVariantId}` : "");
       batch.set(db.collection("userAccess").doc(userAccessId), {
         userAccessId,
         userId,
         accessType,
         accessId,
+        accessVariantId,
         sourceItemId: item.itemId || item.productId,
         sourceProductId: item.productId,
         sourceOrderId: orderId,

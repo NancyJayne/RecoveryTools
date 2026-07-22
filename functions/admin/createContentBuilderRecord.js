@@ -57,6 +57,50 @@ function slugify(value) {
     .slice(0, 60);
 }
 
+function generatedProductSku(productId) {
+  const token = slugify(productId).replace(/^(PROD|PRODUCT|ITEM|BLUEPRINT|PLAN)-/, "");
+  return `RT-${token || "PRODUCT"}`;
+}
+
+function cleanAccessGrants(value) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).map((grant) => ({
+    accessEntityType: ["Item", "Blueprint", "Plan"].includes(cleanString(grant?.accessEntityType))
+      ? cleanString(grant.accessEntityType)
+      : "",
+    accessEntityId: cleanString(grant?.accessEntityId),
+    accessEntityVariantId: cleanString(grant?.accessEntityVariantId || grant?.entityVariantId),
+    productVariantId: cleanString(grant?.productVariantId),
+  })).filter((grant) => {
+    const key = `${grant.productVariantId}:${grant.accessEntityType}:${grant.accessEntityId}:` +
+      grant.accessEntityVariantId;
+    if (!grant.accessEntityType || !grant.accessEntityId || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function cleanVariantContentLinks(value) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).slice(0, 200).map((link) => ({
+    productVariantId: cleanString(link?.productVariantId),
+    entityType: ["Item", "Blueprint", "Plan"].includes(cleanString(link?.entityType))
+      ? cleanString(link.entityType)
+      : "",
+    entityId: cleanString(link?.entityId),
+    entityVariantId: cleanString(link?.entityVariantId),
+    linkRole: ["Represents", "ManufacturedFrom", "Unlocks"].includes(cleanString(link?.linkRole))
+      ? cleanString(link.linkRole)
+      : "Represents",
+    status: "active",
+  })).filter((link) => {
+    const key = `${link.productVariantId}:${link.entityType}:${link.entityId}:${link.entityVariantId}:${link.linkRole}`;
+    if (!link.productVariantId || !link.entityType || !link.entityId || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function normalizeStatus(value) {
   const status = cleanString(value).toLowerCase();
   return CONTENT_BUILDER_OPTIONS.statuses.includes(status) ? status : "draft";
@@ -69,6 +113,7 @@ function asArray(value) {
 }
 
 function asNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -113,6 +158,48 @@ function cleanTemplateFieldValues(value) {
     }
   });
   return output;
+}
+
+function cleanEntityVariants(value) {
+  return (Array.isArray(value) ? value : []).map((variant, index) => ({
+    entityVariantId: cleanString(variant?.entityVariantId) || `VARIANT-${index + 1}`,
+    name: cleanString(variant?.name) || `Variant ${index + 1}`,
+    templateId: cleanString(variant?.templateId),
+    templateVariantId: cleanString(variant?.templateVariantId),
+    durationMinutes: asNumber(variant?.durationMinutes),
+    sizeLabel: cleanString(variant?.sizeLabel),
+    intendedOutput: cleanString(variant?.intendedOutput),
+    reference: cleanString(variant?.reference),
+    references: [...new Set(asArray(variant?.references))],
+    owner: cleanString(variant?.owner),
+    ownerType: cleanString(variant?.ownerType),
+    templateFieldValues: cleanTemplateFieldValues(variant?.templateFieldValues),
+    behaviourDefaults: Object.fromEntries(Object.entries(variant?.behaviourDefaults || {})
+      .filter(([, enabled]) => typeof enabled === "boolean")),
+    shopEnabled: variant?.shopEnabled === true,
+    libraryVisible: variant?.libraryVisible === true,
+    stockQty: asNumber(variant?.stockQty),
+    reorderLevel: asNumber(variant?.reorderLevel),
+    inventoryUnit: cleanString(variant?.inventoryUnit),
+    inventoryLocation: cleanString(variant?.inventoryLocation),
+    unitCost: asNumber(variant?.unitCost),
+    costReference: cleanString(variant?.costReference),
+    linkedItemComponents: cleanItemComponents(variant?.linkedItemComponents),
+    estimatedUnitCost: asNumber(variant?.estimatedUnitCost) ?? 0,
+    status: cleanString(variant?.status) || "draft",
+    scheduledActiveAt: cleanString(variant?.scheduledActiveAt),
+    scheduledPauseAt: cleanString(variant?.scheduledPauseAt),
+    sortOrder: asNumber(variant?.sortOrder) ?? index + 1,
+  }));
+}
+
+function cleanItemComponents(value) {
+  return (Array.isArray(value) ? value : []).slice(0, 200).map((component) => ({
+    itemId: cleanString(component?.itemId),
+    quantity: asNumber(component?.quantity) ?? 0,
+    unitCost: asNumber(component?.unitCost) ?? 0,
+    estimatedCost: asNumber(component?.estimatedCost) ?? 0,
+  })).filter((component) => component.itemId && component.quantity > 0);
 }
 
 function templateFieldKey(value) {
@@ -272,8 +359,16 @@ function normalizeVariant(value, index) {
     colour: cleanString(value.colour),
     size: cleanString(value.size),
     sku: cleanString(value.sku),
-    priceOverride: asNumber(value.priceOverride),
-    stockQty: asNumber(value.stockQty) ?? 0,
+    priceOverride: (asNumber(value.priceOverride) ?? 0) > 0 ? asNumber(value.priceOverride) : null,
+    stockQty: asNumber(value.stockQty ?? value.stock) ?? 0,
+    status: cleanString(value.status || "active").toLowerCase(),
+    contentVariantId: cleanString(value.contentVariantId),
+    calendarBookingReference: cleanString(value.calendarBookingReference),
+    seatCapacity: asNumber(value.seatCapacity),
+    eventStartAt: cleanString(value.eventStartAt),
+    eventEndAt: cleanString(value.eventEndAt),
+    eventLocation: cleanString(value.eventLocation),
+    instructor: cleanString(value.instructor),
   };
 }
 
@@ -356,8 +451,16 @@ export const createContentBuilderRecord = onCall(
     const templateDefaults = selectedTemplate?.defaults || {};
     const templateContent = cleanTemplateContent(data.templateContent);
     const templateFieldValues = cleanTemplateFieldValues(data.templateFieldValues);
+    const entityVariants = cleanEntityVariants(data.entityVariants);
     validateTemplateFieldValues(selectedTemplate, templateFieldValues);
-    const linkedAssetSelections = recordType === "item"
+    entityVariants.forEach((variant) => {
+      const variantTemplate = templateFor(options, recordType, variant.templateVariantId, typeValue);
+      if (!variantTemplate) {
+        throw new HttpsError("invalid-argument", `Choose a valid template for ${variant.name}.`);
+      }
+      validateTemplateFieldValues(variantTemplate, variant.templateFieldValues);
+    });
+    const linkedAssetSelections = ["item", "blueprint", "plan"].includes(recordType)
       ? selectedAssetLinks(selectedTemplate, templateFieldValues)
       : [];
     const similar = await findSimilar(db, config.collection, name);
@@ -374,6 +477,21 @@ export const createContentBuilderRecord = onCall(
     const ref = db.collection(config.collection).doc(id);
     const now = admin.firestore.FieldValue.serverTimestamp();
     const actor = actorOwnership(request);
+    const variantAuditTime = new Date().toISOString();
+    const auditedEntityVariants = entityVariants.map((variant) => ({
+      ...variant,
+      owner: variant.owner || actor.owner,
+      ownerType: variant.ownerType || actor.ownerType,
+      createdByUid: request.auth.uid,
+      createdByEmail: request.auth.token.email || "",
+      createdAt: variantAuditTime,
+      approvalStatus: variant.status === "review"
+        ? "awaiting-approval"
+        : variant.status === "active" ? "approved" : "draft",
+      approvedByUid: variant.status === "active" ? request.auth.uid : "",
+      approvedByEmail: variant.status === "active" ? request.auth.token.email || "" : "",
+      approvedAt: variant.status === "active" ? variantAuditTime : "",
+    }));
     const appManagedFields = {
       managedByWorkbook: false,
       contentOrigin: "app",
@@ -392,11 +510,13 @@ export const createContentBuilderRecord = onCall(
       shortDescription: cleanString(data.shortDescription),
       longDescription: cleanString(data.longDescription),
       notes: cleanString(data.notes),
-      categoryId: cleanString(data.categoryId || templateDefaults.categoryId),
       tags: asArray(data.tags),
       owner: cleanString(data.owner) || actor.owner,
       ownerType: cleanString(data.ownerType) || actor.ownerType,
       templateFieldValues,
+      entityVariants: auditedEntityVariants,
+      scheduledActiveAt: cleanString(data.scheduledActiveAt),
+      scheduledPauseAt: cleanString(data.scheduledPauseAt),
       approvalStatus: cleanString(data.approvalStatus) || (normalizeStatus(data.status) === "active"
         ? "approved"
         : "draft"),
@@ -407,6 +527,8 @@ export const createContentBuilderRecord = onCall(
       requestedWebsiteVisible: data.requestedWebsiteVisible === true,
       requestedProductVisible: data.requestedProductVisible === true,
       createsProduct: data.createsProduct === true || data.isShopProduct === true,
+      websiteVisible: data.websiteVisible === true,
+      visible: data.websiteVisible === true,
       updatedAt: now,
       createdAt: now,
       createdByUid: request.auth.uid,
@@ -417,13 +539,16 @@ export const createContentBuilderRecord = onCall(
       Object.assign(doc, {
         itemId: id,
         itemKind: cleanString(data.itemKind || templateDefaults.itemKind),
-        categoryId: cleanString(data.categoryId || templateDefaults.categoryId),
-        websiteVisible: data.websiteVisible === true,
-        visible: data.websiteVisible === true,
         isShopProduct: data.isShopProduct ?? templateDefaults.isShopProduct ?? false,
         soldByRecoveryTools: data.soldByRecoveryTools ?? templateDefaults.soldByRecoveryTools ?? true,
         requiresShipping: data.requiresShipping ?? templateDefaults.requiresShipping ?? false,
         inventoryTracked: data.inventoryTracked ?? templateDefaults.inventoryTracked ?? false,
+        stockQty: asNumber(data.stockQty) ?? 0,
+        reorderLevel: asNumber(data.reorderLevel),
+        inventoryUnit: cleanString(data.inventoryUnit),
+        inventoryLocation: cleanString(data.inventoryLocation),
+        unitCost: asNumber(data.unitCost),
+        costReference: cleanString(data.costReference),
         stockStatus: templateDefaults.stockStatus || "not-tracked",
         unlocksAccess: data.unlocksAccess ?? templateDefaults.unlocksAccess ?? false,
         accessType: cleanString(data.accessType || templateDefaults.accessType),
@@ -448,6 +573,8 @@ export const createContentBuilderRecord = onCall(
         blueprintId: id,
         blueprintTemplateId: templateDefaults.blueprintTemplateId || selectedTemplate?.id || null,
         linkedItemIds: mergeUnique(asArray(data.linkedItemIds), templateContent.blueprintItemIds),
+        linkedItemComponents: cleanItemComponents(data.linkedItemComponents),
+        estimatedUnitCost: asNumber(data.estimatedUnitCost) ?? 0,
         intendedOutput: cleanString(data.intendedOutput),
         templateContent,
       });
@@ -586,35 +713,34 @@ export const createContentBuilderRecord = onCall(
           });
         }
 
-        if (recordType === "item" && linkedAssets.length) {
+        if (["item", "blueprint", "plan"].includes(recordType) && linkedAssets.length) {
+          const entityType = recordType.charAt(0).toUpperCase() + recordType.slice(1);
           linkedAssets.forEach((asset, index) => {
-            const itemAssetId = [
-              "ITEMASSET",
-              slugify(id),
-              slugify(asset.fieldKey),
-              slugify(asset.assetId),
-            ].join("-");
-            const itemAssetRef = db.collection("itemAssets").doc(itemAssetId);
-            const entityAssetId = `ENTITYASSET-ITEM-${slugify(id)}-${slugify(asset.assetId)}`;
-            transaction.create(itemAssetRef, {
-              ...appManagedFields,
-              itemAssetId,
-              itemId: id,
-              assetId: asset.assetId,
-              purpose: asset.fieldName,
-              sortOrder: uploadedAssets.length + index + 1,
-              displayStatus: "active",
-              contextTitle: cleanString(asset.data.title || asset.data.name) || asset.assetId,
-              contextAltText: cleanString(asset.data.altText),
-              notes: "Linked from a template field in Content Builder.",
-              createdAt: now,
-              updatedAt: now,
-            });
+            const entityAssetId = `ENTITYASSET-${entityType.toUpperCase()}-${slugify(id)}-${slugify(asset.assetId)}`;
+            if (recordType === "item") {
+              const itemAssetId = [
+                "ITEMASSET", slugify(id), slugify(asset.fieldKey), slugify(asset.assetId),
+              ].join("-");
+              transaction.create(db.collection("itemAssets").doc(itemAssetId), {
+                ...appManagedFields,
+                itemAssetId,
+                itemId: id,
+                assetId: asset.assetId,
+                purpose: asset.fieldName,
+                sortOrder: uploadedAssets.length + index + 1,
+                displayStatus: "active",
+                contextTitle: cleanString(asset.data.title || asset.data.name) || asset.assetId,
+                contextAltText: cleanString(asset.data.altText),
+                notes: "Linked from a template field in Content Builder.",
+                createdAt: now,
+                updatedAt: now,
+              });
+            }
             transaction.create(db.collection("entityAssets").doc(entityAssetId), {
               ...appManagedFields,
               entityAssetId,
               assetId: asset.assetId,
-              entityType: "Item",
+              entityType,
               entityId: id,
               assetRole: asset.fieldName,
               fieldKey: asset.fieldKey,
@@ -630,11 +756,40 @@ export const createContentBuilderRecord = onCall(
           });
         }
 
+        if (recordType === "item" && doc.inventoryTracked === true && doc.createsProduct !== true) {
+          const inventoryRef = db.collection("inventory").doc(`INV-${slugify(id)}`);
+          transaction.create(inventoryRef, {
+            ...appManagedFields,
+            inventoryId: inventoryRef.id,
+            name,
+            itemId: id,
+            productId: "",
+            variantId: "",
+            stockQty: asNumber(data.stockQty) ?? 0,
+            reorderLevel: asNumber(data.reorderLevel),
+            unit: cleanString(data.inventoryUnit),
+            location: cleanString(data.inventoryLocation),
+            unitCost: asNumber(data.unitCost),
+            costReference: cleanString(data.costReference),
+            status: "active",
+            updatedAt: now,
+            createdAt: now,
+          });
+        }
+
         if (doc.createsProduct === true) {
           const productId = cleanString(data.productId) || `PROD-${slugify(id).replace(/^ITEM-/, "")}`;
           const productRef = db.collection("products").doc(productId);
           const linkedEntityType = recordType.charAt(0).toUpperCase() + recordType.slice(1);
           const productLinkId = `PRODUCTLINK-${slugify(productId)}-${linkedEntityType.toUpperCase()}-${slugify(id)}`;
+          const linkRole = cleanString(data.productRelation?.linkRole) || "Represents";
+          const isManufacturingLink = recordType === "blueprint" && linkRole === "ManufacturedFrom";
+          const manufacturingBlueprintId = isManufacturingLink
+            ? id
+            : cleanString(data.productRelation?.manufacturingBlueprintId);
+          const blueprintLinkId = manufacturingBlueprintId
+            ? `PRODUCTLINK-${slugify(productId)}-BLUEPRINT-${slugify(manufacturingBlueprintId)}`
+            : "";
           const priceId = `PRICE-${slugify(productId)}-BASE`;
           const priceRef = db.collection("productPrices").doc(priceId);
           const retailPrice = asNumber(data.price) ?? 0;
@@ -643,6 +798,16 @@ export const createContentBuilderRecord = onCall(
           const variants = (Array.isArray(data.variants) ? data.variants : [])
             .map(normalizeVariant)
             .filter(Boolean);
+          const accessTargets = cleanAccessGrants(data.productRelation?.accessGrants);
+          const variantContentLinks = cleanVariantContentLinks(data.productRelation?.variantContentLinks);
+          variantContentLinks.filter((link) => link.linkRole === "Unlocks").forEach((link) => {
+            accessTargets.push({
+              accessEntityType: link.entityType,
+              accessEntityId: link.entityId,
+              accessEntityVariantId: link.entityVariantId,
+              productVariantId: link.productVariantId,
+            });
+          });
           const selectedAssetMedia = linkedAssets.map((asset) => ({
             type: cleanString(asset.data.type || asset.data.assetType) ||
               assetTypeFromUrl(asset.data.fileUrl || asset.data.url),
@@ -668,16 +833,28 @@ export const createContentBuilderRecord = onCall(
           }));
 
           if (existingProductSnapshot?.exists) {
+            if (!cleanString(existingProductSnapshot.data()?.sku)) {
+              transaction.set(productRef, {
+                sku: cleanString(data.sku) || generatedProductSku(productId),
+                updatedAt: now,
+              }, { merge: true });
+            }
+            transaction.set(productRef, {
+              manufacturingBlueprintId,
+              estimatedUnitCost: asNumber(data.productRelation?.estimatedUnitCost) ?? 0,
+              variantContentLinks,
+              updatedAt: now,
+            }, { merge: true });
             transaction.set(db.collection("productLinks").doc(productLinkId), {
               ...appManagedFields,
               productLinkId,
               productId,
               linkedEntityType,
               linkedEntityId: id,
-              linkRole: cleanString(data.productRelation?.linkRole) || "Represents",
+              linkRole,
               quantity: 1,
-              isPrimary: true,
-              sortOrder: 1,
+              isPrimary: !isManufacturingLink,
+              sortOrder: isManufacturingLink ? 2 : 1,
               required: true,
               variantSpecific: false,
               productVariantId: "",
@@ -685,16 +862,37 @@ export const createContentBuilderRecord = onCall(
               createdAt: now,
               updatedAt: now,
             }, { merge: true });
-            if (recordType === "plan" &&
-                ["Unlocks", "Delivers", "Represents"].includes(data.productRelation?.linkRole)) {
-              const grantId = `ACCESSGRANT-${slugify(productId)}-${slugify(id)}`;
+            if (isManufacturingLink) {
+              transaction.set(db.collection("productLinks").doc(blueprintLinkId), {
+                ...appManagedFields,
+                productLinkId: blueprintLinkId,
+                productId,
+                linkedEntityType: "Blueprint",
+                linkedEntityId: manufacturingBlueprintId,
+                linkRole: "ManufacturedFrom",
+                quantity: 1,
+                isPrimary: false,
+                sortOrder: 2,
+                required: true,
+                status: "active",
+                createdAt: now,
+                updatedAt: now,
+              }, { merge: true });
+            }
+            accessTargets.forEach((grant) => {
+              const { accessEntityType, accessEntityId, accessEntityVariantId, productVariantId } = grant;
+              const grantId = [
+                "ACCESSGRANT", slugify(productId), slugify(productVariantId || "ALL"),
+                slugify(accessEntityType), slugify(accessEntityId), slugify(accessEntityVariantId || "ALL"),
+              ].join("-");
               transaction.set(db.collection("productAccessGrants").doc(grantId), {
                 ...appManagedFields,
                 productAccessGrantId: grantId,
                 productId,
-                productVariantId: "",
-                accessEntityType: "Plan",
-                accessEntityId: id,
+                productVariantId: productVariantId || "",
+                accessEntityType,
+                accessEntityId,
+                accessEntityVariantId: accessEntityVariantId || "",
                 grantTiming: "on-payment-confirmed",
                 durationType: "permanent",
                 durationValue: null,
@@ -703,25 +901,45 @@ export const createContentBuilderRecord = onCall(
                 createdAt: now,
                 updatedAt: now,
               }, { merge: true });
-            }
+            });
+            variantContentLinks.forEach((link) => {
+              const linkId = `PRODUCTVARIANTLINK-${slugify(productId)}-${slugify(link.productVariantId)}-` +
+                `${slugify(link.entityType)}-${slugify(link.entityId)}-${slugify(link.entityVariantId || "ALL")}`;
+              transaction.set(db.collection("productVariantContentLinks").doc(linkId), {
+                productVariantContentLinkId: linkId,
+                productId,
+                ...link,
+                contentOrigin: "app",
+                managedByWorkbook: false,
+                createdAt: now,
+                updatedAt: now,
+              }, { merge: true });
+            });
             return;
+          }
+
+          if (isManufacturingLink) {
+            throw new HttpsError(
+              "failed-precondition",
+              "Choose an existing Product for a manufacturing/cost Blueprint.",
+            );
           }
 
           transaction.create(productRef, {
             ...appManagedFields,
             productId,
             productName: name,
-            productType: recordType === "plan"
+            productType: cleanString(data.productRelation?.productType) || (recordType === "plan"
               ? (doc.type === "course" ? "Course Access" : "Plan Access")
-              : recordType === "blueprint" ? "Digital Download" : canonicalProductTypeFromItem(doc),
-            productCategoryId: doc.categoryId,
+              : recordType === "blueprint" ? "Digital Download" : canonicalProductTypeFromItem(doc)),
+            productCategoryId: cleanString(data.productRelation?.productCategoryId),
             itemId: recordType === "item" ? id : "",
             name,
             title: name,
-            type: productTypeFromItem(doc),
+            type: cleanString(data.productRelation?.productType) || productTypeFromItem(doc),
             itemType: cleanString(doc.type),
             itemKind: cleanString(doc.itemKind),
-            categoryId: cleanString(doc.categoryId),
+            categoryId: cleanString(data.productRelation?.productCategoryId),
             templateId: cleanString(doc.templateId),
             templateFieldValues: doc.templateFieldValues || {},
             tagIds: doc.tagIds || [],
@@ -731,23 +949,28 @@ export const createContentBuilderRecord = onCall(
             websiteVisible: doc.websiteVisible === true,
             archived: false,
             featured: data.featured === true,
-            requiresShipping: recordType === "item" && doc.requiresShipping === true,
-            inventoryTracked: recordType === "item" && doc.inventoryTracked === true,
-            sku: cleanString(data.sku),
+            requiresShipping: data.productRelation?.requiresShipping === true,
+            inventoryTracked: data.productRelation?.inventoryTracked === true,
+            manufacturingBlueprintId,
+            estimatedUnitCost: asNumber(data.productRelation?.estimatedUnitCost) ?? 0,
+            variantContentLinks,
+            sku: cleanString(data.sku) || generatedProductSku(productId),
             shortDescription: doc.shortDescription,
             longDescription: doc.longDescription,
             supplierType: cleanString(data.supplierType || templateDefaults.supplierType),
             unlocksAccess: doc.unlocksAccess === true,
             accessType: cleanString(doc.accessType),
             deliveryMode: cleanString(doc.deliveryMode),
-            requiresCalendar: doc.requiresCalendar === true,
-            requiresSessionTime: doc.requiresSessionTime === true,
-            tracksSeats: doc.tracksSeats === true,
+            requiresCalendar: data.productRelation?.requiresCalendar === true,
+            requiresSessionTime: data.productRelation?.requiresSessionTime === true,
+            tracksSeats: data.productRelation?.tracksSeats === true,
+            requiresLocation: data.productRelation?.requiresLocation === true,
+            requiresInstructor: data.productRelation?.requiresInstructor === true,
             seatCapacity: doc.seatCapacity ?? null,
             eventStartAt: cleanString(doc.eventStartAt),
             eventEndAt: cleanString(doc.eventEndAt),
             eventLocation: cleanString(doc.eventLocation),
-            instructor: cleanString(doc.instructor),
+            instructor: cleanString(data.productRelation?.instructor || doc.instructor),
             issuesCertificate: doc.issuesCertificate === true,
             certificateName: cleanString(doc.certificateName),
             relatedPlanId: cleanString(data.relatedPlanId || templateDefaults.relatedPlanId),
@@ -765,8 +988,8 @@ export const createContentBuilderRecord = onCall(
               .concat([effectivePrice])
               .sort((a, b) => a - b)[0],
             hasVariants: variants.length > 0,
-            stock: doc.inventoryTracked === true
-              ? (asNumber(data.stockQty) ?? variants.reduce((sum, variant) => sum + variant.stockQty, 0))
+            stock: data.productRelation?.inventoryTracked === true
+              ? (asNumber(data.productRelation?.stock) ?? variants.reduce((sum, variant) => sum + variant.stockQty, 0))
               : 0,
             images,
             media,
@@ -791,6 +1014,23 @@ export const createContentBuilderRecord = onCall(
             createdAt: now,
             updatedAt: now,
           });
+          if (isManufacturingLink) {
+            transaction.create(db.collection("productLinks").doc(blueprintLinkId), {
+              ...appManagedFields,
+              productLinkId: blueprintLinkId,
+              productId,
+              linkedEntityType: "Blueprint",
+              linkedEntityId: manufacturingBlueprintId,
+              linkRole: "ManufacturedFrom",
+              quantity: 1,
+              isPrimary: false,
+              sortOrder: 2,
+              required: true,
+              status: "active",
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
 
           transaction.create(priceRef, {
             ...appManagedFields,
@@ -823,8 +1063,15 @@ export const createContentBuilderRecord = onCall(
               size: variant.size,
               sku: variant.sku,
               priceOverride: variant.priceOverride,
-              status: "active",
+              status: variant.status || "active",
+              contentVariantId: variant.contentVariantId,
               stock: variant.stockQty,
+              calendarBookingReference: variant.calendarBookingReference,
+              seatCapacity: variant.seatCapacity,
+              eventStartAt: variant.eventStartAt,
+              eventEndAt: variant.eventEndAt,
+              eventLocation: variant.eventLocation,
+              instructor: variant.instructor,
               createdAt: now,
               updatedAt: now,
             });
@@ -835,15 +1082,22 @@ export const createContentBuilderRecord = onCall(
               variantName: variant.name || `Variant ${index + 1}`,
               variantCode: variantId,
               sku: variant.sku,
-              status: "active",
+              status: variant.status || "active",
+              contentVariantId: variant.contentVariantId,
               isDefault: index === 0,
               optionSummary: [variant.colour, variant.size].filter(Boolean).join(" / "),
               priceOverride: variant.priceOverride,
               currency: "AUD",
-              requiresShippingOverride: recordType === "item" && doc.requiresShipping === true,
-              inventoryTracked: recordType === "item" && doc.inventoryTracked === true,
+              requiresShippingOverride: data.productRelation?.requiresShipping === true,
+              inventoryTracked: data.productRelation?.inventoryTracked === true,
               stockQuantity: variant.stockQty,
               stockStatus: variant.stockQty > 0 ? "in-stock" : "out-of-stock",
+              calendarBookingReference: variant.calendarBookingReference,
+              seatCapacity: variant.seatCapacity,
+              eventStartAt: variant.eventStartAt,
+              eventEndAt: variant.eventEndAt,
+              eventLocation: variant.eventLocation,
+              instructor: variant.instructor,
               sortOrder: index + 1,
               createdAt: now,
               updatedAt: now,
@@ -900,24 +1154,18 @@ export const createContentBuilderRecord = onCall(
             });
           }
 
-          const accessTargets = [
-            recordType === "plan" ? ["Plan", id] : null,
-            ["Plan", cleanString(data.relatedPlanId || templateDefaults.relatedPlanId)],
-            ["Plan", cleanString(data.relatedCourseId || templateDefaults.relatedCourseId)],
-            ["Plan", cleanString(data.relatedWorkshopId || templateDefaults.relatedWorkshopId)],
-          ].filter((target) => target?.[1]);
-          const seenAccessTargets = new Set();
-          accessTargets.forEach(([accessEntityType, accessEntityId]) => {
-            if (seenAccessTargets.has(accessEntityId)) return;
-            seenAccessTargets.add(accessEntityId);
-            const grantId = `ACCESSGRANT-${slugify(productId)}-${slugify(accessEntityId)}`;
+          accessTargets.forEach((grant) => {
+            const { accessEntityType, accessEntityId, accessEntityVariantId, productVariantId } = grant;
+            const grantId = `ACCESSGRANT-${slugify(productId)}-${slugify(productVariantId || "ALL")}-` +
+              `${slugify(accessEntityType)}-${slugify(accessEntityId)}-${slugify(accessEntityVariantId || "ALL")}`;
             transaction.create(db.collection("productAccessGrants").doc(grantId), {
               ...appManagedFields,
               productAccessGrantId: grantId,
               productId,
-              productVariantId: "",
+              productVariantId: productVariantId || "",
               accessEntityType,
               accessEntityId,
+              accessEntityVariantId: accessEntityVariantId || "",
               grantTiming: "on-payment-confirmed",
               durationType: "permanent",
               durationValue: null,
@@ -926,6 +1174,18 @@ export const createContentBuilderRecord = onCall(
               createdAt: now,
               updatedAt: now,
             });
+          });
+          variantContentLinks.forEach((link) => {
+            const linkId = `PRODUCTVARIANTLINK-${slugify(productId)}-${slugify(link.productVariantId)}-` +
+              `${slugify(link.entityType)}-${slugify(link.entityId)}-${slugify(link.entityVariantId || "ALL")}`;
+            transaction.set(db.collection("productVariantContentLinks").doc(linkId), {
+              ...appManagedFields,
+              productVariantContentLinkId: linkId,
+              productId,
+              ...link,
+              createdAt: now,
+              updatedAt: now,
+            }, { merge: true });
           });
         }
       });

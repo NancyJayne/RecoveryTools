@@ -48,7 +48,10 @@ function getVariantLabel(variant) {
 }
 
 function getVariantPrice(product, variant) {
-  return Number(variant?.priceOverride ?? getProductPrice(product));
+  const override = Number(variant?.priceOverride);
+  return Number.isFinite(override) && override > 0
+    ? override
+    : getProductPrice(product);
 }
 
 function getProductTags(product) {
@@ -70,14 +73,15 @@ function formatProductDateTime(value) {
     }).format(date);
 }
 
-function productExperienceDetails(product) {
+function productExperienceDetails(product, variant = null) {
   return [
-    ["Starts", formatProductDateTime(product.eventStartAt)],
-    ["Ends", formatProductDateTime(product.eventEndAt)],
-    ["Location", product.eventLocation],
+    ["Starts", formatProductDateTime(variant?.eventStartAt || product.eventStartAt)],
+    ["Ends", formatProductDateTime(variant?.eventEndAt || product.eventEndAt)],
+    ["Location", variant?.eventLocation || product.eventLocation],
+    ["Booking", variant?.calendarBookingReference || product.calendarBookingReference],
     ["Delivery", product.deliveryMode],
-    ["Instructor", product.instructor],
-    ["Tickets / seats", product.tracksSeats ? product.seatCapacity : ""],
+    ["Instructor", variant?.instructor || product.instructor],
+    ["Tickets / seats", product.tracksSeats ? variant?.seatCapacity ?? product.seatCapacity : ""],
     ["Access", product.unlocksAccess ? product.accessType || "Included after purchase" : ""],
     ["Certificate", product.issuesCertificate ? product.certificateName || "Included" : ""],
   ].filter(([, value]) => value !== "" && value !== null && value !== undefined);
@@ -425,15 +429,19 @@ export function showProductDetail(product, options = {}) {
 
   const experienceDetails = document.createElement("dl");
   experienceDetails.className = "mb-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm";
-  productExperienceDetails(product).forEach(([label, value]) => {
-    const term = document.createElement("dt");
-    term.className = "font-semibold text-gray-300";
-    term.textContent = label;
-    const description = document.createElement("dd");
-    description.className = "text-gray-400";
-    description.textContent = String(value);
-    experienceDetails.append(term, description);
-  });
+  function updateExperienceDetails() {
+    experienceDetails.innerHTML = "";
+    productExperienceDetails(product, selectedVariant).forEach(([label, value]) => {
+      const term = document.createElement("dt");
+      term.className = "font-semibold text-gray-300";
+      term.textContent = label;
+      const description = document.createElement("dd");
+      description.className = "text-gray-400";
+      description.textContent = String(value);
+      experienceDetails.append(term, description);
+    });
+  }
+  updateExperienceDetails();
 
   const priceWrap = document.createElement("div");
   priceWrap.className = "flex flex-col gap-4 mb-4";
@@ -457,6 +465,7 @@ export function showProductDetail(product, options = {}) {
         (variant.variantId || variant.id) === variantSelect.value,
       ) || null;
       updatePriceDisplay();
+      updateExperienceDetails();
       updateAddButtonState();
     });
 

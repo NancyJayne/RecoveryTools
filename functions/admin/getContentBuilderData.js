@@ -3,6 +3,7 @@ import admin from "firebase-admin";
 import { CONTENT_BUILDER_OPTIONS } from "./contentBuilderOptions.js";
 import { loadContentTemplateDefinitions } from "./contentTemplateDefinitions.js";
 import {
+  accessGrantsForProduct,
   activePriceForProduct,
   loadProductArchitecture,
   variantsForProduct,
@@ -68,6 +69,7 @@ function normalizeRecord(type, doc) {
       !Array.isArray(data.templateFieldValues)
       ? data.templateFieldValues
       : {},
+    entityVariants: Array.isArray(data.entityVariants) ? data.entityVariants : [],
     templateContent: data.templateContent &&
       typeof data.templateContent === "object" &&
       !Array.isArray(data.templateContent)
@@ -105,11 +107,16 @@ function normalizeRecord(type, doc) {
     planId: data.planId || null,
     campaignId: data.campaignId || null,
     linkedItemIds: Array.isArray(data.linkedItemIds) ? data.linkedItemIds : [],
+    linkedItemComponents: Array.isArray(data.linkedItemComponents) ? data.linkedItemComponents : [],
+    estimatedUnitCost: Number(data.estimatedUnitCost ?? 0),
     linkedBlueprintIds: Array.isArray(data.linkedBlueprintIds) ? data.linkedBlueprintIds : [],
     linkedPlanIds: Array.isArray(data.linkedPlanIds) ? data.linkedPlanIds : [],
     createsProduct: data.createsProduct === true || data.isShopProduct === true,
+    websiteVisible: data.websiteVisible === true || data.visible === true,
+    requestedWebsiteVisible: data.requestedWebsiteVisible === true,
     audience: data.audience || "",
     goal: data.goal || "",
+    instructor: data.instructor || "",
     updatedAt: asIso(data.updatedAt),
     createdAt: asIso(data.createdAt),
   };
@@ -118,6 +125,10 @@ function normalizeRecord(type, doc) {
 function normalizeItemRecord(doc, related = {}) {
   const record = normalizeRecord("item", doc);
   const product = related.productsByItemId.get(doc.id);
+  const itemInventory = related.architecture?.inventoryByItemId?.get(doc.id) || [];
+  const itemStock = itemInventory.reduce((sum, entry) => sum + Number(entry.stockQty ?? entry.stock ?? 0), 0);
+  const standaloneInventory = itemInventory.find((entry) => !entry.productId && !entry.variantId) ||
+    itemInventory[0] || {};
   const activePrice = product ? related.activePricesByProductId.get(product.id) : null;
   const variants = product ? related.variantsByProductId.get(product.id) || [] : [];
   const itemAssets = (related.itemAssetsByItemId.get(doc.id) || []).map((itemAsset) => ({
@@ -137,6 +148,11 @@ function normalizeItemRecord(doc, related = {}) {
     isAsset: ["asset", "document", "policy", "image", "video", "audio"].includes(cleanStatus(record.type)),
     assetType: primaryAsset?.assetType || "",
     inventoryTracked: product?.inventoryTracked === true || doc.data()?.inventoryTracked === true,
+    itemReorderLevel: Number(standaloneInventory.reorderLevel ?? doc.data()?.reorderLevel ?? 0),
+    itemInventoryUnit: standaloneInventory.unit || doc.data()?.inventoryUnit || "",
+    itemInventoryLocation: standaloneInventory.location || doc.data()?.inventoryLocation || "",
+    itemUnitCost: Number(standaloneInventory.unitCost ?? doc.data()?.unitCost ?? 0),
+    itemCostReference: standaloneInventory.costReference || doc.data()?.costReference || "",
     websiteVisible: doc.data()?.websiteVisible === true || doc.data()?.visible === true,
     requestedWebsiteVisible: doc.data()?.requestedWebsiteVisible === true,
     requestedProductVisible: doc.data()?.requestedProductVisible === true,
@@ -165,6 +181,7 @@ function normalizeItemRecord(doc, related = {}) {
     productId: product?.id || "",
     productName: product?.name || product?.title || "",
     productSku: product?.sku || "",
+    productCategoryId: product?.productCategoryId || product?.categoryId || "",
     productType: product?.type || "",
     productShopStatus: product?.shopStatus || "",
     productVisible: product?.visible === true,
@@ -172,7 +189,19 @@ function normalizeItemRecord(doc, related = {}) {
     productFeatured: product?.featured === true,
     productRequiresShipping: product?.requiresShipping === true,
     productInventoryTracked: product?.inventoryTracked === true,
-    productStock: Number(product?.stock ?? 0),
+    productRequiresCalendar: product?.requiresCalendar === true,
+    productRequiresSessionTime: product?.requiresSessionTime === true,
+    productTracksSeats: product?.tracksSeats === true,
+    productRequiresLocation: product?.requiresLocation === true,
+    productRequiresInstructor: product?.requiresInstructor === true,
+    productInstructor: product?.instructor || "",
+    itemStock,
+    productStock: Number(product?.stock ?? itemStock),
+    manufacturingBlueprintId: product?.manufacturingBlueprintId || "",
+    productVariantContentLinks: Array.isArray(product?.variantContentLinks) ? product.variantContentLinks : [],
+    productAccessGrants: product
+      ? accessGrantsForProduct(product.id, product, related.architecture)
+      : [],
     productEffectiveShopPrice: positiveNumber(
       activePrice?.effectiveShopPrice,
       product?.price,
@@ -221,7 +250,7 @@ function normalizeItemRecord(doc, related = {}) {
       colour: variant.colour || "",
       size: variant.size || "",
       sku: variant.sku || "",
-      priceOverride: variant.priceOverride ?? null,
+      priceOverride: Number(variant.priceOverride) > 0 ? Number(variant.priceOverride) : null,
       stock: Number(variant.stock ?? 0),
       status: variant.status || "active",
     })),
@@ -259,7 +288,7 @@ function addLinkedProducts(records, entityType, productsById, links, architectur
     const product = primaryLink ? productsById.get(primaryLink.productId) : null;
     if (!product) return { ...record, createsProduct: record.createsProduct === true };
     const activePrice = activePriceForProduct(product.id, architecture);
-    const variants = variantsForProduct(product.id, product.itemId || "", architecture);
+    const variants = variantsForProduct(product.id, product.itemId || "", architecture, true);
     return {
       ...record,
       createsProduct: true,
@@ -268,12 +297,24 @@ function addLinkedProducts(records, entityType, productsById, links, architectur
       productLinkRole: primaryLink.linkRole || "Represents",
       productName: product.productName || product.name || product.title || "",
       productSku: product.sku || "",
+      productCategoryId: product.productCategoryId || product.categoryId || "",
       productType: product.productType || product.type || "",
       productShopStatus: product.shopStatus || product.status || "draft",
       productVisible: product.websiteVisible === true || product.visible === true,
       productFeatured: product.featured === true,
       productArchived: !!product.archivedAt || product.archived === true,
       productStock: Number(product.stock ?? 0),
+      productRequiresShipping: product.requiresShipping === true,
+      productInventoryTracked: product.inventoryTracked === true,
+      productRequiresCalendar: product.requiresCalendar === true,
+      productRequiresSessionTime: product.requiresSessionTime === true,
+      productTracksSeats: product.tracksSeats === true,
+      productRequiresLocation: product.requiresLocation === true,
+      productRequiresInstructor: product.requiresInstructor === true,
+      productInstructor: product.instructor || "",
+      manufacturingBlueprintId: product.manufacturingBlueprintId || "",
+      productVariantContentLinks: Array.isArray(product.variantContentLinks) ? product.variantContentLinks : [],
+      productAccessGrants: accessGrantsForProduct(product.id, product, architecture),
       productEffectiveShopPrice: positiveNumber(activePrice?.effectiveShopPrice, product.basePrice, product.price),
       activePriceId: activePrice?.id || "",
       variants,
@@ -444,6 +485,7 @@ async function getItemRecords(db) {
     variantsByProductId,
     itemAssetsByItemId,
     assetsById,
+    architecture,
   };
 
   return itemsSnapshot.docs.map((doc) => normalizeItemRecord(doc, related));
@@ -471,6 +513,8 @@ export const getContentBuilderData = onCall(
       productsSnapshot,
       productLinksSnapshot,
       architecture,
+      instructorsSnapshot,
+      usersSnapshot,
     ] = await Promise.all([
       getItemRecords(db),
       getRecords(db, "blueprint"),
@@ -485,6 +529,8 @@ export const getContentBuilderData = onCall(
       db.collection("products").limit(500).get(),
       db.collection("productLinks").limit(1000).get(),
       loadProductArchitecture(db),
+      db.collection("instructors").limit(500).get(),
+      db.collection("users").limit(1000).get(),
     ]);
 
     const productsById = new Map(productsSnapshot.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }]));
@@ -492,6 +538,50 @@ export const getContentBuilderData = onCall(
     const linkedItems = addLinkedProducts(items, "Item", productsById, productLinks, architecture);
     const linkedBlueprints = addLinkedProducts(blueprints, "Blueprint", productsById, productLinks, architecture);
     const linkedPlans = addLinkedProducts(plans, "Plan", productsById, productLinks, architecture);
+
+    const instructorOptionsByName = new Map();
+    const addInstructorOption = ({ id = "", name = "", email = "" } = {}) => {
+      const cleanName = String(name || "").trim();
+      if (!cleanName) return;
+      const key = cleanName.toLowerCase();
+      const current = instructorOptionsByName.get(key) || {};
+      instructorOptionsByName.set(key, {
+        id: id || current.id || cleanName,
+        name: cleanName,
+        email: email || current.email || "",
+      });
+    };
+    instructorsSnapshot.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      if (["archived", "inactive"].includes(cleanStatus(data.status))) return;
+      addInstructorOption({
+        id: doc.id,
+        name: data.name || data.instructorName || data.displayName || doc.id,
+        email: data.email,
+      });
+    });
+    usersSnapshot.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      const roles = data.roles || {};
+      const isInstructor = data.instructor === true || roles.instructor === true ||
+        cleanStatus(data.role) === "instructor";
+      if (!isInstructor || cleanStatus(data.status) === "archived") return;
+      addInstructorOption({
+        id: doc.id,
+        name: data.name || data.displayName || data.email || doc.id,
+        email: data.email,
+      });
+    });
+    [...linkedItems, ...linkedBlueprints, ...linkedPlans].forEach((record) => {
+      addInstructorOption({ name: record.instructor });
+    });
+    productsById.forEach((product) => {
+      addInstructorOption({ name: product.instructor });
+      variantsForProduct(product.id, product.itemId || "", architecture, true)
+        .forEach((variant) => addInstructorOption({ name: variant.instructor }));
+    });
+    const instructorOptions = [...instructorOptionsByName.values()]
+      .sort((left, right) => left.name.localeCompare(right.name));
 
     const savedOptions = settingsSnap.exists ? settingsSnap.data() : {};
     const workbookTypes = { item: [], blueprint: [], plan: [] };
@@ -506,7 +596,6 @@ export const getContentBuilderData = onCall(
           id: doc.id,
           entityKind: kind,
           type,
-          defaultCategoryId: data.defaultCategoryId || "",
           fieldGroupIds: Array.isArray(data.fieldGroupIds) ? data.fieldGroupIds : [],
           capabilities: {
             canUseInBlueprints: data.canUseInBlueprints === true,
@@ -533,7 +622,14 @@ export const getContentBuilderData = onCall(
       })
       .sort((left, right) => left.name.localeCompare(right.name));
     const tagOptions = tagsSnapshot.docs
-      .map((doc) => ({ id: doc.id, name: doc.data()?.name || doc.id }))
+      .map((doc) => {
+        const data = doc.data() || {};
+        return {
+          id: doc.id,
+          name: data.name || doc.id,
+          categoryId: data.categoryId || data.CategoryID || "",
+        };
+      })
       .sort((left, right) => left.name.localeCompare(right.name));
 
     return {
@@ -545,6 +641,7 @@ export const getContentBuilderData = onCall(
           workbookTemplates,
         ),
         tagOptions,
+        instructorOptions,
         entityTypeDefinitions,
       },
       records: {
@@ -558,6 +655,24 @@ export const getContentBuilderData = onCall(
           name: product.productName || product.name || product.title || product.id,
           productType: product.productType || product.type || "",
           status: product.status || product.shopStatus || "draft",
+          sku: product.sku || "",
+          productCategoryId: product.productCategoryId || product.categoryId || "",
+          visible: product.visible === true || product.websiteVisible === true,
+          featured: product.featured === true,
+          archived: product.archived === true || !!product.archivedAt,
+          stock: Number(product.stock ?? 0),
+          requiresShipping: product.requiresShipping === true,
+          inventoryTracked: product.inventoryTracked === true,
+          requiresCalendar: product.requiresCalendar === true,
+          requiresSessionTime: product.requiresSessionTime === true,
+          tracksSeats: product.tracksSeats === true,
+          requiresLocation: product.requiresLocation === true,
+          requiresInstructor: product.requiresInstructor === true,
+          instructor: product.instructor || "",
+          manufacturingBlueprintId: product.manufacturingBlueprintId || "",
+          variantContentLinks: Array.isArray(product.variantContentLinks) ? product.variantContentLinks : [],
+          variants: variantsForProduct(product.id, product.itemId || "", architecture, true),
+          accessGrants: accessGrantsForProduct(product.id, product, architecture),
         })),
       },
     };

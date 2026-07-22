@@ -1,6 +1,6 @@
-const field = (workbook, type = "string") => ({
+const field = (workbook, type = "string", firestore = "") => ({
   workbook,
-  firestore: workbook
+  firestore: firestore || workbook
     .replace(/IDs/g, "Ids")
     .replace(/ID/g, "Id")
     .replace(/URL/g, "Url")
@@ -46,15 +46,14 @@ export const CANONICAL_WORKBOOK_SCHEMAS = {
     idField: "productId",
     fields: [
       field("ProductID"), field("ProductName"), field("ProductType"), field("ProductCategoryID"),
-      field("Status"), field("ShopStatus"), field("ApprovalStatus"), field("MarketplaceVisibility"),
-      field("WebsiteVisible", "boolean"), field("SoldByRecoveryTools", "boolean"),
-      field("SellerUserID"), field("CreatorUserID"), field("OwnerUserID"), field("Featured", "boolean"),
-      field("SortOrder", "number"), field("Slug"), field("ShortDescription"), field("LongDescription"),
-      field("FulfilmentType"), field("RequiresShipping", "boolean"), field("IsDigital", "boolean"),
-      field("IsFree", "boolean"), field("Currency"), field("BasePrice", "number"),
-      field("CompareAtPrice", "number"), field("Taxable", "boolean"), field("TaxCode"),
-      field("InventoryTracked", "boolean"), field("StockStatus"), field("StripeProductID"),
-      field("DefaultStripePriceID"), field("PrimaryAssetID"), field("AccessCodeEligible", "boolean"),
+      field("BaseSKU", "string", "sku"), field("IsDigital", "boolean"), field("IsFree", "boolean"),
+      field("BasePrice", "number"), field("Currency"), field("Status"),
+      field("VisibleInMarketplace", "boolean", "visible"), field("Featured", "boolean"),
+      field("RequiresShipping", "boolean"), field("InventoryTracked", "boolean"),
+      field("Taxable", "boolean"), field("PrimaryAssetID"),
+      field("SellerUserID"), field("CreatorUserID"), field("OwnerUserID"), field("TaxCode"),
+      field("StockStatus"), field("StripeProductID"), field("DefaultStripePriceID"),
+      field("AccessCodeEligible", "boolean"),
       field("AvailableFrom", "date"), field("AvailableUntil", "date"), field("CreatedAt", "date"),
       field("UpdatedAt", "date"), field("ArchivedAt", "date"), field("Notes"),
     ],
@@ -89,13 +88,17 @@ export const CANONICAL_WORKBOOK_SCHEMAS = {
   productVariants: {
     sheet: "ProductVariants", idField: "productVariantId",
     fields: [
-      field("ProductVariantID"), field("ProductID"), field("VariantName"), field("VariantCode"), field("SKU"),
-      field("Status"), field("IsDefault", "boolean"), field("OptionSummary"), field("PriceOverride", "number"),
-      field("CompareAtPriceOverride", "number"), field("Currency"), field("TaxableOverride", "boolean"),
+      field("ProductVariantID"), field("ProductID"), field("VariantName"), field("SKU"),
+      field("Status"), field("IsDefault", "boolean"), field("Colour"), field("Size"), field("SizeUnit"),
+      field("Weight", "number"), field("WeightUnit"), field("Price", "number", "priceOverride"),
+      field("CompareAtPrice", "number", "compareAtPriceOverride"), field("TaxableOverride", "boolean"),
+      field("Requires Shipping", "boolean", "requiresShipping"),
       field("RequiresShippingOverride", "boolean"), field("InventoryTracked", "boolean"),
       field("StockQuantity", "number"), field("StockStatus"), field("ReorderLevel", "number"),
-      field("Weight", "number"), field("WeightUnit"), field("Barcode"), field("StripeProductID"),
-      field("StripePriceID"), field("PrimaryAssetID"), field("SortOrder", "number"), ...commonAudit,
+      field("CalendarBookingReference"), field("SeatCapacity", "number"),
+      field("EventStartAt", "date"), field("EventEndAt", "date"), field("EventLocation"),
+      field("Instructor"),
+      field("Barcode"), field("PrimaryAssetID"), field("SortOrder", "number"), ...commonAudit,
     ],
     required: ["productVariantId", "productId", "variantName", "status"],
   },

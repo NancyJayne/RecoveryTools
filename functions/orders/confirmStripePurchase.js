@@ -285,7 +285,8 @@ const confirmStripePurchaseHandler = async (request) => {
         inventoryId: inventory?.inventoryId || inventory?.id || "",
         creatorId: product.creatorId || null,
         affiliatePercent: commissionRates[type] ?? 0.1,
-        accessGrants: accessGrantsForProduct(productId, product, architecture),
+        accessGrants: accessGrantsForProduct(productId, product, architecture)
+          .filter((grant) => !grant.productVariantId || grant.productVariantId === variantId),
         components: componentsForProduct(productId, variantId, architecture),
         sellerUserId: product.sellerUserId || "",
       };
@@ -552,13 +553,16 @@ const confirmStripePurchaseHandler = async (request) => {
         await Promise.all(item.accessGrants.map((grant) => {
           const accessType = grant.accessEntityType || grant.accessType;
           const accessId = grant.accessEntityId || grant.accessId;
+          const accessVariantId = grant.accessEntityVariantId || "";
           if (!accessType || !accessId) return Promise.resolve();
-          const userAccessId = `${uid}_${accessType}_${accessId}`;
+          const userAccessId = `${uid}_${accessType}_${accessId}` +
+            (accessVariantId ? `_${accessVariantId}` : "");
           return admin.firestore().collection("userAccess").doc(userAccessId).set({
             userAccessId,
             userId: uid,
             accessType,
             accessId,
+            accessVariantId,
             sourceProductId: item.productId,
             sourceOrderId: invoiceNumber,
             productAccessGrantId: grant.productAccessGrantId || grant.id || "",

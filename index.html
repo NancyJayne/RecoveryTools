@@ -1453,18 +1453,17 @@
           </div>
 
           <div id="contentBuilderStepBar" class="mb-4 grid gap-2 text-sm md:grid-cols-5">
-            <button type="button" class="builder-step-btn rounded bg-[#407471] px-3 py-2 text-white" data-builder-step="1">1. Type & Template</button>
-            <button type="button" class="builder-step-btn rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="2">2. Details</button>
-            <button type="button" class="builder-step-btn rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="3">3. Build</button>
-            <button type="button" class="builder-step-btn rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="4">4. Relationships</button>
-            <button type="button" class="builder-step-btn rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="5">5. Review</button>
+            <button type="button" class="builder-step-btn rounded bg-[#407471] px-3 py-2 text-white" data-builder-step="1">1. Details</button>
+            <button type="button" class="builder-step-btn rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="2">2. Build</button>
+            <button type="button" class="builder-step-btn rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="3">3. Connections</button>
+            <button type="button" class="builder-step-btn rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="4">4. Review</button>
+            <button type="button" class="builder-step-btn rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="5">5. Actions</button>
           </div>
 
           <div id="contentBuilderFilterBar" class="mb-4 flex flex-wrap gap-2 text-sm">
             <button type="button" class="builder-filter-btn rounded bg-[#407471] px-3 py-1 text-white" data-builder-filter="item">Items</button>
             <button type="button" class="builder-filter-btn rounded bg-gray-700 px-3 py-1 text-white hover:bg-[#407471]" data-builder-filter="blueprint">Blueprints</button>
             <button type="button" class="builder-filter-btn rounded bg-gray-700 px-3 py-1 text-white hover:bg-[#407471]" data-builder-filter="plan">Plans</button>
-            <button type="button" class="builder-filter-btn rounded bg-gray-700 px-3 py-1 text-white hover:bg-[#407471]" data-builder-filter="plan" data-builder-type="campaign">Campaign Plan</button>
           </div>
 
           <div id="contentBuilderEditBanner" class="mb-4 hidden rounded border border-[#407471]/70 bg-[#0f2b29]/40 p-3 text-sm text-gray-100">
@@ -1479,7 +1478,7 @@
             </div>
           </div>
 
-          <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div class="grid gap-6">
             <form id="contentBuilderForm" class="space-y-4 rounded border border-gray-700 bg-gray-900/50 p-4">
               <div class="builder-step-panel grid gap-4 md:grid-cols-2" data-builder-panel="1" data-field-group="classification">
                 <label class="block text-sm">
@@ -1497,9 +1496,9 @@
                 <p id="contentTypeFieldSummary" class="text-xs text-gray-400 md:col-span-2"></p>
               </div>
 
-              <div class="builder-step-panel grid gap-4 md:grid-cols-2" data-builder-panel="1">
+              <div class="hidden" hidden aria-hidden="true" style="display: none !important;">
                 <div id="contentTemplateStepOneSlot">
-                  <div id="contentTemplateField" class="block text-sm" data-field-group="classification">
+                  <div id="contentTemplateField" class="hidden text-sm" hidden aria-hidden="true" style="display: none !important;" data-field-group="classification">
                     <span class="flex flex-wrap items-center justify-between gap-2">
                       <label id="contentTemplateLabel" for="contentTemplate">Template</label>
                       <span class="flex flex-wrap gap-2">
@@ -1523,73 +1522,68 @@
                     <span id="contentTemplateHelp" class="mt-2 hidden text-xs text-gray-400"></span>
                   </div>
                 </div>
-                <label class="block text-sm" data-field-group="publishing">
-                  Status
-                  <select id="contentStatus" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
-                </label>
-                <label class="block text-sm md:col-span-2" data-field-group="publishing">
-                  Visibility
-                  <select id="contentVisibility" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
-                </label>
               </div>
+              <input id="contentStatus" type="hidden" value="draft">
+              <input id="contentVisibility" type="hidden" value="private">
 
-              <section class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3" data-builder-panel="2" data-field-group="core">
-                <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-300">Main identity</h3>
-                <div class="mt-3 grid gap-4 md:grid-cols-2">
+              <section class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3" data-builder-panel="1" data-field-group="core">
+                <div>
                   <label class="block text-sm">
                     Name
                     <input id="contentName" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" required>
                   </label>
-                  <label class="block text-sm">
+                  <label class="hidden" hidden aria-hidden="true">
                     Optional ID
                     <input id="contentId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Leave blank to auto-generate">
                   </label>
                 </div>
               </section>
 
-              <label class="builder-step-panel block text-sm" data-builder-panel="2" data-field-group="content">
+              <label class="builder-step-panel block rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="1" data-field-group="content">
                 Short description
                 <textarea id="contentShortDescription" class="mt-1 h-20 w-full rounded bg-gray-800 px-3 py-2 text-white"></textarea>
               </label>
 
-              <label class="builder-step-panel block text-sm" data-builder-panel="2" data-field-group="content">
+              <label class="builder-step-panel block rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="1" data-field-group="content">
                 Long description / notes
                 <textarea id="contentLongDescription" class="mt-1 h-28 w-full rounded bg-gray-800 px-3 py-2 text-white"></textarea>
               </label>
 
-              <section class="builder-step-panel block text-sm" data-builder-panel="2" data-field-group="classification">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <span>Tags</span>
-                  <button id="addContentTagBtn" type="button" class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7] hover:bg-[#153b38]">
-                    Add another tag
-                  </button>
+              <section class="builder-step-panel block text-sm" data-builder-panel="1" data-field-group="classification">
+                <div class="rounded border border-gray-700 bg-gray-950/40 p-3">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <span>Tags</span>
+                    <button id="addContentTagBtn" type="button" class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7] hover:bg-[#153b38]">
+                      Add another tag
+                    </button>
+                  </div>
+                  <label class="mt-3 block">
+                    Filter available tags by category
+                    <select id="contentTagCategoryFilter" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                  </label>
+                  <input id="contentTags" type="hidden">
+                  <div id="contentTagRows" class="mt-2 space-y-2"></div>
+                  <p class="mt-2 text-xs text-gray-400">
+                    Select an existing tag where possible, or choose Add new tag to create one.
+                  </p>
                 </div>
-                <input id="contentTags" type="hidden">
-                <div id="contentTagRows" class="mt-2 space-y-2"></div>
-                <p class="mt-2 text-xs text-gray-400">
-                  Select an existing tag where possible, or choose Add new tag to create one.
-                </p>
               </section>
 
-              <section id="templateGuidedFields" class="builder-step-panel rounded border border-[#407471]/60 bg-[#0f2b29]/30 p-3 text-sm" data-builder-panel="3" data-field-group="content method dosage campaign"></section>
+              <section class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="2">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 class="font-semibold text-white">Build variants</h3>
+                    <p class="mt-1 text-xs text-gray-400">Choose a template and complete its fields for each version. Every record starts with one variant.</p>
+                    <p id="contentVariantCountText" class="mt-2 text-xs font-medium text-[#9edbd7]">1 variant in this record</p>
+                  </div>
+                  <button id="addContentEntityVariantBtn" type="button" class="rounded border border-[#407471] bg-[#153b38]/50 px-4 py-2 text-sm font-medium text-[#bce7e4] hover:bg-[#153b38]">+ Add another variant</button>
+                </div>
+                <div id="contentEntityVariantRows" class="mt-4 space-y-5"></div>
+              </section>
 
-              <div id="itemSpecificFields" class="builder-step-panel grid gap-3 rounded border border-gray-700 bg-gray-950/40 p-3 text-sm md:grid-cols-2" data-builder-panel="3">
-                <label class="block" data-field-group="classification">
-                  Item kind
-                  <select id="contentItemKind" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
-                </label>
-                <label class="block" data-field-group="classification">
-                  Category
-                  <select id="contentCategoryId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
-                </label>
-                <label class="inline-flex items-center gap-2" data-field-group="publishing">
-                  <input id="contentWebsiteVisible" type="checkbox" class="accent-[#407471]">
-                  Website visible
-                </label>
-                <label class="inline-flex items-center gap-2" data-field-group="commerce">
-                  <input id="contentIsShopProduct" type="checkbox" class="accent-[#407471]">
-                  Shop product
-                </label>
+              <section id="templateGuidedFields" class="hidden" hidden style="display: none !important;" data-field-group="content method dosage campaign" aria-hidden="true"></section>
+
+              <div id="itemSpecificFields" class="hidden" hidden style="display: none !important;" aria-hidden="true">
                 <label class="inline-flex items-center gap-2" data-field-group="commerce">
                   <input id="contentSoldByRecoveryTools" type="checkbox" class="accent-[#407471]" checked>
                   Sold by Recovery Tools
@@ -1602,6 +1596,30 @@
                   <input id="contentInventoryTracked" type="checkbox" class="accent-[#407471]">
                   Track inventory
                 </label>
+                <section id="contentItemInventoryFields" class="hidden rounded border border-gray-700 bg-gray-900/60 p-3 md:col-span-2" data-field-group="inventory">
+                  <h3 class="font-semibold text-white">Item stock</h3>
+                  <p class="mt-1 text-xs text-gray-400">Use this for supplies and components even when they are not sold as Products.</p>
+                  <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <label class="block">Quantity on hand
+                      <input id="contentItemStockQty" type="number" min="0" step="1" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                    </label>
+                    <label class="block">Reorder when quantity reaches
+                      <input id="contentItemReorderLevel" type="number" min="0" step="1" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                    </label>
+                    <label class="block">Stock unit
+                      <input id="contentItemInventoryUnit" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="boxes, pieces, rolls">
+                    </label>
+                    <label class="block">Storage location
+                      <input id="contentItemInventoryLocation" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Shelf or storeroom">
+                    </label>
+                    <label class="block">Approximate cost per unit (AUD)
+                      <input id="contentItemUnitCost" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                    </label>
+                    <label class="block">Cost reference
+                      <input id="contentItemCostReference" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Supplier quote or estimate">
+                    </label>
+                  </div>
+                </section>
                 <label class="inline-flex items-center gap-2" data-field-group="access">
                   <input id="contentRequiresCalendar" type="checkbox" class="accent-[#407471]">
                   Needs calendar
@@ -1654,28 +1672,20 @@
                   Certificate name
                   <input id="contentCertificateName" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                 </label>
-                <label class="block" data-field-group="media">
-                  Asset title
-                  <input id="contentAssetTitle" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-                </label>
-                <label class="block" data-field-group="media">
-                  Upload assets
-                  <input id="contentAssetFile" type="file" accept="image/*,application/pdf,video/*" multiple class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-                </label>
               </div>
 
-              <label class="builder-step-panel inline-flex items-center gap-2 rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="3" data-field-group="commerce" data-record-types="blueprint plan">
-                <input id="contentCreatesProduct" type="checkbox" class="accent-[#407471]">
-                Create or link a sellable Product for this content
-              </label>
-
-              <section id="itemProductRelationshipFields" class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="3" data-field-group="commerce">
+              <section id="contentProductDrawer" class="fixed inset-0 z-[110] hidden bg-black/55" aria-hidden="true">
+                <div class="ml-auto h-full w-full max-w-3xl overflow-y-auto border-l border-gray-700 bg-gray-950 p-5 text-sm shadow-2xl">
                 <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 class="font-semibold text-white">Shop product relationship</h3>
                     <p class="mt-1 text-xs text-gray-400">
-                      Controls Marketplace display, checkout pricing, shipping behaviour, variants, and inventory.
+                      Create a new shop product or connect this content to an existing product and its variants.
                     </p>
+                  </div>
+                  <div class="flex gap-2">
+                    <button id="toggleContentProductHelpBtn" type="button" class="rounded border border-gray-600 px-3 py-1 text-gray-200 hover:bg-gray-800" aria-expanded="false" aria-controls="contentProductHelpPanel">Help</button>
+                    <button id="closeContentProductDrawerBtn" type="button" class="rounded border border-gray-600 px-3 py-1 text-gray-200 hover:bg-gray-800">Close</button>
                   </div>
                   <span id="contentProductRelationStatus" class="rounded bg-gray-800 px-2 py-1 text-xs text-gray-300">
                     No linked product
@@ -1684,22 +1694,39 @@
                     Unlink product
                   </button>
                 </div>
+                <aside id="contentProductHelpPanel" class="mb-4 hidden rounded border border-[#407471]/70 bg-[#0f2b29]/40 p-4 text-sm" aria-live="polite">
+                  <h4 class="font-semibold text-white">Which connection should I use?</h4>
+                  <div class="mt-3 grid gap-3 md:grid-cols-2">
+                    <div class="rounded bg-gray-900/70 p-3">
+                      <strong class="text-white">Customer-facing Item/tool</strong>
+                      <p class="mt-1 text-xs text-gray-300">Connect the Item to the Product as its customer-facing content. Customers can see and purchase the Product when the Item is recommended.</p>
+                    </div>
+                    <div class="rounded bg-gray-900/70 p-3">
+                      <strong class="text-white">Internal manufacturing Blueprint</strong>
+                      <p class="mt-1 text-xs text-gray-300">Open the Blueprint, choose the existing Product, then tick <strong>Use this Blueprint as the Product's manufacturing / cost recipe</strong>. Customers will not see or unlock this Blueprint.</p>
+                    </div>
+                  </div>
+                  <p class="mt-3 text-xs text-gray-400">Quick rule: the Item explains what the customer uses; the Blueprint records what staff need to make it.</p>
+                </aside>
                 <input id="contentUnlinkProductId" type="hidden">
+                <select id="contentExistingProductId" class="hidden" aria-hidden="true">
+                  <option value="">Create a new Product</option>
+                </select>
+                <div class="mb-4 rounded border border-gray-700 bg-gray-900/70 p-3">
+                  <div class="flex flex-wrap gap-2">
+                    <button id="createNewProductChoiceBtn" type="button" class="rounded bg-[#407471] px-3 py-2 text-white">Create new product</button>
+                    <input id="contentProductSearch" class="min-w-52 flex-1 rounded bg-gray-800 px-3 py-2 text-white" placeholder="Search existing products or variants">
+                  </div>
+                  <div id="contentProductChoiceList" class="mt-3 max-h-64 space-y-2 overflow-y-auto"></div>
+                </div>
                 <div class="grid gap-3 md:grid-cols-2">
-                  <label class="block">
-                    Link existing Product
-                    <select id="contentExistingProductId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-                      <option value="">Create a new Product</option>
-                    </select>
-                  </label>
-                  <label class="block">
-                    Relationship role
-                    <select id="contentProductLinkRole" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-                      <option>Represents</option><option>ProducedBy</option><option>Includes</option>
-                      <option>Component</option><option>Delivers</option><option>Unlocks</option>
-                      <option>Bonus</option><option>RecommendedFor</option><option>Related</option>
-                      <option>SourceContent</option>
-                    </select>
+                  <input id="contentProductLinkRole" type="hidden" value="Represents">
+                  <label id="contentProductManufacturingRoleRow" class="hidden rounded border border-[#407471]/60 bg-[#153b38]/30 p-3 md:col-span-2">
+                    <span class="inline-flex items-center gap-2 font-medium text-white">
+                      <input id="contentProductManufacturingRecipe" type="checkbox" class="accent-[#407471]">
+                      Use this Blueprint as the Product's manufacturing / cost recipe
+                    </span>
+                    <span class="mt-1 block text-xs text-gray-300">Internal only. Customers will not see or unlock this Blueprint.</span>
                   </label>
                   <label class="block">
                     Product ID
@@ -1708,6 +1735,21 @@
                   <label class="block">
                     SKU
                     <input id="contentProductSku" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                  </label>
+                  <label class="block">
+                    Product category
+                    <select id="contentProductCategoryId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                  </label>
+                  <label class="block">
+                    Product delivery
+                    <select id="contentProductDeliveryType" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                      <option value="Physical">Physical product</option>
+                      <option value="Digital Download">Digital product / download</option>
+                      <option value="Course Access">Course access</option>
+                      <option value="Plan Access">Plan or program access</option>
+                      <option value="Service">Service</option>
+                      <option value="Workshop Registration">Workshop / event</option>
+                    </select>
                   </label>
                   <label class="block">
                     Shop status
@@ -1721,11 +1763,78 @@
                     Effective shop price
                     <input id="contentProductPrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                   </label>
-                  <label class="block">
-                    Stock
-                    <input id="contentProductStock" type="number" min="0" step="1" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-                  </label>
                 </div>
+                <details class="mt-4 overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80 shadow-md" open>
+                  <summary class="cursor-pointer bg-gray-800/90 p-4 hover:bg-gray-800">
+                    <div class="flex items-center gap-3">
+                      <span class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#407471] bg-[#153b38] font-semibold text-[#bce7e4]">1</span>
+                      <div><h4 class="font-semibold text-white">Product variants</h4><p id="contentProductVariantSummary" class="text-xs text-gray-400">Complete the selling details for selected variants.</p></div>
+                    </div>
+                  </summary>
+                  <div class="border-t border-gray-700 bg-gray-950/30 p-4">
+                    <p class="text-xs text-gray-400">These rows come from the variants selected for Shop on the Connections page.</p>
+                    <input id="contentProductVariants" type="hidden">
+                    <div id="contentProductVariantRows" class="mt-3 space-y-4"></div>
+                  </div>
+                </details>
+                <details class="mt-4 overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80 shadow-md">
+                  <summary class="cursor-pointer bg-gray-800/90 p-4 hover:bg-gray-800">
+                    <div class="flex items-center gap-3">
+                      <span class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#407471] bg-[#153b38] font-semibold text-[#bce7e4]">2</span>
+                      <div><h4 class="font-semibold text-white">Manufacturing and cost</h4><p class="text-xs text-gray-400">Blueprint, estimated cost and margin.</p></div>
+                    </div>
+                  </summary>
+                  <div class="border-t border-gray-700 bg-gray-950/30 p-4 text-sm">
+                    <input id="contentProductBlueprintId" type="hidden">
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <h5 class="font-medium text-white">Select manufacturing Blueprint</h5>
+                        <p class="mt-1 text-xs text-gray-400">Choose one Blueprint for all Product variants, or assign different Blueprints to individual variants.</p>
+                      </div>
+                      <button id="addProductVariantContentLinkBtn" type="button" class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add Blueprint</button>
+                    </div>
+                    <div id="productVariantContentLinkRows" class="mt-3 space-y-2"></div>
+                    <p class="mt-3">Default manufacturing Blueprint: <strong id="contentProductBlueprintLabel">Not connected</strong></p>
+                    <p>Estimated cost: <strong id="contentProductSourceCost">$0.00</strong></p>
+                    <p class="mt-1">Approximate gross margin: <strong id="contentProductApproxMargin">Not available</strong></p>
+                    <p class="mt-1 text-xs text-gray-400">Cost comes from the Item unit cost or the Blueprint's linked Item recipe.</p>
+                  </div>
+                </details>
+                <details class="mt-4 overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80 shadow-md">
+                  <summary class="cursor-pointer bg-gray-800/90 p-4 hover:bg-gray-800">
+                    <div class="flex items-center gap-3">
+                      <span class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#407471] bg-[#153b38] font-semibold text-[#bce7e4]">3</span>
+                      <div><h4 class="font-semibold text-white">Product fulfilment</h4><p class="text-xs text-gray-400">Shipping, bookings and delivery requirements.</p></div>
+                    </div>
+                  </summary>
+                  <div class="border-t border-gray-700 bg-gray-950/30 p-4">
+                    <input id="contentProductStock" type="hidden">
+                    <label id="contentProductInventoryTrackedField" class="mb-4 inline-flex items-center gap-2 rounded border border-gray-600 bg-gray-900 px-3 py-2 text-sm font-medium text-white">
+                      <input id="contentProductInventoryTracked" type="checkbox" class="accent-[#407471]">
+                      Track Product inventory
+                    </label>
+                    <p id="contentProductInventoryHelp" class="mb-4 text-xs text-gray-400">When enabled, enter stock on each Product variant. Overall Product stock is calculated automatically.</p>
+                    <div class="grid gap-3 md:grid-cols-2">
+                    <label class="inline-flex items-center gap-2"><input id="contentProductRequiresShipping" type="checkbox" class="accent-[#407471]">Requires shipping</label>
+                    <label class="inline-flex items-center gap-2"><input id="contentProductRequiresCalendar" type="checkbox" class="accent-[#407471]">Calendar booking</label>
+                    <label class="inline-flex items-center gap-2"><input id="contentProductRequiresSessionTime" type="checkbox" class="accent-[#407471]">Event/session timing</label>
+                    <label class="inline-flex items-center gap-2"><input id="contentProductTracksSeats" type="checkbox" class="accent-[#407471]">Track tickets/seats</label>
+                    <label class="inline-flex items-center gap-2"><input id="contentProductRequiresLocation" type="checkbox" class="accent-[#407471]">Location required</label>
+                    <label class="inline-flex items-center gap-2"><input id="contentProductRequiresInstructor" type="checkbox" class="accent-[#407471]">Instructor required</label>
+                    </div>
+                    <section id="contentProductInstructorSection" class="mt-4 hidden rounded border border-gray-700 bg-gray-900/70 p-3">
+                      <div class="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <h5 class="font-medium text-white">Instructor assignments</h5>
+                          <p class="mt-1 text-xs text-gray-400">Apply an instructor to all Product variants or select an individual variant.</p>
+                        </div>
+                        <button id="addContentProductInstructorBtn" type="button" class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add instructor</button>
+                      </div>
+                      <input id="contentProductInstructorAssignments" type="hidden">
+                      <div id="contentProductInstructorRows" class="mt-3 space-y-2"></div>
+                    </section>
+                  </div>
+                </details>
                 <div class="mt-3 grid gap-3 md:grid-cols-2">
                   <label class="inline-flex items-center gap-2">
                     <input id="contentProductVisible" type="checkbox" class="accent-[#407471]">
@@ -1740,45 +1849,63 @@
                     Archived
                   </label>
                 </div>
-                <label class="mt-3 block">
-                  Variants
-                  <textarea
-                    id="contentProductVariants"
-                    class="mt-1 h-28 w-full rounded bg-gray-800 px-3 py-2 text-white"
-                    placeholder="One per line: Variant ID | Name | Colour | Size/weight | SKU | Price override | Stock | Status"
-                  ></textarea>
-                </label>
+                <section class="mt-4 rounded border border-gray-700 bg-gray-900/70 p-3">
+                  <div class="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <h4 class="font-semibold text-white">Unlock after purchase</h4>
+                      <p class="mt-1 text-xs text-gray-400">Use this only when payment should give access to digital content, a course, plan, program, or workshop. A physical-only Product normally has no unlocks.</p>
+                    </div>
+                    <button id="addContentProductUnlockBtn" type="button" class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7] hover:bg-[#153b38]">Add unlock</button>
+                  </div>
+                  <div id="contentProductUnlockRows" class="mt-3 space-y-2"></div>
+                </section>
                 <div id="contentCurrentAssetsSection" class="mt-3 rounded border border-gray-800 bg-gray-900/60 p-3">
                   <h4 class="text-sm font-semibold text-white">Current assets</h4>
                   <div id="contentCurrentAssetsList" class="mt-2 space-y-2 text-xs text-gray-300">
                     No assets linked.
                   </div>
                 </div>
+                <div class="mt-5 flex justify-end">
+                  <button id="applyContentProductBtn" type="button" class="rounded bg-[#407471] px-4 py-2 text-white hover:bg-[#305a56]">Use this product connection</button>
+                </div>
+                </div>
               </section>
 
-              <div id="advancedContentFields" class="builder-step-panel space-y-3 rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="4">
+              <section class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="3">
+                <h3 class="font-semibold text-white">Variant connections</h3>
+                <p class="mt-1 text-xs text-gray-400">Review the behaviours and connection requirements for each variant.</p>
+                <div id="contentVariantConnectionRows" class="mt-3 space-y-3"></div>
+              </section>
+
+              <section class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="3">
+                  <h3 class="font-semibold text-white">Shop and Library setup</h3>
+                  <p class="mt-1 text-xs text-gray-400">Select variants above, then configure the shared connection here.</p>
+                  <div class="hidden" hidden aria-hidden="true">
+                    <label>
+                      <input id="contentIsShopProduct" type="checkbox" class="accent-[#407471]">
+                      Add shop product
+                    </label>
+                    <label>
+                      <input id="contentWebsiteVisible" type="checkbox" class="accent-[#407471]">
+                      Website visible / add to library
+                    </label>
+                  </div>
+                  <div class="mt-3 flex flex-wrap gap-3">
+                    <button id="openVariantShopProductBtn" type="button" class="rounded bg-[#407471] px-4 py-2 text-white hover:bg-[#305a56]">Add or edit Shop Product</button>
+                    <button id="applyVariantLibraryBtn" type="button" class="rounded border border-[#407471] px-4 py-2 text-[#9edbd7] hover:bg-[#153b38]">Add or edit Library</button>
+                  </div>
+              </section>
+
+              <div id="advancedContentFields" class="builder-step-panel space-y-3 rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="3">
                 <input id="contentLinkedItemIds" type="hidden">
                 <input id="contentLinkedBlueprintIds" type="hidden">
                 <input id="contentLinkedPlanIds" type="hidden">
 
-                <section id="contentCampaignPlanHelper" class="hidden rounded border border-[#407471]/70 bg-[#0f2b29]/35 p-3" data-field-group="campaign" data-record-types="plan" data-required-type="campaign">
-                  <h3 class="font-semibold text-white">Build campaign from a condition tag</h3>
-                  <p class="mt-1 text-xs text-gray-300">
-                    Add matching marketing and education content as explicit components, and link matching treatment plans without nesting them.
-                  </p>
-                  <div class="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <select id="contentCampaignTagFilter" class="min-w-0 flex-1 rounded bg-gray-800 px-3 py-2 text-white"></select>
-                    <button id="addCampaignMatchesBtn" type="button" class="rounded border border-[#407471] px-3 py-2 text-sm text-[#9edbd7] hover:bg-[#153b38]">
-                      Add matching content
-                    </button>
-                  </div>
-                  <p id="contentCampaignMatchStatus" class="mt-2 text-xs text-gray-400"></p>
-                </section>
-
                 <section id="contentItemPickerSection" data-field-group="relationships" data-record-types="blueprint plan">
                   <h3 class="font-semibold text-white">Reusable Items</h3>
-                  <p class="mt-1 text-xs text-gray-400">Select the Items this Blueprint or Plan uses.</p>
+                  <p class="mt-1 text-xs text-gray-400">Select the Items this Blueprint or Plan uses. Blueprints can record the quantity needed for one completed output.</p>
                   <div id="contentItemPicker" class="mt-2"></div>
+                  <p id="contentBlueprintEstimatedCost" class="mt-2 hidden text-sm text-white"></p>
                 </section>
 
                 <section id="contentBlueprintPickerSection" data-field-group="relationships" data-record-types="plan">
@@ -1804,40 +1931,69 @@
                 </div>
               </div>
 
-              <section id="contentRelationshipReview" class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="4" data-field-group="relationships commerce inventory media access">
-                <h3 class="font-semibold text-white">Relationships</h3>
+              <section id="contentRelationshipReview" class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="3" data-field-group="relationships commerce inventory media access">
+                <h3 class="font-semibold text-white">Linked content, assets &amp; products</h3>
                 <p class="mt-1 text-xs text-gray-400">
-                  Review linked product, pricing, variants, inventory, assets, and content connections before publishing.
+                  Review everything connected to this record before publishing.
                 </p>
                 <div id="contentRelationshipSummary" class="mt-3 grid gap-3 md:grid-cols-2"></div>
               </section>
 
               <div id="contentDuplicateWarning" class="builder-step-panel hidden rounded border border-yellow-500/60 bg-yellow-900/30 p-3 text-sm text-yellow-100" data-builder-panel="5"></div>
 
-              <section id="contentReviewPublishPanel" class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="5">
-                <h3 class="font-semibold text-white">Review & publish</h3>
+              <section id="contentReviewPublishPanel" class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="4">
+                <h3 class="font-semibold text-white">Review entity</h3>
                 <p class="mt-1 text-xs text-gray-400">
                   Check the content and shop-product state before saving.
                 </p>
                 <div id="contentReviewSummary" class="mt-3 grid gap-3 md:grid-cols-2"></div>
+                <div id="contentVariantReviewRows" class="mt-4 space-y-3"></div>
               </section>
 
-              <div class="builder-step-panel flex flex-wrap gap-3" data-builder-panel="5">
+              <section class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="5">
+                <h3 class="font-semibold text-white">Save and lifecycle actions</h3>
+                <p class="mt-1 text-xs text-gray-400">Choose the state this entity should have after saving.</p>
+              <div id="contentVariantActionRows" class="mt-3 space-y-3"></div>
+              <div class="hidden" aria-hidden="true">
+                <label class="block">Set active at
+                  <input id="contentScheduledActiveAt" type="datetime-local" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+                <label class="block">Pause at
+                  <input id="contentScheduledPauseAt" type="datetime-local" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                </label>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-3">
                 <button id="saveContentBuilderBtn" type="submit" class="rounded bg-[#407471] px-4 py-2 text-white hover:bg-[#305a56]">
                   Save
                 </button>
+                <button id="approveContentBuilderBtn" type="button" class="rounded bg-purple-700 px-4 py-2 text-white hover:bg-purple-600">
+                  Approve
+                </button>
                 <button id="saveContinueContentBtn" type="button" class="rounded bg-blue-700 px-4 py-2 text-white hover:bg-blue-600">
-                  Save and set active
+                  Set active
+                </button>
+                <button id="pauseContentBuilderBtn" type="button" class="rounded bg-gray-700 px-4 py-2 text-white hover:bg-gray-600">
+                  Pause
+                </button>
+                <button id="archiveContentBuilderBtn" type="button" class="rounded bg-gray-800 px-4 py-2 text-white hover:bg-gray-700">
+                  Archive
                 </button>
                 <button id="confirmDuplicateContentBtn" type="button" class="hidden rounded bg-yellow-600 px-4 py-2 text-white hover:bg-yellow-700">
                   Save anyway
                 </button>
               </div>
+              </section>
               <div
                 id="contentSaveWorkflowNote"
                 class="builder-step-panel rounded border border-gray-700 bg-gray-950/50 p-3 text-xs text-gray-300"
                 data-builder-panel="5"
               ></div>
+
+              <section class="builder-step-panel rounded border border-gray-700 bg-gray-900/50 p-4" data-builder-panel="1">
+                <h3 class="text-lg font-semibold">Similar records</h3>
+                <p class="mb-3 text-xs text-gray-400">Updates as you type so duplicates are easier to catch.</p>
+                <div id="contentSimilarList" class="space-y-2 text-sm text-gray-300">Start typing a name.</div>
+              </section>
 
               <div class="flex flex-wrap justify-between gap-3 border-t border-gray-700 pt-4">
                 <button id="builderBackStepBtn" type="button" class="rounded bg-gray-700 px-4 py-2 text-white hover:bg-gray-600">
@@ -1849,13 +2005,7 @@
               </div>
             </form>
 
-            <aside class="space-y-4">
-              <section class="rounded border border-gray-700 bg-gray-900/50 p-4">
-                <h3 class="text-lg font-semibold">Similar records</h3>
-                <p class="mb-3 text-xs text-gray-400">Updates as you type so duplicates are easier to catch.</p>
-                <div id="contentSimilarList" class="space-y-2 text-sm text-gray-300">Start typing a name.</div>
-              </section>
-
+            <aside>
               <section id="contentTemplateToolSection" class="fixed inset-0 z-[100] hidden bg-black/40">
                 <div class="ml-auto flex h-full w-full max-w-2xl flex-col overflow-y-auto border-l border-gray-700 bg-gray-900 p-5 shadow-2xl">
                   <div class="mb-4 flex items-start justify-between gap-3">
@@ -1915,10 +2065,6 @@
                       <select id="templateAppliesTo" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
                     </label>
                     <label class="block">
-                      Default category
-                      <select id="templateCategoryId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
-                    </label>
-                    <label class="block">
                       Description
                       <textarea
                         id="templateDescription"
@@ -1927,11 +2073,11 @@
                       ></textarea>
                     </label>
                     <div id="itemTemplateDefaults" class="grid gap-3 rounded border border-gray-700 bg-gray-950/40 p-3 sm:grid-cols-2">
-                      <p class="text-xs font-semibold uppercase tracking-wide text-gray-400 sm:col-span-2">Item behaviour defaults</p>
+                      <p class="text-xs font-semibold uppercase tracking-wide text-gray-400 sm:col-span-2">Item inventory default</p>
                       <p class="text-xs text-gray-400 sm:col-span-2">
-                        These switches decide which behaviours and details an Item needs. Workshop-specific values are entered on the Item itself.
+                        Use this only when the reusable Item or manufacturing component needs its own stock record.
                       </p>
-                      <label class="inline-flex items-center gap-2">
+                      <label class="hidden">
                         <input id="templateRequiresShipping" type="checkbox" class="accent-[#407471]">
                         Requires shipping
                       </label>
@@ -1939,35 +2085,35 @@
                         <input id="templateInventoryTracked" type="checkbox" class="accent-[#407471]">
                         Track inventory
                       </label>
-                      <label class="inline-flex items-center gap-2">
+                      <label class="hidden">
                         <input id="templateIsShopProduct" type="checkbox" class="accent-[#407471]">
                         Shop product
                       </label>
-                      <label class="inline-flex items-center gap-2">
+                      <label class="hidden">
                         <input id="templateSoldByRecoveryTools" type="checkbox" class="accent-[#407471]" checked>
                         Sold by Recovery Tools
                       </label>
-                      <label class="inline-flex items-center gap-2">
+                      <label class="hidden">
                         <input id="templateUnlocksAccess" type="checkbox" class="accent-[#407471]">
                         Unlocks access
                       </label>
-                      <label class="inline-flex items-center gap-2">
+                      <label class="hidden">
                         <input id="templateRequiresCalendar" type="checkbox" class="accent-[#407471]">
                         Needs calendar booking
                       </label>
-                      <label class="inline-flex items-center gap-2">
+                      <label class="hidden">
                         <input id="templateRequiresSessionTime" type="checkbox" class="accent-[#407471]">
                         Needs event/session timing
                       </label>
-                      <label class="inline-flex items-center gap-2">
+                      <label class="hidden">
                         <input id="templateTracksSeats" type="checkbox" class="accent-[#407471]">
                         Tracks tickets/seats
                       </label>
-                      <label class="inline-flex items-center gap-2">
+                      <label class="hidden">
                         <input id="templateRequiresLocation" type="checkbox" class="accent-[#407471]">
                         Requires location
                       </label>
-                      <label class="inline-flex items-center gap-2">
+                      <label class="hidden">
                         <input id="templateRequiresInstructor" type="checkbox" class="accent-[#407471]">
                         Requires instructor
                       </label>
@@ -2046,6 +2192,54 @@
                     </button>
                   </div>
                 </form>
+                </div>
+              </section>
+
+              <section id="contentAssetDrawer" class="fixed inset-0 z-[110] hidden bg-black/50" aria-hidden="true" inert>
+                <div class="ml-auto flex h-full w-full max-w-xl flex-col bg-gray-950 shadow-2xl">
+                  <div class="flex items-start justify-between gap-3 border-b border-gray-700 p-4">
+                    <div><h3 class="text-lg font-semibold">Add new asset</h3><p id="contentAssetDrawerContext" class="mt-1 text-xs text-gray-400"></p></div>
+                    <div class="flex gap-2">
+                      <button id="toggleContentAssetHelpBtn" type="button" class="rounded border border-gray-600 px-3 py-1" aria-expanded="false" aria-controls="contentAssetHelpPanel">Help</button>
+                      <button id="closeContentAssetDrawerBtn" type="button" class="rounded border border-gray-600 px-3 py-1">Close</button>
+                    </div>
+                  </div>
+                  <form id="contentAssetDrawerForm" class="flex-1 space-y-4 overflow-y-auto p-4">
+                    <aside id="contentAssetHelpPanel" class="hidden space-y-3 rounded border border-gray-600 bg-gray-900 p-4 text-sm" aria-live="polite">
+                      <div>
+                        <h4 class="font-semibold text-white">What should I add here?</h4>
+                        <p class="mt-1 text-gray-300">Create one reusable Asset record for each file or external resource. Give it a clear name, choose its type, then either upload the file or store a safe external link.</p>
+                      </div>
+                      <ul class="list-disc space-y-2 pl-5 text-gray-300">
+                        <li><strong class="text-white">Image, PDF, document or audio:</strong> upload the finished file when it should be stored and managed by Recovery Tools.</li>
+                        <li><strong class="text-white">YouTube video:</strong> use the video's public or unlisted watch/share URL. An unlisted video can be viewed by anyone who receives the link, so it is convenient but not secure. Do not use a private video unless every viewer has been individually granted access in YouTube.</li>
+                        <li><strong class="text-white">Canva design:</strong> paste a Canva template link that lets the recipient create their own copy. Do not paste the editing link to your master design. Test the link in a private browser window before saving it.</li>
+                        <li><strong class="text-white">Other website:</strong> use a direct HTTPS link that the intended customer or staff member is permitted to open.</li>
+                      </ul>
+                      <p class="text-xs text-gray-400">Display title is what users may see. Alternative text should briefly describe meaningful images for people using screen readers. Notes are for internal context and should not contain passwords or private access tokens.</p>
+                    </aside>
+                    <label class="block text-sm">Asset name *<input id="contentAssetName" class="input mt-1 w-full" required></label>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                      <label class="block text-sm">Asset type *<select id="contentAssetType" class="input mt-1 w-full"><option>Image</option><option>Video</option><option>PDF</option><option>Document</option><option>Audio</option><option>Canva Design</option></select></label>
+                      <label class="block text-sm">Status<select id="contentAssetStatus" class="input mt-1 w-full"><option value="active">Active</option><option value="draft">Draft</option></select></label>
+                    </div>
+                    <label class="block text-sm">Storage method<select id="contentAssetStorageMethod" class="input mt-1 w-full"><option value="upload">Upload a file</option><option value="external">Use an external URL</option></select></label>
+                    <label id="contentAssetFileRow" class="block text-sm">
+                      File *
+                      <input id="contentAssetFile" type="file" class="input mt-1 w-full">
+                      <span id="contentAssetSelectedFile" class="mt-1 block text-xs text-gray-400">No file selected.</span>
+                    </label>
+                    <div id="contentAssetExternalRow" class="hidden space-y-3">
+                      <label class="block text-sm">External service<select id="contentAssetExternalProvider" class="input mt-1 w-full"><option value="youtube">YouTube</option><option value="canva">Canva</option><option value="other">Other website</option></select></label>
+                      <label class="block text-sm">External URL *<input id="contentAssetExternalUrl" type="url" class="input mt-1 w-full" placeholder="https://..."></label>
+                      <p class="text-xs text-gray-400">The URL is stored in the Asset record; the external file is not copied into Firebase Storage.</p>
+                    </div>
+                    <label class="block text-sm">Display title<input id="contentAssetTitle" class="input mt-1 w-full"></label>
+                    <label class="block text-sm">Description<textarea id="contentAssetDescription" class="input mt-1 w-full" rows="3"></textarea></label>
+                    <label class="block text-sm">Alternative text / accessibility description<input id="contentAssetAltText" class="input mt-1 w-full"></label>
+                    <label class="block text-sm">Notes<textarea id="contentAssetNotes" class="input mt-1 w-full" rows="2"></textarea></label>
+                    <div class="border-t border-gray-700 pt-4"><button id="saveContentAssetBtn" type="submit" class="rounded bg-[#407471] px-4 py-2 text-white">Upload and add asset</button></div>
+                  </form>
                 </div>
               </section>
             </aside>
@@ -2906,11 +3100,6 @@
 
   </div>
 </div>
-
-<!-- Floating Cart Button -->
-<button id="floatingCartBtn" class="open-cart-btn hidden fixed bottom-4 right-4 bg-green-600 hover:bg-green-700 text-white p-4 rounded-full shadow-lg z-50" aria-label="Open Cart">
-  🛒
-</button>
 
 <!-- Toast for cart actions -->
 <div id="toast" class="hidden fixed bottom-4 right-4 px-4 py-2 rounded text-white bg-green-500 z-50"></div>

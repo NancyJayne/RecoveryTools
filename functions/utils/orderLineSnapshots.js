@@ -15,6 +15,8 @@ export function canonicalOrderLine(item, index, currency = "AUD") {
     productAccessGrantId: grant.productAccessGrantId || grant.id || "",
     accessEntityType: grant.accessEntityType || grant.accessType || "",
     accessEntityId: grant.accessEntityId || grant.accessId || "",
+    accessEntityVariantId: grant.accessEntityVariantId || "",
+    productVariantId: grant.productVariantId || "",
     grantTiming: grant.grantTiming || "on-payment-confirmed",
     durationType: grant.durationType || "permanent",
     durationValue: grant.durationValue ?? null,

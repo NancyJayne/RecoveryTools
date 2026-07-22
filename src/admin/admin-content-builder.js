@@ -2,12 +2,15 @@ import { httpsCallable } from "firebase/functions";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { functions, storage } from "../utils/firebase-config.js";
 import { showToast } from "../utils/utils.js";
-import { selectCampaignMatches } from "./content-builder-relationships.js";
 
 const getContentBuilderData = httpsCallable(functions, "getContentBuilderData");
 const createContentBuilderRecord = httpsCallable(functions, "createContentBuilderRecord");
 const upsertContentBuilderTemplate = httpsCallable(functions, "upsertContentBuilderTemplate");
 const updateContentControlRecord = httpsCallable(functions, "updateContentControlRecord");
+const upsertAdminAsset = httpsCallable(functions, "upsertAdminAsset");
+let assetDrawerField = null;
+let assetDrawerFile = null;
+let resumeAssetSaveAfterFileSelection = false;
 
 let state = {
   options: {
@@ -18,6 +21,7 @@ let state = {
     planTypes: [],
     campaignTypes: [],
     tagOptions: [],
+    instructorOptions: [],
     entityTypeDefinitions: [],
     templateDefinitions: {},
     statuses: [],
@@ -35,37 +39,14 @@ let state = {
   currentStep: 1,
   duplicateWarningActive: false,
   isDirty: false,
+  retainedProductVariantContentLinks: [],
 };
 
 const BUILDER_STEP_LABELS = {
-  item: [
-    "1. Type & Template",
-    "2. Item Details",
-    "3. Product / Asset / Access",
-    "4. Relationships",
-    "5. Review & Publish",
-  ],
-  blueprint: [
-    "1. Type & Template",
-    "2. Blueprint Details",
-    "3. Instructions & Components",
-    "4. Items, Assets & Relationships",
-    "5. Review & Publish",
-  ],
-  plan: [
-    "1. Plan Type",
-    "2. Plan Details",
-    "3. Build Plan & Template",
-    "4. Access, Pathway & Relationships",
-    "5. Review & Publish",
-  ],
-  campaign: [
-    "1. Campaign Type & Template",
-    "2. Strategy & Audience",
-    "3. Build Deliverables",
-    "4. Schedule, Channels & Relationships",
-    "5. Review & Activate",
-  ],
+  item: ["1. Details", "2. Build", "3. Connections", "4. Review", "5. Actions"],
+  blueprint: ["1. Details", "2. Build", "3. Connections", "4. Review", "5. Actions"],
+  plan: ["1. Details", "2. Build", "3. Connections", "4. Review", "5. Actions"],
+  campaign: ["1. Details", "2. Build", "3. Connections", "4. Review", "5. Actions"],
 };
 
 function escapeHTML(value) {
@@ -176,7 +157,7 @@ const FIELD_GROUP_LABELS = {
   access: "Access",
   commerce: "Commerce",
   inventory: "Inventory",
-  relationships: "Reusable relationships",
+  relationships: "Reusable connections",
   campaign: "Campaign matching",
 };
 
@@ -224,12 +205,6 @@ function applyTypeDrivenFieldGroups() {
     element.classList.toggle("hidden", !fieldGroupAllowed(element));
   });
 
-  const definition = selectedEntityTypeDefinition();
-  const category = document.getElementById("contentCategoryId");
-  if (!state.editingRecord && category && !category.value && definition?.defaultCategoryId) {
-    setSelectValue("contentCategoryId", definition.defaultCategoryId);
-  }
-
   const summary = document.getElementById("contentTypeFieldSummary");
   if (summary) {
     summary.textContent = `This Type shows: ${[...active]
@@ -249,8 +224,68 @@ function setHiddenRelationshipIds(inputId, ids = []) {
   input.value = uniqueValues(ids).join(", ");
 }
 
-function relationshipPickerMarkup(kind, records, selectedIds) {
+function blueprintItemComponentsFromPicker() {
+  return [...document.querySelectorAll(
+    ".content-relationship-checkbox[data-relation-kind=\"items\"]:checked",
+  )].map((checkbox) => {
+    const row = checkbox.closest(".content-relationship-row");
+    const item = (state.records.items || []).find((record) => record.id === checkbox.value);
+    const quantity = optionalNumberFromElement(row?.querySelector(".blueprint-item-quantity")) ?? 1;
+    const unitCost = Number(item?.itemUnitCost ?? 0) || 0;
+    return { itemId: checkbox.value, quantity, unitCost, estimatedCost: quantity * unitCost };
+  });
+}
+
+function updateBlueprintEstimatedCost() {
+  const output = document.getElementById("contentBlueprintEstimatedCost");
+  if (!output) return 0;
+  const isBlueprint = currentRecordType() === "blueprint";
+  const total = isBlueprint
+    ? blueprintItemComponentsFromPicker().reduce((sum, component) => sum + component.estimatedCost, 0)
+    : 0;
+  output.classList.toggle("hidden", !isBlueprint);
+  output.textContent = `Estimated Item cost for one Blueprint output: $${total.toFixed(2)}`;
+  return total;
+}
+
+function updateConnectedProductCostPreview() {
+  let cost = 0;
+  const blueprintId = document.getElementById("contentProductBlueprintId")?.value || "";
+  const costBlueprint = (state.records.blueprints || []).find((blueprint) => blueprint.id === blueprintId);
+  if (costBlueprint) cost = Number(costBlueprint.estimatedUnitCost ?? 0) || 0;
+  else if (currentRecordType() === "blueprint") cost = updateBlueprintEstimatedCost();
+  if (!costBlueprint && currentRecordType() === "item") {
+    cost = optionalNumberFromInput("contentItemUnitCost") ?? 0;
+  }
+  const price = optionalNumberFromInput("contentProductPrice");
+  const costOutput = document.getElementById("contentProductSourceCost");
+  const marginOutput = document.getElementById("contentProductApproxMargin");
+  if (costOutput) costOutput.textContent = `$${cost.toFixed(2)}`;
+  if (marginOutput) {
+    if (price === null) {
+      marginOutput.textContent = "Enter a selling price";
+    } else {
+      const margin = price - cost;
+      const percentage = price > 0 ? (margin / price) * 100 : 0;
+      marginOutput.textContent = `$${margin.toFixed(2)} (${percentage.toFixed(1)}%)`;
+    }
+  }
+  return cost;
+}
+
+function renderProductBlueprintOptions(selectedId = "") {
+  setInputValue("contentProductBlueprintId", selectedId);
+  const blueprint = (state.records.blueprints || []).find((record) => record.id === selectedId);
+  const label = document.getElementById("contentProductBlueprintLabel");
+  if (label) label.textContent = blueprint
+    ? `${blueprint.name || blueprint.id} ($${Number(blueprint.estimatedUnitCost ?? 0).toFixed(2)})`
+    : "Not connected";
+  updateConnectedProductCostPreview();
+}
+
+function relationshipPickerMarkup(kind, records, selectedIds, itemComponents = []) {
   const selected = new Set(selectedIds);
+  const componentMap = new Map(itemComponents.map((component) => [component.itemId, component]));
   const ordered = [...records].sort((left, right) => {
     const selectedDifference = Number(selected.has(right.id)) - Number(selected.has(left.id));
     if (selectedDifference) return selectedDifference;
@@ -262,6 +297,9 @@ function relationshipPickerMarkup(kind, records, selectedIds) {
       const tagLabel = record.tags?.length
         ? ` | ${escapeHTML(record.tags.join(", "))}`
         : "";
+      const showBlueprintQuantity = kind === "items" && currentRecordType() === "blueprint";
+      const component = componentMap.get(record.id) || {};
+      const unitCost = Number(record.itemUnitCost ?? 0) || 0;
       return `
         <label
           class="content-relationship-row flex cursor-pointer items-start gap-2 rounded px-2 py-2 hover:bg-gray-800"
@@ -280,6 +318,13 @@ function relationshipPickerMarkup(kind, records, selectedIds) {
               ${escapeHTML(record.id)} | ${escapeHTML(record.type || "untyped")}${tagLabel}
             </span>
           </span>
+          ${showBlueprintQuantity ? `
+            <span class="ml-auto grid min-w-[10rem] grid-cols-2 gap-2 text-xs text-gray-300">
+              <input class="blueprint-item-quantity rounded bg-gray-800 px-2 py-1 text-white"
+                type="number" min="0" step="0.01" value="${escapeHTML(component.quantity ?? 1)}"
+                aria-label="Quantity used">
+              <span class="self-center">$${unitCost.toFixed(2)} each</span>
+            </span>` : ""}
         </label>
       `;
     }).join("")
@@ -302,18 +347,6 @@ function relationshipPickerMarkup(kind, records, selectedIds) {
   `;
 }
 
-function renderCampaignTagFilter() {
-  const select = document.getElementById("contentCampaignTagFilter");
-  if (!select) return;
-  const current = select.value;
-  const tags = knownContentTags();
-  select.innerHTML = [
-    "<option value=\"\">Choose a condition tag</option>",
-    ...tags.map((tag) => `<option value="${escapeHTML(tag)}">${escapeHTML(tag)}</option>`),
-  ].join("");
-  if (tags.includes(current)) select.value = current;
-}
-
 function renderRelationshipPickers() {
   const recordType = currentRecordType();
   const currentId = state.editingRecord?.id || "";
@@ -324,8 +357,8 @@ function renderRelationshipPickers() {
   };
 
   sections.item?.classList.toggle("hidden", recordType === "item");
-  sections.blueprint?.classList.toggle("hidden", !["plan", "campaign"].includes(recordType));
-  sections.plan?.classList.toggle("hidden", !["plan", "campaign"].includes(recordType));
+  sections.blueprint?.classList.toggle("hidden", recordType !== "plan");
+  sections.plan?.classList.toggle("hidden", recordType !== "plan");
 
   const pickerConfig = [
     ["items", "contentItemPicker", "contentLinkedItemIds", state.records.items || []],
@@ -338,16 +371,21 @@ function renderRelationshipPickers() {
     ],
   ];
 
+  const existingComponents = document.querySelector(".blueprint-item-quantity")
+    ? blueprintItemComponentsFromPicker()
+    : state.editingRecord?.linkedItemComponents || [];
   pickerConfig.forEach(([kind, containerId, inputId, records]) => {
     const container = document.getElementById(containerId);
     if (!container) return;
-    container.innerHTML = relationshipPickerMarkup(kind, records, hiddenRelationshipIds(inputId));
+    container.innerHTML = relationshipPickerMarkup(
+      kind,
+      records,
+      hiddenRelationshipIds(inputId),
+      kind === "items" ? existingComponents : [],
+    );
   });
+  updateBlueprintEstimatedCost();
 
-  const isCampaignPlan = recordType === "plan" &&
-    normalizedType(document.getElementById("contentType")?.value) === "campaign";
-  document.getElementById("contentCampaignPlanHelper")?.classList.toggle("hidden", !isCampaignPlan);
-  if (isCampaignPlan) renderCampaignTagFilter();
 }
 
 function syncRelationshipPicker(kind) {
@@ -362,53 +400,21 @@ function syncRelationshipPicker(kind) {
   setHiddenRelationshipIds(inputId, ids);
 }
 
-function addCampaignMatches() {
-  const tag = document.getElementById("contentCampaignTagFilter")?.value || "";
-  const status = document.getElementById("contentCampaignMatchStatus");
-  if (!tag) {
-    if (status) status.textContent = "Choose a condition tag first.";
-    return;
-  }
-
-  const { blueprints, items, plans } = selectCampaignMatches(state.records, tag);
-
-  setHiddenRelationshipIds("contentLinkedBlueprintIds", [
-    ...hiddenRelationshipIds("contentLinkedBlueprintIds"),
-    ...blueprints.map((record) => record.id),
-  ]);
-  setHiddenRelationshipIds("contentLinkedItemIds", [
-    ...hiddenRelationshipIds("contentLinkedItemIds"),
-    ...items.map((record) => record.id),
-  ]);
-  setHiddenRelationshipIds("contentLinkedPlanIds", [
-    ...hiddenRelationshipIds("contentLinkedPlanIds"),
-    ...plans.map((record) => record.id),
-  ]);
-  if (!selectedTagsFromControls().some((selectedTag) => normalizedType(selectedTag) === normalizedType(tag))) {
-    addTagRow(tag);
-  }
-
-  renderRelationshipPickers();
-  if (status) {
-    status.textContent = `Added ${blueprints.length} Blueprints, ${items.length} Items, ` +
-      `and ${plans.length} related treatment Plans for ${tag}.`;
-  }
-  state.isDirty = true;
-  renderBuilderSummaries();
-}
-
 function knownContentTags() {
+  const categoryId = document.getElementById("contentTagCategoryFilter")?.value || "";
   const allRecords = Object.values(state.records || {}).flatMap((records) => records || []);
   return uniqueValues([
-    ...(state.options.tagOptions || []).map((tag) => tag.name || tag.id),
-    ...allRecords.flatMap((record) => record.tags || []),
+    ...(state.options.tagOptions || [])
+      .filter((tag) => !categoryId || tag.categoryId === categoryId)
+      .map((tag) => tag.name || tag.id),
+    ...(!categoryId ? allRecords.flatMap((record) => record.tags || []) : []),
   ])
     .sort((left, right) => left.localeCompare(right));
 }
 
 function tagRowMarkup(value = "") {
-  const knownTags = knownContentTags();
   const selectedValue = String(value || "").trim();
+  const knownTags = uniqueValues([...knownContentTags(), selectedValue]).filter(Boolean);
   const selectedKey = selectedValue.toLowerCase();
   const isKnownTag = knownTags.some((tag) => tag.toLowerCase() === selectedKey);
   const customValue = selectedValue && !isKnownTag ? selectedValue : "";
@@ -530,6 +536,13 @@ function parseProductVariants(value) {
         priceOverride = "",
         stock = "",
         status = "active",
+        contentVariantId = "",
+        calendarBookingReference = "",
+        seatCapacity = "",
+        eventStartAt = "",
+        eventEndAt = "",
+        eventLocation = "",
+        instructor = "",
       ] = line.split("|").map((part) => part.trim());
       return {
         variantId,
@@ -540,6 +553,13 @@ function parseProductVariants(value) {
         priceOverride: priceOverride ? Number(priceOverride) : null,
         stock: stock ? Number(stock) : 0,
         status: status || "active",
+        contentVariantId,
+        calendarBookingReference,
+        seatCapacity: seatCapacity ? Number(seatCapacity) : null,
+        eventStartAt,
+        eventEndAt,
+        eventLocation,
+        instructor,
       };
     });
 }
@@ -554,6 +574,13 @@ function serializeProductVariants(variants = []) {
     variant.priceOverride ?? "",
     variant.stock ?? 0,
     variant.status || "active",
+    variant.contentVariantId || "",
+    variant.calendarBookingReference || "",
+    variant.seatCapacity ?? "",
+    variant.eventStartAt || "",
+    variant.eventEndAt || "",
+    variant.eventLocation || "",
+    variant.instructor || "",
   ].join(" | ")).join("\n");
 }
 
@@ -600,10 +627,20 @@ function fillCategorySelect(select, includeBlank = false) {
   if (options.some((record) => record.id === current)) select.value = current;
 }
 
-function categoryName(categoryId) {
-  const category = (state.options.categoryOptions || [])
-    .find((option) => option.id === categoryId);
-  return category ? categoryDisplayName(category) : categoryId || "-";
+function fillTagCategoryFilter() {
+  const select = document.getElementById("contentTagCategoryFilter");
+  if (!select) return;
+  const current = select.value;
+  const categories = [...(state.options.categoryOptions || [])]
+    .filter((record) => record.id)
+    .map((record) => ({ ...record, displayName: categoryDisplayName(record) }))
+    .sort((left, right) => left.displayName.localeCompare(right.displayName));
+  select.innerHTML = [
+    "<option value=\"\">All categories</option>",
+    ...categories.map((record) =>
+      `<option value="${escapeHTML(record.id)}">${escapeHTML(record.displayName)}</option>`),
+  ].join("");
+  if (categories.some((record) => record.id === current)) select.value = current;
 }
 
 function templateDefinitions(recordType, typeValue = "") {
@@ -613,6 +650,578 @@ function templateDefinitions(recordType, typeValue = "") {
     template.active !== false &&
     (!normalizedValue || normalizedType(template.appliesTo) === normalizedValue),
   );
+}
+
+function entityVariantId(name, index) {
+  const token = String(name || `Variant ${index + 1}`)
+    .trim()
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .toUpperCase();
+  return `VAR-${token || index + 1}`;
+}
+
+function entityVariantTemplateOptions(selectedId = "") {
+  const definitions = templateDefinitions(
+    currentRecordType(),
+    document.getElementById("contentType")?.value || "",
+  );
+  return ["<option value=\"\">Choose template</option>", ...definitions.map((definition) => `
+    <option value="${escapeHTML(definition.id)}"${definition.id === selectedId ? " selected" : ""}>
+      ${escapeHTML(`${definition.templateName || "Template"} / ${definition.name || definition.id}`)}
+    </option>
+  `)].join("");
+}
+
+function templateBehaviourDefaults(template) {
+  const defaults = template?.defaults || {};
+  return {
+    isShopProduct: defaults.isShopProduct === true,
+    requiresShipping: defaults.requiresShipping === true,
+    inventoryTracked: defaults.inventoryTracked === true,
+    soldByRecoveryTools: defaults.soldByRecoveryTools !== false,
+    unlocksAccess: defaults.unlocksAccess === true,
+    requiresCalendar: defaults.requiresCalendar === true,
+    requiresSessionTime: defaults.requiresSessionTime === true,
+    tracksSeats: defaults.tracksSeats === true,
+    requiresLocation: defaults.requiresLocation === true,
+    requiresInstructor: defaults.requiresInstructor === true,
+    issuesCertificate: defaults.issuesCertificate === true,
+  };
+}
+
+function variantBehaviourMarkup(template) {
+  const defaults = templateBehaviourDefaults(template);
+  const labels = [
+    ["inventoryTracked", "Track entity inventory"],
+  ];
+  return `
+    <section class="mt-3 rounded border border-gray-700 bg-gray-950/50 p-3">
+      <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-300">Item behaviours</h4>
+      <div class="mt-2 flex flex-wrap gap-2">
+        ${labels.map(([key, label]) => `
+          <span class="rounded border px-2 py-1 text-xs ${defaults[key]
+    ? "border-[#407471] bg-[#153b38] text-[#bce7e4]"
+    : "border-gray-700 text-gray-500"}">${escapeHTML(label)}: ${defaults[key] ? "Yes" : "No"}</span>
+        `).join("")}
+      </div>
+    </section>`;
+}
+
+function variantTemplateFieldsMarkup(template, recordType, variant = {}) {
+  if (!template) return "<p class=\"mt-3 text-xs text-gray-400\">Choose a template to display this variant's fields.</p>";
+  const defaults = template.defaults || {};
+  const common = recordType === "plan" ? `
+    <div class="mt-3 grid gap-3 md:grid-cols-2">
+      <label class="block text-xs text-gray-300">Size / variant label
+        <input class="content-entity-variant-size-label mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+          value="${escapeHTML(variant.sizeLabel ?? defaults.sizeLabel ?? "")}">
+      </label>
+    </div>` : recordType === "blueprint" ? `
+    <label class="mt-3 block text-xs text-gray-300">Intended output
+      <input class="content-entity-variant-intended-output mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+        value="${escapeHTML(variant.intendedOutput || "")}">
+    </label>` : "";
+  return `${common}${renderTemplateCustomFields(template)}`;
+}
+
+function variantStockMarkup(variant, defaults) {
+  if (currentRecordType() !== "item" || defaults.inventoryTracked !== true) return "";
+  return `
+    <section class="mt-3 rounded border border-gray-700 bg-gray-950/50 p-3">
+      <h5 class="font-medium text-white">Item stock</h5>
+      <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <label class="block text-xs text-gray-300">Quantity on hand
+          <input class="variant-stock-qty mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(variant.stockQty ?? "")}">
+        </label>
+        <label class="block text-xs text-gray-300">Reorder level
+          <input class="variant-reorder-level mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(variant.reorderLevel ?? "")}">
+        </label>
+        <label class="block text-xs text-gray-300">Stock unit
+          <input class="variant-inventory-unit mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(variant.inventoryUnit || "")}" placeholder="boxes, pieces, rolls">
+        </label>
+        <label class="block text-xs text-gray-300">Storage location
+          <input class="variant-inventory-location mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(variant.inventoryLocation || "")}">
+        </label>
+        <label class="block text-xs text-gray-300">Approximate unit cost (AUD)
+          <input class="variant-unit-cost mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="0.01" value="${escapeHTML(variant.unitCost ?? "")}">
+        </label>
+        <label class="block text-xs text-gray-300">Cost reference
+          <input class="variant-cost-reference mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(variant.costReference || "")}">
+        </label>
+      </div>
+    </section>`;
+}
+
+function renderVariantStepRows(variants) {
+  const definitions = templateDefinitions(currentRecordType(), document.getElementById("contentType")?.value);
+  const connections = document.getElementById("contentVariantConnectionRows");
+  const review = document.getElementById("contentVariantReviewRows");
+  const actions = document.getElementById("contentVariantActionRows");
+  if (connections) connections.innerHTML = variants.map((variant, index) => {
+    const template = definitions.find((candidate) => candidate.id === variant.templateVariantId);
+    const defaults = templateBehaviourDefaults(template);
+    return `<details class="content-variant-connection-row rounded border border-gray-700 bg-gray-900/60" ${index === 0 ? "open" : ""} data-entity-variant-id="${escapeHTML(variant.entityVariantId)}">
+      <summary class="cursor-pointer bg-gray-800/70 p-3 text-sm text-white">${escapeHTML(variant.name || `Variant ${index + 1}`)} · ${escapeHTML(template ? templateOptionLabel(template) : "No template")} · ${escapeHTML(variant.owner || "Recovery Tools")}</summary>
+      <div class="p-3">
+      <div class="grid gap-3 md:grid-cols-2">
+        <label class="inline-flex items-center gap-2">
+          <input class="variant-add-to-shop accent-[#407471]" type="checkbox" ${variant.shopEnabled === true ? "checked" : ""}>
+          Add this variant to the Shop Product
+        </label>
+        <label class="inline-flex items-center gap-2">
+          <input class="variant-add-to-library accent-[#407471]" type="checkbox" ${variant.libraryVisible === true ? "checked" : ""}>
+          Add this variant to the Library
+        </label>
+      </div>
+      ${currentRecordType() === "item" ? variantBehaviourMarkup(template) : ""}
+      ${variantStockMarkup(variant, defaults)}
+      </div>
+    </details>`;
+  }).join("");
+  if (review) review.innerHTML = variants.map((variant, index) => {
+    const template = definitions.find((candidate) => candidate.id === variant.templateVariantId);
+    const entityDefaults = variant.behaviourDefaults || templateBehaviourDefaults(template);
+    const enabled = entityDefaults.inventoryTracked === true ? "Track entity inventory" : "";
+    return `<details class="rounded border border-gray-700 bg-gray-900/60" ${index === 0 ? "open" : ""}>
+      <summary class="cursor-pointer bg-gray-800/70 p-3 text-sm text-white">${escapeHTML(variant.name || `Variant ${index + 1}`)} · ${escapeHTML(template ? templateOptionLabel(template) : "No template")} · ${escapeHTML(variant.owner || "Recovery Tools")}</summary>
+      <div class="p-3">
+      <dl class="mt-2 grid gap-2 text-xs text-gray-300 sm:grid-cols-2">
+        <div><dt class="text-gray-500">Template</dt><dd>${escapeHTML(templateOptionLabel(template))}</dd></div>
+        <div><dt class="text-gray-500">Status</dt><dd>${escapeHTML(variant.status || "draft")}</dd></div>
+        ${currentRecordType() === "item" ? `<div class="sm:col-span-2"><dt class="text-gray-500">Enabled behaviours</dt><dd>${escapeHTML(enabled || "Standard Item")}</dd></div>` : ""}
+      </dl>
+      </div>
+    </details>`;
+  }).join("");
+  if (actions) actions.innerHTML = variants.map((variant, index) => `
+    <details class="content-variant-action-row rounded border border-gray-700 bg-gray-900/60" ${index === 0 ? "open" : ""} data-entity-variant-id="${escapeHTML(variant.entityVariantId)}">
+      <summary class="cursor-pointer bg-gray-800/70 p-3 text-sm text-white">${escapeHTML(variant.name || `Variant ${index + 1}`)} · ${escapeHTML(variant.owner || "Recovery Tools")}</summary>
+      <div class="p-3">
+      <div class="mt-3 grid gap-3 md:grid-cols-3">
+        <label class="block text-xs text-gray-300">Status
+          <select class="content-entity-variant-status mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">${compactSelectOptions(["draft", "review", "active", "paused", "archived"], variant.status || "draft")}</select>
+        </label>
+        <label class="block text-xs text-gray-300">Set active at
+          <input class="content-entity-variant-active-at mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="datetime-local" value="${escapeHTML(variant.scheduledActiveAt || "")}">
+        </label>
+        <label class="block text-xs text-gray-300">Pause at
+          <input class="content-entity-variant-pause-at mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="datetime-local" value="${escapeHTML(variant.scheduledPauseAt || "")}">
+        </label>
+      </div>
+      </div>
+    </details>`).join("");
+}
+
+function compactSelectOptions(values, selectedValue) {
+  return values.map((value) => {
+    const selected = value === selectedValue ? " selected" : "";
+    return `<option value="${value}"${selected}>${value}</option>`;
+  }).join("");
+}
+
+function variantReferenceRowMarkup(value = "") {
+  return `
+    <div class="content-entity-variant-reference-row flex gap-2">
+      <input class="content-entity-variant-reference min-w-0 flex-1 rounded bg-gray-800 px-3 py-2 text-white"
+        value="${escapeHTML(value)}" placeholder="Internal or source reference">
+      <button type="button" class="remove-content-entity-variant-reference rounded border border-gray-600 px-3 py-2 text-xs text-gray-300">Remove</button>
+    </div>`;
+}
+
+function blueprintRecipeItemOptions(selectedId = "") {
+  return ["<option value=\"\">Choose Item</option>", ...(state.records.items || []).map((item) => {
+    const selected = item.id === selectedId ? " selected" : "";
+    const cost = Number(item.itemUnitCost ?? 0).toFixed(2);
+    return `<option value="${escapeHTML(item.id)}"${selected}>` +
+      `${escapeHTML(item.name || item.id)} ($${cost})</option>`;
+  })].join("");
+}
+
+function blueprintVariantRecipeMarkup(variant) {
+  if (currentRecordType() !== "blueprint") return "";
+  const components = Array.isArray(variant.linkedItemComponents) ? variant.linkedItemComponents : [];
+  const rows = components.map((component) => `
+    <div class="blueprint-variant-recipe-row grid gap-2 md:grid-cols-[1fr_8rem_auto]">
+      <select class="blueprint-variant-recipe-item rounded bg-gray-800 px-2 py-2 text-white">
+        ${blueprintRecipeItemOptions(component.itemId)}
+      </select>
+      <input class="blueprint-variant-recipe-quantity rounded bg-gray-800 px-2 py-2 text-white"
+        type="number" min="0" step="0.01" value="${escapeHTML(component.quantity ?? 1)}" aria-label="Quantity">
+      <button type="button" class="remove-blueprint-variant-recipe-row rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
+    </div>`).join("");
+  const total = components.reduce((sum, component) => sum + Number(component.estimatedCost ?? 0), 0);
+  return `
+    <details class="mt-3 rounded border border-gray-700 p-3">
+      <summary class="cursor-pointer font-semibold text-white">Variant-specific Item recipe</summary>
+      <div class="blueprint-variant-recipe-rows mt-3 space-y-2">${rows || "<p class=\"text-xs text-gray-400\">No variant-specific Items yet.</p>"}</div>
+      <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <button type="button" class="add-blueprint-variant-recipe-row rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add Item</button>
+        <span class="blueprint-variant-recipe-total text-sm text-white">Estimated cost: $${total.toFixed(2)}</span>
+      </div>
+    </details>`;
+}
+
+function renderEntityVariantRows(variants = []) {
+  const container = document.getElementById("contentEntityVariantRows");
+  if (!container) return;
+  const normalizedVariants = variants.length ? variants : [{
+    name: "Primary",
+    templateVariantId: document.getElementById("contentTemplate")?.value || "",
+    status: "draft",
+  }];
+  const countText = document.getElementById("contentVariantCountText");
+  if (countText) {
+    countText.textContent = `${normalizedVariants.length} variant${normalizedVariants.length === 1 ? "" : "s"} in this record`;
+  }
+  container.innerHTML = normalizedVariants.map((variant, index) => {
+    const templateVariantId = variant.templateVariantId || variant.variantId || variant.templateId || "";
+    const variantId = variant.entityVariantId || entityVariantId(variant.name || `Variant ${index + 1}`, index);
+    const template = templateDefinitions(currentRecordType(), document.getElementById("contentType")?.value)
+      .find((candidate) => candidate.id === templateVariantId);
+    const expanded = variant.expanded === true || (index === 0 && variant.expanded !== false);
+    return `
+    <details class="content-entity-variant-row overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80 shadow-md"
+      ${expanded ? "open" : ""}
+      data-entity-variant-id="${escapeHTML(variantId)}"
+      data-created-by-uid="${escapeHTML(variant.createdByUid || "")}"
+      data-created-by-email="${escapeHTML(variant.createdByEmail || "")}"
+      data-approved-by-uid="${escapeHTML(variant.approvedByUid || "")}"
+      data-approved-by-email="${escapeHTML(variant.approvedByEmail || "")}">
+      <summary class="cursor-pointer list-none bg-gray-800/90 p-4 text-sm marker:hidden hover:bg-gray-800">
+        <div class="grid items-center gap-3 sm:grid-cols-[auto_auto_1fr_1fr_1fr]">
+          <span class="content-entity-variant-chevron text-lg font-semibold text-[#9edbd7]">${expanded ? "−" : "+"}</span>
+          <span class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#407471] bg-[#153b38] font-semibold text-[#bce7e4]">${index + 1}</span>
+          <span><span class="block text-xs font-medium uppercase tracking-wide text-[#9edbd7]">${index === 0 ? "Primary variant" : `Additional variant ${index + 1}`}</span><strong class="variant-summary-name mt-0.5 block text-base text-white">${escapeHTML(variant.name || `Variant ${index + 1}`)}</strong></span>
+          <span><span class="block text-xs text-gray-500">Template</span><span class="text-gray-200">${escapeHTML(template ? templateOptionLabel(template) : "Not selected")}</span></span>
+          <span><span class="block text-xs text-gray-500">Owner</span><span class="variant-summary-owner text-gray-200">${escapeHTML(variant.owner || state.editingRecord?.owner || "Recovery Tools")}</span></span>
+        </div>
+      </summary>
+      <div class="border-t border-gray-700 bg-gray-950/30 p-4">
+      <div class="mb-3 flex justify-end">
+        ${index === 0 ? "" : `<button type="button" class="remove-content-entity-variant rounded border border-red-700 px-3 py-1 text-xs text-red-200">Remove variant</button>`}
+      </div>
+      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <label class="block text-xs text-gray-300">
+          Variant name
+          <input class="content-entity-variant-name mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+            value="${escapeHTML(variant.name || "")}" placeholder="30 minutes">
+        </label>
+        <label class="block text-xs text-gray-300">
+          Template / template variant
+          <select class="content-entity-variant-template mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+            ${entityVariantTemplateOptions(templateVariantId)}
+          </select>
+        </label>
+      </div>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <button type="button" class="edit-entity-variant-template rounded border border-gray-500 px-3 py-1 text-xs text-white" ${template ? "" : "disabled"}>Edit selected template</button>
+        <button type="button" class="create-entity-variant-template rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Create new template</button>
+      </div>
+      <div class="entity-variant-template-fields">${variantTemplateFieldsMarkup(template, currentRecordType(), variant)}</div>
+      <section class="mt-4 text-xs text-gray-300">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span>References</span>
+          <button type="button" class="add-content-entity-variant-reference rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add another</button>
+        </div>
+        <div class="content-entity-variant-reference-rows mt-2 space-y-2">
+          ${(Array.isArray(variant.references) && variant.references.length
+    ? variant.references
+    : [variant.reference || ""]).map((reference) => variantReferenceRowMarkup(reference)).join("")}
+        </div>
+      </section>
+      <div class="mt-4 grid gap-3 md:grid-cols-2">
+        <label class="block text-xs text-gray-300">
+          Owner
+          <input class="content-entity-variant-owner mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+            value="${escapeHTML(variant.owner || state.editingRecord?.owner || "Recovery Tools")}">
+        </label>
+        <label class="block text-xs text-gray-300">
+          Owner type
+          <select class="content-entity-variant-owner-type mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+            ${compactSelectOptions(
+    ["admin", "therapist", "affiliate"],
+    variant.ownerType || state.editingRecord?.ownerType || "admin",
+  )}
+          </select>
+        </label>
+      </div>
+      ${blueprintVariantRecipeMarkup(variant)}
+      <div class="mt-4 border-t border-gray-700 pt-3 text-xs text-gray-400">
+        <p>Creator: ${escapeHTML(variant.createdByEmail || "Set when saved")}</p>
+        <p class="mt-1">Approved by: ${escapeHTML(variant.approvedByEmail || "Not approved")}</p>
+      </div>
+      </div>
+    </details>
+  `; }).join("");
+  normalizedVariants.forEach((variant, index) => {
+    restoreTemplateFieldValuesInRoot(
+      container.querySelectorAll(".content-entity-variant-row")[index],
+      variant.templateFieldValues || {},
+    );
+  });
+  renderVariantStepRows(normalizedVariants.map((variant, index) => ({
+    ...variant,
+    entityVariantId: variant.entityVariantId || entityVariantId(variant.name || `Variant ${index + 1}`, index),
+  })));
+}
+
+function entityVariantsFromBuilder() {
+  return [...document.querySelectorAll(".content-entity-variant-row")].map((row, index) => {
+    const name = row.querySelector(".content-entity-variant-name")?.value.trim() || `Variant ${index + 1}`;
+    const variantId = row.dataset.entityVariantId || entityVariantId(name, index);
+    const actionRow = document.querySelector(`.content-variant-action-row[data-entity-variant-id="${CSS.escape(variantId)}"]`);
+    const connectionRow = document.querySelector(`.content-variant-connection-row[data-entity-variant-id="${CSS.escape(variantId)}"]`);
+    const templateVariantId = row.querySelector(".content-entity-variant-template")?.value || "";
+    const definition = templateDefinitions(currentRecordType(), document.getElementById("contentType")?.value)
+      .find((candidate) => candidate.id === templateVariantId);
+    const recipeComponents = [...row.querySelectorAll(".blueprint-variant-recipe-row")].map((recipeRow) => {
+      const itemId = recipeRow.querySelector(".blueprint-variant-recipe-item")?.value || "";
+      const item = (state.records.items || []).find((record) => record.id === itemId);
+      const quantity = optionalNumberFromElement(
+        recipeRow.querySelector(".blueprint-variant-recipe-quantity"),
+      ) ?? 0;
+      const unitCost = Number(item?.itemUnitCost ?? 0) || 0;
+      return { itemId, quantity, unitCost, estimatedCost: quantity * unitCost };
+    }).filter((component) => component.itemId && component.quantity > 0);
+    const references = uniqueValues([...row.querySelectorAll(".content-entity-variant-reference")]
+      .map((input) => input.value));
+    return {
+      entityVariantId: variantId,
+      name,
+      templateId: definition?.templateId || "",
+      templateVariantId,
+      durationMinutes: null,
+      sizeLabel: row.querySelector(".content-entity-variant-size-label")?.value.trim() || "",
+      intendedOutput: row.querySelector(".content-entity-variant-intended-output")?.value.trim() || "",
+      reference: references[0] || "",
+      references,
+      owner: row.querySelector(".content-entity-variant-owner")?.value.trim() || "",
+      ownerType: row.querySelector(".content-entity-variant-owner-type")?.value || "admin",
+      templateFieldValues: templateFieldValuesFromBuilder({ root: row }),
+      behaviourDefaults: templateBehaviourDefaults(definition),
+      shopEnabled: connectionRow?.querySelector(".variant-add-to-shop")?.checked === true,
+      libraryVisible: connectionRow?.querySelector(".variant-add-to-library")?.checked === true,
+      linkedItemComponents: recipeComponents,
+      estimatedUnitCost: recipeComponents.reduce((sum, component) => sum + component.estimatedCost, 0),
+      stockQty: optionalNumberFromElement(connectionRow?.querySelector(".variant-stock-qty")),
+      reorderLevel: optionalNumberFromElement(connectionRow?.querySelector(".variant-reorder-level")),
+      inventoryUnit: connectionRow?.querySelector(".variant-inventory-unit")?.value.trim() || "",
+      inventoryLocation: connectionRow?.querySelector(".variant-inventory-location")?.value.trim() || "",
+      unitCost: optionalNumberFromElement(connectionRow?.querySelector(".variant-unit-cost")),
+      costReference: connectionRow?.querySelector(".variant-cost-reference")?.value.trim() || "",
+      status: actionRow?.querySelector(".content-entity-variant-status")?.value || "draft",
+      scheduledActiveAt: actionRow?.querySelector(".content-entity-variant-active-at")?.value || "",
+      scheduledPauseAt: actionRow?.querySelector(".content-entity-variant-pause-at")?.value || "",
+      createdByUid: row.dataset.createdByUid || "",
+      createdByEmail: row.dataset.createdByEmail || "",
+      approvedByUid: row.dataset.approvedByUid || "",
+      approvedByEmail: row.dataset.approvedByEmail || "",
+      expanded: row.open === true,
+      sortOrder: index + 1,
+    };
+  });
+}
+
+function optionalNumberFromElement(input) {
+  if (!input || input.value === "") return null;
+  const amount = Number(input.value);
+  return Number.isFinite(amount) ? amount : null;
+}
+
+function addEntityVariantRow() {
+  const existingVariants = entityVariantsFromBuilder().map((variant) => ({
+    ...variant,
+    expanded: false,
+  }));
+  renderEntityVariantRows([
+    ...existingVariants,
+    { name: "", templateVariantId: "", durationMinutes: null, expanded: true },
+  ]);
+}
+
+function updateBlueprintVariantRecipeTotals() {
+  document.querySelectorAll(".content-entity-variant-row").forEach((variantRow) => {
+    let total = 0;
+    variantRow.querySelectorAll(".blueprint-variant-recipe-row").forEach((recipeRow) => {
+      const itemId = recipeRow.querySelector(".blueprint-variant-recipe-item")?.value || "";
+      const item = (state.records.items || []).find((record) => record.id === itemId);
+      const quantity = optionalNumberFromElement(
+        recipeRow.querySelector(".blueprint-variant-recipe-quantity"),
+      ) ?? 0;
+      total += quantity * (Number(item?.itemUnitCost ?? 0) || 0);
+    });
+    const output = variantRow.querySelector(".blueprint-variant-recipe-total");
+    if (output) output.textContent = `Estimated cost: $${total.toFixed(2)}`;
+  });
+}
+
+function generatedProductVariantId(entityVariantId) {
+  const productToken = document.getElementById("contentProductId")?.value ||
+    document.getElementById("contentId")?.value ||
+    document.getElementById("contentName")?.value || "PRODUCT";
+  const cleanToken = (value) => String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `PV-${cleanToken(productToken)}-${cleanToken(entityVariantId)}`;
+}
+
+function populateProductVariantsFromEntity() {
+  const input = document.getElementById("contentProductVariants");
+  if (!input) return;
+  const current = parseProductVariants(input.value);
+  const entityVariants = entityVariantsFromBuilder();
+  const entityVariantIds = new Set(entityVariants.map((variant) => variant.entityVariantId));
+  const selected = entityVariants.filter((variant) => variant.shopEnabled === true);
+  const selectedIds = new Set(selected.map((variant) => variant.entityVariantId));
+  const retained = current.filter((variant) =>
+    !entityVariantIds.has(variant.contentVariantId) || selectedIds.has(variant.contentVariantId));
+  const usedVariantIds = new Set();
+
+  selected.forEach((entityVariant) => {
+    let productVariant = retained.find((variant) => variant.contentVariantId === entityVariant.entityVariantId);
+    if (!productVariant) {
+      productVariant = retained.find((variant) =>
+        !usedVariantIds.has(variant.variantId) &&
+        normalizedText(variant.name) === normalizedText(entityVariant.name));
+    }
+    if (productVariant) {
+      productVariant.contentVariantId = entityVariant.entityVariantId;
+      usedVariantIds.add(productVariant.variantId);
+      return;
+    }
+    const generated = {
+      variantId: generatedProductVariantId(entityVariant.entityVariantId),
+      name: entityVariant.name,
+      colour: "",
+      size: entityVariant.sizeLabel || "",
+      sku: "",
+      priceOverride: null,
+      stock: entityVariant.stockQty ?? 0,
+      status: "draft",
+      contentVariantId: entityVariant.entityVariantId,
+    };
+    retained.push(generated);
+    usedVariantIds.add(generated.variantId);
+  });
+
+  input.value = serializeProductVariants(retained);
+  renderSelectedProductVariantRows(retained, selected);
+  renderProductVariantContentLinkRows(productVariantContentLinksFromRows(true));
+  updateProductPhysicalFields();
+}
+
+function renderSelectedProductVariantRows(
+  productVariants = currentProductVariants(),
+  selectedEntityVariants = entityVariantsFromBuilder().filter((variant) => variant.shopEnabled === true),
+) {
+  const container = document.getElementById("contentProductVariantRows");
+  if (!container) return;
+  const summary = document.getElementById("contentProductVariantSummary");
+  if (!selectedEntityVariants.length) {
+    if (summary) summary.textContent = "No variants selected for Shop.";
+    container.innerHTML = "<p class=\"text-sm text-gray-400\">No variants are selected for Shop. Close this drawer and select at least one variant on the Connections page.</p>";
+    return;
+  }
+  if (summary) {
+    summary.textContent = `${selectedEntityVariants.length} selected variant${selectedEntityVariants.length === 1 ? "" : "s"}`;
+  }
+  container.innerHTML = selectedEntityVariants.map((entityVariant, index) => {
+    const productVariant = productVariants.find((variant) =>
+      variant.contentVariantId === entityVariant.entityVariantId) || {};
+    return `
+      <details class="content-product-variant-row overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80" ${index === 0 ? "open" : ""} data-content-variant-id="${escapeHTML(entityVariant.entityVariantId)}">
+        <summary class="cursor-pointer bg-gray-800/90 p-3 hover:bg-gray-800">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <span class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#407471] bg-[#153b38] font-semibold text-[#bce7e4]">${index + 1}</span>
+              <div>
+                <p class="font-semibold text-white">${escapeHTML(productVariant.name || entityVariant.name || entityVariant.entityVariantId)}</p>
+                <p class="text-xs text-gray-400">${index === 0 ? "Primary Product variant" : `Additional Product variant ${index + 1}`}</p>
+              </div>
+            </div>
+            <span class="rounded bg-gray-900 px-2 py-1 text-xs text-gray-300">${escapeHTML(productVariant.status || "draft")}</span>
+          </div>
+        </summary>
+        <div class="grid gap-3 border-t border-gray-700 bg-gray-950/30 p-4 md:grid-cols-2 xl:grid-cols-4">
+          <label class="block text-sm">Product variant ID
+            <input class="product-variant-id mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.variantId || "")}">
+          </label>
+          <label class="block text-sm">Selling name
+            <input class="product-variant-name mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.name || entityVariant.name || "")}">
+          </label>
+          <label class="block text-sm">SKU
+            <input class="product-variant-sku mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.sku || "")}" placeholder="Auto-filled if blank">
+          </label>
+          <label class="block text-sm">Status
+            <select class="product-variant-status mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+              ${compactSelectOptions(["draft", "active", "paused", "archived"], productVariant.status || "draft")}
+            </select>
+          </label>
+          <label class="block text-sm">Colour
+            <input class="product-variant-colour mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.colour || "")}">
+          </label>
+          <label class="block text-sm">Size / weight
+            <input class="product-variant-size mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.size || entityVariant.sizeLabel || "")}">
+          </label>
+          <label class="block text-sm">Price override
+            <input class="product-variant-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="0.01" value="${escapeHTML(productVariant.priceOverride ?? "")}">
+          </label>
+          <label class="product-variant-stock-field block text-sm">Product stock
+            <input class="product-variant-stock mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.stock ?? entityVariant.stockQty ?? 0)}">
+            <span class="mt-1 block text-xs text-gray-400">Sellable stock for this variant.</span>
+          </label>
+          <label class="product-variant-calendar-field hidden block text-sm">Calendar / booking reference
+            <input class="product-variant-calendar-reference mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.calendarBookingReference || "")}" placeholder="Calendar ID, booking link or reference">
+          </label>
+          <label class="product-variant-seats-field hidden block text-sm">Ticket / seat capacity
+            <input class="product-variant-seat-capacity mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.seatCapacity ?? "")}">
+          </label>
+          <label class="product-variant-session-field hidden block text-sm">Session starts
+            <input class="product-variant-event-start mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="datetime-local" value="${escapeHTML(productVariant.eventStartAt || "")}">
+          </label>
+          <label class="product-variant-session-field hidden block text-sm">Session ends
+            <input class="product-variant-event-end mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="datetime-local" value="${escapeHTML(productVariant.eventEndAt || "")}">
+          </label>
+          <label class="product-variant-location-field hidden block text-sm md:col-span-2">Location
+            <input class="product-variant-event-location mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.eventLocation || "")}" placeholder="Venue, address or online location">
+          </label>
+        </div>
+      </details>`;
+  }).join("");
+}
+
+function syncSelectedProductVariantRows() {
+  const input = document.getElementById("contentProductVariants");
+  if (!input) return;
+  const current = parseProductVariants(input.value);
+  const byContentVariantId = new Map(current.map((variant) => [variant.contentVariantId, variant]));
+  document.querySelectorAll(".content-product-variant-row").forEach((row) => {
+    const contentVariantId = row.dataset.contentVariantId || "";
+    const existing = byContentVariantId.get(contentVariantId) || {};
+    byContentVariantId.set(contentVariantId, {
+      ...existing,
+      variantId: row.querySelector(".product-variant-id")?.value.trim() ||
+        generatedProductVariantId(contentVariantId),
+      name: row.querySelector(".product-variant-name")?.value.trim() || "Variant",
+      colour: row.querySelector(".product-variant-colour")?.value.trim() || "",
+      size: row.querySelector(".product-variant-size")?.value.trim() || "",
+      sku: row.querySelector(".product-variant-sku")?.value.trim() || "",
+      priceOverride: optionalNumberFromElement(row.querySelector(".product-variant-price")),
+      stock: optionalNumberFromElement(row.querySelector(".product-variant-stock")) ?? 0,
+      status: row.querySelector(".product-variant-status")?.value || "draft",
+      contentVariantId,
+      calendarBookingReference: row.querySelector(".product-variant-calendar-reference")?.value.trim() || "",
+      seatCapacity: optionalNumberFromElement(row.querySelector(".product-variant-seat-capacity")),
+      eventStartAt: row.querySelector(".product-variant-event-start")?.value || "",
+      eventEndAt: row.querySelector(".product-variant-event-end")?.value || "",
+      eventLocation: row.querySelector(".product-variant-event-location")?.value.trim() || "",
+      instructor: existing.instructor || "",
+    });
+  });
+  input.value = serializeProductVariants([...byContentVariantId.values()]);
 }
 
 function templateOptionLabel(template) {
@@ -640,7 +1249,12 @@ function selectedAssetTemplateFields() {
 
 function assetMatchesTemplateField(asset, field) {
   const fieldName = normalizedType(field?.name);
-  const assetType = normalizedType(asset?.type);
+  const fieldType = normalizedType(field?.fieldType);
+  const assetType = normalizedType(asset?.assetType || asset?.type);
+  if (fieldType === "image asset") return assetType === "image";
+  if (fieldType === "video asset") return assetType === "video";
+  if (fieldType === "pdf asset") return assetType === "pdf";
+  if (fieldType === "canva design asset") return assetType === "canva design";
   if (fieldName.includes("image")) return assetType === "image";
   if (fieldName.includes("video")) return assetType === "video";
   if (fieldName.includes("document") || fieldName.includes("pdf")) {
@@ -689,8 +1303,16 @@ function currentRecordType() {
 }
 
 function isShopProductSelected() {
-  return document.getElementById("contentIsShopProduct")?.checked === true ||
-    document.getElementById("contentCreatesProduct")?.checked === true;
+  if ([...document.querySelectorAll(".variant-add-to-shop")].some((input) => input.checked)) return true;
+  if (currentRecordType() === "item") {
+    const hasShopVariant = [...document.querySelectorAll(".content-entity-variant-template")].some((select) => {
+      const template = templateDefinitions("item", document.getElementById("contentType")?.value)
+        .find((candidate) => candidate.id === select.value);
+      return template?.defaults?.isShopProduct === true;
+    });
+    if (hasShopVariant) return true;
+  }
+  return document.getElementById("contentIsShopProduct")?.checked === true;
 }
 
 function editingCollectionKey() {
@@ -714,7 +1336,6 @@ function panelAllowedForRecordType(panel) {
   const recordType = currentRecordType();
   if (!fieldGroupAllowed(panel)) return false;
   if (panel.id === "itemSpecificFields") return recordType === "item";
-  if (panel.id === "itemProductRelationshipFields") return isShopProductSelected();
   if (panel.id === "advancedContentFields") return recordType !== "item";
   if (panel.id === "contentRelationshipReview") return true;
   if (panel.id === "contentReviewPublishPanel") return true;
@@ -725,6 +1346,9 @@ function panelAllowedForRecordType(panel) {
 function showBuilderStep(step = state.currentStep) {
   const nextStep = Math.max(1, Math.min(Number(step || 1), 5));
   state.currentStep = nextStep;
+  if (nextStep >= 3 && document.querySelector(".content-entity-variant-row")) {
+    renderVariantStepRows(entityVariantsFromBuilder());
+  }
 
   document.querySelectorAll(".builder-step-btn").forEach((button) => {
     const active = Number(button.dataset.builderStep || 1) === nextStep;
@@ -747,17 +1371,17 @@ function setupBuilderStepControls() {
   document.querySelectorAll(".builder-step-btn").forEach((button) => {
     if (button.dataset.bound === "true") return;
     button.dataset.bound = "true";
-    button.addEventListener("click", () => {
-      showBuilderStep(Number(button.dataset.builderStep || 1));
+    button.addEventListener("click", async () => {
+      await navigateBuilderStep(Number(button.dataset.builderStep || 1));
     });
   });
 
-  document.getElementById("builderBackStepBtn")?.addEventListener("click", () => {
-    showBuilderStep(state.currentStep - 1);
+  document.getElementById("builderBackStepBtn")?.addEventListener("click", async () => {
+    await navigateBuilderStep(state.currentStep - 1);
   });
 
-  document.getElementById("builderNextStepBtn")?.addEventListener("click", () => {
-    showBuilderStep(state.currentStep + 1);
+  document.getElementById("builderNextStepBtn")?.addEventListener("click", async () => {
+    await navigateBuilderStep(state.currentStep + 1);
   });
 
   document.getElementById("contentBuilderForm")?.addEventListener("input", () => {
@@ -770,6 +1394,15 @@ function setupBuilderStepControls() {
     event.preventDefault();
     event.returnValue = "";
   });
+}
+
+async function navigateBuilderStep(targetStep) {
+  const nextStep = Math.max(1, Math.min(Number(targetStep || 1), 5));
+  if (state.currentStep === 2 && nextStep > 2 && state.isDirty) {
+    const saved = await saveVariantsFromBuild();
+    if (!saved) return;
+  }
+  showBuilderStep(nextStep);
 }
 
 function templateInput(id) {
@@ -787,6 +1420,9 @@ function templateFieldKey(value) {
 
 function normalizedTemplateFieldType(value) {
   const fieldType = normalizedType(value).replace(/[_-]+/g, " ");
+  if (["image asset", "video asset", "pdf asset", "canva design asset", "asset"].includes(fieldType)) {
+    return "linked";
+  }
   if (fieldType.includes("linked") || fieldType.includes("reference")) return "linked";
   if (["textarea", "long text", "rich text", "instructions"].includes(fieldType)) return "textarea";
   if (["number", "numeric", "integer", "decimal"].includes(fieldType)) return "number";
@@ -811,6 +1447,11 @@ function canonicalTemplateFieldType(value) {
     "linked item list": "Linked Item List",
     "linked blueprint list": "Linked Blueprint List",
     "linked plan list": "Linked Plan List",
+    "image asset": "Image Asset",
+    "video asset": "Video Asset",
+    "pdf asset": "PDF Asset",
+    "canva design asset": "Canva Design Asset",
+    asset: "Asset",
     select: "Dropdown",
     dropdown: "Dropdown",
   };
@@ -835,7 +1476,16 @@ function linkedTemplateFieldRecords(field) {
   if (linkedTable === "blueprints") return state.records.blueprints || [];
   if (linkedTable === "plans") return state.records.plans || [];
   if (["asset", "assets", "item asset", "item assets"].includes(linkedTable)) {
-    return state.records.assets || [];
+    const requestedType = {
+      "image asset": "image",
+      "video asset": "video",
+      "pdf asset": "pdf",
+      "canva design asset": "canva design",
+    }[normalizedType(field?.fieldType)];
+    return (state.records.assets || []).filter((asset) => {
+      if (!requestedType) return true;
+      return normalizedType(asset.assetType || asset.type) === requestedType;
+    });
   }
   if (["tag", "tags"].includes(linkedTable)) return state.options.tagOptions || [];
   if (["category", "categories"].includes(linkedTable)) return state.options.categoryOptions || [];
@@ -900,6 +1550,7 @@ function renderRepeatableLinkedTemplateField(field, key, name, required) {
       data-min-entries="${minimum}"
       data-max-entries="${maximum > 0 ? maximum : ""}"
       data-allow-unlimited="${field.allowUnlimited === true ? "true" : "false"}"
+      data-asset-type="${escapeHTML(assetTypeForTemplateField(field))}"
     >
       <div class="content-template-linked-rows space-y-2">
         ${Array.from({ length: initialRows }, () =>
@@ -914,9 +1565,23 @@ function renderRepeatableLinkedTemplateField(field, key, name, required) {
         >
           Add another
         </button>
+        ${assetTypeForTemplateField(field) ? `
+          <button type="button" class="create-content-template-asset rounded border border-[#407471]
+            px-3 py-1 text-xs text-[#9edbd7] hover:bg-[#153b38]">Add new asset</button>
+        ` : ""}
       </div>
     </div>
   `;
+}
+
+function assetTypeForTemplateField(field) {
+  return {
+    "image asset": "Image",
+    "video asset": "Video",
+    "pdf asset": "PDF",
+    "canva design asset": "Canva Design",
+    asset: "Document",
+  }[normalizedType(field?.fieldType)] || "";
 }
 
 function renderTemplateCustomFields(template) {
@@ -983,6 +1648,13 @@ function renderTemplateCustomFields(template) {
       <label class="block">
         <span>${escapeHTML(name)}${required ? " *" : ""}</span>
         ${control}
+        ${fieldType === "linked" && !repeatable && assetTypeForTemplateField(field) ? `
+          <button type="button" class="create-content-template-asset mt-2 rounded border border-[#407471]
+            px-3 py-1 text-xs text-[#9edbd7] hover:bg-[#153b38]"
+            data-field-key="${escapeHTML(key)}"
+            data-field-name="${escapeHTML(name)}"
+            data-asset-type="${escapeHTML(assetTypeForTemplateField(field))}">Add new asset</button>
+        ` : ""}
         ${notes ? `<span class="mt-1 block text-xs text-gray-400">${escapeHTML(notes)}</span>` : ""}
       </label>
     `;
@@ -990,17 +1662,16 @@ function renderTemplateCustomFields(template) {
 
   return `
     <section class="mt-4 rounded border border-gray-700 bg-gray-950/40 p-3">
-      <h4 class="font-semibold text-white">Template fields</h4>
       <p class="mt-1 text-xs text-gray-400">These fields are specific to the selected template.</p>
       <div class="mt-3 grid gap-3">${controls}</div>
     </section>
   `;
 }
 
-function templateFieldValuesFromBuilder({ validate = false } = {}) {
+function templateFieldValuesFromBuilder({ validate = false, root = document } = {}) {
   const values = {};
   const linkedKeys = new Set();
-  document.querySelectorAll(".content-template-linked-field").forEach((field) => {
+  root.querySelectorAll(".content-template-linked-field").forEach((field) => {
     const key = templateFieldKey(field.dataset.fieldKey);
     if (!key) return;
     linkedKeys.add(key);
@@ -1018,7 +1689,7 @@ function templateFieldValuesFromBuilder({ validate = false } = {}) {
     values[key] = selected;
   });
 
-  document.querySelectorAll(".content-template-variable").forEach((input) => {
+  root.querySelectorAll(".content-template-variable").forEach((input) => {
     const key = templateFieldKey(input.dataset.fieldKey);
     if (!key || linkedKeys.has(key)) return;
     if (input instanceof HTMLSelectElement && input.multiple) {
@@ -1050,6 +1721,26 @@ function templateFieldValuesFromBuilder({ validate = false } = {}) {
     values[key] = input.value || "";
   });
   return values;
+}
+
+function restoreTemplateFieldValuesInRoot(root, fieldValues = {}) {
+  if (!root) return;
+  root.querySelectorAll(".content-template-linked-field").forEach((field) => {
+    const key = templateFieldKey(field.dataset.fieldKey);
+    if (!key || fieldValues[key] === undefined) refreshLinkedTemplateField(field);
+    else restoreLinkedTemplateField(field, fieldValues[key]);
+  });
+  root.querySelectorAll(".content-template-variable").forEach((input) => {
+    const key = templateFieldKey(input.dataset.fieldKey);
+    if (!key || input.closest(".content-template-linked-field") || fieldValues[key] === undefined) return;
+    const value = fieldValues[key];
+    if (input instanceof HTMLSelectElement && input.multiple) {
+      const selectedValues = new Set(Array.isArray(value) ? value : [value]);
+      [...input.options].forEach((option) => { option.selected = selectedValues.has(option.value); });
+    } else if (input.dataset.fieldType === "checkbox") input.checked = value === true;
+    else if (input.dataset.repeatable === "true" && Array.isArray(value)) input.value = value.join("\n");
+    else input.value = value ?? "";
+  });
 }
 
 function captureTemplateGuidedValues() {
@@ -1166,6 +1857,11 @@ function restoreLinkedTemplateField(field, rawValues) {
 }
 
 function handleTemplateGuidedFieldsClick(event) {
+  const createAsset = event.target.closest(".create-content-template-asset");
+  if (createAsset) {
+    openContentAssetDrawer(createAsset);
+    return;
+  }
   const field = event.target.closest(".content-template-linked-field");
   if (!field) return;
   if (event.target.closest(".add-content-template-entry")) {
@@ -1179,6 +1875,234 @@ function handleTemplateGuidedFieldsClick(event) {
   if (rows.length <= minimum) return;
   remove.closest(".content-template-linked-row")?.remove();
   refreshLinkedTemplateField(field);
+}
+
+function assetFileAccept(assetType) {
+  return {
+    Image: "image/*",
+    Video: "video/*",
+    PDF: "application/pdf,.pdf",
+    Audio: "audio/*",
+  }[assetType] || "";
+}
+
+function openContentAssetDrawer(button) {
+  const repeatableField = button.closest(".content-template-linked-field");
+  assetDrawerField = {
+    key: templateFieldKey(button.dataset.fieldKey || repeatableField?.dataset.fieldKey),
+    name: button.dataset.fieldName || repeatableField?.dataset.fieldName || "Template Asset",
+    type: button.dataset.assetType || repeatableField?.dataset.assetType || "Document",
+    repeatableField,
+    trigger: button,
+  };
+  const form = document.getElementById("contentAssetDrawerForm");
+  form?.reset();
+  assetDrawerFile = null;
+  resumeAssetSaveAfterFileSelection = false;
+  const selectedFile = document.getElementById("contentAssetSelectedFile");
+  if (selectedFile) selectedFile.textContent = "No file selected.";
+  setInputValue("contentAssetType", assetDrawerField.type);
+  setInputValue("contentAssetStatus", "active");
+  const prefersExternal = ["Video", "Canva Design"].includes(assetDrawerField.type);
+  setInputValue("contentAssetStorageMethod", prefersExternal ? "external" : "upload");
+  setInputValue("contentAssetExternalProvider", assetDrawerField.type === "Canva Design" ? "canva" : "youtube");
+  updateContentAssetStorageMethod();
+  const file = document.getElementById("contentAssetFile");
+  if (file) file.accept = assetFileAccept(assetDrawerField.type);
+  document.getElementById("contentAssetDrawerContext").textContent =
+    `${assetDrawerField.name} | ${assetDrawerField.type}`;
+  const helpPanel = document.getElementById("contentAssetHelpPanel");
+  const helpButton = document.getElementById("toggleContentAssetHelpBtn");
+  helpPanel?.classList.add("hidden");
+  helpButton?.setAttribute("aria-expanded", "false");
+  if (helpButton) helpButton.textContent = "Help";
+  const drawer = document.getElementById("contentAssetDrawer");
+  if (drawer) drawer.inert = false;
+  drawer?.classList.remove("hidden");
+  drawer?.setAttribute("aria-hidden", "false");
+  document.getElementById("contentAssetName")?.focus();
+}
+
+function updateContentAssetStorageMethod() {
+  const external = document.getElementById("contentAssetStorageMethod")?.value === "external";
+  document.getElementById("contentAssetFileRow")?.classList.toggle("hidden", external);
+  document.getElementById("contentAssetExternalRow")?.classList.toggle("hidden", !external);
+  const file = document.getElementById("contentAssetFile");
+  const url = document.getElementById("contentAssetExternalUrl");
+  if (file) file.required = !external;
+  if (url) url.required = external;
+  const saveButton = document.getElementById("saveContentAssetBtn");
+  if (saveButton && !saveButton.disabled) {
+    saveButton.textContent = external ? "Save and add asset" : "Upload and add asset";
+  }
+}
+
+function validatedExternalAssetUrl(value, provider) {
+  let url;
+  try { url = new URL(value); } catch { throw new Error("Enter a valid external URL."); }
+  if (url.protocol !== "https:") throw new Error("External Asset URLs must use HTTPS.");
+  const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+  const matchesHost = (host) => hostname === host || hostname.endsWith(`.${host}`);
+  if (provider === "youtube" && !["youtube.com", "youtu.be"].some(matchesHost)) {
+    throw new Error("Enter a valid YouTube URL.");
+  }
+  if (provider === "canva" && !matchesHost("canva.com")) {
+    throw new Error("Enter a valid Canva URL.");
+  }
+  return url.toString();
+}
+
+function youtubeEmbedUrl(value) {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    let videoId = hostname === "youtu.be" ? url.pathname.split("/").filter(Boolean)[0] : url.searchParams.get("v");
+    if (!videoId && ["shorts", "embed"].includes(url.pathname.split("/").filter(Boolean)[0])) {
+      videoId = url.pathname.split("/").filter(Boolean)[1];
+    }
+    return videoId ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}` : "";
+  } catch {
+    return "";
+  }
+}
+
+function closeContentAssetDrawer() {
+  const drawer = document.getElementById("contentAssetDrawer");
+  const returnFocusTo = assetDrawerField?.trigger;
+  if (returnFocusTo?.isConnected) returnFocusTo.focus();
+  else if (drawer?.contains(document.activeElement)) document.activeElement.blur();
+  drawer?.classList.add("hidden");
+  drawer?.setAttribute("aria-hidden", "true");
+  if (drawer) drawer.inert = true;
+  assetDrawerField = null;
+  assetDrawerFile = null;
+  resumeAssetSaveAfterFileSelection = false;
+}
+
+function assertAssetFileType(file, assetType) {
+  const valid = {
+    Image: file.type.startsWith("image/"),
+    Video: file.type.startsWith("video/"),
+    PDF: file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"),
+    Audio: file.type.startsWith("audio/"),
+  }[assetType];
+  if (valid === false) throw new Error(`Choose a valid ${assetType} file.`);
+}
+
+function selectNewTemplateAsset(asset) {
+  const key = assetDrawerField?.key;
+  if (!key) return;
+  let selects = [...document.querySelectorAll(
+    `.content-template-linked-select[data-field-key="${CSS.escape(key)}"]`,
+  )];
+  selects.forEach((select) => {
+    if (![...select.options].some((option) => option.value === asset.id)) {
+      select.add(new Option(linkedTemplateRecordLabel(asset), asset.id));
+    }
+  });
+  let target = selects.find((select) => !select.value) || selects[0];
+  if (assetDrawerField.repeatableField && selects.every((select) => select.value)) {
+    target = addLinkedTemplateFieldRow(assetDrawerField.repeatableField)?.querySelector("select") || target;
+    selects = [...assetDrawerField.repeatableField.querySelectorAll(".content-template-linked-select")];
+    selects.forEach((select) => {
+      if (![...select.options].some((option) => option.value === asset.id)) {
+        select.add(new Option(linkedTemplateRecordLabel(asset), asset.id));
+      }
+    });
+  }
+  if (target) target.value = asset.id;
+  if (assetDrawerField.repeatableField) refreshLinkedTemplateField(assetDrawerField.repeatableField);
+}
+
+async function saveContentAsset(event) {
+  event.preventDefault();
+  const button = document.getElementById("saveContentAssetBtn");
+  const file = document.getElementById("contentAssetFile")?.files?.[0] || assetDrawerFile;
+  const selectedStorageMethod = document.getElementById("contentAssetStorageMethod")?.value || "upload";
+  const externalUrl = document.getElementById("contentAssetExternalUrl")?.value.trim() || "";
+  // Prefer the populated source if the visible method and entered data ever get out of sync.
+  const storageMethod = externalUrl && !file ? "external" : selectedStorageMethod;
+  const externalProvider = document.getElementById("contentAssetExternalProvider")?.value || "";
+  const assetName = document.getElementById("contentAssetName")?.value.trim() || "";
+  const assetType = document.getElementById("contentAssetType")?.value || assetDrawerField?.type || "Document";
+  if (!assetName || !assetDrawerField) return;
+  try {
+    if (storageMethod === "upload" && !file) {
+      resumeAssetSaveAfterFileSelection = true;
+      document.getElementById("contentAssetFile")?.click();
+      showToast("Choose the file to upload. Saving will continue after it is selected.", "info");
+      return;
+    }
+    if (file) assertAssetFileType(file, assetType);
+    button.disabled = true;
+    button.textContent = storageMethod === "upload" ? "Uploading..." : "Saving...";
+    const assetId = `ASSET-${templateFieldKey(assetName).toUpperCase().replaceAll("_", "-")}-${Date.now()}`;
+    let fileUrl = "";
+    let storagePath = "";
+    if (storageMethod === "upload") {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, "-");
+      storagePath = `assets/${assetId}/${Date.now()}-${safeName}`;
+      const fileRef = ref(storage, storagePath);
+      await uploadBytes(fileRef, file, { contentType: file.type || undefined });
+      fileUrl = await getDownloadURL(fileRef);
+    } else {
+      fileUrl = validatedExternalAssetUrl(
+        externalUrl,
+        externalProvider,
+      );
+    }
+    const recordType = currentRecordType();
+    const editingId = state.editingRecord?.id || "";
+    const response = await upsertAdminAsset({
+      assetId,
+      assetName,
+      assetType,
+      title: document.getElementById("contentAssetTitle")?.value.trim() || assetName,
+      description: document.getElementById("contentAssetDescription")?.value.trim() || "",
+      altText: document.getElementById("contentAssetAltText")?.value.trim() || "",
+      notes: document.getElementById("contentAssetNotes")?.value.trim() || "",
+      fileUrl,
+      storagePath,
+      originalFilename: file?.name || "",
+      mimeType: file?.type || (externalProvider === "youtube" ? "text/html+youtube" : "text/html"),
+      externalProvider: storageMethod === "external" ? externalProvider : "",
+      embedUrl: storageMethod === "external" && externalProvider === "youtube"
+        ? youtubeEmbedUrl(fileUrl)
+        : "",
+      sourceType: storageMethod,
+      status: document.getElementById("contentAssetStatus")?.value || "active",
+      visibility: "private",
+      newLinks: editingId && ["item", "blueprint", "plan"].includes(recordType) ? [{
+        entityType: singularRecordType(recordType).replace(/^./, (character) => character.toUpperCase()),
+        entityId: editingId,
+        assetRole: assetDrawerField.name,
+        fieldKey: assetDrawerField.key,
+      }] : [],
+    });
+    const savedAsset = {
+      id: response.data?.assetId || assetId,
+      assetId: response.data?.assetId || assetId,
+      name: assetName,
+      assetName,
+      assetType,
+      type: assetType.toLowerCase(),
+      title: document.getElementById("contentAssetTitle")?.value.trim() || assetName,
+      fileUrl,
+      status: document.getElementById("contentAssetStatus")?.value || "active",
+    };
+    state.records.assets = [...state.records.assets.filter((asset) => asset.id !== savedAsset.id), savedAsset];
+    selectNewTemplateAsset(savedAsset);
+    state.isDirty = true;
+    renderBuilderSummaries();
+    showToast("Asset uploaded, saved, and selected.", "success");
+    closeContentAssetDrawer();
+  } catch (error) {
+    console.error("Failed to create template Asset:", error);
+    showToast(error.message || "Failed to create Asset.", "error");
+  } finally {
+    button.disabled = false;
+    updateContentAssetStorageMethod();
+  }
 }
 
 function renderItemProductTemplateFields(template) {
@@ -1209,7 +2133,6 @@ function renderItemProductTemplateFields(template) {
     : "Choose or create a template to define the fields for this Item."}
       </p>
       <div class="mt-3 grid gap-2 text-xs text-gray-300 sm:grid-cols-2">
-        <div><strong>Default category:</strong> ${escapeHTML(categoryName(defaults.categoryId))}</div>
         <div><strong>Enabled behaviours:</strong> ${escapeHTML(behaviours.join(", ") || "Standard Item")}</div>
       </div>
       ${renderTemplateCustomFields(template)}
@@ -1224,7 +2147,7 @@ function renderPlanTemplateFields(template) {
       <div id="planTemplateSelectorSlot" class="mb-4"></div>
       <h3 class="font-semibold text-white">${escapeHTML(template?.name || "Plan structure")}</h3>
       <p class="mt-1 text-xs text-gray-300">
-        Add reusable Blueprints and Items through this variant's fields and the Relationships step.
+        Add reusable Blueprints and Items through this variant's fields and the Connections step.
       </p>
       <div class="mt-3 grid gap-3">
         <div class="grid gap-3 md:grid-cols-2">
@@ -1248,7 +2171,7 @@ function renderPlanTemplateFields(template) {
           </label>
         </div>
         <div class="rounded border border-gray-700 bg-gray-950/40 p-3 text-xs text-gray-300">
-          Template fields define the variant-specific structure. Relationships remain reusable and are not copied
+          Template fields define the variant-specific structure. Connections remain reusable and are not copied
           into the template.
         </div>
       </div>
@@ -1279,30 +2202,7 @@ function renderBlueprintTemplateFields(template) {
         </label>
       </div>
       ${fields.length ? renderTemplateCustomFields(template) : ""}
-      <p class="mt-2 text-xs text-gray-400">Choose reusable Items in the Relationships step.</p>
-    </div>
-  `;
-}
-
-function renderCampaignTemplateFields(template) {
-  return `
-    <div>
-      ${currentRecordType() === "plan" ? "<div id=\"planTemplateSelectorSlot\" class=\"mb-4\"></div>" : ""}
-      <h3 class="font-semibold text-white">${escapeHTML(template?.name || "Campaign template")}</h3>
-      <p class="mt-1 text-xs text-gray-300">
-        Link existing items, blueprints, or plans, then use audience and goal to define the campaign.
-      </p>
-      <div class="mt-3 grid gap-3 md:grid-cols-2">
-        <label class="block">
-          Start date
-          <input id="contentStartDate" type="date" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-        </label>
-        <label class="block">
-          End date
-          <input id="contentEndDate" type="date" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-        </label>
-      </div>
-      ${renderTemplateCustomFields(template)}
+      <p class="mt-2 text-xs text-gray-400">Choose reusable Items in the Connections step.</p>
     </div>
   `;
 }
@@ -1376,10 +2276,7 @@ function renderTemplateGuidedFields() {
   }
 
   if (recordType === "plan") {
-    const type = normalizedType(document.getElementById("contentType")?.value);
-    container.innerHTML = type === "campaign"
-      ? renderCampaignTemplateFields(template)
-      : renderPlanTemplateFields(template);
+    container.innerHTML = renderPlanTemplateFields(template);
     positionTemplateField(recordType);
     renderPlanTemplateSelect(template?.id || "");
     return;
@@ -1391,7 +2288,7 @@ function renderTemplateGuidedFields() {
     return;
   }
 
-  container.innerHTML = renderCampaignTemplateFields(template);
+  container.innerHTML = renderPlanTemplateFields(template);
 }
 
 function renderPlanTemplateSelect(selectedId = "") {
@@ -1464,8 +2361,6 @@ function applyTemplateDefaults() {
   const currentValues = captureTemplateGuidedValues();
   const defaults = selectedTemplate()?.defaults || {};
   const recordType = document.getElementById("contentRecordType")?.value || "item";
-  const categoryId = document.getElementById("contentCategoryId");
-  if (categoryId && defaults.categoryId) categoryId.value = defaults.categoryId;
 
   if (recordType === "item") {
     const shopProduct = document.getElementById("contentIsShopProduct");
@@ -1477,7 +2372,6 @@ function applyTemplateDefaults() {
     const tracksSeats = document.getElementById("contentTracksSeats");
     const unlocksAccess = document.getElementById("contentUnlocksAccess");
     const issuesCertificate = document.getElementById("contentIssuesCertificate");
-    const itemKind = document.getElementById("contentItemKind");
 
     if (shopProduct) shopProduct.checked = defaults.isShopProduct === true;
     if (requiresShipping) requiresShipping.checked = defaults.requiresShipping === true;
@@ -1491,7 +2385,6 @@ function applyTemplateDefaults() {
     setInputValue("contentSeatCapacity", defaults.seatCapacity ?? "");
     setInputValue("contentAccessType", defaults.accessType || "");
     setInputValue("contentDeliveryMode", defaults.deliveryMode || "");
-    if (itemKind && defaults.itemKind) itemKind.value = defaults.itemKind;
     applyTemplateDrivenItemFields(defaults);
   }
   renderTemplateGuidedFields();
@@ -1520,6 +2413,25 @@ function renderRecordPill(record) {
       <div class="mt-1 text-xs text-gray-500">${escapeHTML(typeStatus)}</div>
     </div>
   `;
+}
+
+function renderSimilarRecord(record) {
+  const typeStatus = [record.type || "No type", record.status || ""].filter(Boolean).join(" | ");
+  const recordType = singularRecordType(record.recordType || currentRecordType());
+  return `
+    <div class="flex flex-wrap items-center justify-between gap-3 rounded border border-yellow-700/70 bg-yellow-950/20 p-3">
+      <div class="min-w-0">
+        <div class="font-medium text-white">${escapeHTML(record.name)}</div>
+        <div class="mt-1 break-all text-xs text-gray-400">${escapeHTML(record.id)}</div>
+        <div class="mt-1 text-xs text-gray-400">${escapeHTML(typeStatus)}</div>
+      </div>
+      <button type="button"
+        class="edit-similar-content-record shrink-0 rounded bg-[#407471] px-3 py-2 text-xs font-medium text-white hover:bg-[#305a56]"
+        data-record-type="${escapeHTML(recordType)}"
+        data-record-id="${escapeHTML(record.id)}">
+        Edit instead
+      </button>
+    </div>`;
 }
 
 function similarRecords(recordType, query) {
@@ -1555,7 +2467,7 @@ function renderSimilarList() {
     return;
   }
 
-  list.innerHTML = matches.map(renderRecordPill).join("");
+  list.innerHTML = matches.map(renderSimilarRecord).join("");
 }
 
 function updateFormForRecordType() {
@@ -1567,12 +2479,15 @@ function updateFormForRecordType() {
     recordType,
   );
   updateTemplatesForType();
-  fillSelect(document.getElementById("contentStatus"), state.options.statuses || [], "draft");
-  fillSelect(document.getElementById("contentVisibility"), state.options.visibilityValues || [], "private");
-  fillSelect(document.getElementById("contentItemKind"), state.options.itemKinds || [], "Shop Product");
-  fillCategorySelect(document.getElementById("contentCategoryId"));
+  if (!state.editingRecord) {
+    setInputValue("contentStatus", "draft");
+    setInputValue("contentVisibility", "private");
+  }
+  fillTagCategoryFilter();
+  fillCategorySelect(document.getElementById("contentProductCategoryId"), true);
+  if (!state.editingRecord) renderEntityVariantRows([]);
 
-  document.getElementById("itemSpecificFields")?.classList.toggle("hidden", recordType !== "item");
+  document.getElementById("itemSpecificFields")?.classList.add("hidden");
   document.getElementById("advancedContentFields")?.classList.toggle("hidden", recordType === "item");
   document.getElementById("contentDuplicateWarning")?.classList.add("hidden");
   document.getElementById("confirmDuplicateContentBtn")?.classList.add("hidden");
@@ -1584,6 +2499,20 @@ function updateFormForRecordType() {
   renderSimilarList();
   renderRelationshipPickers();
   applyTypeDrivenFieldGroups();
+  updateItemInventoryFields();
+  updateProductRelationshipControl();
+}
+
+function updateProductRelationshipControl(role = "") {
+  const isBlueprint = currentRecordType() === "blueprint";
+  const roleInput = document.getElementById("contentProductLinkRole");
+  const manufacturingRow = document.getElementById("contentProductManufacturingRoleRow");
+  const manufacturingCheckbox = document.getElementById("contentProductManufacturingRecipe");
+  const resolvedRole = role || roleInput?.value || "Represents";
+  const manufacturing = isBlueprint && resolvedRole === "ManufacturedFrom";
+  manufacturingRow?.classList.toggle("hidden", !isBlueprint);
+  if (manufacturingCheckbox) manufacturingCheckbox.checked = manufacturing;
+  if (roleInput) roleInput.value = manufacturing ? "ManufacturedFrom" : "Represents";
 }
 
 function updateEditBanner() {
@@ -1616,24 +2545,16 @@ function updateEditBanner() {
   updateSaveWorkflow();
 }
 
-function publicationApprovalRequired() {
-  return isShopProductSelected() ||
-    document.getElementById("contentWebsiteVisible")?.checked === true;
-}
-
 function updateSaveWorkflow() {
-  const actionButton = document.getElementById("saveContinueContentBtn");
   const note = document.getElementById("contentSaveWorkflowNote");
   const isProduct = isShopProductSelected();
   const websiteVisible = document.getElementById("contentWebsiteVisible")?.checked === true;
-  const needsApproval = isProduct || websiteVisible;
-  if (actionButton) {
-    actionButton.textContent = needsApproval ? "Save and send for approval" : "Save and set active";
-  }
   if (!note) return;
 
   const messages = [
-    "Save keeps the current workflow state. Save and set active makes non-public content active immediately.",
+    "Save keeps this record in its current workflow state. Approve confirms it is ready. " +
+      "Set active makes it available in its configured connections. " +
+      "Pause removes it from active use without deleting it.",
   ];
   if (isProduct) {
     messages.push(
@@ -1647,34 +2568,52 @@ function updateSaveWorkflow() {
       "an approved Anato-me story can appear in the Anato-me list.",
     );
   }
-  if (needsApproval) {
-    messages.push(
-      "The approval action saves this as Awaiting approval; " +
-      "it does not publish the requested visibility yet.",
-    );
-  }
   note.innerHTML = messages.map((message) => `<p>${escapeHTML(message)}</p>`).join("");
 }
 
 function productRelationPayload() {
   if (!isShopProductSelected()) return null;
+  syncSelectedProductVariantRows();
+  const instructor = applyProductInstructorAssignments();
+  populateGeneratedProductSku();
+  const physical = isPhysicalProductConnection();
 
+  const variants = parseProductVariants(document.getElementById("contentProductVariants")?.value);
+  const inventoryTracked = physical &&
+    document.getElementById("contentProductInventoryTracked")?.checked === true;
+  const totalVariantStock = variants.reduce((total, variant) => total + Number(variant.stock || 0), 0);
+  setInputValue("contentProductStock", inventoryTracked ? totalVariantStock : "");
+  const linkRole = document.getElementById("contentProductLinkRole")?.value || "Represents";
+  const manufacturingLink = currentRecordType() === "blueprint" && linkRole === "ManufacturedFrom";
   return {
     existingProductId: document.getElementById("contentExistingProductId")?.value || "",
     productId: document.getElementById("contentProductId")?.value || "",
-    linkRole: document.getElementById("contentProductLinkRole")?.value || "Represents",
-    sku: document.getElementById("contentProductSku")?.value || "",
-    productType: state.editingRecord?.productType || state.editingRecord?.firebaseType || "",
+    linkRole,
+    sku: document.getElementById("contentProductSku")?.value || generatedProductSku(),
+    productCategoryId: document.getElementById("contentProductCategoryId")?.value || "",
+    productType: document.getElementById("contentProductDeliveryType")?.value || "Physical",
     shopStatus: document.getElementById("contentProductShopStatus")?.value || "draft",
     effectiveShopPrice: optionalNumberFromInput("contentProductPrice"),
-    stock: optionalNumberFromInput("contentProductStock"),
+    stock: inventoryTracked ? totalVariantStock : null,
     visible: document.getElementById("contentProductVisible")?.checked === true,
     featured: document.getElementById("contentProductFeatured")?.checked === true,
     archived: document.getElementById("contentProductArchived")?.checked === true,
-    requiresShipping: document.getElementById("contentRequiresShipping")?.checked === true,
-    inventoryTracked: document.getElementById("contentInventoryTracked")?.checked === true,
+    requiresShipping: physical && document.getElementById("contentProductRequiresShipping")?.checked === true,
+    inventoryTracked,
+    requiresCalendar: document.getElementById("contentProductRequiresCalendar")?.checked === true,
+    requiresSessionTime: document.getElementById("contentProductRequiresSessionTime")?.checked === true,
+    tracksSeats: document.getElementById("contentProductTracksSeats")?.checked === true,
+    requiresLocation: document.getElementById("contentProductRequiresLocation")?.checked === true,
+    requiresInstructor: document.getElementById("contentProductRequiresInstructor")?.checked === true,
+    instructor,
     activePriceId: state.editingRecord?.activePriceId || "",
-    variants: parseProductVariants(document.getElementById("contentProductVariants")?.value),
+    variants,
+    manufacturingBlueprintId: manufacturingLink
+      ? document.getElementById("contentId")?.value || state.editingRecord?.id || ""
+      : document.getElementById("contentProductBlueprintId")?.value || "",
+    estimatedUnitCost: updateConnectedProductCostPreview(),
+    variantContentLinks: productVariantContentLinksFromRows(),
+    accessGrants: productUnlocksFromRows(),
   };
 }
 
@@ -1690,6 +2629,430 @@ function renderExistingProductOptions(selectedId = "") {
       </option>
     `),
   ].join("");
+  renderProductChoiceList(document.getElementById("contentProductSearch")?.value || "", selectedId);
+}
+
+function productVariantLabel(variant) {
+  return [variant.name, variant.colour, variant.size, variant.sizeLabel, variant.sku]
+    .filter(Boolean)
+    .join(" / ");
+}
+
+function renderProductChoiceList(query = "", selectedId = "") {
+  const list = document.getElementById("contentProductChoiceList");
+  if (!list) return;
+  const normalizedQuery = normalizedType(query);
+  const products = (state.records.products || []).filter((product) => {
+    const searchable = [
+      product.id,
+      product.name,
+      product.productType,
+      product.sku,
+      ...(product.variants || []).flatMap((variant) => [
+        variant.id, variant.variantId, productVariantLabel(variant),
+      ]),
+    ].join(" ").toLowerCase();
+    return !normalizedQuery || searchable.includes(normalizedQuery);
+  });
+  const currentId = selectedId || document.getElementById("contentExistingProductId")?.value || "";
+  list.innerHTML = products.length ? products.map((product) => {
+    const variants = (product.variants || []).map(productVariantLabel).filter(Boolean);
+    const selected = product.id === currentId;
+    const choiceClass = selected
+      ? "border-[#8f6ad8] bg-[#2a1d45]"
+      : "border-gray-700 bg-gray-950 hover:border-[#407471]";
+    return `
+      <button
+        type="button"
+        data-product-choice="${escapeHTML(product.id)}"
+        class="w-full rounded border p-3 text-left ${choiceClass}"
+      >
+        <span class="block font-semibold text-white">${escapeHTML(product.name || product.id)}</span>
+        <span class="mt-1 block text-xs text-gray-400">
+          ${escapeHTML([product.id, product.productType, product.sku].filter(Boolean).join(" / "))}
+        </span>
+        <span class="mt-1 block text-xs text-gray-300">
+          ${variants.length ? escapeHTML(`Variants: ${variants.join("; ")}`) : "No variants recorded"}
+        </span>
+      </button>
+    `;
+  }).join("") : "<p class=\"text-xs text-gray-400\">No existing products match this search.</p>";
+}
+
+function chooseExistingProduct(productId) {
+  const product = (state.records.products || []).find((candidate) => candidate.id === productId);
+  if (!product) return;
+  setSelectValue("contentExistingProductId", product.id);
+  setInputValue("contentProductId", product.id);
+  setInputValue("contentProductSku", product.sku);
+  setSelectValue("contentProductCategoryId", product.productCategoryId);
+  setSelectValue("contentProductDeliveryType", product.productType || "Physical");
+  setCheckboxValue("contentProductRequiresShipping", product.requiresShipping === true);
+  setCheckboxValue("contentProductInventoryTracked", product.inventoryTracked === true);
+  setCheckboxValue("contentProductRequiresCalendar", product.requiresCalendar === true);
+  setCheckboxValue("contentProductRequiresSessionTime", product.requiresSessionTime === true);
+  setCheckboxValue("contentProductTracksSeats", product.tracksSeats === true);
+  setCheckboxValue("contentProductRequiresLocation", product.requiresLocation === true);
+  setCheckboxValue("contentProductRequiresInstructor", product.requiresInstructor === true);
+  setSelectValue("contentProductShopStatus", product.status || "draft");
+  if (currentRecordType() === "blueprint") {
+    setInputValue("contentProductLinkRole", "ManufacturedFrom");
+    updateProductRelationshipControl("ManufacturedFrom");
+    renderProductBlueprintOptions(document.getElementById("contentId")?.value || state.editingRecord?.id || "");
+  } else {
+    updateProductRelationshipControl("Represents");
+    renderProductBlueprintOptions(product.manufacturingBlueprintId || "");
+  }
+  setInputValue("contentProductStock", product.stock ?? 0);
+  setCheckboxValue("contentProductVisible", product.visible);
+  setCheckboxValue("contentProductFeatured", product.featured);
+  setCheckboxValue("contentProductArchived", product.archived);
+  state.retainedProductVariantContentLinks = (product.variantContentLinks || [])
+    .filter((link) => link.linkRole !== "ManufacturedFrom");
+  setInputValue("contentProductVariants", serializeProductVariants(product.variants || []));
+  populateProductVariantsFromEntity();
+  renderProductBlueprintOptions(product.manufacturingBlueprintId || "");
+  renderProductVariantContentLinkRows(product.variantContentLinks || []);
+  renderProductUnlockRows(product.accessGrants || []);
+  renderProductInstructorRows(productInstructorAssignments(product));
+  updateProductRelationStatus({ productId: product.id });
+  renderProductChoiceList(document.getElementById("contentProductSearch")?.value || "", product.id);
+  state.isDirty = true;
+  renderBuilderSummaries();
+  updateProductPhysicalFields();
+}
+
+function chooseNewProduct() {
+  const linkedProductId = document.getElementById("contentProductId")?.value || state.editingRecord?.productId || "";
+  if (linkedProductId) setInputValue("contentUnlinkProductId", linkedProductId);
+  setSelectValue("contentExistingProductId", "");
+  setInputValue("contentProductId", "");
+  setInputValue("contentProductSku", "");
+  setSelectValue("contentProductCategoryId", "");
+  setSelectValue("contentProductDeliveryType", "Physical");
+  updateProductRelationshipControl("Represents");
+  ["contentProductRequiresShipping", "contentProductInventoryTracked", "contentProductRequiresCalendar",
+    "contentProductRequiresSessionTime", "contentProductTracksSeats", "contentProductRequiresLocation",
+    "contentProductRequiresInstructor"].forEach((id) => setCheckboxValue(id, false));
+  setSelectValue("contentProductShopStatus", "draft");
+  setInputValue(
+    "contentProductStock",
+    currentRecordType() === "item" ? state.editingRecord?.itemStock ?? "" : "",
+  );
+  setCheckboxValue("contentProductVisible", false);
+  setCheckboxValue("contentProductFeatured", false);
+  setCheckboxValue("contentProductArchived", false);
+  setInputValue("contentProductVariants", "");
+  state.retainedProductVariantContentLinks = [];
+  populateProductVariantsFromEntity();
+  renderProductVariantContentLinkRows([]);
+  renderProductBlueprintOptions("");
+  renderProductUnlockRows([]);
+  renderProductInstructorRows([]);
+  updateProductRelationStatus(null);
+  renderProductChoiceList(document.getElementById("contentProductSearch")?.value || "");
+  state.isDirty = true;
+  updateProductPhysicalFields();
+}
+
+function openContentProductDrawer() {
+  const drawer = document.getElementById("contentProductDrawer");
+  if (!drawer) return;
+  drawer.classList.remove("hidden");
+  drawer.setAttribute("aria-hidden", "false");
+  updateProductRelationshipControl();
+  renderProductChoiceList(document.getElementById("contentProductSearch")?.value || "");
+  populateGeneratedProductSku();
+  renderProductBlueprintOptions(
+    document.getElementById("contentProductBlueprintId")?.value || state.editingRecord?.manufacturingBlueprintId || "",
+  );
+  populateProductVariantsFromEntity();
+  updateConnectedProductCostPreview();
+  updateProductPhysicalFields();
+  document.getElementById("contentProductSearch")?.focus();
+}
+
+function closeContentProductDrawer() {
+  const drawer = document.getElementById("contentProductDrawer");
+  if (!drawer) return;
+  if (drawer.contains(document.activeElement)) document.getElementById("contentIsShopProduct")?.focus();
+  drawer.classList.add("hidden");
+  drawer.setAttribute("aria-hidden", "true");
+}
+
+function generatedProductSku() {
+  const source = document.getElementById("contentProductId")?.value ||
+    document.getElementById("contentId")?.value ||
+    document.getElementById("contentName")?.value || "PRODUCT";
+  const token = String(source)
+    .trim()
+    .replace(/^(PROD|PRODUCT|ITEM|BLUEPRINT|PLAN)[-_]/i, "")
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .toUpperCase();
+  return `RT-${token || "PRODUCT"}`;
+}
+
+function populateGeneratedProductSku() {
+  const sku = document.getElementById("contentProductSku");
+  if (sku && !sku.value.trim()) sku.value = generatedProductSku();
+}
+
+function isPhysicalProductConnection() {
+  return document.getElementById("contentProductDeliveryType")?.value === "Physical";
+}
+
+function updateProductPhysicalFields() {
+  const physical = isPhysicalProductConnection();
+  const tracked = physical && document.getElementById("contentProductInventoryTracked")?.checked === true;
+  document.getElementById("contentProductRequiresShipping")?.closest("label")
+    ?.classList.toggle("hidden", !physical);
+  document.getElementById("contentProductInventoryTrackedField")?.classList.toggle("hidden", !physical);
+  document.getElementById("contentProductInventoryHelp")?.classList.toggle("hidden", !physical);
+  document.querySelectorAll(".product-variant-stock-field").forEach((field) => {
+    field.classList.toggle("hidden", !tracked);
+  });
+  const calendar = document.getElementById("contentProductRequiresCalendar")?.checked === true;
+  const seats = document.getElementById("contentProductTracksSeats")?.checked === true;
+  const timing = document.getElementById("contentProductRequiresSessionTime")?.checked === true;
+  const location = document.getElementById("contentProductRequiresLocation")?.checked === true;
+  const instructor = document.getElementById("contentProductRequiresInstructor")?.checked === true;
+  document.querySelectorAll(".product-variant-calendar-field").forEach((field) => {
+    field.classList.toggle("hidden", !calendar);
+  });
+  document.querySelectorAll(".product-variant-seats-field").forEach((field) => {
+    field.classList.toggle("hidden", !seats);
+  });
+  document.querySelectorAll(".product-variant-session-field").forEach((field) => {
+    field.classList.toggle("hidden", !timing);
+  });
+  document.querySelectorAll(".product-variant-location-field").forEach((field) => {
+    field.classList.toggle("hidden", !location);
+  });
+  document.getElementById("contentProductInstructorSection")?.classList.toggle("hidden", !instructor);
+  if (!tracked) setInputValue("contentProductStock", "");
+}
+
+function updateItemInventoryFields() {
+  const tracked = currentRecordType() === "item" &&
+    document.getElementById("contentInventoryTracked")?.checked === true;
+  document.getElementById("contentItemInventoryFields")?.classList.toggle("hidden", !tracked);
+}
+
+function productUnlockOptions(entityType) {
+  const key = `${normalizedType(entityType)}s`;
+  return state.records[key] || [];
+}
+
+function currentProductVariants() {
+  return parseProductVariants(document.getElementById("contentProductVariants")?.value);
+}
+
+function productVariantContentLinksFromRows(includeIncomplete = false) {
+  let defaultBlueprintId = "";
+  const manufacturingLinks = [...document.querySelectorAll(".product-variant-content-link-row")]
+    .map((row) => {
+      const productVariantId = row.querySelector(".variant-content-product-variant")?.value || "";
+      const entityId = row.querySelector(".variant-content-blueprint")?.value || "";
+      if (!productVariantId && entityId) defaultBlueprintId = entityId;
+      return {
+        productVariantId,
+        entityType: "Blueprint",
+        entityId,
+        entityVariantId: "",
+        linkRole: "ManufacturedFrom",
+        status: "active",
+      };
+    })
+    .filter((link) => link.productVariantId && (includeIncomplete || link.entityId));
+  setInputValue("contentProductBlueprintId", defaultBlueprintId);
+  const retained = Array.isArray(state.retainedProductVariantContentLinks)
+    ? state.retainedProductVariantContentLinks
+    : [];
+  return [...retained, ...manufacturingLinks];
+}
+
+function renderProductVariantContentLinkRows(links = []) {
+  const container = document.getElementById("productVariantContentLinkRows");
+  if (!container) return;
+  const productVariants = currentProductVariants();
+  const blueprints = state.records.blueprints || [];
+  const manufacturingLinks = links.filter((link) => link.linkRole === "ManufacturedFrom");
+  const defaultBlueprintId = document.getElementById("contentProductBlueprintId")?.value || "";
+  const rows = [
+    ...(defaultBlueprintId ? [{ productVariantId: "", entityId: defaultBlueprintId }] : []),
+    ...manufacturingLinks,
+  ];
+  container.innerHTML = rows.map((link) => {
+    const productVariantOptions = productVariants.map((variant) => {
+      const selected = variant.variantId === link.productVariantId ? " selected" : "";
+      return `<option value="${escapeHTML(variant.variantId)}"${selected}>${escapeHTML(variant.name || variant.variantId)}</option>`;
+    }).join("");
+    const blueprintOptions = blueprints.map((record) => {
+      const selected = record.id === link.entityId ? " selected" : "";
+      return `<option value="${escapeHTML(record.id)}"${selected}>${escapeHTML(record.name || record.id)}</option>`;
+    }).join("");
+    return `
+      <div class="product-variant-content-link-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_1.5fr_auto]">
+        <select class="variant-content-product-variant rounded bg-gray-800 px-2 py-2 text-white">
+          <option value="">All Product variants</option>${productVariantOptions}
+        </select>
+        <select class="variant-content-blueprint rounded bg-gray-800 px-2 py-2 text-white">
+          <option value="">Choose manufacturing Blueprint</option>${blueprintOptions}
+        </select>
+        <button type="button" class="remove-product-variant-content-link rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
+      </div>`;
+  }).join("") || "<p class=\"text-xs text-gray-400\">No manufacturing Blueprint selected.</p>";
+}
+
+function addProductVariantContentLinkRow() {
+  renderProductVariantContentLinkRows([
+    ...productVariantContentLinksFromRows(),
+    { productVariantId: "", entityType: "Blueprint", entityId: "", linkRole: "ManufacturedFrom" },
+  ]);
+}
+
+function productInstructorAssignmentsFromRows(includeIncomplete = false) {
+  return [...document.querySelectorAll(".content-product-instructor-row")].map((row) => ({
+    productVariantId: row.querySelector(".content-product-instructor-variant")?.value || "",
+    instructor: row.querySelector(".content-product-instructor-name")?.value.trim() || "",
+  })).filter((assignment) => includeIncomplete || assignment.instructor);
+}
+
+function renderProductInstructorRows(assignments = []) {
+  const container = document.getElementById("contentProductInstructorRows");
+  if (!container) return;
+  const variants = currentProductVariants();
+  const savedInstructors = state.options.instructorOptions || [];
+  container.innerHTML = assignments.map((assignment) => {
+    const options = variants.map((variant) => {
+      const selected = variant.variantId === assignment.productVariantId ? " selected" : "";
+      return `<option value="${escapeHTML(variant.variantId)}"${selected}>${escapeHTML(variant.name || variant.variantId)}</option>`;
+    }).join("");
+    const instructorOptions = [...savedInstructors];
+    if (assignment.instructor && !instructorOptions.some((option) => option.name === assignment.instructor)) {
+      instructorOptions.push({ id: assignment.instructor, name: assignment.instructor, email: "" });
+    }
+    const instructorSelectOptions = instructorOptions.map((option) => {
+      const selected = option.name === assignment.instructor ? " selected" : "";
+      const label = option.email ? `${option.name} (${option.email})` : option.name;
+      return `<option value="${escapeHTML(option.name)}"${selected}>${escapeHTML(label)}</option>`;
+    }).join("");
+    return `
+      <div class="content-product-instructor-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_1.5fr_auto]">
+        <select class="content-product-instructor-variant rounded bg-gray-800 px-2 py-2 text-white">
+          <option value="">All Product variants</option>${options}
+        </select>
+        <select class="content-product-instructor-name rounded bg-gray-800 px-3 py-2 text-white">
+          <option value="">Choose instructor</option>
+          ${instructorSelectOptions || "<option value=\"\" disabled>No instructors saved</option>"}
+        </select>
+        <button type="button" class="remove-content-product-instructor rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
+      </div>`;
+  }).join("") || "<p class=\"text-xs text-gray-400\">No instructor assigned.</p>";
+  setInputValue("contentProductInstructorAssignments", JSON.stringify(assignments));
+}
+
+function productInstructorAssignments(product = {}) {
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  const defaultInstructor = product.instructor || "";
+  const assignments = defaultInstructor
+    ? [{ productVariantId: "", instructor: defaultInstructor }]
+    : [];
+  variants.forEach((variant) => {
+    if (variant.instructor && variant.instructor !== defaultInstructor) {
+      assignments.push({ productVariantId: variant.variantId || variant.id || "", instructor: variant.instructor });
+    }
+  });
+  return assignments;
+}
+
+function applyProductInstructorAssignments() {
+  const assignments = productInstructorAssignmentsFromRows();
+  const defaultInstructor = assignments.find((assignment) => !assignment.productVariantId)?.instructor || "";
+  const overrides = new Map(assignments
+    .filter((assignment) => assignment.productVariantId)
+    .map((assignment) => [assignment.productVariantId, assignment.instructor]));
+  const variants = currentProductVariants().map((variant) => ({
+    ...variant,
+    instructor: overrides.get(variant.variantId) || defaultInstructor,
+  }));
+  setInputValue("contentProductVariants", serializeProductVariants(variants));
+  setInputValue("contentProductInstructorAssignments", JSON.stringify(assignments));
+  return defaultInstructor;
+}
+
+function addProductInstructorRow() {
+  renderProductInstructorRows([
+    ...productInstructorAssignmentsFromRows(true),
+    { productVariantId: "", instructor: "" },
+  ]);
+}
+
+function productUnlocksFromRows() {
+  return [...document.querySelectorAll(".content-product-unlock-row")].map((row) => ({
+    productVariantId: row.querySelector(".content-product-unlock-variant")?.value || "",
+    accessEntityType: row.querySelector(".content-product-unlock-type")?.value || "Plan",
+    accessEntityId: row.querySelector(".content-product-unlock-target")?.value || "",
+    grantTiming: "on-payment-confirmed",
+    durationType: "permanent",
+    durationValue: null,
+    revocable: true,
+    status: "active",
+  })).filter((grant) => grant.accessEntityId);
+}
+
+function renderProductUnlockRows(grants = []) {
+  const container = document.getElementById("contentProductUnlockRows");
+  if (!container) return;
+  const rows = grants.length ? grants : [];
+  container.innerHTML = rows.map((grant, index) => {
+    const entityType = ["Item", "Blueprint", "Plan"].includes(grant.accessEntityType)
+      ? grant.accessEntityType
+      : "Plan";
+    const options = productUnlockOptions(entityType);
+    const typeOptions = ["Item", "Blueprint", "Plan"].map((type) => {
+      const selected = type === entityType ? " selected" : "";
+      return `<option value="${type}"${selected}>${type}</option>`;
+    }).join("");
+    const targetOptions = options.map((record) => {
+      const selected = record.id === grant.accessEntityId ? " selected" : "";
+      const label = `${record.name || record.id} (${record.id})`;
+      return `<option value="${escapeHTML(record.id)}"${selected}>${escapeHTML(label)}</option>`;
+    }).join("");
+    const variantOptions = currentProductVariants().map((variant) => {
+      const selected = variant.variantId === grant.productVariantId ? " selected" : "";
+      return `<option value="${escapeHTML(variant.variantId)}"${selected}>${escapeHTML(variant.name || variant.variantId)}</option>`;
+    }).join("");
+    return `
+      <div class="content-product-unlock-row grid gap-2 rounded border border-gray-700 p-2
+        md:grid-cols-[12rem_10rem_1fr_auto]">
+        <select class="content-product-unlock-variant rounded bg-gray-800 px-2 py-2 text-white">
+          <option value="">All Product variants</option>
+          ${variantOptions}
+        </select>
+        <select class="content-product-unlock-type rounded bg-gray-800 px-2 py-2 text-white"
+          data-row-index="${index}">
+          ${typeOptions}
+        </select>
+        <select class="content-product-unlock-target min-w-0 rounded bg-gray-800 px-2 py-2 text-white">
+          <option value="">Choose content to unlock</option>
+          ${targetOptions}
+        </select>
+        <button type="button"
+          class="remove-content-product-unlock rounded border border-red-700 px-3 py-1 text-red-200">
+          Remove
+        </button>
+      </div>
+    `;
+  }).join("") || "<p class=\"text-xs text-gray-400\">No additional content unlocks selected.</p>";
+}
+
+function addProductUnlockRow() {
+  renderProductUnlockRows([
+    ...productUnlocksFromRows(),
+    { productVariantId: "", accessEntityType: "Plan", accessEntityId: "" },
+  ]);
 }
 
 function updateProductRelationStatus(record) {
@@ -1760,77 +3123,71 @@ function renderBuilderSummaries(record = state.editingRecord) {
     record?.productEffectiveShopPrice ??
     record?.productPrice ??
     "";
-  const visible = productRelation.visible === true;
-  const inventoryTracked = productRelation.inventoryTracked === true;
   const variants = productRelation.variants || record?.variants || [];
   const recordType = currentRecordType();
   const linkedItemCount = hiddenRelationshipIds("contentLinkedItemIds").length;
   const linkedBlueprintCount = hiddenRelationshipIds("contentLinkedBlueprintIds").length;
   const linkedPlanCount = hiddenRelationshipIds("contentLinkedPlanIds").length;
+  const entityVariants = entityVariantsFromBuilder();
+  const selectedAssetIds = uniqueValues([
+    ...entityVariants.flatMap((variant) => templateAssetLinksForVariant(variant)).map((link) => link.assetId),
+    ...(Array.isArray(record?.assets) ? record.assets : [])
+      .map((asset) => typeof asset === "string" ? asset : asset.assetId || asset.id),
+  ]);
+  const selectedAssetLabels = selectedAssetIds.map((assetId) => {
+    const asset = (state.records.assets || []).find((candidate) => candidate.id === assetId);
+    return asset?.name || asset?.assetName || asset?.title || assetId;
+  });
+  const assetSummary = selectedAssetLabels.join(", ") || "No linked assets";
+  const entityVariantSummary = entityVariants.length
+    ? entityVariants.map((variant) => variant.name).join(", ")
+    : "Primary version only";
+  const libraryVisible = document.getElementById("contentWebsiteVisible")?.checked === true;
+  const accessGrants = productRelation.accessGrants || record?.productAccessGrants || [];
+  const estimatedCost = recordType === "blueprint"
+    ? updateBlueprintEstimatedCost()
+    : recordType === "item" ? optionalNumberFromInput("contentItemUnitCost") ?? 0 : null;
 
   if (relationships) {
-    relationships.innerHTML = recordType !== "item" ? [
+    relationships.innerHTML = [
+      summaryCard(
+        "Shop product",
+        isShopProduct ? productId || "New product" : "Not connected",
+        isShopProduct ? "ok" : "default",
+      ),
+      summaryCard("Library", libraryVisible ? "Add to library" : "Not in library", libraryVisible ? "ok" : "default"),
       summaryCard("Reusable Items", `${linkedItemCount} selected`, linkedItemCount ? "ok" : "default"),
       summaryCard("Blueprint components", `${linkedBlueprintCount} selected`, linkedBlueprintCount ? "ok" : "default"),
       summaryCard("Related Plans", `${linkedPlanCount} linked`, linkedPlanCount ? "ok" : "default"),
-      summaryCard("Tags", selectedTagsFromControls().join(", ") || "No tags"),
-    ].join("") : isShopProduct ? [
-      summaryCard("Linked product", productId || "No linked product", productId ? "ok" : "warning"),
-      summaryCard("Price", moneyLabel(price), price ? "ok" : "warning"),
-      summaryCard("Variants", variants.length ? `${variants.length} variants` : "No variants"),
-      summaryCard(
-        "Inventory",
-        inventoryTracked ? "Tracked" : "Not tracked",
-        inventoryTracked ? "ok" : "default",
-      ),
-      summaryCard(
-        "Assets",
-        record?.assets?.length ? `${record.assets.length} linked` : "No linked assets",
-        record?.assets?.length ? "ok" : "warning",
-      ),
-      summaryCard("Relationship health", record?.relationshipHealth || "Not checked"),
-    ].join("") : [
-      summaryCard("Shop product", "No"),
-      summaryCard("Product relationship", "Hidden because this item is not selected as a shop product", "ok"),
-      summaryCard(
-        "Assets",
-        record?.assets?.length ? `${record.assets.length} linked` : "No linked assets",
-        record?.assets?.length ? "ok" : "warning",
-      ),
+      summaryCard("Linked assets", assetSummary, selectedAssetIds.length ? "ok" : "warning"),
+      summaryCard("Product unlocks", accessGrants.length ? `${accessGrants.length} targets` : "No unlocks"),
     ].join("");
   }
 
   if (review) {
-    review.innerHTML = recordType !== "item" ? [
+    review.innerHTML = [
+      summaryCard("Entity", recordType),
       summaryCard("Name", document.getElementById("contentName")?.value || record?.name || ""),
       summaryCard("Type", document.getElementById("contentType")?.value || record?.type || ""),
+      summaryCard("Template", selectedTemplate()?.templateName || selectedTemplate()?.name || "Not selected"),
+      summaryCard("Entity variants", entityVariantSummary),
       summaryCard("Status", document.getElementById("contentStatus")?.value || record?.status || "draft"),
-      summaryCard("Visibility", document.getElementById("contentVisibility")?.value || record?.visibility || "private"),
-      summaryCard("Items", `${linkedItemCount}`),
-      summaryCard("Blueprints / related Plans", `${linkedBlueprintCount} / ${linkedPlanCount}`),
-    ].join("") : [
-      summaryCard("Name", document.getElementById("contentName")?.value || record?.name || ""),
-      summaryCard("Status", document.getElementById("contentStatus")?.value || record?.status || "draft"),
+      summaryCard("Tags", selectedTagsFromControls().join(", ") || "No tags"),
+      summaryCard("Description", document.getElementById("contentShortDescription")?.value || "Not entered"),
+      ...(estimatedCost === null ? [] : [summaryCard("Estimated unit cost", `$${estimatedCost.toFixed(2)}`)]),
+      summaryCard("Library", libraryVisible ? "Included" : "Not included", libraryVisible ? "ok" : "default"),
       summaryCard(
-        "Shop status",
+        "Product",
         isShopProduct
-          ? productRelation.shopStatus || record?.productShopStatus || record?.shopStatus || "draft"
-          : "N/A",
+          ? `${productId || "New product"} / ${moneyLabel(price)} / ${variants.length} variants`
+          : "Not connected",
       ),
+      summaryCard("Product unlocks", accessGrants.length ? `${accessGrants.length} targets` : "No unlocks"),
       summaryCard(
-        "Marketplace",
-        isShopProduct ? visible ? "Visible" : "Hidden" : "Not a shop product",
-        isShopProduct && visible ? "ok" : "default",
+        "Connections",
+        `${linkedItemCount} Items / ${linkedBlueprintCount} Blueprints / ${linkedPlanCount} Plans`,
       ),
-      summaryCard(
-        "Shipping",
-        isShopProduct && productRelation.requiresShipping ? "Requires shipping" : "No shipping required",
-      ),
-      summaryCard(
-        "Archived",
-        isShopProduct && productRelation.archived ? "Archived" : "Not archived",
-        isShopProduct && productRelation.archived ? "warning" : "ok",
-      ),
+      summaryCard("Assets", assetSummary),
     ].join("");
   }
 }
@@ -1860,17 +3217,24 @@ function populateNewBuilderFromRoute(params) {
     updateTemplatesForType();
   }
   if (requestedStatus) {
-    setSelectValue("contentStatus", requestedStatus === "awaiting-approval" ? "review" : requestedStatus);
+    setInputValue("contentStatus", requestedStatus === "awaiting-approval" ? "review" : requestedStatus);
   }
-  if (params.get("visibility")) setSelectValue("contentVisibility", params.get("visibility"));
-  if (params.get("category")) setSelectValue("contentCategoryId", params.get("category"));
+  if (params.get("visibility")) setInputValue("contentVisibility", params.get("visibility"));
+  if (params.get("category")) setSelectValue("contentTagCategoryFilter", params.get("category"));
   if (params.get("tag")) renderTagControls([params.get("tag")]);
+  setCheckboxValue("contentIsShopProduct", params.get("product") === "1");
+  setCheckboxValue("contentWebsiteVisible", params.get("websiteVisible") === "1");
   if (recordType === "item") {
-    setCheckboxValue("contentIsShopProduct", params.get("product") === "1");
-    setCheckboxValue("contentWebsiteVisible", params.get("websiteVisible") === "1");
     setCheckboxValue("contentProductFeatured", params.get("featured") === "1");
     setCheckboxValue("contentInventoryTracked", params.get("inventoryTracked") === "1");
     applyTemplateDrivenItemFields(selectedTemplate()?.defaults || {});
+  }
+
+  const routeVariants = entityVariantsFromBuilder();
+  if (routeVariants[0]) {
+    routeVariants[0].shopEnabled = params.get("product") === "1";
+    routeVariants[0].libraryVisible = params.get("websiteVisible") === "1";
+    renderEntityVariantRows(routeVariants);
   }
 
   state.currentStep = 1;
@@ -1902,23 +3266,66 @@ function populateBuilderFromRecord(record) {
     cooldownBlueprintIds: (record.templateContent?.cooldownBlueprintIds || []).join(", "),
     templateFieldValues: templateFieldValuesForRecord(record),
   });
-  setSelectValue("contentStatus", record.status);
-  setSelectValue("contentVisibility", record.visibility || "private");
+  setInputValue("contentStatus", record.status || "draft");
+  setInputValue("contentVisibility", record.visibility || "private");
+  setInputValue("contentScheduledActiveAt", record.scheduledActiveAt || "");
+  setInputValue("contentScheduledPauseAt", record.scheduledPauseAt || "");
 
   setInputValue("contentName", record.name);
   setInputValue("contentId", record.id);
   setInputValue("contentShortDescription", record.shortDescription);
   setInputValue("contentLongDescription", record.longDescription);
   renderTagControls(record.tags || []);
+  const storedVariants = Array.isArray(record.entityVariants) ? record.entityVariants : [];
+  const legacyShopEnabled = Boolean(record.productId || record.createsProduct || record.isShopProduct);
+  const legacyLibraryVisible = Boolean(record.websiteVisible || record.requestedWebsiteVisible);
+  const hydratedVariants = storedVariants.length ? storedVariants.map((variant, index) => ({
+    ...(index === 0 ? {
+      stockQty: record.itemStockQty ?? record.stockQty ?? record.stock,
+      reorderLevel: record.itemReorderLevel ?? record.reorderLevel,
+      inventoryUnit: record.itemInventoryUnit || record.inventoryUnit,
+      inventoryLocation: record.itemInventoryLocation || record.inventoryLocation,
+      unitCost: record.itemUnitCost ?? record.unitCost,
+      costReference: record.itemCostReference || record.costReference,
+    } : {}),
+    shopEnabled: variant?.shopEnabled ?? legacyShopEnabled,
+    libraryVisible: variant?.libraryVisible ?? legacyLibraryVisible,
+    ...variant,
+  })) : [{
+    entityVariantId: "VAR-PRIMARY",
+    name: "Primary",
+    templateVariantId: record.templateId || record.template || "",
+    durationMinutes: record.durationMinutes,
+    sizeLabel: record.sizeLabel,
+    intendedOutput: record.intendedOutput,
+    templateFieldValues: templateFieldValuesForRecord(record),
+    status: record.status || "draft",
+    owner: record.owner,
+    ownerType: record.ownerType,
+    stockQty: record.itemStockQty ?? record.stockQty ?? record.stock,
+    reorderLevel: record.itemReorderLevel ?? record.reorderLevel,
+    inventoryUnit: record.itemInventoryUnit || record.inventoryUnit,
+    inventoryLocation: record.itemInventoryLocation || record.inventoryLocation,
+    unitCost: record.itemUnitCost ?? record.unitCost,
+    costReference: record.itemCostReference || record.costReference,
+    shopEnabled: legacyShopEnabled,
+    libraryVisible: legacyLibraryVisible,
+  }];
+  renderEntityVariantRows(hydratedVariants);
 
   if (recordType === "item") {
-    setSelectValue("contentItemKind", record.itemKind);
-    setSelectValue("contentCategoryId", record.categoryId);
     setCheckboxValue("contentWebsiteVisible", record.websiteVisible || record.requestedWebsiteVisible);
     setCheckboxValue("contentIsShopProduct", record.isShopProduct);
     setCheckboxValue("contentSoldByRecoveryTools", record.soldByRecoveryTools !== false);
     setCheckboxValue("contentRequiresShipping", record.requiresShipping);
     setCheckboxValue("contentInventoryTracked", record.inventoryTracked);
+    setInputValue("contentItemStockQty", record.itemStock ?? "");
+    setInputValue("contentItemReorderLevel", record.itemReorderLevel ?? "");
+    setInputValue("contentItemInventoryUnit", record.itemInventoryUnit || "");
+    setInputValue("contentItemInventoryLocation", record.itemInventoryLocation || "");
+    setInputValue("contentItemUnitCost", record.itemUnitCost ?? "");
+    setInputValue("contentItemCostReference", record.itemCostReference || "");
+    updateItemInventoryFields();
     setCheckboxValue("contentRequiresCalendar", record.requiresCalendar);
     setCheckboxValue("contentRequiresSessionTime", record.requiresSessionTime);
     setCheckboxValue("contentTracksSeats", record.tracksSeats);
@@ -1935,8 +3342,18 @@ function populateBuilderFromRecord(record) {
     applyTemplateDrivenItemFields(selectedTemplate()?.defaults || {});
     setInputValue("contentProductId", record.productId || record.itemProductId || "");
     renderExistingProductOptions(record.productId || record.itemProductId || "");
-    setSelectValue("contentProductLinkRole", record.productLinkRole || "Represents");
+    setInputValue("contentProductLinkRole", record.productLinkRole || "Represents");
+    updateProductRelationshipControl(record.productLinkRole || "Represents");
     setInputValue("contentProductSku", record.productSku);
+    setSelectValue("contentProductCategoryId", record.productCategoryId);
+    setSelectValue("contentProductDeliveryType", record.productType || "Physical");
+    setCheckboxValue("contentProductRequiresShipping", record.productRequiresShipping === true);
+    setCheckboxValue("contentProductInventoryTracked", record.productInventoryTracked === true);
+    setCheckboxValue("contentProductRequiresCalendar", record.productRequiresCalendar === true);
+    setCheckboxValue("contentProductRequiresSessionTime", record.productRequiresSessionTime === true);
+    setCheckboxValue("contentProductTracksSeats", record.productTracksSeats === true);
+    setCheckboxValue("contentProductRequiresLocation", record.productRequiresLocation === true);
+    setCheckboxValue("contentProductRequiresInstructor", record.productRequiresInstructor === true);
     setSelectValue("contentProductShopStatus", record.productShopStatus || record.shopStatus || "draft");
     setInputValue("contentProductPrice", record.productEffectiveShopPrice || record.productPrice || "");
     setInputValue("contentProductStock", record.productStock ?? 0);
@@ -1946,11 +3363,21 @@ function populateBuilderFromRecord(record) {
     );
     setCheckboxValue("contentProductFeatured", record.productFeatured);
     setCheckboxValue("contentProductArchived", record.productArchived);
+    state.retainedProductVariantContentLinks = (record.productVariantContentLinks || [])
+      .filter((link) => link.linkRole !== "ManufacturedFrom");
     setInputValue("contentProductVariants", serializeProductVariants(record.variants || []));
+    renderProductBlueprintOptions(record.manufacturingBlueprintId || "");
+    renderProductVariantContentLinkRows(record.productVariantContentLinks || []);
+    renderProductUnlockRows(record.productAccessGrants || []);
+    renderProductInstructorRows(productInstructorAssignments({
+      instructor: record.productInstructor,
+      variants: record.variants || [],
+    }));
     updateProductRelationStatus(record);
     renderCurrentAssets(record);
   } else {
-    setCheckboxValue("contentCreatesProduct", record.createsProduct || !!record.productId);
+    setCheckboxValue("contentWebsiteVisible", record.websiteVisible || record.requestedWebsiteVisible);
+    setCheckboxValue("contentIsShopProduct", record.createsProduct || !!record.productId);
     setInputValue("contentLinkedItemIds", (record.linkedItemIds || []).join(", "));
     setInputValue("contentLinkedBlueprintIds", (record.linkedBlueprintIds || []).join(", "));
     setInputValue("contentLinkedPlanIds", (record.linkedPlanIds || []).join(", "));
@@ -1958,17 +3385,38 @@ function populateBuilderFromRecord(record) {
     setInputValue("contentGoal", record.goal);
     setInputValue("contentProductId", record.productId || "");
     renderExistingProductOptions(record.productId || "");
-    setSelectValue("contentProductLinkRole", record.productLinkRole || "Represents");
+    setInputValue("contentProductLinkRole", record.productLinkRole || "Represents");
+    updateProductRelationshipControl(record.productLinkRole || "Represents");
     setInputValue("contentProductSku", record.productSku);
+    setSelectValue("contentProductCategoryId", record.productCategoryId);
+    setSelectValue("contentProductDeliveryType", record.productType || "Physical");
+    setCheckboxValue("contentProductRequiresShipping", record.productRequiresShipping === true);
+    setCheckboxValue("contentProductInventoryTracked", record.productInventoryTracked === true);
+    setCheckboxValue("contentProductRequiresCalendar", record.productRequiresCalendar === true);
+    setCheckboxValue("contentProductRequiresSessionTime", record.productRequiresSessionTime === true);
+    setCheckboxValue("contentProductTracksSeats", record.productTracksSeats === true);
+    setCheckboxValue("contentProductRequiresLocation", record.productRequiresLocation === true);
+    setCheckboxValue("contentProductRequiresInstructor", record.productRequiresInstructor === true);
     setSelectValue("contentProductShopStatus", record.productShopStatus || record.shopStatus || "draft");
     setInputValue("contentProductPrice", record.productEffectiveShopPrice || record.productPrice || "");
     setInputValue("contentProductStock", record.productStock ?? 0);
     setCheckboxValue("contentProductVisible", record.productVisible || record.requestedProductVisible);
     setCheckboxValue("contentProductFeatured", record.productFeatured);
     setCheckboxValue("contentProductArchived", record.productArchived);
+    state.retainedProductVariantContentLinks = (record.productVariantContentLinks || [])
+      .filter((link) => link.linkRole !== "ManufacturedFrom");
     setInputValue("contentProductVariants", serializeProductVariants(record.variants || []));
+    renderProductBlueprintOptions(record.manufacturingBlueprintId || "");
+    renderProductVariantContentLinkRows(record.productVariantContentLinks || []);
+    renderProductUnlockRows(record.productAccessGrants || []);
+    renderProductInstructorRows(productInstructorAssignments({
+      instructor: record.productInstructor,
+      variants: record.variants || [],
+    }));
     updateProductRelationStatus(record);
   }
+
+  updateProductPhysicalFields();
 
   renderRelationshipPickers();
 
@@ -2002,13 +3450,8 @@ function applyBuilderRoute() {
 }
 
 function updateBuilderFilterButtons(recordType) {
-  const selectedType = normalizedType(document.getElementById("contentType")?.value);
   document.querySelectorAll(".builder-filter-btn").forEach((button) => {
-    const filterType = button.dataset.builderType || "";
-    const isActive = button.dataset.builderFilter === recordType &&
-      (filterType
-        ? normalizedType(filterType) === selectedType
-        : !(recordType === "plan" && selectedType === "campaign"));
+    const isActive = button.dataset.builderFilter === recordType;
     button.classList.toggle("bg-[#407471]", isActive);
     button.classList.toggle("bg-gray-700", !isActive);
   });
@@ -2160,6 +3603,11 @@ function templateFieldRowMarkup(field = {}) {
     "Linked Item List",
     "Linked Blueprint List",
     "Linked Plan List",
+    "Asset",
+    "Image Asset",
+    "Video Asset",
+    "PDF Asset",
+    "Canva Design Asset",
   ].map((option) => `
               <option value="${option}" ${fieldType === option ? "selected" : ""}>${option}</option>
             `).join("")}
@@ -2274,7 +3722,7 @@ function templateFieldsFromDrawer(rows, variantId) {
       const idSlug = String(name).trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");
       const id = row.querySelector(".template-field-id")?.value || `${variantId || templateId}-FIELD-${idSlug}`;
       if (!name || !key) throw new Error("Every template field needs a name and field key.");
-      if (fieldType.startsWith("Linked ") && !linkedTable) {
+      if ((fieldType.startsWith("Linked ") || fieldType.endsWith(" Asset") || fieldType === "Asset") && !linkedTable) {
         throw new Error(`Choose a LinkedTable for "${name}".`);
       }
       if (!Number.isInteger(sortOrder) || sortOrder < 1) {
@@ -2335,6 +3783,11 @@ function handleTemplateFieldRowsChange(event) {
       "Linked Item List": "Items",
       "Linked Blueprint List": "Blueprints",
       "Linked Plan List": "Plans",
+      Asset: "Assets",
+      "Image Asset": "Assets",
+      "Video Asset": "Assets",
+      "PDF Asset": "Assets",
+      "Canva Design Asset": "Assets",
     };
     const linkedTable = row.querySelector(".template-field-linked-table");
     if (linkedTable) linkedTable.value = linkedDefaults[event.target.value] || "";
@@ -2621,6 +4074,17 @@ function addSavedTemplatesToState(templates) {
   };
 }
 
+async function refreshTemplateDefinitions() {
+  const response = await getContentBuilderData();
+  const refreshedOptions = response.data?.options;
+  if (!refreshedOptions?.templateDefinitions) return;
+  state.options = {
+    ...state.options,
+    ...refreshedOptions,
+    templateDefinitions: refreshedOptions.templateDefinitions,
+  };
+}
+
 function selectSavedTemplateWithoutReset(template) {
   const recordType = currentRecordType();
   const typeValue = document.getElementById("contentType")?.value || "";
@@ -2632,6 +4096,7 @@ function selectSavedTemplateWithoutReset(template) {
   }
 
   const currentValues = captureTemplateGuidedValues();
+  const variants = entityVariantsFromBuilder();
   const select = document.getElementById("contentTemplate");
   const help = document.getElementById("contentTemplateHelp");
   const templates = templateDefinitions(recordType, typeValue);
@@ -2645,6 +4110,15 @@ function selectSavedTemplateWithoutReset(template) {
     help.textContent =
       `${templates.length} saved template${templates.length === 1 ? "" : "s"} available for ${typeValue}.`;
   }
+  const targetVariantId = state.templateTargetVariantId || variants[0]?.entityVariantId || "";
+  const target = variants.find((variant) => variant.entityVariantId === targetVariantId);
+  if (target) {
+    target.templateVariantId = template.id;
+    target.templateId = template.templateId || "";
+    target.templateFieldValues = {};
+  }
+  renderEntityVariantRows(variants);
+  state.templateTargetVariantId = "";
   renderTemplateGuidedFields();
   restoreTemplateGuidedValues(currentValues);
 }
@@ -2689,7 +4163,6 @@ function openTemplateEditorForSelectedTemplate() {
   setInputValue("templateId", parentId);
   setInputValue("templateName", source.templateName || source.name || "");
   setSelectValue("templateAppliesTo", source.appliesTo);
-  setSelectValue("templateCategoryId", defaults.categoryId);
   setInputValue("templateDescription", source.templateDescription || source.description || "");
   setCheckboxValue("templateIsDefault", siblings.some((template) =>
     template.templateIsDefault === true || template.isDefault === true));
@@ -2746,7 +4219,6 @@ function openTemplateCreatorForCurrentRecord() {
   }
   setInputValue("templateName", "");
   setInputValue("templateDescription", "");
-  setSelectValue("templateCategoryId", document.getElementById("contentCategoryId")?.value);
   setCheckboxValue("templateIsDefault", false);
   setCheckboxValue("templateActive", true);
   renderTemplateVariants([{
@@ -2776,31 +4248,7 @@ function updateTemplateManagerTypeOptions() {
   document.querySelectorAll(".template-variant-plan-defaults").forEach((section) => {
     section.classList.toggle("hidden", recordType !== "plan");
   });
-  fillCategorySelect(document.getElementById("templateCategoryId"), true);
   updateGeneratedTemplateId();
-}
-
-async function uploadContentAsset() {
-  const files = [...(document.getElementById("contentAssetFile")?.files || [])];
-  const title = document.getElementById("contentAssetTitle")?.value || "";
-
-  return Promise.all(files.map(async (file, index) => {
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, "-");
-    const fileRef = ref(storage, `content-builder/assets/${Date.now()}-${index + 1}-${safeName}`);
-    await uploadBytes(fileRef, file);
-    const url = await getDownloadURL(fileRef);
-    const type = file.type.startsWith("image/")
-      ? "image"
-      : file.type.startsWith("video/")
-        ? "video"
-        : "document";
-    return {
-      url,
-      type,
-      title: title || file.name,
-      purpose: selectedTemplate()?.name || "Primary Asset",
-    };
-  }));
 }
 
 function templateAssetLinksFromBuilder(templateFieldValues) {
@@ -2816,22 +4264,59 @@ function templateAssetLinksFromBuilder(templateFieldValues) {
   });
 }
 
+function templateAssetLinksForVariant(variant) {
+  const template = templateDefinitions(currentRecordType(), document.getElementById("contentType")?.value)
+    .find((candidate) => candidate.id === variant.templateVariantId);
+  return templateFields(template).filter(isAssetTemplateField).flatMap((field) => {
+    const key = templateFieldKey(field.key || field.id || field.name);
+    const rawValue = variant.templateFieldValues?.[key];
+    const values = Array.isArray(rawValue) ? rawValue : rawValue ? [rawValue] : [];
+    return uniqueValues(values).map((assetId) => ({
+      assetId,
+      fieldKey: key,
+      fieldName: field.name || "Template Asset",
+      entityVariantId: variant.entityVariantId,
+    }));
+  });
+}
+
+function variantHasAssetTemplateFields(variant) {
+  const template = templateDefinitions(currentRecordType(), document.getElementById("contentType")?.value)
+    .find((candidate) => candidate.id === variant.templateVariantId);
+  return templateFields(template).some(isAssetTemplateField);
+}
+
 function originalTemplateAssetIds() {
   if (!state.editingRecord) return [];
   const values = templateFieldValuesForRecord(state.editingRecord);
-  return uniqueValues(templateAssetLinksFromBuilder(values).map((link) => link.assetId));
+  const variantLinks = (state.editingRecord.entityVariants || [])
+    .flatMap((variant) => templateAssetLinksForVariant(variant));
+  return uniqueValues([
+    ...templateAssetLinksFromBuilder(values).map((link) => link.assetId),
+    ...variantLinks.map((link) => link.assetId),
+  ]);
 }
 
 async function formPayload(confirmDuplicate = false) {
-  const templateFieldValues = templateFieldValuesFromBuilder({ validate: true });
   const recordType = document.getElementById("contentRecordType")?.value || "item";
-  const templateId = document.getElementById("contentTemplate")?.value || "";
+  const entityVariants = entityVariantsFromBuilder();
+  if (!entityVariants.length) throw new Error("Add at least one variant before saving.");
+  entityVariants.forEach((variant, index) => {
+    const row = document.querySelectorAll(".content-entity-variant-row")[index];
+    if (!variant.templateVariantId) throw new Error(`Choose a template for ${variant.name}.`);
+    templateFieldValuesFromBuilder({ validate: true, root: row });
+  });
+  const primaryVariant = entityVariants[0];
+  const primaryBehaviours = primaryVariant.behaviourDefaults || {};
+  const templateFieldValues = primaryVariant.templateFieldValues || {};
+  const templateId = primaryVariant.templateVariantId || "";
   if (["item", "blueprint", "plan"].includes(recordType) && !templateId) {
     throw new Error("Choose or create a template before building this record.");
   }
-  validateTemplateDrivenItemFields();
-  const uploadedAssets = state.editingRecord ? [] : await uploadContentAsset();
   const productRelation = productRelationPayload();
+  if (productRelation?.linkRole === "ManufacturedFrom" && !productRelation.existingProductId) {
+    throw new Error("Choose an existing Product for a manufacturing/cost Blueprint.");
+  }
   const warmupBlueprintIds = splitCsv(templateInput("contentWarmupBlueprintIds"));
   const mainBlueprintIds = splitCsv(templateInput("contentMainBlueprintIds"));
   const cooldownBlueprintIds = splitCsv(templateInput("contentCooldownBlueprintIds"));
@@ -2856,21 +4341,41 @@ async function formPayload(confirmDuplicate = false) {
     longDescription: document.getElementById("contentLongDescription")?.value || "",
     notes: document.getElementById("contentLongDescription")?.value || "",
     tags: selectedTagsFromControls(),
-    itemKind: document.getElementById("contentItemKind")?.value || "",
-    categoryId: document.getElementById("contentCategoryId")?.value || "",
-    websiteVisible: document.getElementById("contentWebsiteVisible")?.checked === true,
-    isShopProduct: document.getElementById("contentIsShopProduct")?.checked === true,
+    websiteVisible: entityVariants.some((variant) => variant.libraryVisible === true),
+    isShopProduct: recordType === "item"
+      ? primaryBehaviours.isShopProduct === true
+      : document.getElementById("contentIsShopProduct")?.checked === true,
     createsProduct: isShopProductSelected(),
-    soldByRecoveryTools: document.getElementById("contentSoldByRecoveryTools")?.checked !== false,
-    requiresShipping: document.getElementById("contentRequiresShipping")?.checked === true,
-    inventoryTracked: document.getElementById("contentInventoryTracked")?.checked === true,
-    requiresCalendar: document.getElementById("contentRequiresCalendar")?.checked === true,
-    requiresSessionTime: document.getElementById("contentRequiresSessionTime")?.checked === true,
-    tracksSeats: document.getElementById("contentTracksSeats")?.checked === true,
-    unlocksAccess: document.getElementById("contentUnlocksAccess")?.checked === true,
-    requiresLocation: selectedTemplate()?.defaults?.requiresLocation === true,
-    requiresInstructor: selectedTemplate()?.defaults?.requiresInstructor === true,
-    issuesCertificate: document.getElementById("contentIssuesCertificate")?.checked === true,
+    soldByRecoveryTools: recordType === "item"
+      ? primaryBehaviours.soldByRecoveryTools !== false
+      : document.getElementById("contentSoldByRecoveryTools")?.checked !== false,
+    requiresShipping: recordType === "item"
+      ? primaryBehaviours.requiresShipping === true
+      : document.getElementById("contentRequiresShipping")?.checked === true,
+    inventoryTracked: recordType === "item"
+      ? primaryBehaviours.inventoryTracked === true
+      : document.getElementById("contentInventoryTracked")?.checked === true,
+    requiresCalendar: recordType === "item"
+      ? primaryBehaviours.requiresCalendar === true
+      : document.getElementById("contentRequiresCalendar")?.checked === true,
+    requiresSessionTime: recordType === "item"
+      ? primaryBehaviours.requiresSessionTime === true
+      : document.getElementById("contentRequiresSessionTime")?.checked === true,
+    tracksSeats: recordType === "item"
+      ? primaryBehaviours.tracksSeats === true
+      : document.getElementById("contentTracksSeats")?.checked === true,
+    unlocksAccess: recordType === "item"
+      ? primaryBehaviours.unlocksAccess === true
+      : document.getElementById("contentUnlocksAccess")?.checked === true,
+    requiresLocation: recordType === "item"
+      ? primaryBehaviours.requiresLocation === true
+      : selectedTemplate()?.defaults?.requiresLocation === true,
+    requiresInstructor: recordType === "item"
+      ? primaryBehaviours.requiresInstructor === true
+      : selectedTemplate()?.defaults?.requiresInstructor === true,
+    issuesCertificate: recordType === "item"
+      ? primaryBehaviours.issuesCertificate === true
+      : document.getElementById("contentIssuesCertificate")?.checked === true,
     seatCapacity: Number(document.getElementById("contentSeatCapacity")?.value || 0) || null,
     accessType: document.getElementById("contentAccessType")?.value || "",
     deliveryMode: document.getElementById("contentDeliveryMode")?.value || "",
@@ -2879,13 +4384,12 @@ async function formPayload(confirmDuplicate = false) {
     eventLocation: document.getElementById("contentEventLocation")?.value || "",
     instructor: document.getElementById("contentInstructor")?.value || "",
     certificateName: document.getElementById("contentCertificateName")?.value || "",
-    uploadedAssets,
-    assetTitle: document.getElementById("contentAssetTitle")?.value || "",
-    assetPurpose: selectedTemplate()?.name || "",
     linkedItemIds: [
       ...splitCsv(document.getElementById("contentLinkedItemIds")?.value),
       ...blueprintItemIds,
     ],
+    linkedItemComponents: recordType === "blueprint" ? blueprintItemComponentsFromPicker() : [],
+    estimatedUnitCost: recordType === "blueprint" ? updateBlueprintEstimatedCost() : null,
     linkedBlueprintIds: [...new Set(linkedBlueprintIds)],
     linkedPlanIds: splitCsv(document.getElementById("contentLinkedPlanIds")?.value),
     audience: document.getElementById("contentAudience")?.value || "",
@@ -2898,7 +4402,12 @@ async function formPayload(confirmDuplicate = false) {
     sku: productRelation?.sku || "",
     productId: productRelation?.productId || "",
     price: productRelation?.effectiveShopPrice ?? null,
-    stockQty: productRelation?.stock ?? null,
+    stockQty: primaryVariant.stockQty ?? productRelation?.stock ?? null,
+    reorderLevel: primaryVariant.reorderLevel ?? null,
+    inventoryUnit: primaryVariant.inventoryUnit || "",
+    inventoryLocation: primaryVariant.inventoryLocation || "",
+    unitCost: primaryVariant.unitCost ?? null,
+    costReference: primaryVariant.costReference || "",
     variants: productRelation?.variants || [],
     productRelation,
     unlinkProductIds: splitCsv(document.getElementById("contentUnlinkProductId")?.value),
@@ -2912,8 +4421,11 @@ async function formPayload(confirmDuplicate = false) {
       blueprintItemIds,
     },
     templateFieldValues,
-    hasAssetTemplateFields: selectedAssetTemplateFields().length > 0,
-    templateAssetLinks: templateAssetLinksFromBuilder(templateFieldValues),
+    entityVariants,
+    scheduledActiveAt: primaryVariant.scheduledActiveAt || "",
+    scheduledPauseAt: primaryVariant.scheduledPauseAt || "",
+    hasAssetTemplateFields: entityVariants.some(variantHasAssetTemplateFields),
+    templateAssetLinks: entityVariants.flatMap((variant) => templateAssetLinksForVariant(variant)),
     originalTemplateAssetIds: originalTemplateAssetIds(),
     confirmDuplicate,
   };
@@ -2922,7 +4434,6 @@ async function formPayload(confirmDuplicate = false) {
 function templatePayload() {
   const recordType = document.getElementById("templateRecordType")?.value || "item";
   const defaults = {
-    categoryId: document.getElementById("templateCategoryId")?.value || "",
   };
 
   if (recordType === "item") {
@@ -3039,31 +4550,47 @@ async function savePayload(payload) {
 }
 
 function applySaveAction(payload, action = "save") {
-  if (!publicationApprovalRequired()) {
-    return action === "promote" ? { ...payload, status: "active" } : payload;
-  }
-
   const requestedWebsiteVisible = payload.websiteVisible === true;
   const requestedProductVisible = payload.productRelation?.visible === true || payload.shopVisible === true;
-  const isApprovalRequest = action === "promote";
-  const editingActiveRecord = state.editingRecord?.status === "active";
-  if (!isApprovalRequest && editingActiveRecord) return payload;
+  if (action === "save") return payload;
+
+  const awaitingApproval = payload.approvalStatus === "awaiting-approval" ||
+    state.editingRecord?.approvalStatus === "awaiting-approval" ||
+    payload.status === "review" || state.editingRecord?.status === "review";
+  const futureActiveAt = payload.scheduledActiveAt &&
+    new Date(payload.scheduledActiveAt).getTime() > Date.now();
+  const futurePauseAt = payload.scheduledPauseAt &&
+    new Date(payload.scheduledPauseAt).getTime() > Date.now();
+  const activationRequested = action === "active" || (action === "approve" && awaitingApproval);
+  const isActive = activationRequested && !futureActiveAt;
+  const isPaused = action === "pause" && !futurePauseAt;
+  const isArchived = action === "archive";
+  const scheduledStatus = state.editingRecord?.status === "active" ? "active" : "draft";
+  const status = isActive
+    ? "active"
+    : isPaused
+      ? "paused"
+      : isArchived ? "archived" : activationRequested || action === "pause" ? scheduledStatus : "draft";
+  const approvalStatus = action === "approve" || isActive
+    ? "approved"
+    : payload.approvalStatus || state.editingRecord?.approvalStatus || "draft";
 
   return {
     ...payload,
-    status: isApprovalRequest ? "review" : "draft",
-    approvalStatus: isApprovalRequest ? "awaiting-approval" : "draft",
-    publishRequested: isApprovalRequest,
+    status,
+    approvalStatus,
+    publishRequested: false,
     requestedWebsiteVisible,
     requestedProductVisible,
-    websiteVisible: false,
-    shopVisible: false,
-    shopStatus: isApprovalRequest ? "review" : "draft",
+    websiteVisible: isActive ? requestedWebsiteVisible : false,
+    shopVisible: isActive ? requestedProductVisible : false,
+    shopStatus: isActive ? "active" : isArchived ? "archived" : "draft",
     productRelation: payload.productRelation
       ? {
         ...payload.productRelation,
-        visible: false,
-        shopStatus: isApprovalRequest ? "review" : "draft",
+        visible: isActive ? requestedProductVisible : false,
+        shopStatus: isActive ? "active" : isArchived ? "archived" : "draft",
+        archived: isArchived || payload.productRelation.archived === true,
       }
       : null,
   };
@@ -3076,6 +4603,48 @@ async function buildAndSavePayload(confirmDuplicate = false, action = "save") {
   } catch (err) {
     console.error("Failed to prepare content record:", err);
     showToast(err.message || "Check the form values and try again.", "error");
+  }
+}
+
+async function saveVariantsFromBuild() {
+  try {
+    const payload = await formPayload(false);
+    payload.status = state.editingRecord?.status || "draft";
+    if (!state.editingRecord) {
+      payload.createsProduct = false;
+      payload.isShopProduct = false;
+      payload.productRelation = null;
+    }
+    payload.shopVisible = false;
+    payload.websiteVisible = false;
+
+    if (state.editingRecord) {
+      await updateContentControlRecord({
+        recordType: state.editingRecord.recordType,
+        recordId: state.editingRecord.id,
+        updates: payload,
+      });
+    } else {
+      const response = await createContentBuilderRecord(payload);
+      if (response.data?.duplicateWarning) {
+        showDuplicateWarning(response.data.similar || [], payload);
+        showToast("Similar record found. Edit it instead or confirm the new record first.", "error");
+        return false;
+      }
+      const recordId = response.data?.id;
+      if (!recordId) throw new Error("The variants saved, but the new record ID was not returned.");
+      state.editingRecord = { id: recordId, recordType: payload.recordType };
+      history.replaceState({}, "", `/admin/content/builder?type=${encodeURIComponent(payload.recordType)}&id=${encodeURIComponent(recordId)}`);
+    }
+
+    state.isDirty = false;
+    await loadData();
+    showToast("Variants saved automatically.", "success");
+    return true;
+  } catch (err) {
+    console.error("Failed to save content variants:", err);
+    showToast(err.message || "Failed to save variants.", "error");
+    return false;
   }
 }
 
@@ -3094,9 +4663,18 @@ async function saveTemplate() {
     }
 
     addSavedTemplatesToState(definitions);
-    const selectedDefinition = definitions.find((definition) => definition.id === previouslySelectedId) ||
-      definitions.find((definition) => definition.isDefault) ||
-      definitions[0];
+    try {
+      await refreshTemplateDefinitions();
+    } catch (refreshError) {
+      console.warn("Template saved, but its server definitions could not be refreshed immediately.", refreshError);
+    }
+    const savedIds = new Set(definitions.map((definition) => definition.id));
+    const refreshedDefinitions = templateDefinitions(savedTemplate.recordType, savedTemplate.appliesTo)
+      .filter((definition) => savedIds.has(definition.id));
+    const availableDefinitions = refreshedDefinitions.length ? refreshedDefinitions : definitions;
+    const selectedDefinition = availableDefinitions.find((definition) => definition.id === previouslySelectedId) ||
+      availableDefinitions.find((definition) => definition.isDefault) ||
+      availableDefinitions[0];
     if (selectedDefinition?.active !== false) {
       selectSavedTemplateWithoutReset(selectedDefinition);
       showToast("Template saved and selected.", "success");
@@ -3131,7 +4709,9 @@ export async function setupContentBuilder() {
   document.getElementById("newContentBuilderRecordBtn")?.addEventListener("click", clearEditMode);
   setupBuilderFilters();
   document.getElementById("contentType")?.addEventListener("change", () => {
+    const variants = entityVariantsFromBuilder();
     updateTemplatesForType();
+    renderEntityVariantRows(variants);
     applyTypeDrivenFieldGroups();
     renderSimilarList();
     renderRelationshipPickers();
@@ -3153,6 +4733,49 @@ export async function setupContentBuilder() {
   document.getElementById("contentTemplateToolSection")?.addEventListener("click", (event) => {
     if (event.target.id === "contentTemplateToolSection") closeTemplateCreator();
   });
+  document.getElementById("closeContentAssetDrawerBtn")?.addEventListener("click", closeContentAssetDrawer);
+  document.getElementById("toggleContentAssetHelpBtn")?.addEventListener("click", () => {
+    const button = document.getElementById("toggleContentAssetHelpBtn");
+    const panel = document.getElementById("contentAssetHelpPanel");
+    const isOpening = panel?.classList.contains("hidden");
+    panel?.classList.toggle("hidden", !isOpening);
+    button?.setAttribute("aria-expanded", String(isOpening));
+    if (button) button.textContent = isOpening ? "Hide help" : "Help";
+  });
+  document.getElementById("contentAssetDrawer")?.addEventListener("click", (event) => {
+    if (event.target.id === "contentAssetDrawer") closeContentAssetDrawer();
+  });
+  document.getElementById("contentAssetDrawerForm")?.addEventListener("submit", saveContentAsset);
+  document.getElementById("contentAssetType")?.addEventListener("change", (event) => {
+    const file = document.getElementById("contentAssetFile");
+    if (file) file.accept = assetFileAccept(event.target.value);
+    const external = ["Video", "Canva Design"].includes(event.target.value);
+    setInputValue("contentAssetStorageMethod", external ? "external" : "upload");
+    if (external) {
+      setInputValue("contentAssetExternalProvider", event.target.value === "Canva Design" ? "canva" : "youtube");
+    }
+    updateContentAssetStorageMethod();
+  });
+  document.getElementById("contentAssetStorageMethod")?.addEventListener(
+    "change",
+    updateContentAssetStorageMethod,
+  );
+  document.getElementById("contentAssetFile")?.addEventListener("change", (event) => {
+    assetDrawerFile = event.target.files?.[0] || null;
+    const selectedFile = document.getElementById("contentAssetSelectedFile");
+    if (selectedFile) {
+      selectedFile.textContent = assetDrawerFile
+        ? `Selected: ${assetDrawerFile.name}`
+        : "No file selected.";
+    }
+    if (assetDrawerFile && resumeAssetSaveAfterFileSelection) {
+      resumeAssetSaveAfterFileSelection = false;
+      const form = document.getElementById("contentAssetDrawerForm");
+      if (form?.reportValidity()) form.requestSubmit();
+    } else if (!assetDrawerFile) {
+      resumeAssetSaveAfterFileSelection = false;
+    }
+  });
   document.addEventListener("keydown", (event) => {
     if (
       event.key === "Escape" &&
@@ -3160,12 +4783,33 @@ export async function setupContentBuilder() {
     ) {
       closeTemplateCreator();
     }
+    if (
+      event.key === "Escape" &&
+      !document.getElementById("contentAssetDrawer")?.classList.contains("hidden")
+    ) closeContentAssetDrawer();
   });
   document.getElementById("contentName")?.addEventListener("input", renderSimilarList);
+  document.getElementById("contentSimilarList")?.addEventListener("click", (event) => {
+    const button = event.target.closest(".edit-similar-content-record");
+    if (!button) return;
+    const recordType = button.dataset.recordType || currentRecordType();
+    const recordId = button.dataset.recordId || "";
+    const record = findRecord(recordType, recordId);
+    if (!record) {
+      showToast("That similar record could not be loaded. Refresh and try again.", "error");
+      return;
+    }
+    history.pushState({}, "", `/admin/content/builder?type=${encodeURIComponent(recordType)}&id=${encodeURIComponent(recordId)}`);
+    populateBuilderFromRecord(record);
+    showToast(`Editing ${record.name || record.id} instead.`, "success");
+  });
   document.getElementById("addContentTagBtn")?.addEventListener("click", () => addTagRow());
   document.getElementById("contentTagRows")?.addEventListener("change", handleTagRowsChange);
   document.getElementById("contentTagRows")?.addEventListener("input", syncTagInput);
   document.getElementById("contentTagRows")?.addEventListener("click", handleTagRowsClick);
+  document.getElementById("contentTagCategoryFilter")?.addEventListener("change", () => {
+    renderTagControls(selectedTagsFromControls());
+  });
   document.getElementById("templateGuidedFields")?.addEventListener(
     "click",
     handleTemplateGuidedFieldsClick,
@@ -3186,20 +4830,268 @@ export async function setupContentBuilder() {
 
     if (event.target.classList.contains("content-relationship-checkbox")) {
       syncRelationshipPicker(event.target.dataset.relationKind);
+      updateBlueprintEstimatedCost();
+      updateConnectedProductCostPreview();
+      state.isDirty = true;
+      renderBuilderSummaries();
+    }
+    if (event.target.classList.contains("blueprint-item-quantity")) {
+      updateBlueprintEstimatedCost();
+      updateConnectedProductCostPreview();
       state.isDirty = true;
       renderBuilderSummaries();
     }
   });
-  document.getElementById("addCampaignMatchesBtn")?.addEventListener("click", addCampaignMatches);
-  document.getElementById("contentIsShopProduct")?.addEventListener("change", () => {
+  document.getElementById("contentIsShopProduct")?.addEventListener("change", (event) => {
+    if (event.target.checked) openContentProductDrawer();
     showBuilderStep(state.currentStep);
     renderBuilderSummaries();
     updateSaveWorkflow();
   });
-  document.getElementById("contentCreatesProduct")?.addEventListener("change", () => {
-    showBuilderStep(state.currentStep);
-    renderBuilderSummaries();
+  document.getElementById("contentVariantConnectionRows")?.addEventListener("change", (event) => {
+    if (!event.target.matches(".variant-add-to-shop, .variant-add-to-library")) return;
+    const variants = entityVariantsFromBuilder();
+    setCheckboxValue("contentIsShopProduct", variants.some((variant) => variant.shopEnabled));
+    setCheckboxValue("contentWebsiteVisible", variants.some((variant) => variant.libraryVisible));
+    state.isDirty = true;
     updateSaveWorkflow();
+    renderBuilderSummaries();
+  });
+  document.getElementById("openVariantShopProductBtn")?.addEventListener("click", () => {
+    const variants = entityVariantsFromBuilder();
+    if (!variants.some((variant) => variant.shopEnabled)) {
+      showToast("Select at least one variant to add to the Shop Product.", "error");
+      return;
+    }
+    setCheckboxValue("contentIsShopProduct", true);
+    openContentProductDrawer();
+  });
+  document.getElementById("applyVariantLibraryBtn")?.addEventListener("click", () => {
+    const variants = entityVariantsFromBuilder();
+    if (!variants.some((variant) => variant.libraryVisible)) {
+      showToast("Select at least one variant to add to the Library.", "error");
+      return;
+    }
+    setCheckboxValue("contentWebsiteVisible", true);
+    state.isDirty = true;
+    showToast("Library variants selected. They will be saved with this entity.", "success");
+  });
+  document.getElementById("contentProductPrice")?.addEventListener("input", updateConnectedProductCostPreview);
+  document.getElementById("contentProductDeliveryType")?.addEventListener("change", () => {
+    updateProductPhysicalFields();
+  });
+  document.getElementById("contentProductInventoryTracked")?.addEventListener(
+    "change",
+    updateProductPhysicalFields,
+  );
+  ["contentProductRequiresCalendar", "contentProductTracksSeats", "contentProductRequiresSessionTime",
+    "contentProductRequiresLocation", "contentProductRequiresInstructor"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("change", updateProductPhysicalFields);
+  });
+  document.getElementById("contentItemUnitCost")?.addEventListener("input", updateConnectedProductCostPreview);
+  document.getElementById("contentProductManufacturingRecipe")?.addEventListener("change", (event) => {
+    const manufacturing = event.target.checked === true && currentRecordType() === "blueprint";
+    const roleInput = document.getElementById("contentProductLinkRole");
+    if (roleInput) roleInput.value = manufacturing ? "ManufacturedFrom" : "Represents";
+    renderProductBlueprintOptions(
+      manufacturing ? document.getElementById("contentId")?.value || state.editingRecord?.id || "" : "",
+    );
+  });
+  document.getElementById("contentProductSearch")?.addEventListener("input", (event) => {
+    renderProductChoiceList(event.target.value);
+  });
+  document.getElementById("contentProductChoiceList")?.addEventListener("click", (event) => {
+    const choice = event.target.closest("[data-product-choice]");
+    if (choice) chooseExistingProduct(choice.dataset.productChoice);
+  });
+  document.getElementById("createNewProductChoiceBtn")?.addEventListener("click", chooseNewProduct);
+  document.getElementById("addProductVariantContentLinkBtn")?.addEventListener(
+    "click",
+    addProductVariantContentLinkRow,
+  );
+  document.getElementById("productVariantContentLinkRows")?.addEventListener("click", (event) => {
+    const remove = event.target.closest(".remove-product-variant-content-link");
+    if (!remove) return;
+    remove.closest(".product-variant-content-link-row")?.remove();
+    productVariantContentLinksFromRows(true);
+    renderProductBlueprintOptions(document.getElementById("contentProductBlueprintId")?.value || "");
+    state.isDirty = true;
+  });
+  document.getElementById("productVariantContentLinkRows")?.addEventListener("change", (event) => {
+    if (!event.target.matches(".variant-content-product-variant, .variant-content-blueprint")) return;
+    productVariantContentLinksFromRows(true);
+    renderProductBlueprintOptions(document.getElementById("contentProductBlueprintId")?.value || "");
+    state.isDirty = true;
+  });
+  document.getElementById("contentProductVariants")?.addEventListener("change", () => {
+    renderProductVariantContentLinkRows(productVariantContentLinksFromRows(true));
+    renderProductInstructorRows(productInstructorAssignmentsFromRows(true));
+  });
+  document.getElementById("contentProductVariantRows")?.addEventListener("input", () => {
+    syncSelectedProductVariantRows();
+    state.isDirty = true;
+  });
+  document.getElementById("contentProductVariantRows")?.addEventListener("change", () => {
+    syncSelectedProductVariantRows();
+    renderProductVariantContentLinkRows(productVariantContentLinksFromRows(true));
+    renderProductInstructorRows(productInstructorAssignmentsFromRows(true));
+    state.isDirty = true;
+  });
+  document.getElementById("addContentProductInstructorBtn")?.addEventListener(
+    "click",
+    addProductInstructorRow,
+  );
+  document.getElementById("contentProductInstructorRows")?.addEventListener("click", (event) => {
+    const remove = event.target.closest(".remove-content-product-instructor");
+    if (!remove) return;
+    remove.closest(".content-product-instructor-row")?.remove();
+    state.isDirty = true;
+  });
+  document.getElementById("contentProductInstructorRows")?.addEventListener("change", () => {
+    state.isDirty = true;
+  });
+  document.getElementById("contentProductInstructorRows")?.addEventListener("input", () => {
+    state.isDirty = true;
+  });
+  document.getElementById("addContentEntityVariantBtn")?.addEventListener("click", addEntityVariantRow);
+  document.getElementById("contentEntityVariantRows")?.addEventListener("click", (event) => {
+    handleTemplateGuidedFieldsClick(event);
+    const addReference = event.target.closest(".add-content-entity-variant-reference");
+    if (addReference) {
+      const rows = addReference.closest(".content-entity-variant-row")
+        ?.querySelector(".content-entity-variant-reference-rows");
+      rows?.insertAdjacentHTML("beforeend", variantReferenceRowMarkup());
+      rows?.lastElementChild?.querySelector("input")?.focus();
+      state.isDirty = true;
+      return;
+    }
+    const removeReference = event.target.closest(".remove-content-entity-variant-reference");
+    if (removeReference) {
+      const rows = removeReference.closest(".content-entity-variant-reference-rows");
+      const entries = rows?.querySelectorAll(".content-entity-variant-reference-row") || [];
+      if (entries.length > 1) removeReference.closest(".content-entity-variant-reference-row")?.remove();
+      else {
+        const input = entries[0]?.querySelector("input");
+        if (input) input.value = "";
+      }
+      state.isDirty = true;
+      return;
+    }
+    const editTemplate = event.target.closest(".edit-entity-variant-template");
+    const createTemplate = event.target.closest(".create-entity-variant-template");
+    if (editTemplate || createTemplate) {
+      const row = event.target.closest(".content-entity-variant-row");
+      state.templateTargetVariantId = row?.dataset.entityVariantId || "";
+      const selectedId = row?.querySelector(".content-entity-variant-template")?.value || "";
+      setSelectValue("contentTemplate", selectedId);
+      if (editTemplate) openTemplateEditorForSelectedTemplate();
+      else openTemplateCreatorForCurrentRecord();
+      return;
+    }
+    const addRecipe = event.target.closest(".add-blueprint-variant-recipe-row");
+    if (addRecipe) {
+      const variantRows = [...document.querySelectorAll(".content-entity-variant-row")];
+      const index = variantRows.indexOf(addRecipe.closest(".content-entity-variant-row"));
+      const variants = entityVariantsFromBuilder();
+      variants[index].linkedItemComponents.push({ itemId: "", quantity: 1 });
+      renderEntityVariantRows(variants);
+      return;
+    }
+    const removeRecipe = event.target.closest(".remove-blueprint-variant-recipe-row");
+    if (removeRecipe) {
+      removeRecipe.closest(".blueprint-variant-recipe-row")?.remove();
+      updateBlueprintVariantRecipeTotals();
+      state.isDirty = true;
+      return;
+    }
+    const remove = event.target.closest(".remove-content-entity-variant");
+    if (!remove) return;
+    const rows = [...document.querySelectorAll(".content-entity-variant-row")];
+    const index = rows.indexOf(remove.closest(".content-entity-variant-row"));
+    const variants = entityVariantsFromBuilder();
+    variants.splice(index, 1);
+    renderEntityVariantRows(variants);
+    renderBuilderSummaries();
+  });
+  document.getElementById("contentEntityVariantRows")?.addEventListener("input", (event) => {
+    const row = event.target.closest(".content-entity-variant-row");
+    if (row && event.target.classList.contains("content-entity-variant-name")) {
+      const output = row.querySelector(".variant-summary-name");
+      if (output) output.textContent = event.target.value || "Unnamed variant";
+    }
+    if (row && event.target.classList.contains("content-entity-variant-owner")) {
+      const output = row.querySelector(".variant-summary-owner");
+      if (output) output.textContent = event.target.value || "Recovery Tools";
+    }
+    updateBlueprintVariantRecipeTotals();
+    renderBuilderSummaries();
+  });
+  document.getElementById("contentEntityVariantRows")?.addEventListener("toggle", (event) => {
+    const row = event.target.closest(".content-entity-variant-row");
+    if (!row) return;
+    const chevron = row.querySelector(".content-entity-variant-chevron");
+    if (chevron) chevron.textContent = row.open ? "−" : "+";
+  }, true);
+  document.getElementById("contentEntityVariantRows")?.addEventListener("change", (event) => {
+    if (event.target.classList.contains("content-entity-variant-template")) {
+      const rows = [...document.querySelectorAll(".content-entity-variant-row")];
+      const changedRow = event.target.closest(".content-entity-variant-row");
+      const index = rows.indexOf(changedRow);
+      const variants = entityVariantsFromBuilder();
+      variants[index].templateVariantId = event.target.value;
+      const definition = templateDefinitions(currentRecordType(), document.getElementById("contentType")?.value)
+        .find((candidate) => candidate.id === event.target.value);
+      variants[index].templateId = definition?.templateId || "";
+      variants[index].templateFieldValues = {};
+      if (index === 0) {
+        setSelectValue("contentTemplate", event.target.value);
+        applyTemplateDefaults();
+      }
+      renderEntityVariantRows(variants);
+    }
+    updateBlueprintVariantRecipeTotals();
+    renderBuilderSummaries();
+  });
+  document.getElementById("addContentProductUnlockBtn")?.addEventListener("click", addProductUnlockRow);
+  document.getElementById("contentProductUnlockRows")?.addEventListener("change", (event) => {
+    if (!event.target.classList.contains("content-product-unlock-type")) return;
+    const allRows = [...document.querySelectorAll(".content-product-unlock-row")];
+    const index = allRows.indexOf(event.target.closest(".content-product-unlock-row"));
+    const grants = productUnlocksFromRows();
+    grants[index] = {
+      productVariantId: event.target.closest(".content-product-unlock-row")
+        ?.querySelector(".content-product-unlock-variant")?.value || "",
+      accessEntityType: event.target.value,
+      accessEntityId: "",
+    };
+    renderProductUnlockRows(grants);
+  });
+  document.getElementById("contentProductUnlockRows")?.addEventListener("click", (event) => {
+    const remove = event.target.closest(".remove-content-product-unlock");
+    if (!remove) return;
+    const allRows = [...document.querySelectorAll(".content-product-unlock-row")];
+    const index = allRows.indexOf(remove.closest(".content-product-unlock-row"));
+    const grants = productUnlocksFromRows();
+    grants.splice(index, 1);
+    renderProductUnlockRows(grants);
+  });
+  document.getElementById("closeContentProductDrawerBtn")?.addEventListener("click", closeContentProductDrawer);
+  document.getElementById("toggleContentProductHelpBtn")?.addEventListener("click", () => {
+    const button = document.getElementById("toggleContentProductHelpBtn");
+    const panel = document.getElementById("contentProductHelpPanel");
+    const opening = panel?.classList.contains("hidden");
+    panel?.classList.toggle("hidden", !opening);
+    button?.setAttribute("aria-expanded", String(opening));
+    if (button) button.textContent = opening ? "Hide help" : "Help";
+  });
+  document.getElementById("applyContentProductBtn")?.addEventListener("click", closeContentProductDrawer);
+  document.getElementById("contentProductDrawer")?.addEventListener("click", (event) => {
+    if (event.target.id === "contentProductDrawer") closeContentProductDrawer();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !document.getElementById("contentProductDrawer")?.classList.contains("hidden")) {
+      closeContentProductDrawer();
+    }
   });
   document.getElementById("contentExistingProductId")?.addEventListener("change", (event) => {
     setInputValue("contentProductId", event.target.value);
@@ -3216,7 +5108,6 @@ export async function setupContentBuilder() {
     );
     if (!confirmed) return;
     setInputValue("contentUnlinkProductId", productId);
-    setCheckboxValue("contentCreatesProduct", false);
     setCheckboxValue("contentIsShopProduct", false);
     setInputValue("contentProductId", "");
     updateProductRelationStatus(null);
@@ -3231,9 +5122,13 @@ export async function setupContentBuilder() {
     "contentRequiresSessionTime",
     "contentTracksSeats",
     "contentIssuesCertificate",
+    "contentRequiresShipping",
+    "contentInventoryTracked",
   ].forEach((id) => {
     document.getElementById(id)?.addEventListener("change", () => {
       applyTemplateDrivenItemFields();
+      updateProductPhysicalFields();
+      updateItemInventoryFields();
     });
   });
   document.getElementById("templateRecordType")?.addEventListener("change", updateTemplateManagerTypeOptions);
@@ -3264,7 +5159,19 @@ export async function setupContentBuilder() {
   });
 
   document.getElementById("saveContinueContentBtn")?.addEventListener("click", () => {
-    buildAndSavePayload(false, "promote");
+    buildAndSavePayload(false, "active");
+  });
+
+  document.getElementById("approveContentBuilderBtn")?.addEventListener("click", () => {
+    buildAndSavePayload(false, "approve");
+  });
+
+  document.getElementById("pauseContentBuilderBtn")?.addEventListener("click", () => {
+    buildAndSavePayload(false, "pause");
+  });
+
+  document.getElementById("archiveContentBuilderBtn")?.addEventListener("click", () => {
+    buildAndSavePayload(false, "archive");
   });
 
   document.getElementById("confirmDuplicateContentBtn")?.addEventListener("click", () => {

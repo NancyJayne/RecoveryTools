@@ -309,8 +309,6 @@ export function updateCartCount() {
   const count = cart.reduce((sum, i) => sum + i.quantity, 0);
   const cartCountEl = document.getElementById("cartCount");
   if (cartCountEl) cartCountEl.textContent = count;
-  const floatingBtn = document.getElementById("floatingCartBtn");
-  if (floatingBtn) floatingBtn.style.display = count > 0 ? "block" : "none";
 }
 
 export function getCurrentCart() {

@@ -21,8 +21,9 @@ function findWorkbooks(directory) {
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       const fullPath = path.join(current, entry.name);
       if (entry.isDirectory()) visit(fullPath);
-      else if (/^Recovery Tools Master Database.*\.xlsx$/i.test(entry.name)) {
-        results.push({ path: fullPath, modified: fs.statSync(fullPath).mtimeMs });
+      else if (/^Recovery Tools Master Database.*\.(xlsx|xlsm)$/i.test(entry.name)) {
+        const version = Number(entry.name.match(/\((\d+)\)\.(?:xlsx|xlsm)$/i)?.[1] || 0);
+        results.push({ path: fullPath, modified: fs.statSync(fullPath).mtimeMs, version });
       }
     }
   };
@@ -39,7 +40,7 @@ function resolveWorkbookPath() {
   const candidates = [
     ...findWorkbooks(path.join(projectRoot, "outputs")),
     ...findWorkbooks(path.join(os.homedir(), "Downloads")),
-  ].sort((left, right) => right.modified - left.modified);
+  ].sort((left, right) => right.version - left.version || right.modified - left.modified);
   return candidates[0]?.path || null;
 }
 

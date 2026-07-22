@@ -47,6 +47,7 @@ const COLLECTIONS = [
   "assetRenditions",
   "itemAssets",
   "inventory",
+  "instructors",
   "users",
   "orders",
   "orderItems",
@@ -81,13 +82,13 @@ const COLLECTION_SHEETS = {
   contentTemplateVariants: "TemplateVariants",
   contentTemplateFields: "TemplateFields",
   products: "ItemProduct",
-  productLinks: "ProductLinks",
+  productLinks: "ProductConnections",
   productOptions: "ProductOptions",
   productOptionValues: "ProductOptionValues",
   productVariants: "ProductVariants",
   productVariantValues: "ProductVariantValues",
   productComponents: "ProductComponents",
-  productAccessGrants: "ProductAccessGrants",
+  productAccessGrants: "ProductConnections",
   productPrices: "ProductPrice",
   itemVariants: "ItemVariants",
   assets: "Asset",
@@ -95,6 +96,7 @@ const COLLECTION_SHEETS = {
   assetRenditions: "AssetRenditions",
   itemAssets: "ItemAsset",
   inventory: "Inventory",
+  instructors: "Instructors",
   users: "Users",
   orders: "Orders",
   orderItems: "OrderItem",
@@ -135,12 +137,12 @@ function parseArgs(argv) {
 function usage() {
   return [
     "Usage:",
-    "  node functions/scripts/importMasterDatabase.js --dry-run <workbook.xlsx>",
-    "  node functions/scripts/importMasterDatabase.js --emulator <workbook.xlsx>",
-    "  node functions/scripts/importMasterDatabase.js --emulator --reconcile [--report report.json] <workbook.xlsx>",
-    "  node functions/scripts/importMasterDatabase.js --live --confirm-live <workbook.xlsx>",
+    "  node functions/scripts/importMasterDatabase.js --dry-run <workbook.xlsx|xlsm>",
+    "  node functions/scripts/importMasterDatabase.js --emulator <workbook.xlsx|xlsm>",
+    "  node functions/scripts/importMasterDatabase.js --emulator --reconcile [--report report.json] <workbook.xlsx|xlsm>",
+    "  node functions/scripts/importMasterDatabase.js --live --confirm-live <workbook.xlsx|xlsm>",
     "  node functions/scripts/importMasterDatabase.js --live --confirm-live --reconcile " +
-      "[--report report.json] <workbook.xlsx>",
+      "[--report report.json] <workbook.xlsx|xlsm>",
     "",
     "Imports use a managed merge: new IDs are created and workbook-managed IDs receive changed workbook fields.",
     "App-owned collisions and workbook-managed records missing from the workbook are preserved.",
@@ -191,6 +193,13 @@ function asNumber(input) {
   if (input === null || input === undefined || input === "") return null;
   const parsed = Number(input);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function asDate(input) {
+  if (input === null || input === undefined || input === "") return null;
+  if (input instanceof Date) return Number.isNaN(input.getTime()) ? null : input;
+  const parsed = new Date(input);
+  return Number.isNaN(parsed.getTime()) ? asString(input) : parsed;
 }
 
 function asBool(input) {
@@ -429,6 +438,7 @@ function buildDocs(workbook, workbookPath) {
     contentTemplateFields: parseSheet(workbook, "TemplateFields"),
     products: parseSheet(workbook, "ItemProduct"),
     canonicalProducts: parseSheet(workbook, "Products"),
+    productConnections: parseSheet(workbook, "ProductConnections"),
     productLinks: parseSheet(workbook, "ProductLinks"),
     productOptions: parseSheet(workbook, "ProductOptions"),
     productOptionValues: parseSheet(workbook, "ProductOptionValues"),
@@ -444,6 +454,7 @@ function buildDocs(workbook, workbookPath) {
     assetRenditions: parseSheet(workbook, "AssetRenditions"),
     itemAssets: parseSheet(workbook, "ItemAsset"),
     inventory: parseSheet(workbook, "Inventory"),
+    instructors: parseSheet(workbook, "Instructors"),
     users: parseSheet(workbook, "Users"),
     orders: parseSheet(workbook, "Orders"),
     orderItems: parseSheet(workbook, "OrderItem"),
@@ -603,7 +614,6 @@ function buildDocs(workbook, workbookPath) {
       typeId,
       entityKind,
       type,
-      defaultCategoryId: asString(value(row, "DefaultCategoryID")),
       fieldGroupIds: asArray(value(row, "FieldGroupIDs", "Field Group IDs")),
       canUseInBlueprints: asBool(value(row, "CanUseInBlueprints")),
       canUseInPlans: asBool(value(row, "CanUseInPlans")),
@@ -633,7 +643,6 @@ function buildDocs(workbook, workbookPath) {
       itemId,
       name: asString(value(row, "Item Name")),
       type,
-      categoryId: asString(value(row, "CategoryID")),
       tagIds,
       tags: tagIds.map((tagId) => asString(value(tagsById.get(tagId) ?? {}, "TagName", "Tag Name"))).filter(Boolean),
       soldByRecoveryTools: asBool(value(row, "SoldByRecoveryTools")),
@@ -687,7 +696,6 @@ function buildDocs(workbook, workbookPath) {
       name: asString(value(row, "BlueprintName", "Blueprint Name")),
       type: resolveEntityType(row, "Blueprint", entityTypeById),
       createsProduct: asBool(value(row, "CreatesProduct", "Creates Product")),
-      categoryId: asString(value(row, "CategoryID")),
       tagIds,
       tags: tagIds
         .map((tagId) => asString(value(tagsById.get(tagId) ?? {}, "TagName", "Tag Name")))
@@ -803,7 +811,6 @@ function buildDocs(workbook, workbookPath) {
       templateArea,
       name: asString(value(row, "TemplateName", "Name")) || templateId,
       appliesTo: canonicalType(value(row, "AppliesToType", "Type")),
-      defaultCategoryId: asString(value(row, "DefaultCategoryID", "CategoryID")),
       description: asString(value(row, "Description")),
       requiresShipping: asBool(value(row, "RequiresShipping")),
       inventoryTracked: asBool(value(row, "InventoryTracked", "TrackInventory")),
@@ -857,7 +864,6 @@ function buildDocs(workbook, workbookPath) {
       templateId,
       name: asString(value(row, "VariantName", "Name")) || variantId,
       description: asString(value(row, "Description")),
-      defaultCategoryId: asString(value(row, "DefaultCategoryID", "CategoryID")),
       durationMinutes: asNumber(value(row, "DurationMinutes")),
       sizeLabel: asString(value(row, "SizeLabel")),
       ...(requiresShipping === null ? {} : { requiresShipping: asBool(requiresShipping) }),
@@ -948,7 +954,6 @@ function buildDocs(workbook, workbookPath) {
       name: asString(value(row, "VariantName", "Name")) || variantId,
       description: asString(value(row, "Description")),
       itemKind: asString(value(row, "ItemKind")),
-      categoryId: asString(value(row, "CategoryID", "DefaultCategoryID")),
       isShopProduct: asBool(value(row, "IsShopProduct")),
       requiresShipping: asBool(value(row, "RequiresShipping")),
       inventoryTracked: asBool(value(row, "InventoryTracked")),
@@ -1150,7 +1155,6 @@ function buildDocs(workbook, workbookPath) {
       name: asString(value(row, "PlanName", "Plan Name")),
       type: resolveEntityType(row, "Plan", entityTypeById),
       createsProduct: asBool(value(row, "CreatesProduct", "Creates Product", "Creates Product?")),
-      categoryId: asString(value(row, "CategoryID")),
       conditionId: asString(value(row, "ConditionID")),
       tagIds,
       tags: tagIds
@@ -1312,7 +1316,9 @@ function buildDocs(workbook, workbookPath) {
       colour: asString(value(row, "Colour")),
       size: asString(value(row, "Size")),
       sku: asString(value(row, "SKU")),
-      priceOverride: asNumber(value(row, "Price Override")),
+      priceOverride: (asNumber(value(row, "Price Override")) ?? 0) > 0
+        ? asNumber(value(row, "Price Override"))
+        : null,
       itemAssetId: asString(value(row, "ItemAssetID")),
       status: asStatus(value(row, "Status")),
       stock,
@@ -1322,7 +1328,7 @@ function buildDocs(workbook, workbookPath) {
 
   for (const row of rows.prices) {
     const priceId = asString(value(row, "PriceID"));
-    const productId = asString(value(row, "ItemProductID"));
+    const productId = asString(value(row, "ProductID", "ItemProductID"));
     if (!productId) continue;
     if (!priceId) {
       warnings.push(`ProductPrice row for product ${productId} is missing PriceID.`);
@@ -1333,7 +1339,7 @@ function buildDocs(workbook, workbookPath) {
       priceId,
       productId,
       variantId: asString(value(row, "VariantID")),
-      currency: asString(value(row, "Currency")) ?? "AUD",
+      currency: asString(value(row, "Currency")) || "AUD",
       retailPrice: asNumber(value(row, "RetailPrice")),
       salePrice: asNumber(value(row, "SalePrice")),
       onSale: asBool(value(row, "OnSale")),
@@ -1352,6 +1358,8 @@ function buildDocs(workbook, workbookPath) {
       partnerShareRetail: asNumber(value(row, "PartnerShareRetail")),
       stripeProductId: asString(value(row, "stripeProductId")),
       stripePriceId: asString(value(row, "stripePriceId")),
+      effectiveFrom: asDate(value(row, "EffectiveFrom")),
+      effectiveTo: asDate(value(row, "EffectiveTo")),
       status: asStatus(value(row, "Status")),
       notes: asString(value(row, "Notes")),
       updatedAt: FieldValue.serverTimestamp(),
@@ -1432,7 +1440,8 @@ function buildDocs(workbook, workbookPath) {
       itemId,
       name: asString(value(row, "ProductTitle")),
       type: resolveEntityType(item, "Item", entityTypeById),
-      categoryId: asString(value(item, "CategoryID")),
+      productCategoryId: asString(value(row, "ProductCategoryID", "Product Category ID")),
+      categoryId: asString(value(row, "ProductCategoryID", "Product Category ID")),
       tagIds: unique([
         ...asArray(value(item, "TagID")),
         ...(itemTagsById.get(itemId) || []),
@@ -1467,13 +1476,7 @@ function buildDocs(workbook, workbookPath) {
 
   const canonicalRows = {
     products: rows.canonicalProducts,
-    productLinks: rows.productLinks,
-    productOptions: rows.productOptions,
-    productOptionValues: rows.productOptionValues,
     productVariants: rows.productVariants,
-    productVariantValues: rows.productVariantValues,
-    productComponents: rows.productComponents,
-    productAccessGrants: rows.productAccessGrants,
     assets: rows.canonicalAssets,
     entityAssets: rows.entityAssets,
     assetRenditions: rows.assetRenditions,
@@ -1497,6 +1500,20 @@ function buildDocs(workbook, workbookPath) {
       ids.add(id);
       const errors = validateCanonicalRecord(collection, data);
       if (errors.length) warnings.push(`${schema.sheet} ${id}: ${errors.join("; ")}.`);
+      if (collection === "products") {
+        data.name = data.productName;
+        data.shopStatus = data.status;
+        data.websiteVisible = data.visible === true;
+        data.price = data.basePrice;
+        data.priceFrom = data.basePrice;
+      }
+      if (collection === "productVariants") {
+        data.name = data.variantName;
+        data.stock = data.stockQuantity ?? 0;
+        if (data.requiresShippingOverride === undefined && data.requiresShipping !== undefined) {
+          data.requiresShippingOverride = data.requiresShipping;
+        }
+      }
       pushDoc(docs, collection, id, {
         ...data,
         importSourceSheet: schema.sheet,
@@ -1504,6 +1521,86 @@ function buildDocs(workbook, workbookPath) {
       });
     }
     canonicalDocsByCollection.set(collection, ids);
+  }
+
+  const productConnectionIds = new Set();
+  const variantContentLinksByProduct = new Map();
+  for (const row of rows.productConnections) {
+    const connectionId = asString(value(row, "ProductConnectionID"));
+    const productId = asString(value(row, "ProductID"));
+    const productVariantId = asString(value(row, "ProductVariantID"));
+    const entityType = asString(value(row, "EntityType"));
+    const entityId = asString(value(row, "EntityID"));
+    const entityVariantId = asString(value(row, "EntityVariantID"));
+    const connectionType = asString(value(row, "ConnectionType"));
+    if (!connectionId) continue;
+    if (productConnectionIds.has(connectionId)) {
+      warnings.push(`ProductConnections contains duplicate ID ${connectionId}.`);
+      continue;
+    }
+    productConnectionIds.add(connectionId);
+    if (!productId || !entityType || !entityId || !connectionType) {
+      warnings.push(`ProductConnections ${connectionId} is missing ProductID, EntityType, EntityID, or ConnectionType.`);
+      continue;
+    }
+    const status = asStatus(value(row, "Status")) || "active";
+    if (connectionType === "Unlocks") {
+      pushDoc(docs, "productAccessGrants", connectionId, {
+        productAccessGrantId: connectionId,
+        productId,
+        productVariantId,
+        accessEntityType: entityType,
+        accessEntityId: entityId,
+        accessEntityVariantId: entityVariantId,
+        grantTiming: asString(value(row, "GrantTiming")) || "on-payment-confirmed",
+        durationType: asString(value(row, "DurationType")) || "permanent",
+        durationValue: asNumber(value(row, "DurationValue")),
+        startsAt: asDate(value(row, "StartsAt")),
+        endsAt: asDate(value(row, "EndsAt")),
+        revocable: true,
+        status,
+        notes: asString(value(row, "Notes")),
+        importSourceSheet: "ProductConnections",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    } else {
+      pushDoc(docs, "productLinks", connectionId, {
+        productLinkId: connectionId,
+        productId,
+        linkedEntityType: entityType,
+        linkedEntityId: entityId,
+        linkedEntityVariantId: entityVariantId,
+        linkRole: connectionType,
+        isPrimary: asBool(value(row, "IsPrimary")),
+        variantSpecific: Boolean(productVariantId || entityVariantId),
+        productVariantId,
+        status,
+        notes: asString(value(row, "Notes")),
+        importSourceSheet: "ProductConnections",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+    if (productVariantId || entityVariantId) {
+      const links = variantContentLinksByProduct.get(productId) || [];
+      links.push({
+        productVariantId,
+        entityType,
+        entityId,
+        entityVariantId,
+        linkRole: connectionType,
+        status,
+      });
+      variantContentLinksByProduct.set(productId, links);
+    }
+  }
+  for (const doc of docs.filter((entry) => entry.collection === "products")) {
+    const variantContentLinks = variantContentLinksByProduct.get(doc.id);
+    if (variantContentLinks?.length) doc.data.variantContentLinks = variantContentLinks;
+    const manufacturing = rows.productConnections.find((row) =>
+      asString(value(row, "ProductID")) === doc.id &&
+      asString(value(row, "ConnectionType")) === "ManufacturedFrom" &&
+      asString(value(row, "EntityType")) === "Blueprint");
+    if (manufacturing) doc.data.manufacturingBlueprintId = asString(value(manufacturing, "EntityID"));
   }
 
   const productIds = canonicalDocsByCollection.get("products") || new Set();
@@ -1519,24 +1616,36 @@ function buildDocs(workbook, workbookPath) {
 
   const productLinkKeys = new Set();
   const primaryRepresentsByProduct = new Map();
-  for (const row of rows.productLinks) {
-    const id = asString(value(row, "ProductLinkID"));
+  for (const row of rows.productConnections) {
+    const id = asString(value(row, "ProductConnectionID"));
     const productId = asString(value(row, "ProductID"));
-    const entityType = asString(value(row, "LinkedEntityType"));
-    const entityId = asString(value(row, "LinkedEntityID"));
-    const linkRole = asString(value(row, "LinkRole"));
+    const entityType = asString(value(row, "EntityType"));
+    const entityId = asString(value(row, "EntityID"));
+    const linkRole = asString(value(row, "ConnectionType"));
     if (id && productId && !productIds.has(productId)) {
-      warnings.push(`ProductLinks ${id} references missing Product ${productId}.`);
+      warnings.push(`ProductConnections ${id} references missing Product ${productId}.`);
     }
     const entityMaps = { Item: itemsById, Blueprint: blueprintsById, Plan: plansById };
-    if (id && entityType === "Asset" && entityId && !targetAssetIds.has(entityId)) {
-      warnings.push(`ProductLinks ${id} references missing Asset ${entityId}.`);
-    }
     if (id && entityMaps[entityType] && entityId && !entityMaps[entityType].has(entityId)) {
-      warnings.push(`ProductLinks ${id} references missing ${entityType} ${entityId}.`);
+      warnings.push(`ProductConnections ${id} references missing ${entityType} ${entityId}.`);
     }
-    const uniqueKey = [productId, entityType, entityId, linkRole].join("|");
-    if (id && productLinkKeys.has(uniqueKey)) warnings.push(`ProductLinks ${id} duplicates ${uniqueKey}.`);
+    if (id && !["Item", "Blueprint", "Plan"].includes(entityType)) {
+      warnings.push(`ProductConnections ${id} has invalid EntityType ${entityType}.`);
+    }
+    if (id && !["Represents", "ManufacturedFrom", "Unlocks", "Includes"].includes(linkRole)) {
+      warnings.push(`ProductConnections ${id} has invalid ConnectionType ${linkRole}.`);
+    }
+    const uniqueKey = [
+      productId,
+      asString(value(row, "ProductVariantID")),
+      entityType,
+      entityId,
+      asString(value(row, "EntityVariantID")),
+      linkRole,
+    ].join("|");
+    if (id && productLinkKeys.has(uniqueKey)) {
+      warnings.push(`ProductConnections ${id} duplicates ${uniqueKey}.`);
+    }
     if (id) productLinkKeys.add(uniqueKey);
     if (productId && linkRole === "Represents" && asBool(value(row, "IsPrimary"))) {
       primaryRepresentsByProduct.set(productId, (primaryRepresentsByProduct.get(productId) || 0) + 1);
@@ -1560,6 +1669,18 @@ function buildDocs(workbook, workbookPath) {
     const productId = asString(value(row, "ProductID"));
     if (id && productId && !productIds.has(productId)) {
       warnings.push(`ProductVariants ${id} references missing Product ${productId}.`);
+    }
+  }
+  const productVariantIds = canonicalIds("productVariants");
+  for (const row of rows.prices) {
+    const id = asString(value(row, "PriceID"));
+    const productId = asString(value(row, "ProductID", "ItemProductID"));
+    const variantId = asString(value(row, "VariantID"));
+    if (id && productId && !productIds.has(productId)) {
+      warnings.push(`ProductPrice ${id} references missing Product ${productId}.`);
+    }
+    if (id && variantId && !productVariantIds.has(variantId)) {
+      warnings.push(`ProductPrice ${id} references missing ProductVariant ${variantId}.`);
     }
   }
   for (const row of rows.productOptions) {
@@ -1611,6 +1732,23 @@ function buildDocs(workbook, workbookPath) {
     if (id && assetId && !targetAssetIds.has(assetId)) {
       warnings.push(`AssetRenditions ${id} references missing Asset ${assetId}.`);
     }
+  }
+
+  for (const row of rows.instructors) {
+    const instructorId = asString(value(row, "InstructorID"));
+    if (!instructorId) continue;
+    pushDoc(docs, "instructors", instructorId, {
+      instructorId,
+      name: asString(value(row, "InstructorName", "Name")) || instructorId,
+      email: asString(value(row, "Email")),
+      phone: asString(value(row, "Phone")),
+      userId: asString(value(row, "UserID")),
+      bio: asString(value(row, "Bio", "Description")),
+      status: asStatus(value(row, "Status")) || "active",
+      ownerType: asString(value(row, "OwnerType")),
+      notes: asString(value(row, "Notes")),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
   }
 
   for (const row of rows.users) {
@@ -1668,7 +1806,7 @@ function buildDocs(workbook, workbookPath) {
 
   for (const doc of docs) {
     const sourceWorkbook = path.basename(workbookPath || "Recovery Tools Master Database.xlsx");
-    const versionMatch = sourceWorkbook.match(/\((\d+)\)\.xlsx$/i);
+    const versionMatch = sourceWorkbook.match(/\((\d+)\)\.(?:xlsx|xlsm)$/i);
     doc.data.managedByWorkbook = true;
     const sourceSheet = doc.data.importSourceSheet || COLLECTION_SHEETS[doc.collection] || doc.collection;
     delete doc.data.importSourceSheet;

@@ -20,7 +20,7 @@
     "verify:canonical-admin-writes:emulator": "node scripts/verify-canonical-admin-writes-emulator.js",
     "verify:order-lines": "node scripts/verify-order-line-snapshots.js",
     "verify:phase5:emulator": "node scripts/verify-phase5-order-parity-emulator.js",
-    "emulators": "firebase emulators:start",
+    "emulators": "node scripts/start-emulators.js",
     "check:imports": "node scripts/verify-imports.js",
     "lint": "eslint .",
     "test:firebase": "node testFirebase.cjs"
