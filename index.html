@@ -1616,7 +1616,8 @@
                       <input id="contentItemUnitCost" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                     </label>
                     <label class="block">Cost reference
-                      <input id="contentItemCostReference" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Supplier quote or estimate">
+                      <input id="contentItemCostReference" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Supplier name, quote/invoice number, product URL or catalogue reference">
+                      <span class="mt-1 block text-xs text-gray-400">Record where this unit cost came from so it can be checked and reordered later.</span>
                     </label>
                   </div>
                 </section>
@@ -1635,18 +1636,6 @@
                 <label class="inline-flex items-center gap-2" data-field-group="access">
                   <input id="contentUnlocksAccess" type="checkbox" class="accent-[#407471]">
                   Unlocks access after purchase
-                </label>
-                <label class="block" data-field-group="access" data-template-visible="tracksSeats" data-template-required="true">
-                  Seats / tickets
-                  <input id="contentSeatCapacity" type="number" min="0" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-                </label>
-                <label class="block" data-field-group="access" data-template-visible="unlocksAccess" data-template-required="true">
-                  Access type
-                  <input id="contentAccessType" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Course, download, membership...">
-                </label>
-                <label class="block" data-field-group="access" data-template-visible-any="requiresSessionTime requiresLocation requiresCalendar">
-                  Delivery mode
-                  <input id="contentDeliveryMode" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="In person, online, hybrid...">
                 </label>
                 <label class="block" data-field-group="access" data-template-visible="requiresSessionTime" data-template-required="true">
                   Event / session starts
@@ -1749,6 +1738,7 @@
                       <option value="Plan Access">Plan or program access</option>
                       <option value="Service">Service</option>
                       <option value="Workshop Registration">Workshop / event</option>
+                      <option value="Hybrid">Hybrid</option>
                     </select>
                   </label>
                   <label class="block">
@@ -1809,13 +1799,23 @@
                   </summary>
                   <div class="border-t border-gray-700 bg-gray-950/30 p-4">
                     <input id="contentProductStock" type="hidden">
+                    <label class="mb-4 block max-w-md text-sm font-medium text-white">
+                      Default physical fulfilment
+                      <select id="contentProductPhysicalFulfilment" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                        <option value="none">None</option>
+                        <option value="shipping">Shipping</option>
+                        <option value="pickup">Pickup</option>
+                        <option value="shipping-or-pickup">Shipping or pickup</option>
+                      </select>
+                      <span class="mt-1 block text-xs font-normal text-gray-400">New Product variants use this default and can be changed individually.</span>
+                    </label>
                     <label id="contentProductInventoryTrackedField" class="mb-4 inline-flex items-center gap-2 rounded border border-gray-600 bg-gray-900 px-3 py-2 text-sm font-medium text-white">
                       <input id="contentProductInventoryTracked" type="checkbox" class="accent-[#407471]">
                       Track Product inventory
                     </label>
                     <p id="contentProductInventoryHelp" class="mb-4 text-xs text-gray-400">When enabled, enter stock on each Product variant. Overall Product stock is calculated automatically.</p>
                     <div class="grid gap-3 md:grid-cols-2">
-                    <label class="inline-flex items-center gap-2"><input id="contentProductRequiresShipping" type="checkbox" class="accent-[#407471]">Requires shipping</label>
+                    <label class="hidden"><input id="contentProductRequiresShipping" type="checkbox">Requires shipping</label>
                     <label class="inline-flex items-center gap-2"><input id="contentProductRequiresCalendar" type="checkbox" class="accent-[#407471]">Calendar booking</label>
                     <label class="inline-flex items-center gap-2"><input id="contentProductRequiresSessionTime" type="checkbox" class="accent-[#407471]">Event/session timing</label>
                     <label class="inline-flex items-center gap-2"><input id="contentProductTracksSeats" type="checkbox" class="accent-[#407471]">Track tickets/seats</label>
@@ -2005,6 +2005,38 @@
               </div>
             </form>
 
+            <section
+              id="contentBuilderConfirmation"
+              class="hidden rounded border border-[#407471] bg-gray-900/70 p-6 text-center"
+              aria-live="polite"
+            >
+              <div class="mx-auto max-w-2xl">
+                <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#153b38] text-2xl text-[#9edbd7]" aria-hidden="true">✓</div>
+                <h2 id="contentBuilderConfirmationTitle" class="mt-4 text-2xl font-semibold text-white">Content saved</h2>
+                <p id="contentBuilderConfirmationMessage" class="mt-2 text-sm text-gray-300"></p>
+                <p id="contentBuilderConfirmationMeta" class="mt-2 break-all text-xs text-gray-400"></p>
+                <div class="mt-6 flex flex-wrap justify-center gap-3">
+                  <a href="/admin/content" class="rounded bg-[#407471] px-4 py-2 text-white hover:bg-[#305a56]">
+                    Back to Content
+                  </a>
+                  <a
+                    id="contentBuilderMarketplaceLink"
+                    href="/shop"
+                    class="hidden rounded border border-purple-500 px-4 py-2 text-purple-200 hover:bg-purple-950/50"
+                  >
+                    View in Marketplace
+                  </a>
+                  <a
+                    id="contentBuilderLibraryLink"
+                    href="/anato-me"
+                    class="hidden rounded border border-[#407471] px-4 py-2 text-[#9edbd7] hover:bg-[#153b38]"
+                  >
+                    View in Library
+                  </a>
+                </div>
+              </div>
+            </section>
+
             <aside>
               <section id="contentTemplateToolSection" class="fixed inset-0 z-[100] hidden bg-black/40">
                 <div class="ml-auto flex h-full w-full max-w-2xl flex-col overflow-y-auto border-l border-gray-700 bg-gray-900 p-5 shadow-2xl">
@@ -2120,18 +2152,6 @@
                       <label class="inline-flex items-center gap-2">
                         <input id="templateIssuesCertificate" type="checkbox" class="accent-[#407471]">
                         Issues certificate
-                      </label>
-                      <label class="block">
-                        Default ticket/seat capacity
-                        <input id="templateSeatCapacity" type="number" min="0" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-                      </label>
-                      <label class="block">
-                        Default access type
-                        <input id="templateAccessType" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Course, download, membership...">
-                      </label>
-                      <label class="block sm:col-span-2">
-                        Default delivery mode
-                        <input id="templateDeliveryMode" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="In person, online, hybrid...">
                       </label>
                     </div>
                     <div class="flex flex-wrap gap-4">

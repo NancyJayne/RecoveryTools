@@ -79,7 +79,8 @@ function productExperienceDetails(product, variant = null) {
     ["Ends", formatProductDateTime(variant?.eventEndAt || product.eventEndAt)],
     ["Location", variant?.eventLocation || product.eventLocation],
     ["Booking", variant?.calendarBookingReference || product.calendarBookingReference],
-    ["Delivery", product.deliveryMode],
+    ["Delivery", variant?.deliveryMode || product.deliveryMode],
+    ["Physical fulfilment", variant?.physicalFulfilment || product.physicalFulfilment],
     ["Instructor", variant?.instructor || product.instructor],
     ["Tickets / seats", product.tracksSeats ? variant?.seatCapacity ?? product.seatCapacity : ""],
     ["Access", product.unlocksAccess ? product.accessType || "Included after purchase" : ""],
@@ -445,6 +446,31 @@ export function showProductDetail(product, options = {}) {
 
   const priceWrap = document.createElement("div");
   priceWrap.className = "flex flex-col gap-4 mb-4";
+  let selectedPhysicalFulfilment =
+    selectedVariant?.physicalFulfilment || product.physicalFulfilment ||
+    (product.requiresShipping ? "shipping" : "none");
+  const fulfilmentLabel = document.createElement("label");
+  fulfilmentLabel.className = "hidden text-sm text-gray-300";
+  fulfilmentLabel.textContent = "Choose physical fulfilment";
+  const fulfilmentSelect = document.createElement("select");
+  fulfilmentSelect.className = "mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white";
+  fulfilmentSelect.innerHTML = `
+    <option value="shipping">Shipping within Australia</option>
+    <option value="pickup">Pickup</option>
+  `;
+  fulfilmentSelect.addEventListener("change", () => {
+    selectedPhysicalFulfilment = fulfilmentSelect.value;
+  });
+  fulfilmentLabel.appendChild(fulfilmentSelect);
+
+  function updatePhysicalFulfilmentChoice() {
+    const configured = selectedVariant?.physicalFulfilment || product.physicalFulfilment ||
+      (product.requiresShipping ? "shipping" : "none");
+    selectedPhysicalFulfilment = configured === "shipping-or-pickup" ? "shipping" : configured;
+    fulfilmentSelect.value = selectedPhysicalFulfilment;
+    fulfilmentLabel.classList.toggle("hidden", configured !== "shipping-or-pickup");
+  }
+  updatePhysicalFulfilmentChoice();
 
   let variantSelect = null;
   if (variants.length) {
@@ -466,6 +492,7 @@ export function showProductDetail(product, options = {}) {
       ) || null;
       updatePriceDisplay();
       updateExperienceDetails();
+      updatePhysicalFulfilmentChoice();
       updateAddButtonState();
     });
 
@@ -473,6 +500,7 @@ export function showProductDetail(product, options = {}) {
     if (selectedVariant) variantSelect.value = selectedVariant.variantId || selectedVariant.id;
     priceWrap.appendChild(variantLabel);
   }
+  priceWrap.appendChild(fulfilmentLabel);
 
   const qtyWrap = document.createElement("div");
   qtyWrap.className = "flex items-center gap-4";
@@ -528,7 +556,8 @@ export function showProductDetail(product, options = {}) {
       price: finalPrice,
       quantity,
       type: product.type || "tool",
-      requiresShipping: product.requiresShipping !== false,
+      physicalFulfilment: selectedPhysicalFulfilment,
+      requiresShipping: selectedPhysicalFulfilment === "shipping",
       variantId: selectedVariant?.variantId || selectedVariant?.id || "",
       variantName: selectedVariant ? getVariantLabel(selectedVariant) : "",
       sku: selectedVariant?.sku || product.sku || "",

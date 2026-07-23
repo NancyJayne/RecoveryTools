@@ -104,6 +104,8 @@ function normalizedVariant(variant, sourceCollection) {
     inventoryTracked: variant.inventoryTracked === true,
     status: variant.status || "active",
     contentVariantId: variant.contentVariantId || "",
+    deliveryMode: variant.deliveryMode || "",
+    physicalFulfilment: variant.physicalFulfilment || "",
     calendarBookingReference: variant.calendarBookingReference || "",
     seatCapacity: Number.isFinite(Number(variant.seatCapacity)) ? Number(variant.seatCapacity) : null,
     eventStartAt: dateTimeValue(variant.eventStartAt),

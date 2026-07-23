@@ -59,7 +59,9 @@ function normalizeProduct(doc, architecture) {
     data.retailPrice,
   );
   const searchTags = normalizeTags(data);
-  const requiresShipping = data.requiresShipping !== false;
+  const physicalFulfilment = data.physicalFulfilment ||
+    (data.requiresShipping === true ? "shipping" : "none");
+  const requiresShipping = ["shipping", "shipping-or-pickup"].includes(physicalFulfilment);
   const inventoryTracked = data.inventoryTracked ?? requiresShipping;
   const visible =
     data.archived !== true &&
@@ -83,6 +85,7 @@ function normalizeProduct(doc, architecture) {
     onSale: data.onSale === true || activePrice?.salePrice !== null && activePrice?.salePrice !== undefined,
     stock: Number(data.stock ?? 0),
     requiresShipping,
+    physicalFulfilment,
     inventoryTracked,
     type: normalizeStatus(data.type || productDisplayType(data, "tool")),
     productType: productDisplayType(data, "tool"),

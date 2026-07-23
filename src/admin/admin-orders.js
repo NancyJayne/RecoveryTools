@@ -253,9 +253,17 @@ function itemVariantId(item) {
 
 function itemPackingReference(item) {
   const variant = itemVariantName(item) || itemVariantId(item);
+  const fulfilment = item.physicalFulfilment === "pickup"
+    ? "Pickup"
+    : item.physicalFulfilment === "shipping"
+      ? "Shipping"
+      : "";
   return [
     variant ? `Variant: ${variant}` : "",
     item.sku ? `SKU: ${item.sku}` : "",
+    fulfilment ? `Fulfilment: ${fulfilment}` : "",
+    item.pickupLocation?.locationName ? `Pickup: ${item.pickupLocation.locationName}` : "",
+    item.pickupLocation?.address ? item.pickupLocation.address : "",
   ].filter(Boolean).join(" | ") || "-";
 }
 

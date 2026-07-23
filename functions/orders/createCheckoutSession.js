@@ -13,6 +13,10 @@ import {
   productDisplayType,
   variantForProduct,
 } from "../utils/productArchitecture.js";
+import {
+  pickupLocationMetadata,
+  resolveSelectedPickupLocation,
+} from "./pickupLocations.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -193,7 +197,7 @@ const createCheckoutSessionHandler = async (request) => {
 
     const architecture = await loadProductArchitecture(db);
 
-    const validatedItems = productDocs.map((doc, i) => {
+    const validatedItems = await Promise.all(productDocs.map(async (doc, i) => {
       if (!doc.exists) throw new HttpsError("not-found", `Product not found: ${productIds[i]}`);
 
       const data = doc.data();
@@ -217,6 +221,28 @@ const createCheckoutSessionHandler = async (request) => {
       const media = mediaForProduct(doc.id, data, architecture);
       const image = media.find((asset) => asset.type === "image")?.url || firstImage(data);
       const accessGrants = accessGrantsForProduct(doc.id, data, architecture);
+      const configuredFulfilment = variant?.physicalFulfilment || data.physicalFulfilment ||
+        (data.requiresShipping === true ? "shipping" : "none");
+      const requestedFulfilment = cleanString(cart[i].physicalFulfilment).toLowerCase();
+      const physicalFulfilment = configuredFulfilment === "shipping-or-pickup" &&
+        ["shipping", "pickup"].includes(requestedFulfilment)
+        ? requestedFulfilment
+        : configuredFulfilment;
+      const pickupLocation = physicalFulfilment === "pickup"
+        ? await resolveSelectedPickupLocation(db, {
+          productId: doc.id,
+          variantId,
+          referrerId,
+          pickupLocationId: cart[i].pickupLocationId,
+        })
+        : null;
+
+      if (physicalFulfilment === "pickup" && !pickupLocation) {
+        throw new HttpsError(
+          "failed-precondition",
+          `Choose an available pickup location for ${name}.`,
+        );
+      }
 
       if (!price || isNaN(price)) throw new HttpsError("invalid-argument", `Invalid price for: ${name}`);
 
@@ -233,7 +259,9 @@ const createCheckoutSessionHandler = async (request) => {
           data.relatedPlanId || null,
         relatedCourseId: data.relatedCourseId || null,
         relatedWorkshopId: data.relatedWorkshopId || null,
-        requiresShipping: data.requiresShipping !== false,
+        physicalFulfilment,
+        pickupLocation,
+        requiresShipping: physicalFulfilment === "shipping",
         unlocksAccess: accessGrants.length > 0 || data.unlocksAccess === true,
         type: data.type || "item",
         productType: productDisplayType(data, "item"),
@@ -243,7 +271,7 @@ const createCheckoutSessionHandler = async (request) => {
         creatorId: data.creatorId || null,
         stripeAccountId: creatorMap[data.creatorId] || null,
       };
-    });
+    }));
 
     // 💳 Stripe line items
     const hasPhysicalItems = validatedItems.some((item) => item.requiresShipping);
@@ -267,6 +295,8 @@ const createCheckoutSessionHandler = async (request) => {
             relatedCourseId: item.relatedCourseId || "",
             relatedWorkshopId: item.relatedWorkshopId || "",
             requiresShipping: item.requiresShipping ? "true" : "false",
+            physicalFulfilment: item.physicalFulfilment || "none",
+            ...pickupLocationMetadata(item.pickupLocation),
             unlocksAccess: item.unlocksAccess ? "true" : "false",
           },
         },

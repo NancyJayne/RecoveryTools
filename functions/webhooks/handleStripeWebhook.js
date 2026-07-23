@@ -205,6 +205,7 @@ async function productSnapshotFromLineItem(lineItem, commissionRates = {}, archi
     ? await admin.firestore().collection("products").doc(productId).get()
     : null;
   const product = productSnap?.exists ? productSnap.data() : {};
+  const variantId = metadata.variantId || "";
   const accessGrants = accessGrantsForProduct(productId, product, architecture)
     .filter((grant) => !grant.productVariantId || grant.productVariantId === variantId);
   const displayType = productDisplayType(product, metadata.productType || "item");
@@ -212,7 +213,6 @@ async function productSnapshotFromLineItem(lineItem, commissionRates = {}, archi
   const quantity = Number(lineItem.quantity || 1);
   const lineTotal = centsToDollars(lineItem.amount_total);
   const unitPrice = quantity > 0 ? Number((lineTotal / quantity).toFixed(2)) : lineTotal;
-  const variantId = metadata.variantId || "";
   const variant = variantForProduct(productId, product.itemId || product.legacyItemId || "", variantId, architecture);
   const inventory = inventoryForProduct(
     productId,
@@ -238,9 +238,20 @@ async function productSnapshotFromLineItem(lineItem, commissionRates = {}, archi
     affiliatePercent: commissionRates[legacyType] ?? 0,
     affiliateCommission:
       Number((lineTotal * (commissionRates[legacyType] ?? 0)).toFixed(2)),
-    requiresShipping:
-      product.requiresShipping ??
-      (metadata.requiresShipping ? metadata.requiresShipping === "true" : true),
+    physicalFulfilment: metadata.physicalFulfilment ||
+      variant?.physicalFulfilment || product.physicalFulfilment || "none",
+    pickupLocation: metadata.pickupLocationId ? {
+      pickupLocationId: metadata.pickupLocationId,
+      sourceType: metadata.pickupSourceType || "",
+      locationName: metadata.pickupLocationName || "",
+      address: metadata.pickupAddress || "",
+      customerInstructions: metadata.pickupInstructions || "",
+      contactName: metadata.pickupContactName || "",
+      contactPhone: metadata.pickupContactPhone || "",
+    } : null,
+    requiresShipping: metadata.requiresShipping
+      ? metadata.requiresShipping === "true"
+      : product.requiresShipping === true,
     accessGranted: accessGrants.length > 0 || product.unlocksAccess === true || metadata.unlocksAccess === "true",
     accessType: accessGrants[0]?.accessEntityType || product.accessType || metadata.accessType || "",
     relatedPlanId: accessGrants.find((grant) => grant.accessEntityType === "Plan")?.accessEntityId ||

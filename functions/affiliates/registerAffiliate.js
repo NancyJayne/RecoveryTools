@@ -22,6 +22,7 @@ export const registerAffiliate = onCall(
 
     try {
       const db = admin.firestore();
+      const data = request.data || {};
       const affiliateRef = db.collection("affiliates").doc(uid);
       const userRef = db.collection("users").doc(uid);
 
@@ -46,12 +47,20 @@ export const registerAffiliate = onCall(
 
       await affiliateRef.set({
         uid,
+        userId: uid,
         email,
         referralCode,
-        businessName: "",
-        website: "",
+        businessName: String(data.businessName || "").trim(),
+        businessAddress: String(data.address || "").trim(),
+        phone: String(data.phone || "").trim(),
+        description: String(data.description || "").trim(),
+        logoUrl: String(data.logoUrl || "").trim(),
+        timezone: String(data.timezone || "Australia/Brisbane").trim(),
+        website: String(data.website || "").trim(),
         stripeAccountId: "",
         status: "pending",
+        pickupEnabled: false,
+        pickupApprovalStatus: "draft",
         joinedAt: admin.firestore.FieldValue.serverTimestamp(),
         earnings: 0,
       });

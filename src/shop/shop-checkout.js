@@ -39,6 +39,12 @@ function itemRequiresShipping(item) {
   return item.requiresShipping === true;
 }
 
+function itemPhysicalFulfilment(item) {
+  if (item.physicalFulfilment === "pickup") return "Pickup";
+  if (item.physicalFulfilment === "shipping") return "Shipping";
+  return "";
+}
+
 function normalizedShippingZones(settings = {}) {
   const rawZones = settings.shippingZones;
   if (Array.isArray(rawZones)) return rawZones;
@@ -157,6 +163,12 @@ export async function setupCheckoutPage() {
             variant.textContent = `Variant: ${itemVariantName(item)}`;
             left.appendChild(variant);
           }
+          if (itemPhysicalFulfilment(item)) {
+            const fulfilment = document.createElement("div");
+            fulfilment.className = "text-gray-300";
+            fulfilment.textContent = `Fulfilment: ${itemPhysicalFulfilment(item)}`;
+            left.appendChild(fulfilment);
+          }
           left.appendChild(typeQty);
 
           const right = document.createElement("div");
@@ -203,6 +215,7 @@ export async function setupCheckoutPage() {
 
   const cart = getCurrentCart();
   const hasShippingItems = cart.some(itemRequiresShipping);
+  const pickupItems = cart.filter((item) => item.physicalFulfilment === "pickup");
   if (!cart.length) {
     summaryContainer.innerHTML =
       "<p class='text-red-500'>Your cart is empty.</p>";
@@ -211,6 +224,22 @@ export async function setupCheckoutPage() {
   }
 
   summaryContainer.innerHTML = "";
+
+  const pickupOptionsByKey = new Map();
+  if (pickupItems.length) {
+    try {
+      const getPickupOptions = httpsCallable(functions, "getCheckoutPickupOptions");
+      const result = await getPickupOptions({
+        cart,
+        referrerId: localStorage.getItem("referrer_uid") || null,
+      });
+      (result.data?.items || []).forEach((item) => {
+        pickupOptionsByKey.set(item.key, Array.isArray(item.options) ? item.options : []);
+      });
+    } catch (error) {
+      console.error("Unable to load pickup locations:", error);
+    }
+  }
 
   let shippingSettings = {};
   if (hasShippingItems) {
@@ -358,6 +387,55 @@ export async function setupCheckoutPage() {
 
   nameEmailGroup.append(nameWrapper, emailWrapper, phoneWrapper);
   form.appendChild(nameEmailGroup);
+
+  let missingPickupLocation = false;
+  pickupItems.forEach((item) => {
+    const key = `${item.id || ""}:${item.variantId || ""}`;
+    const options = pickupOptionsByKey.get(key) || [];
+    const wrapper = document.createElement("div");
+    wrapper.className = "rounded border border-gray-700 bg-gray-900 p-4";
+    const title = document.createElement("label");
+    title.className = "block text-sm font-medium text-white";
+    title.textContent = `Pickup location — ${item.name}${item.variantName ? ` (${item.variantName})` : ""}`;
+    wrapper.appendChild(title);
+
+    if (!options.length) {
+      missingPickupLocation = true;
+      const warning = document.createElement("p");
+      warning.className = "mt-2 text-sm text-amber-300";
+      warning.textContent =
+        "No eligible pickup location is available. Select an approved affiliate in the Cart, " +
+        "choose shipping instead, or return after a workshop/dispatch location is assigned.";
+      wrapper.appendChild(warning);
+    } else {
+      const select = document.createElement("select");
+      select.required = true;
+      select.className =
+        "mt-2 block w-full rounded border border-gray-700 bg-gray-800 px-3 py-2 text-white";
+      select.innerHTML = "<option value=\"\">Choose a pickup location</option>";
+      options.forEach((option) => {
+        const entry = document.createElement("option");
+        entry.value = option.pickupLocationId;
+        entry.textContent = [option.locationName, option.address].filter(Boolean).join(" — ");
+        select.appendChild(entry);
+      });
+      select.value = item.pickupLocationId || (options.length === 1 ? options[0].pickupLocationId : "");
+      item.pickupLocationId = select.value;
+      select.addEventListener("change", () => {
+        item.pickupLocationId = select.value;
+      });
+      wrapper.appendChild(select);
+      const selected = options.find((option) => option.pickupLocationId === select.value);
+      if (selected?.customerInstructions) {
+        const instructions = document.createElement("p");
+        instructions.className = "mt-2 text-xs text-gray-300";
+        instructions.textContent = selected.customerInstructions;
+        wrapper.appendChild(instructions);
+      }
+    }
+    form.appendChild(wrapper);
+  });
+  if (missingPickupLocation) confirmBtn.disabled = true;
 
   // 📦 Shipping Address Section
   const shippingGroup = document.createElement("div");
@@ -517,6 +595,12 @@ export async function setupCheckoutPage() {
       variant.className = "text-xs font-normal text-gray-300";
       variant.textContent = `Variant: ${itemVariantName(item)}`;
       row.firstElementChild?.appendChild(variant);
+    }
+    if (itemPhysicalFulfilment(item)) {
+      const fulfilment = document.createElement("div");
+      fulfilment.className = "text-xs font-normal text-gray-300";
+      fulfilment.textContent = `Fulfilment: ${itemPhysicalFulfilment(item)}`;
+      row.firstElementChild?.appendChild(fulfilment);
     }
     cartSummary.appendChild(row);
   });

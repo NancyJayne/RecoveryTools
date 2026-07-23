@@ -81,7 +81,9 @@ export function addToCart(item) {
   const existingItem = cart.find((i) =>
     i.id === item.id &&
     i.type === item.type &&
-    (i.variantId || "") === (item.variantId || ""),
+    (i.variantId || "") === (item.variantId || "") &&
+    (i.physicalFulfilment || (i.requiresShipping ? "shipping" : "none")) ===
+      (item.physicalFulfilment || (item.requiresShipping ? "shipping" : "none")),
   );
 
   if (existingItem) {
@@ -94,6 +96,7 @@ export function addToCart(item) {
       quantity: item.quantity || 1,
       type: item.type || "tool",
       requiresShipping: item.requiresShipping === true,
+      physicalFulfilment: item.physicalFulfilment || (item.requiresShipping ? "shipping" : "none"),
       variantId: item.variantId || "",
       variantName: item.variantName || "",
       sku: item.sku || "",
@@ -175,8 +178,17 @@ export async function renderCartItems() {
       variant.className = "text-xs text-gray-300";
       variant.textContent = item.variantName ? `Variant: ${item.variantName}` : "";
 
+      const fulfilment = document.createElement("div");
+      fulfilment.className = "text-xs text-gray-300";
+      fulfilment.textContent = item.physicalFulfilment === "pickup"
+        ? "Fulfilment: Pickup"
+        : item.physicalFulfilment === "shipping"
+          ? "Fulfilment: Shipping"
+          : "";
+
       info.appendChild(name);
       if (item.variantName) info.appendChild(variant);
+      if (fulfilment.textContent) info.appendChild(fulfilment);
       info.appendChild(details);
       left.appendChild(img);
       left.appendChild(info);
@@ -241,21 +253,20 @@ export async function renderCartItems() {
   }
 
   const hasTools = cart.some((item) => item.type === "tool");
-  const canChooseAffiliate = hasTools && Boolean(auth?.currentUser);
+  const hasPickupItems = cart.some((item) => item.physicalFulfilment === "pickup");
+  const canChooseAffiliate = (hasTools || hasPickupItems) && Boolean(auth?.currentUser);
   const affiliateBlock = affiliateSelect?.closest(".p-4.border-t");
   if (affiliateBlock) affiliateBlock.style.display = canChooseAffiliate ? "block" : "none";
 
   if (canChooseAffiliate && affiliateSelect && !affiliateSelect.dataset.loaded) {
-    import("firebase/firestore").then(({ getDocs, collection, getFirestore }) => {
-      const db = getFirestore();
-      getDocs(collection(db, "affiliates"))
-        .then((snapshot) => {
+    const getCheckoutAffiliates = httpsCallable(functions, "getCheckoutAffiliates");
+    getCheckoutAffiliates()
+      .then((response) => {
           affiliateSelect.innerHTML = "<option value=\"\">No Affiliate / I found this myself</option>";
-          snapshot.forEach((doc) => {
-            const data = doc.data();
+          (response.data?.affiliates || []).forEach((affiliate) => {
             const option = document.createElement("option");
-            option.value = doc.id;
-            option.textContent = data.businessName || doc.id;
+            option.value = affiliate.affiliateId;
+            option.textContent = affiliate.businessName || affiliate.affiliateId;
             affiliateSelect.appendChild(option);
           });
 
@@ -263,15 +274,14 @@ export async function renderCartItems() {
           if (storedAffiliate) affiliateSelect.value = storedAffiliate;
 
           affiliateSelect.dataset.loaded = true;
-        })
-        .catch((err) => {
-          console.error("Failed to load affiliates:", err);
-          showToast("Unable to load referrer list", "error");
-        });
-
-      affiliateSelect.addEventListener("change", () => {
-        localStorage.setItem("referrer_uid", affiliateSelect.value);
+      })
+      .catch((err) => {
+        console.error("Failed to load affiliates:", err);
+        showToast("Unable to load referrer list", "error");
       });
+
+    affiliateSelect.addEventListener("change", () => {
+      localStorage.setItem("referrer_uid", affiliateSelect.value);
     });
   }
 

@@ -118,6 +118,7 @@ function canonicalProductTypeValue(value) {
   }
   if (["plan access", "plan"].includes(cleanValue)) return "Plan Access";
   if (["program access", "program"].includes(cleanValue)) return "Program Access";
+  if (cleanValue === "hybrid") return "Hybrid";
   if (["service", "bundle", "membership", "mixed"].includes(cleanValue)) {
     return cleanValue.charAt(0).toUpperCase() + cleanValue.slice(1);
   }
@@ -203,7 +204,9 @@ function cleanEntityVariants(value) {
     inventoryUnit: cleanString(variant?.inventoryUnit),
     inventoryLocation: cleanString(variant?.inventoryLocation),
     unitCost: asNumber(variant?.unitCost),
+    supplierId: cleanString(variant?.supplierId),
     costReference: cleanString(variant?.costReference),
+    purchaseUrl: cleanString(variant?.purchaseUrl),
     linkedItemComponents: cleanItemComponents(variant?.linkedItemComponents),
     estimatedUnitCost: asNumber(variant?.estimatedUnitCost) ?? 0,
     status: cleanString(variant?.status) || "draft",
@@ -290,6 +293,8 @@ function normalizeVariant(value, index, itemId, productId) {
     stock: asNumber(value.stock) ?? 0,
     status: cleanString(value.status || "active").toLowerCase(),
     contentVariantId: cleanString(value.contentVariantId),
+    deliveryMode: cleanString(value.deliveryMode),
+    physicalFulfilment: cleanString(value.physicalFulfilment || "none").toLowerCase(),
     calendarBookingReference: cleanString(value.calendarBookingReference),
     seatCapacity: asNumber(value.seatCapacity),
     eventStartAt: cleanString(value.eventStartAt),
@@ -520,6 +525,9 @@ async function updateProductRelation({
     archived: asBoolean(relation.archived),
     featured: asBoolean(relation.featured),
     requiresShipping: asBoolean(relation.requiresShipping),
+    physicalFulfilment: cleanString(
+      relation.physicalFulfilment || (asBoolean(relation.requiresShipping) ? "shipping" : "none"),
+    ).toLowerCase(),
     inventoryTracked: asBoolean(relation.inventoryTracked),
     manufacturingBlueprintId,
     estimatedUnitCost: asNumber(relation.estimatedUnitCost) ?? 0,
@@ -695,11 +703,13 @@ async function updateProductRelation({
       sku: variant.sku,
       status: variant.status || "active",
       contentVariantId: variant.contentVariantId,
+      deliveryMode: variant.deliveryMode,
+      physicalFulfilment: variant.physicalFulfilment,
       isDefault: index === 0,
       optionSummary: [variant.colour, variant.size].filter(Boolean).join(" / "),
       priceOverride: variant.priceOverride,
       currency: "AUD",
-      requiresShippingOverride: asBoolean(relation.requiresShipping),
+      requiresShippingOverride: ["shipping", "shipping-or-pickup"].includes(variant.physicalFulfilment),
       inventoryTracked: asBoolean(relation.inventoryTracked),
       stockQuantity: variant.stock,
       stockStatus: variant.stock > 0 ? "in-stock" : "out-of-stock",
@@ -1004,7 +1014,9 @@ export const updateContentControlRecord = onCall(
       applyString(update, updates, "inventoryUnit");
       applyString(update, updates, "inventoryLocation");
       applyNumber(update, updates, "unitCost");
+      applyString(update, updates, "supplierId");
       applyString(update, updates, "costReference");
+      applyString(update, updates, "purchaseUrl");
       applyBoolean(update, updates, "requiresCalendar");
       applyBoolean(update, updates, "requiresSessionTime");
       applyBoolean(update, updates, "tracksSeats");
@@ -1059,7 +1071,9 @@ export const updateContentControlRecord = onCall(
           unit: cleanString(updates.inventoryUnit),
           location: cleanString(updates.inventoryLocation),
           unitCost: asNumber(updates.unitCost),
+          supplierId: cleanString(updates.supplierId),
           costReference: cleanString(updates.costReference),
+          purchaseUrl: cleanString(updates.purchaseUrl),
           status: updates.inventoryTracked === true ? "active" : "not-tracked",
           managedByWorkbook: false,
           contentOrigin: "app",

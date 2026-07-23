@@ -52,6 +52,7 @@ function canonicalFieldType(value) {
     "linked item list": "Linked Item List",
     "linked blueprint list": "Linked Blueprint List",
     "linked plan list": "Linked Plan List",
+    "linked product list": "Linked Product List",
     asset: "Asset",
     "image asset": "Image Asset",
     "video asset": "Video Asset",

@@ -21,6 +21,7 @@ export const PRODUCT_TYPES = [
   "Bundle",
   "Membership",
   "Mixed",
+  "Hybrid",
 ];
 
 export const LINKED_ENTITY_TYPES = ["Item", "Blueprint", "Plan", "Asset"];
@@ -49,7 +50,7 @@ export const CANONICAL_WORKBOOK_SCHEMAS = {
       field("BaseSKU", "string", "sku"), field("IsDigital", "boolean"), field("IsFree", "boolean"),
       field("BasePrice", "number"), field("Currency"), field("Status"),
       field("VisibleInMarketplace", "boolean", "visible"), field("Featured", "boolean"),
-      field("RequiresShipping", "boolean"), field("InventoryTracked", "boolean"),
+      field("RequiresShipping", "boolean"), field("PhysicalFulfilment"), field("InventoryTracked", "boolean"),
       field("Taxable", "boolean"), field("PrimaryAssetID"),
       field("SellerUserID"), field("CreatorUserID"), field("OwnerUserID"), field("TaxCode"),
       field("StockStatus"), field("StripeProductID"), field("DefaultStripePriceID"),
@@ -93,9 +94,10 @@ export const CANONICAL_WORKBOOK_SCHEMAS = {
       field("Weight", "number"), field("WeightUnit"), field("Price", "number", "priceOverride"),
       field("CompareAtPrice", "number", "compareAtPriceOverride"), field("TaxableOverride", "boolean"),
       field("Requires Shipping", "boolean", "requiresShipping"),
-      field("RequiresShippingOverride", "boolean"), field("InventoryTracked", "boolean"),
+      field("RequiresShippingOverride", "boolean"), field("PhysicalFulfilment"),
+      field("InventoryTracked", "boolean"),
       field("StockQuantity", "number"), field("StockStatus"), field("ReorderLevel", "number"),
-      field("CalendarBookingReference"), field("SeatCapacity", "number"),
+      field("DeliveryMode"), field("CalendarBookingReference"), field("SeatCapacity", "number"),
       field("EventStartAt", "date"), field("EventEndAt", "date"), field("EventLocation"),
       field("Instructor"),
       field("Barcode"), field("PrimaryAssetID"), field("SortOrder", "number"), ...commonAudit,

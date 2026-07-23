@@ -66,6 +66,8 @@ export { manageUserProfiles } from "./users/manageUserProfiles.js";
 export { createStripeConnectLink } from "./affiliates/createStripeConnectLink.js";
 export { createStripeLoginLink } from "./affiliates/createStripeLoginLink.js";
 export { registerAffiliate } from "./affiliates/registerAffiliate.js";
+export { getCheckoutAffiliates } from "./affiliates/getCheckoutAffiliates.js";
+export { getCheckoutPickupOptions } from "./orders/getCheckoutPickupOptions.js";
 export { getAffiliatePerformance } from "./admin/getAffiliatePerformance.js";
 
 

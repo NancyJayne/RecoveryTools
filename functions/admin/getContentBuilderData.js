@@ -152,7 +152,9 @@ function normalizeItemRecord(doc, related = {}) {
     itemInventoryUnit: standaloneInventory.unit || doc.data()?.inventoryUnit || "",
     itemInventoryLocation: standaloneInventory.location || doc.data()?.inventoryLocation || "",
     itemUnitCost: Number(standaloneInventory.unitCost ?? doc.data()?.unitCost ?? 0),
+    itemSupplierId: standaloneInventory.supplierId || doc.data()?.supplierId || "",
     itemCostReference: standaloneInventory.costReference || doc.data()?.costReference || "",
+    itemPurchaseUrl: standaloneInventory.purchaseUrl || doc.data()?.purchaseUrl || "",
     websiteVisible: doc.data()?.websiteVisible === true || doc.data()?.visible === true,
     requestedWebsiteVisible: doc.data()?.requestedWebsiteVisible === true,
     requestedProductVisible: doc.data()?.requestedProductVisible === true,
@@ -305,6 +307,8 @@ function addLinkedProducts(records, entityType, productsById, links, architectur
       productArchived: !!product.archivedAt || product.archived === true,
       productStock: Number(product.stock ?? 0),
       productRequiresShipping: product.requiresShipping === true,
+      productPhysicalFulfilment: product.physicalFulfilment ||
+        (product.requiresShipping === true ? "shipping" : "none"),
       productInventoryTracked: product.inventoryTracked === true,
       productRequiresCalendar: product.requiresCalendar === true,
       productRequiresSessionTime: product.requiresSessionTime === true,
@@ -513,6 +517,7 @@ export const getContentBuilderData = onCall(
       productsSnapshot,
       productLinksSnapshot,
       architecture,
+      suppliersSnapshot,
       instructorsSnapshot,
       usersSnapshot,
     ] = await Promise.all([
@@ -529,6 +534,7 @@ export const getContentBuilderData = onCall(
       db.collection("products").limit(500).get(),
       db.collection("productLinks").limit(1000).get(),
       loadProductArchitecture(db),
+      db.collection("suppliers").limit(500).get(),
       db.collection("instructors").limit(500).get(),
       db.collection("users").limit(1000).get(),
     ]);
@@ -581,6 +587,22 @@ export const getContentBuilderData = onCall(
         .forEach((variant) => addInstructorOption({ name: variant.instructor }));
     });
     const instructorOptions = [...instructorOptionsByName.values()]
+      .sort((left, right) => left.name.localeCompare(right.name));
+    const supplierOptions = suppliersSnapshot.docs
+      .map((doc) => {
+        const data = doc.data() || {};
+        return {
+          id: doc.id,
+          name: data.name || data.supplierName || doc.id,
+          contactName: data.contactName || "",
+          email: data.email || "",
+          phone: data.phone || "",
+          website: data.website || "",
+          orderingUrl: data.orderingUrl || data.purchaseUrl || data.website || "",
+          status: data.status || "active",
+        };
+      })
+      .filter((supplier) => !["archived", "inactive"].includes(cleanStatus(supplier.status)))
       .sort((left, right) => left.name.localeCompare(right.name));
 
     const savedOptions = settingsSnap.exists ? settingsSnap.data() : {};
@@ -642,6 +664,7 @@ export const getContentBuilderData = onCall(
         ),
         tagOptions,
         instructorOptions,
+        supplierOptions,
         entityTypeDefinitions,
       },
       records: {
@@ -662,6 +685,8 @@ export const getContentBuilderData = onCall(
           archived: product.archived === true || !!product.archivedAt,
           stock: Number(product.stock ?? 0),
           requiresShipping: product.requiresShipping === true,
+          physicalFulfilment: product.physicalFulfilment ||
+            (product.requiresShipping === true ? "shipping" : "none"),
           inventoryTracked: product.inventoryTracked === true,
           requiresCalendar: product.requiresCalendar === true,
           requiresSessionTime: product.requiresSessionTime === true,

@@ -22,6 +22,7 @@ let state = {
     campaignTypes: [],
     tagOptions: [],
     instructorOptions: [],
+    supplierOptions: [],
     entityTypeDefinitions: [],
     templateDefinitions: {},
     statuses: [],
@@ -40,6 +41,7 @@ let state = {
   duplicateWarningActive: false,
   isDirty: false,
   retainedProductVariantContentLinks: [],
+  pendingAction: "save",
 };
 
 const BUILDER_STEP_LABELS = {
@@ -56,6 +58,14 @@ function escapeHTML(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function externalUrl(value) {
+  const url = String(value || "").trim();
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(?:[/?#].*)?$/i.test(url)) return `https://${url}`;
+  return "";
 }
 
 function recordCollectionName(recordType) {
@@ -255,7 +265,9 @@ function updateConnectedProductCostPreview() {
   if (costBlueprint) cost = Number(costBlueprint.estimatedUnitCost ?? 0) || 0;
   else if (currentRecordType() === "blueprint") cost = updateBlueprintEstimatedCost();
   if (!costBlueprint && currentRecordType() === "item") {
-    cost = optionalNumberFromInput("contentItemUnitCost") ?? 0;
+    cost = optionalNumberFromElement(document.querySelector(
+      ".content-variant-connection-row .variant-unit-cost",
+    )) ?? 0;
   }
   const price = optionalNumberFromInput("contentProductPrice");
   const costOutput = document.getElementById("contentProductSourceCost");
@@ -543,6 +555,8 @@ function parseProductVariants(value) {
         eventEndAt = "",
         eventLocation = "",
         instructor = "",
+        deliveryMode = "",
+        physicalFulfilment = "",
       ] = line.split("|").map((part) => part.trim());
       return {
         variantId,
@@ -554,6 +568,8 @@ function parseProductVariants(value) {
         stock: stock ? Number(stock) : 0,
         status: status || "active",
         contentVariantId,
+        deliveryMode,
+        physicalFulfilment,
         calendarBookingReference,
         seatCapacity: seatCapacity ? Number(seatCapacity) : null,
         eventStartAt,
@@ -581,6 +597,8 @@ function serializeProductVariants(variants = []) {
     variant.eventEndAt || "",
     variant.eventLocation || "",
     variant.instructor || "",
+    variant.deliveryMode || "",
+    variant.physicalFulfilment || "",
   ].join(" | ")).join("\n");
 }
 
@@ -717,16 +735,23 @@ function variantTemplateFieldsMarkup(template, recordType, variant = {}) {
         <input class="content-entity-variant-size-label mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
           value="${escapeHTML(variant.sizeLabel ?? defaults.sizeLabel ?? "")}">
       </label>
-    </div>` : recordType === "blueprint" ? `
-    <label class="mt-3 block text-xs text-gray-300">Intended output
-      <input class="content-entity-variant-intended-output mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
-        value="${escapeHTML(variant.intendedOutput || "")}">
-    </label>` : "";
+    </div>` : "";
   return `${common}${renderTemplateCustomFields(template)}`;
 }
 
 function variantStockMarkup(variant, defaults) {
   if (currentRecordType() !== "item" || defaults.inventoryTracked !== true) return "";
+  const suppliers = state.options.supplierOptions || [];
+  const selectedSupplier = suppliers.find((supplier) => supplier.id === variant.supplierId);
+  const supplierOptions = suppliers.map((supplier) => `
+    <option value="${escapeHTML(supplier.id)}"
+      data-ordering-url="${escapeHTML(supplier.orderingUrl || supplier.website || "")}"
+      ${supplier.id === variant.supplierId ? "selected" : ""}>
+      ${escapeHTML(supplier.name || supplier.id)}
+    </option>`).join("");
+  const orderingUrl = externalUrl(
+    variant.purchaseUrl || selectedSupplier?.orderingUrl || selectedSupplier?.website,
+  );
   return `
     <section class="mt-3 rounded border border-gray-700 bg-gray-950/50 p-3">
       <h5 class="font-medium text-white">Item stock</h5>
@@ -746,11 +771,41 @@ function variantStockMarkup(variant, defaults) {
         <label class="block text-xs text-gray-300">Approximate unit cost (AUD)
           <input class="variant-unit-cost mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="0.01" value="${escapeHTML(variant.unitCost ?? "")}">
         </label>
-        <label class="block text-xs text-gray-300">Cost reference
-          <input class="variant-cost-reference mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(variant.costReference || "")}">
+        <label class="block text-xs text-gray-300">Supplier
+          <select class="variant-supplier-id mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+            <option value="">Choose supplier</option>
+            ${supplierOptions}
+          </select>
+          <span class="mt-1 block text-xs text-gray-400">Select from the Suppliers sheet imported into the system.</span>
         </label>
+        <label class="block text-xs text-gray-300">Cost reference
+          <input class="variant-cost-reference mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(variant.costReference || "")}" placeholder="Quote, invoice or catalogue reference">
+          <span class="mt-1 block text-xs text-gray-400">The source used to verify this unit cost.</span>
+        </label>
+        <label class="block text-xs text-gray-300">Item ordering page
+          <input class="variant-purchase-url mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="url" value="${escapeHTML(variant.purchaseUrl || "")}" placeholder="Optional direct URL for this exact Item">
+          <span class="mt-1 block text-xs text-gray-400">Overrides the supplier's general ordering page for this Item.</span>
+        </label>
+        <div class="flex items-end">
+          <button type="button" class="open-variant-ordering-page w-full rounded border border-[#407471] px-3 py-2 text-[#9edbd7] disabled:cursor-not-allowed disabled:border-gray-700 disabled:text-gray-500"
+            data-ordering-url="${escapeHTML(orderingUrl)}" ${orderingUrl ? "" : "disabled"}>
+            Open ordering page
+          </button>
+        </div>
       </div>
     </section>`;
+}
+
+function updateVariantOrderingButton(row) {
+  if (!row) return;
+  const directUrl = row.querySelector(".variant-purchase-url")?.value.trim() || "";
+  const supplierSelect = row.querySelector(".variant-supplier-id");
+  const supplierUrl = supplierSelect?.selectedOptions?.[0]?.dataset.orderingUrl || "";
+  const url = externalUrl(directUrl || supplierUrl);
+  const button = row.querySelector(".open-variant-ordering-page");
+  if (!button) return;
+  button.dataset.orderingUrl = url;
+  button.disabled = !url;
 }
 
 function renderVariantStepRows(variants) {
@@ -993,7 +1048,6 @@ function entityVariantsFromBuilder() {
       templateVariantId,
       durationMinutes: null,
       sizeLabel: row.querySelector(".content-entity-variant-size-label")?.value.trim() || "",
-      intendedOutput: row.querySelector(".content-entity-variant-intended-output")?.value.trim() || "",
       reference: references[0] || "",
       references,
       owner: row.querySelector(".content-entity-variant-owner")?.value.trim() || "",
@@ -1009,7 +1063,9 @@ function entityVariantsFromBuilder() {
       inventoryUnit: connectionRow?.querySelector(".variant-inventory-unit")?.value.trim() || "",
       inventoryLocation: connectionRow?.querySelector(".variant-inventory-location")?.value.trim() || "",
       unitCost: optionalNumberFromElement(connectionRow?.querySelector(".variant-unit-cost")),
+      supplierId: connectionRow?.querySelector(".variant-supplier-id")?.value || "",
       costReference: connectionRow?.querySelector(".variant-cost-reference")?.value.trim() || "",
+      purchaseUrl: connectionRow?.querySelector(".variant-purchase-url")?.value.trim() || "",
       status: actionRow?.querySelector(".content-entity-variant-status")?.value || "draft",
       scheduledActiveAt: actionRow?.querySelector(".content-entity-variant-active-at")?.value || "",
       scheduledPauseAt: actionRow?.querySelector(".content-entity-variant-pause-at")?.value || "",
@@ -1176,6 +1232,27 @@ function renderSelectedProductVariantRows(
           <label class="product-variant-calendar-field hidden block text-sm">Calendar / booking reference
             <input class="product-variant-calendar-reference mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.calendarBookingReference || "")}" placeholder="Calendar ID, booking link or reference">
           </label>
+          <label class="product-variant-delivery-field block text-sm">Delivery mode
+            <select class="product-variant-delivery-mode mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+              <option value="">Select delivery mode</option>
+              <option value="physical"${productVariant.deliveryMode === "physical" ? " selected" : ""}>Physical delivery</option>
+              <option value="in-person"${productVariant.deliveryMode === "in-person" ? " selected" : ""}>In person</option>
+              <option value="online-live"${productVariant.deliveryMode === "online-live" ? " selected" : ""}>Online live</option>
+              <option value="online-self-paced"${productVariant.deliveryMode === "online-self-paced" ? " selected" : ""}>Online self-paced</option>
+              <option value="hybrid"${productVariant.deliveryMode === "hybrid" ? " selected" : ""}>Hybrid</option>
+              <option value="digital-download"${productVariant.deliveryMode === "digital-download" ? " selected" : ""}>Digital download</option>
+            </select>
+          </label>
+          <label class="block text-sm">Physical fulfilment
+            <select class="product-variant-physical-fulfilment mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+              ${compactSelectOptions(
+    ["none", "shipping", "pickup", "shipping-or-pickup"],
+    productVariant.physicalFulfilment ||
+      document.getElementById("contentProductPhysicalFulfilment")?.value ||
+      "none",
+  )}
+            </select>
+          </label>
           <label class="product-variant-seats-field hidden block text-sm">Ticket / seat capacity
             <input class="product-variant-seat-capacity mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.seatCapacity ?? "")}">
           </label>
@@ -1213,6 +1290,8 @@ function syncSelectedProductVariantRows() {
       stock: optionalNumberFromElement(row.querySelector(".product-variant-stock")) ?? 0,
       status: row.querySelector(".product-variant-status")?.value || "draft",
       contentVariantId,
+      deliveryMode: row.querySelector(".product-variant-delivery-mode")?.value || "",
+      physicalFulfilment: row.querySelector(".product-variant-physical-fulfilment")?.value || "none",
       calendarBookingReference: row.querySelector(".product-variant-calendar-reference")?.value.trim() || "",
       seatCapacity: optionalNumberFromElement(row.querySelector(".product-variant-seat-capacity")),
       eventStartAt: row.querySelector(".product-variant-event-start")?.value || "",
@@ -1447,6 +1526,7 @@ function canonicalTemplateFieldType(value) {
     "linked item list": "Linked Item List",
     "linked blueprint list": "Linked Blueprint List",
     "linked plan list": "Linked Plan List",
+    "linked product list": "Linked Product List",
     "image asset": "Image Asset",
     "video asset": "Video Asset",
     "pdf asset": "PDF Asset",
@@ -1475,6 +1555,7 @@ function linkedTemplateFieldRecords(field) {
   if (linkedTable === "items") return state.records.items || [];
   if (linkedTable === "blueprints") return state.records.blueprints || [];
   if (linkedTable === "plans") return state.records.plans || [];
+  if (["product", "products"].includes(linkedTable)) return state.records.products || [];
   if (["asset", "assets", "item asset", "item assets"].includes(linkedTable)) {
     const requestedType = {
       "image asset": "image",
@@ -1745,7 +1826,6 @@ function restoreTemplateFieldValuesInRoot(root, fieldValues = {}) {
 
 function captureTemplateGuidedValues() {
   return {
-    intendedOutput: templateInput("contentIntendedOutput"),
     durationMinutes: templateInput("contentDurationMinutes"),
     sizeLabel: templateInput("contentSizeLabel"),
     startDate: templateInput("contentStartDate"),
@@ -1758,7 +1838,6 @@ function captureTemplateGuidedValues() {
 }
 
 function restoreTemplateGuidedValues(values = {}) {
-  setInputValue("contentIntendedOutput", values.intendedOutput);
   setInputValue("contentDurationMinutes", values.durationMinutes);
   setInputValue("contentSizeLabel", values.sizeLabel);
   setInputValue("contentStartDate", values.startDate);
@@ -2191,16 +2270,6 @@ function renderBlueprintTemplateFields(template) {
     ? "Use this saved structure for a reusable action that Plans can link to later."
     : "Choose a saved template or create one here. The Blueprint type controls the available field groups."}
       </p>
-      <div class="mt-3 grid gap-3">
-        <label class="block">
-          Intended output
-          <input
-            id="contentIntendedOutput"
-            class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
-            placeholder="Exercise instruction, warmup, test, cue..."
-          >
-        </label>
-      </div>
       ${fields.length ? renderTemplateCustomFields(template) : ""}
       <p class="mt-2 text-xs text-gray-400">Choose reusable Items in the Connections step.</p>
     </div>
@@ -2382,9 +2451,6 @@ function applyTemplateDefaults() {
     if (tracksSeats) tracksSeats.checked = defaults.tracksSeats === true;
     if (unlocksAccess) unlocksAccess.checked = defaults.unlocksAccess === true;
     if (issuesCertificate) issuesCertificate.checked = defaults.issuesCertificate === true;
-    setInputValue("contentSeatCapacity", defaults.seatCapacity ?? "");
-    setInputValue("contentAccessType", defaults.accessType || "");
-    setInputValue("contentDeliveryMode", defaults.deliveryMode || "");
     applyTemplateDrivenItemFields(defaults);
   }
   renderTemplateGuidedFields();
@@ -2579,6 +2645,10 @@ function productRelationPayload() {
   const physical = isPhysicalProductConnection();
 
   const variants = parseProductVariants(document.getElementById("contentProductVariants")?.value);
+  const physicalFulfilment =
+    document.getElementById("contentProductPhysicalFulfilment")?.value || "none";
+  const requiresShipping = [physicalFulfilment, ...variants.map((variant) => variant.physicalFulfilment)]
+    .some((value) => ["shipping", "shipping-or-pickup"].includes(value));
   const inventoryTracked = physical &&
     document.getElementById("contentProductInventoryTracked")?.checked === true;
   const totalVariantStock = variants.reduce((total, variant) => total + Number(variant.stock || 0), 0);
@@ -2592,13 +2662,14 @@ function productRelationPayload() {
     sku: document.getElementById("contentProductSku")?.value || generatedProductSku(),
     productCategoryId: document.getElementById("contentProductCategoryId")?.value || "",
     productType: document.getElementById("contentProductDeliveryType")?.value || "Physical",
+    physicalFulfilment,
     shopStatus: document.getElementById("contentProductShopStatus")?.value || "draft",
     effectiveShopPrice: optionalNumberFromInput("contentProductPrice"),
     stock: inventoryTracked ? totalVariantStock : null,
     visible: document.getElementById("contentProductVisible")?.checked === true,
     featured: document.getElementById("contentProductFeatured")?.checked === true,
     archived: document.getElementById("contentProductArchived")?.checked === true,
-    requiresShipping: physical && document.getElementById("contentProductRequiresShipping")?.checked === true,
+    requiresShipping,
     inventoryTracked,
     requiresCalendar: document.getElementById("contentProductRequiresCalendar")?.checked === true,
     requiresSessionTime: document.getElementById("contentProductRequiresSessionTime")?.checked === true,
@@ -2686,7 +2757,14 @@ function chooseExistingProduct(productId) {
   setInputValue("contentProductId", product.id);
   setInputValue("contentProductSku", product.sku);
   setSelectValue("contentProductCategoryId", product.productCategoryId);
-  setSelectValue("contentProductDeliveryType", product.productType || "Physical");
+  setSelectValue("contentProductDeliveryType", productDeliveryControlValue(
+    product.productType,
+    product.requiresShipping,
+  ));
+  setSelectValue(
+    "contentProductPhysicalFulfilment",
+    product.physicalFulfilment || (product.requiresShipping ? "shipping" : "none"),
+  );
   setCheckboxValue("contentProductRequiresShipping", product.requiresShipping === true);
   setCheckboxValue("contentProductInventoryTracked", product.inventoryTracked === true);
   setCheckboxValue("contentProductRequiresCalendar", product.requiresCalendar === true);
@@ -2730,6 +2808,7 @@ function chooseNewProduct() {
   setInputValue("contentProductSku", "");
   setSelectValue("contentProductCategoryId", "");
   setSelectValue("contentProductDeliveryType", "Physical");
+  setSelectValue("contentProductPhysicalFulfilment", "none");
   updateProductRelationshipControl("Represents");
   ["contentProductRequiresShipping", "contentProductInventoryTracked", "contentProductRequiresCalendar",
     "contentProductRequiresSessionTime", "contentProductTracksSeats", "contentProductRequiresLocation",
@@ -2799,11 +2878,26 @@ function populateGeneratedProductSku() {
 }
 
 function isPhysicalProductConnection() {
-  return document.getElementById("contentProductDeliveryType")?.value === "Physical";
+  const hasPhysicalVariant = [...document.querySelectorAll(".product-variant-physical-fulfilment")]
+    .some((select) => select.value && select.value !== "none");
+  return ["Physical", "Hybrid"]
+    .includes(document.getElementById("contentProductDeliveryType")?.value || "") ||
+    document.getElementById("contentProductPhysicalFulfilment")?.value !== "none" ||
+    hasPhysicalVariant;
+}
+
+function productDeliveryControlValue(productType, requiresShipping) {
+  return productType || "Physical";
 }
 
 function updateProductPhysicalFields() {
   const physical = isPhysicalProductConnection();
+  const physicalFulfilment =
+    document.getElementById("contentProductPhysicalFulfilment")?.value || "none";
+  setCheckboxValue(
+    "contentProductRequiresShipping",
+    ["shipping", "shipping-or-pickup"].includes(physicalFulfilment),
+  );
   const tracked = physical && document.getElementById("contentProductInventoryTracked")?.checked === true;
   document.getElementById("contentProductRequiresShipping")?.closest("label")
     ?.classList.toggle("hidden", !physical);
@@ -3134,19 +3228,41 @@ function renderBuilderSummaries(record = state.editingRecord) {
     ...(Array.isArray(record?.assets) ? record.assets : [])
       .map((asset) => typeof asset === "string" ? asset : asset.assetId || asset.id),
   ]);
-  const selectedAssetLabels = selectedAssetIds.map((assetId) => {
+  const assetLabel = (assetId) => {
     const asset = (state.records.assets || []).find((candidate) => candidate.id === assetId);
     return asset?.name || asset?.assetName || asset?.title || assetId;
-  });
+  };
+  const selectedAssetLabels = selectedAssetIds.map(assetLabel);
   const assetSummary = selectedAssetLabels.join(", ") || "No linked assets";
+  const variantAssetIds = new Set();
+  const variantAssetSummaries = entityVariants.map((variant) => {
+    const assetIds = uniqueValues(templateAssetLinksForVariant(variant).map((link) => link.assetId));
+    assetIds.forEach((assetId) => variantAssetIds.add(assetId));
+    return assetIds.length
+      ? `${variant.name}: ${assetIds.map(assetLabel).join(", ")}`
+      : "";
+  }).filter(Boolean);
+  const unassignedAssetIds = selectedAssetIds.filter((assetId) => !variantAssetIds.has(assetId));
+  const reviewAssetSummary = [
+    ...variantAssetSummaries,
+    ...(unassignedAssetIds.length
+      ? [`Other linked assets: ${unassignedAssetIds.map(assetLabel).join(", ")}`]
+      : []),
+  ].join(" | ") || "No linked assets";
   const entityVariantSummary = entityVariants.length
     ? entityVariants.map((variant) => variant.name).join(", ")
     : "Primary version only";
   const libraryVisible = document.getElementById("contentWebsiteVisible")?.checked === true;
   const accessGrants = productRelation.accessGrants || record?.productAccessGrants || [];
-  const estimatedCost = recordType === "blueprint"
-    ? updateBlueprintEstimatedCost()
-    : recordType === "item" ? optionalNumberFromInput("contentItemUnitCost") ?? 0 : null;
+  const estimatedCost = recordType === "blueprint" ? updateBlueprintEstimatedCost() : null;
+  const itemCostSummary = recordType === "item"
+    ? entityVariants
+      .filter((variant) => variant.unitCost !== null && variant.unitCost !== undefined)
+      .map((variant) => entityVariants.length > 1
+        ? `${variant.name}: $${Number(variant.unitCost).toFixed(2)}`
+        : `$${Number(variant.unitCost).toFixed(2)}`)
+      .join(", ")
+    : "";
 
   if (relationships) {
     relationships.innerHTML = [
@@ -3175,6 +3291,9 @@ function renderBuilderSummaries(record = state.editingRecord) {
       summaryCard("Tags", selectedTagsFromControls().join(", ") || "No tags"),
       summaryCard("Description", document.getElementById("contentShortDescription")?.value || "Not entered"),
       ...(estimatedCost === null ? [] : [summaryCard("Estimated unit cost", `$${estimatedCost.toFixed(2)}`)]),
+      ...(recordType === "item"
+        ? [summaryCard("Estimated unit cost", itemCostSummary || "Not entered")]
+        : []),
       summaryCard("Library", libraryVisible ? "Included" : "Not included", libraryVisible ? "ok" : "default"),
       summaryCard(
         "Product",
@@ -3184,10 +3303,10 @@ function renderBuilderSummaries(record = state.editingRecord) {
       ),
       summaryCard("Product unlocks", accessGrants.length ? `${accessGrants.length} targets` : "No unlocks"),
       summaryCard(
-        "Connections",
+        "Connected content",
         `${linkedItemCount} Items / ${linkedBlueprintCount} Blueprints / ${linkedPlanCount} Plans`,
       ),
-      summaryCard("Assets", assetSummary),
+      summaryCard("Assets", reviewAssetSummary),
     ].join("");
   }
 }
@@ -3286,7 +3405,9 @@ function populateBuilderFromRecord(record) {
       inventoryUnit: record.itemInventoryUnit || record.inventoryUnit,
       inventoryLocation: record.itemInventoryLocation || record.inventoryLocation,
       unitCost: record.itemUnitCost ?? record.unitCost,
+      supplierId: record.itemSupplierId || record.supplierId,
       costReference: record.itemCostReference || record.costReference,
+      purchaseUrl: record.itemPurchaseUrl || record.purchaseUrl,
     } : {}),
     shopEnabled: variant?.shopEnabled ?? legacyShopEnabled,
     libraryVisible: variant?.libraryVisible ?? legacyLibraryVisible,
@@ -3307,7 +3428,9 @@ function populateBuilderFromRecord(record) {
     inventoryUnit: record.itemInventoryUnit || record.inventoryUnit,
     inventoryLocation: record.itemInventoryLocation || record.inventoryLocation,
     unitCost: record.itemUnitCost ?? record.unitCost,
+    supplierId: record.itemSupplierId || record.supplierId,
     costReference: record.itemCostReference || record.costReference,
+    purchaseUrl: record.itemPurchaseUrl || record.purchaseUrl,
     shopEnabled: legacyShopEnabled,
     libraryVisible: legacyLibraryVisible,
   }];
@@ -3331,9 +3454,6 @@ function populateBuilderFromRecord(record) {
     setCheckboxValue("contentTracksSeats", record.tracksSeats);
     setCheckboxValue("contentUnlocksAccess", record.unlocksAccess);
     setCheckboxValue("contentIssuesCertificate", record.issuesCertificate);
-    setInputValue("contentSeatCapacity", record.seatCapacity || "");
-    setInputValue("contentAccessType", record.accessType);
-    setInputValue("contentDeliveryMode", record.deliveryMode);
     setInputValue("contentEventStartAt", record.eventStartAt);
     setInputValue("contentEventEndAt", record.eventEndAt);
     setInputValue("contentEventLocation", record.eventLocation);
@@ -3346,7 +3466,14 @@ function populateBuilderFromRecord(record) {
     updateProductRelationshipControl(record.productLinkRole || "Represents");
     setInputValue("contentProductSku", record.productSku);
     setSelectValue("contentProductCategoryId", record.productCategoryId);
-    setSelectValue("contentProductDeliveryType", record.productType || "Physical");
+    setSelectValue("contentProductDeliveryType", productDeliveryControlValue(
+      record.productType,
+      record.productRequiresShipping,
+    ));
+    setSelectValue(
+      "contentProductPhysicalFulfilment",
+      record.productPhysicalFulfilment || (record.productRequiresShipping ? "shipping" : "none"),
+    );
     setCheckboxValue("contentProductRequiresShipping", record.productRequiresShipping === true);
     setCheckboxValue("contentProductInventoryTracked", record.productInventoryTracked === true);
     setCheckboxValue("contentProductRequiresCalendar", record.productRequiresCalendar === true);
@@ -3389,7 +3516,14 @@ function populateBuilderFromRecord(record) {
     updateProductRelationshipControl(record.productLinkRole || "Represents");
     setInputValue("contentProductSku", record.productSku);
     setSelectValue("contentProductCategoryId", record.productCategoryId);
-    setSelectValue("contentProductDeliveryType", record.productType || "Physical");
+    setSelectValue("contentProductDeliveryType", productDeliveryControlValue(
+      record.productType,
+      record.productRequiresShipping,
+    ));
+    setSelectValue(
+      "contentProductPhysicalFulfilment",
+      record.productPhysicalFulfilment || (record.productRequiresShipping ? "shipping" : "none"),
+    );
     setCheckboxValue("contentProductRequiresShipping", record.productRequiresShipping === true);
     setCheckboxValue("contentProductInventoryTracked", record.productInventoryTracked === true);
     setCheckboxValue("contentProductRequiresCalendar", record.productRequiresCalendar === true);
@@ -3429,6 +3563,8 @@ function populateBuilderFromRecord(record) {
 }
 
 function applyBuilderRoute() {
+  document.getElementById("contentBuilderForm")?.classList.remove("hidden");
+  document.getElementById("contentBuilderConfirmation")?.classList.add("hidden");
   const params = new URLSearchParams(window.location.search);
   if (params.get("new") === "1") {
     populateNewBuilderFromRoute(params);
@@ -3551,9 +3687,18 @@ function templateFieldRowMarkup(field = {}) {
   const fieldType = canonicalTemplateFieldType(field.fieldType);
   const key = templateFieldKey(field.key || field.id || field.name);
   const linkedTable = field.linkedTable || "";
-  const linkedTableOptions = ["", "Items", "Blueprints", "Plans", "Assets", "Tags", "Categories"];
+  const linkedTableOptions = ["", "Items", "Blueprints", "Plans", "Products", "Assets", "Tags", "Categories"];
   if (linkedTable && !linkedTableOptions.includes(linkedTable)) linkedTableOptions.push(linkedTable);
   const sortOrder = Number(field.sortOrder || 0) || 1;
+  const minEntries = field.minEntries ?? (field.required ? 1 : 0);
+  const storedMaxEntries = Number(field.maxEntries);
+  const maxEntries = field.allowUnlimited
+    ? ""
+    : storedMaxEntries > 0
+      ? storedMaxEntries
+      : field.repeatable
+        ? ""
+        : 1;
   return `
     <div class="template-field-row rounded border border-gray-700 bg-gray-900/70 p-3">
       <input
@@ -3603,6 +3748,7 @@ function templateFieldRowMarkup(field = {}) {
     "Linked Item List",
     "Linked Blueprint List",
     "Linked Plan List",
+    "Linked Product List",
     "Asset",
     "Image Asset",
     "Video Asset",
@@ -3624,22 +3770,22 @@ function templateFieldRowMarkup(field = {}) {
           </select>
         </label>
         <label class="block">
-          MinEntries
+          Minimum entries
           <input
             class="template-field-min-entries mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
             type="number"
             min="0"
-            value="${field.minEntries ?? ""}"
+            value="${minEntries}"
           >
         </label>
         <label class="block">
-          MaxEntries
+          Maximum entries
           <input
             class="template-field-max-entries mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
             type="number"
             min="0"
-            value="${field.maxEntries ?? ""}"
-            ${field.allowUnlimited ? "disabled" : ""}
+            value="${maxEntries}"
+            placeholder="Blank means unlimited"
           >
         </label>
         <label class="block">
@@ -3661,28 +3807,7 @@ function templateFieldRowMarkup(field = {}) {
           placeholder="Guidance for the content creator"
         >${escapeHTML(field.notes || "")}</textarea>
       </label>
-      <div class="mt-3 flex flex-wrap gap-4">
-        <label class="inline-flex items-center gap-2">
-          <input class="template-field-required accent-[#407471]" type="checkbox" ${field.required ? "checked" : ""}>
-          Required
-        </label>
-        <label class="inline-flex items-center gap-2">
-          <input
-            class="template-field-repeatable accent-[#407471]"
-            type="checkbox"
-            ${field.repeatable ? "checked" : ""}
-          >
-          Repeatable
-        </label>
-        <label class="inline-flex items-center gap-2">
-          <input
-            class="template-field-allow-unlimited accent-[#407471]"
-            type="checkbox"
-            ${field.allowUnlimited ? "checked" : ""}
-          >
-          AllowUnlimited
-        </label>
-      </div>
+      <p class="mt-3 text-xs text-gray-400">Minimum 0 is optional; minimum 1 or more is required. Maximum 1 is a single entry; maximum 2 or more is repeatable. Leave maximum blank for unlimited entries.</p>
     </div>
   `;
 }
@@ -3715,9 +3840,11 @@ function templateFieldsFromDrawer(rows, variantId) {
       const linkedTable = row.querySelector(".template-field-linked-table")?.value || "";
       const minValue = row.querySelector(".template-field-min-entries")?.value || "";
       const maxValue = row.querySelector(".template-field-max-entries")?.value || "";
-      const minEntries = minValue === "" ? null : Number(minValue);
+      const minEntries = minValue === "" ? 0 : Number(minValue);
       const maxEntries = maxValue === "" ? null : Number(maxValue);
-      const allowUnlimited = row.querySelector(".template-field-allow-unlimited")?.checked === true;
+      const required = minEntries > 0;
+      const allowUnlimited = maxEntries === null;
+      const repeatable = allowUnlimited || maxEntries > 1;
       const sortOrder = Number(row.querySelector(".template-field-sort-order")?.value || 0);
       const idSlug = String(name).trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");
       const id = row.querySelector(".template-field-id")?.value || `${variantId || templateId}-FIELD-${idSlug}`;
@@ -3731,10 +3858,10 @@ function templateFieldsFromDrawer(rows, variantId) {
       if (minEntries !== null && (!Number.isInteger(minEntries) || minEntries < 0)) {
         throw new Error(`MinEntries for "${name}" must be zero or a positive whole number.`);
       }
-      if (maxEntries !== null && (!Number.isInteger(maxEntries) || maxEntries < 0)) {
-        throw new Error(`MaxEntries for "${name}" must be zero or a positive whole number.`);
+      if (maxEntries !== null && (!Number.isInteger(maxEntries) || maxEntries < 1)) {
+        throw new Error(`Maximum entries for "${name}" must be one or more, or blank for unlimited.`);
       }
-      if (!allowUnlimited && minEntries !== null && maxEntries !== null && maxEntries < minEntries) {
+      if (maxEntries !== null && maxEntries < minEntries) {
         throw new Error(`MaxEntries cannot be less than MinEntries for "${name}".`);
       }
       return {
@@ -3743,8 +3870,8 @@ function templateFieldsFromDrawer(rows, variantId) {
         name,
         fieldType,
         linkedTable,
-        required: row.querySelector(".template-field-required")?.checked === true,
-        repeatable: row.querySelector(".template-field-repeatable")?.checked === true,
+        required,
+        repeatable,
         minEntries,
         maxEntries: allowUnlimited ? null : maxEntries,
         allowUnlimited,
@@ -3783,6 +3910,7 @@ function handleTemplateFieldRowsChange(event) {
       "Linked Item List": "Items",
       "Linked Blueprint List": "Blueprints",
       "Linked Plan List": "Plans",
+      "Linked Product List": "Products",
       Asset: "Assets",
       "Image Asset": "Assets",
       "Video Asset": "Assets",
@@ -3791,13 +3919,6 @@ function handleTemplateFieldRowsChange(event) {
     };
     const linkedTable = row.querySelector(".template-field-linked-table");
     if (linkedTable) linkedTable.value = linkedDefaults[event.target.value] || "";
-  }
-  if (event.target.classList.contains("template-field-allow-unlimited")) {
-    const maxEntries = row.querySelector(".template-field-max-entries");
-    if (maxEntries) {
-      maxEntries.disabled = event.target.checked;
-      if (event.target.checked) maxEntries.value = "";
-    }
   }
 }
 
@@ -3889,15 +4010,15 @@ function templateVariantRowMarkup(variant = {}, index = 0, expanded = true) {
           <label class="inline-flex items-center gap-2"><input class="template-variant-active accent-[#407471]" type="checkbox" ${variant.active !== false ? "checked" : ""}> Active</label>
         </div>
         <section class="mt-4 rounded border border-gray-700 bg-gray-950/50 p-3">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <h5 class="font-semibold text-white">Fields for this variant</h5>
-              <p class="mt-1 text-xs text-gray-400">Each field is shown only when this variant is selected.</p>
-            </div>
-            <button type="button" class="add-template-field rounded border border-[#407471] px-3 py-2 text-xs text-white hover:bg-[#407471]/20">Add field</button>
+          <div>
+            <h5 class="font-semibold text-white">Fields for this variant</h5>
+            <p class="mt-1 text-xs text-gray-400">Each field is shown only when this variant is selected.</p>
           </div>
           <div class="template-field-rows mt-3 space-y-3">${fields.map(templateFieldRowMarkup).join("")}</div>
           <p class="template-field-empty-state mt-3 text-xs text-gray-500 ${fields.length ? "hidden" : ""}">No extra fields. The standard fields for this entity type will still be shown.</p>
+          <div class="mt-3 flex justify-start">
+            <button type="button" class="add-template-field rounded border border-[#407471] px-3 py-2 text-xs text-white hover:bg-[#407471]/20">+ Add another field</button>
+          </div>
         </section>
       </div>
     </section>
@@ -4179,9 +4300,6 @@ function openTemplateEditorForSelectedTemplate() {
   setCheckboxValue("templateRequiresLocation", defaults.requiresLocation === true);
   setCheckboxValue("templateRequiresInstructor", defaults.requiresInstructor === true);
   setCheckboxValue("templateIssuesCertificate", defaults.issuesCertificate === true);
-  setInputValue("templateSeatCapacity", defaults.seatCapacity ?? "");
-  setInputValue("templateAccessType", defaults.accessType || "");
-  setInputValue("templateDeliveryMode", defaults.deliveryMode || "");
 
   const hasStoredVariantDefault = siblings.some((template) =>
     template.variantIsDefault !== undefined);
@@ -4376,9 +4494,6 @@ async function formPayload(confirmDuplicate = false) {
     issuesCertificate: recordType === "item"
       ? primaryBehaviours.issuesCertificate === true
       : document.getElementById("contentIssuesCertificate")?.checked === true,
-    seatCapacity: Number(document.getElementById("contentSeatCapacity")?.value || 0) || null,
-    accessType: document.getElementById("contentAccessType")?.value || "",
-    deliveryMode: document.getElementById("contentDeliveryMode")?.value || "",
     eventStartAt: document.getElementById("contentEventStartAt")?.value || "",
     eventEndAt: document.getElementById("contentEventEndAt")?.value || "",
     eventLocation: document.getElementById("contentEventLocation")?.value || "",
@@ -4394,7 +4509,6 @@ async function formPayload(confirmDuplicate = false) {
     linkedPlanIds: splitCsv(document.getElementById("contentLinkedPlanIds")?.value),
     audience: document.getElementById("contentAudience")?.value || "",
     goal: document.getElementById("contentGoal")?.value || "",
-    intendedOutput: templateInput("contentIntendedOutput"),
     durationMinutes: Number(templateInput("contentDurationMinutes") || 0) || null,
     sizeLabel: templateInput("contentSizeLabel"),
     startDate: templateInput("contentStartDate"),
@@ -4407,7 +4521,9 @@ async function formPayload(confirmDuplicate = false) {
     inventoryUnit: primaryVariant.inventoryUnit || "",
     inventoryLocation: primaryVariant.inventoryLocation || "",
     unitCost: primaryVariant.unitCost ?? null,
+    supplierId: primaryVariant.supplierId || "",
     costReference: primaryVariant.costReference || "",
+    purchaseUrl: primaryVariant.purchaseUrl || "",
     variants: productRelation?.variants || [],
     productRelation,
     unlinkProductIds: splitCsv(document.getElementById("contentUnlinkProductId")?.value),
@@ -4451,9 +4567,6 @@ function templatePayload() {
     defaults.requiresInstructor =
       document.getElementById("templateRequiresInstructor")?.checked === true;
     defaults.issuesCertificate = document.getElementById("templateIssuesCertificate")?.checked === true;
-    defaults.seatCapacity = Number(document.getElementById("templateSeatCapacity")?.value || 0) || null;
-    defaults.accessType = document.getElementById("templateAccessType")?.value || "";
-    defaults.deliveryMode = document.getElementById("templateDeliveryMode")?.value || "";
     defaults.stockStatus = defaults.inventoryTracked ? "draft" : "not-tracked";
   }
 
@@ -4510,10 +4623,81 @@ async function loadData() {
   updateTemplateManagerTypeOptions();
 }
 
-async function savePayload(payload) {
+function confirmationCopy(action) {
+  return {
+    save: {
+      title: "Content saved",
+      message: "Your changes have been saved.",
+    },
+    approve: {
+      title: "Content approved",
+      message: "The content has been approved and its active settings have been applied.",
+    },
+    active: {
+      title: "Content set active",
+      message: "The content is now active, or scheduled to become active at the selected time.",
+    },
+    pause: {
+      title: "Content paused",
+      message: "The content is now paused, or scheduled to pause at the selected time.",
+    },
+    archive: {
+      title: "Content archived",
+      message: "The content has been archived.",
+    },
+  }[action] || {
+    title: "Content saved",
+    message: "Your changes have been saved.",
+  };
+}
+
+function showSaveConfirmation({ action, payload, recordId, record }) {
+  const form = document.getElementById("contentBuilderForm");
+  const confirmation = document.getElementById("contentBuilderConfirmation");
+  if (!confirmation) return;
+
+  const copy = confirmationCopy(action);
+  const name = record?.name || payload.name || recordId;
+  const productId = record?.productId || record?.itemProductId ||
+    payload.productRelation?.productId || payload.productRelation?.existingProductId || payload.productId || "";
+  const marketplaceVisible = Boolean(
+    productId && (
+      record?.shopVisible === true ||
+      record?.productVisible === true ||
+      record?.visible === true ||
+      payload.shopVisible === true ||
+      payload.productRelation?.visible === true
+    ),
+  );
+  const libraryVisible = Boolean(
+    record?.websiteVisible === true ||
+    payload.websiteVisible === true,
+  );
+
+  form?.classList.add("hidden");
+  confirmation.classList.remove("hidden");
+  document.getElementById("contentBuilderConfirmationTitle").textContent = copy.title;
+  document.getElementById("contentBuilderConfirmationMessage").textContent = copy.message;
+  document.getElementById("contentBuilderConfirmationMeta").textContent =
+    [name, recordId].filter(Boolean).join(" • ");
+
+  const marketplaceLink = document.getElementById("contentBuilderMarketplaceLink");
+  marketplaceLink?.classList.toggle("hidden", !marketplaceVisible);
+  if (marketplaceLink) marketplaceLink.href = `/shop/${encodeURIComponent(productId)}`;
+
+  const libraryLink = document.getElementById("contentBuilderLibraryLink");
+  libraryLink?.classList.toggle("hidden", !libraryVisible);
+  if (libraryLink) libraryLink.href = "/anato-me";
+
+  confirmation.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function savePayload(payload, action = "save") {
   const saveButton = document.getElementById("saveContentBuilderBtn");
   saveButton?.setAttribute("disabled", "disabled");
   try {
+    let recordId = state.editingRecord?.id || "";
+    const recordType = state.editingRecord?.recordType || payload.recordType;
     if (state.editingRecord) {
       await updateContentControlRecord({
         recordType: state.editingRecord.recordType,
@@ -4523,24 +4707,27 @@ async function savePayload(payload) {
       showToast("Content record updated.", "success");
       state.isDirty = false;
       await loadData();
+      const refreshed = findRecord(recordType, recordId);
+      showSaveConfirmation({ action, payload, recordId, record: refreshed });
       return;
     }
 
     const res = await createContentBuilderRecord(payload);
     if (res.data?.duplicateWarning) {
       showDuplicateWarning(res.data.similar || [], payload);
+      state.pendingAction = action;
       showToast("Similar record found. Review before saving.", "error");
       return;
     }
 
+    recordId = res.data?.id || payload.id || "";
     showToast("Content record saved.", "success");
-    document.getElementById("contentBuilderForm")?.reset();
-    document.getElementById("contentSoldByRecoveryTools").checked = true;
-    renderTagControls([]);
     state.isDirty = false;
     state.duplicateWarningActive = false;
-    state.currentStep = 1;
+    state.pendingAction = "save";
     await loadData();
+    const savedRecord = findRecord(recordType, recordId);
+    showSaveConfirmation({ action, payload, recordId, record: savedRecord });
   } catch (err) {
     console.error("Failed to save content record:", err);
     showToast(err.message || "Failed to save content record.", "error");
@@ -4599,7 +4786,7 @@ function applySaveAction(payload, action = "save") {
 async function buildAndSavePayload(confirmDuplicate = false, action = "save") {
   try {
     const payload = await formPayload(confirmDuplicate);
-    await savePayload(applySaveAction(payload, action));
+    await savePayload(applySaveAction(payload, action), action);
   } catch (err) {
     console.error("Failed to prepare content record:", err);
     showToast(err.message || "Check the form values and try again.", "error");
@@ -4650,11 +4837,15 @@ async function saveVariantsFromBuild() {
 
 async function saveTemplate() {
   const saveButton = document.querySelector("#contentTemplateForm button[type='submit']");
+  if (saveButton?.dataset.saving === "true") return;
+  if (saveButton) {
+    saveButton.dataset.saving = "true";
+    saveButton.setAttribute("disabled", "disabled");
+    saveButton.textContent = "Saving template...";
+  }
   try {
     const previouslySelectedId = selectedTemplate()?.id || "";
     const payload = templatePayload();
-    saveButton?.setAttribute("disabled", "disabled");
-    if (saveButton) saveButton.textContent = "Saving template...";
     const response = await upsertContentBuilderTemplate(payload);
     const savedTemplate = response.data?.template;
     const definitions = response.data?.definitions || [];
@@ -4685,10 +4876,16 @@ async function saveTemplate() {
     closeTemplateCreator();
   } catch (err) {
     console.error("Failed to save content template:", err);
-    showToast(err.message || "Failed to save template.", "error");
+    const message = err?.code === "functions/deadline-exceeded" || err?.code === "deadline-exceeded"
+      ? "The template save timed out. Your form is still open; restart the Functions emulator and try again."
+      : err.message || "Failed to save template.";
+    showToast(message, "error");
   } finally {
     saveButton?.removeAttribute("disabled");
-    if (saveButton) saveButton.textContent = "Save template";
+    if (saveButton) {
+      delete saveButton.dataset.saving;
+      saveButton.textContent = "Save template";
+    }
   }
 }
 
@@ -4880,6 +5077,10 @@ export async function setupContentBuilder() {
   document.getElementById("contentProductDeliveryType")?.addEventListener("change", () => {
     updateProductPhysicalFields();
   });
+  document.getElementById("contentProductPhysicalFulfilment")?.addEventListener("change", () => {
+    updateProductPhysicalFields();
+    state.isDirty = true;
+  });
   document.getElementById("contentProductInventoryTracked")?.addEventListener(
     "change",
     updateProductPhysicalFields,
@@ -5052,6 +5253,28 @@ export async function setupContentBuilder() {
     updateBlueprintVariantRecipeTotals();
     renderBuilderSummaries();
   });
+  document.getElementById("contentVariantConnectionRows")?.addEventListener("input", (event) => {
+    if (event.target.classList.contains("variant-purchase-url")) {
+      updateVariantOrderingButton(event.target.closest(".content-variant-connection-row"));
+    }
+    state.isDirty = true;
+  });
+  document.getElementById("contentVariantConnectionRows")?.addEventListener("change", (event) => {
+    if (event.target.classList.contains("variant-supplier-id")) {
+      updateVariantOrderingButton(event.target.closest(".content-variant-connection-row"));
+    }
+    state.isDirty = true;
+  });
+  document.getElementById("contentVariantConnectionRows")?.addEventListener("click", (event) => {
+    const button = event.target.closest(".open-variant-ordering-page");
+    if (!button || button.disabled) return;
+    const url = button.dataset.orderingUrl || "";
+    if (!externalUrl(url)) {
+      showToast("Add a complete ordering URL beginning with http:// or https://.", "error");
+      return;
+    }
+    window.open(externalUrl(url), "_blank", "noopener,noreferrer");
+  });
   document.getElementById("addContentProductUnlockBtn")?.addEventListener("click", addProductUnlockRow);
   document.getElementById("contentProductUnlockRows")?.addEventListener("change", (event) => {
     if (!event.target.classList.contains("content-product-unlock-type")) return;
@@ -5180,7 +5403,7 @@ export async function setupContentBuilder() {
       buildAndSavePayload(true);
       return;
     }
-    savePayload({ ...payload, confirmDuplicate: true });
+    savePayload({ ...payload, confirmDuplicate: true }, state.pendingAction || "save");
   });
   document.getElementById("contentTemplateForm")?.addEventListener("submit", (event) => {
     event.preventDefault();

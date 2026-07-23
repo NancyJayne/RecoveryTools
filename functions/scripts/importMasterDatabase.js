@@ -47,7 +47,11 @@ const COLLECTIONS = [
   "assetRenditions",
   "itemAssets",
   "inventory",
+  "suppliers",
   "instructors",
+  "affiliates",
+  "pickupLocations",
+  "productVariantPickupLocations",
   "users",
   "orders",
   "orderItems",
@@ -95,8 +99,12 @@ const COLLECTION_SHEETS = {
   entityAssets: "EntityAssets",
   assetRenditions: "AssetRenditions",
   itemAssets: "ItemAsset",
-  inventory: "Inventory",
+  inventory: "ItemInventory",
+  suppliers: "Suppliers",
   instructors: "Instructors",
+  affiliates: "Affiliates",
+  pickupLocations: "PickupLocations",
+  productVariantPickupLocations: "ProductVariantPickupLocations",
   users: "Users",
   orders: "Orders",
   orderItems: "OrderItem",
@@ -370,6 +378,13 @@ function parseSheet(workbook, sheetName) {
   });
 }
 
+function parseFirstSheet(workbook, ...sheetNames) {
+  for (const sheetName of sheetNames) {
+    if (workbook.Sheets[sheetName]) return parseSheet(workbook, sheetName);
+  }
+  return [];
+}
+
 function indexBy(rows, ...keys) {
   const map = new Map();
   for (const row of rows) {
@@ -453,8 +468,12 @@ function buildDocs(workbook, workbookPath) {
     entityAssets: parseSheet(workbook, "EntityAssets"),
     assetRenditions: parseSheet(workbook, "AssetRenditions"),
     itemAssets: parseSheet(workbook, "ItemAsset"),
-    inventory: parseSheet(workbook, "Inventory"),
+    inventory: parseFirstSheet(workbook, "ItemInventory", "Inventory"),
+    suppliers: parseSheet(workbook, "Suppliers"),
     instructors: parseSheet(workbook, "Instructors"),
+    affiliates: parseSheet(workbook, "Affiliates"),
+    pickupLocations: parseSheet(workbook, "PickupLocations"),
+    productVariantPickupLocations: parseSheet(workbook, "ProductVariantPickupLocations"),
     users: parseSheet(workbook, "Users"),
     orders: parseSheet(workbook, "Orders"),
     orderItems: parseSheet(workbook, "OrderItem"),
@@ -468,6 +487,17 @@ function buildDocs(workbook, workbookPath) {
   const itemsById = indexBy(rows.items, "ItemID");
   const blueprintsById = indexBy(rows.blueprints, "BlueprintID");
   const plansById = indexBy(rows.plans, "PlanID");
+  const supplierIds = new Set();
+  for (const row of rows.suppliers) {
+    const supplierName = asString(value(row, "SupplierName", "Business", "Name"));
+    if (!supplierName) continue;
+    const storedId = asString(value(row, "SupplierID"));
+    const supplierId = storedId || `SUPPLIER-${slugId(supplierName)}`;
+    supplierIds.add(supplierId);
+    if (!storedId) {
+      warnings.push(`Supplier "${supplierName}" has no SupplierID; using ${supplierId}.`);
+    }
+  }
   const itemTemplatesById = indexBy(rows.itemTemplates, "ItemTemplateID");
   const blueprintTemplatesById = indexBy(rows.blueprintTemplates, "BlueprintTemplateID");
   const singleBlueprintTemplateId = blueprintTemplatesById.size === 1
@@ -1367,16 +1397,29 @@ function buildDocs(workbook, workbookPath) {
   }
 
   for (const row of rows.inventory) {
-    const inventoryId = asString(value(row, "Inventory ID"));
+    const inventoryId = asString(value(row, "InventoryID", "Inventory ID"));
     if (!inventoryId) continue;
+    const supplierId = asString(value(row, "SupplierID"));
+    if (!supplierId) {
+      warnings.push(`ItemInventory ${inventoryId} has no SupplierID.`);
+    } else if (!supplierIds.has(supplierId)) {
+      warnings.push(`ItemInventory ${inventoryId} references missing Supplier ${supplierId}.`);
+    }
     pushDoc(docs, "inventory", inventoryId, {
       inventoryId,
       name: asString(value(row, "InventoryItemName")),
       itemId: asString(value(row, "ItemID")),
       variantId: asString(value(row, "VariantID")),
-      partCost: asNumber(value(row, "Part Cost")),
-      supplier: asString(value(row, "Part 1 Supplier")),
-      stockQty: asNumber(value(row, "Stock Qty")) ?? 0,
+      partCost: asNumber(value(row, "Part Cost", "UnitCost")),
+      unitCost: asNumber(value(row, "UnitCost", "Part Cost")),
+      supplierId,
+      costReference: asString(value(row, "CostReference", "Cost Reference")),
+      purchaseUrl: asString(value(row, "PurchaseURL", "Purchase URL", "OrderingURL")),
+      stockQty: asNumber(value(row, "StockQty", "Stock Qty")) ?? 0,
+      reorderLevel: asNumber(value(row, "ReorderLevel", "Reorder Level")),
+      unit: asString(value(row, "Unit", "StockUnit")),
+      location: asString(value(row, "Location", "StorageLocation")),
+      status: asStatus(value(row, "Status")) || "active",
       updatedAt: FieldValue.serverTimestamp(),
     });
   }
@@ -1452,6 +1495,8 @@ function buildDocs(workbook, workbookPath) {
       sortOrder: asNumber(value(row, "SortOrder")),
       featured: asBool(value(row, "Featured")),
       requiresShipping: asBool(value(row, "Requires Shipping")),
+      physicalFulfilment: asString(value(row, "PhysicalFulfilment", "Physical Fulfilment")) ||
+        (asBool(value(row, "Requires Shipping")) ? "shipping" : "none"),
       sku: asString(value(row, "SKU")),
       shortDescription: asString(value(row, "ProductShortDescription")),
       longDescription: asString(value(row, "ProductLongDescription")),
@@ -1506,6 +1551,8 @@ function buildDocs(workbook, workbookPath) {
         data.websiteVisible = data.visible === true;
         data.price = data.basePrice;
         data.priceFrom = data.basePrice;
+        data.physicalFulfilment = data.physicalFulfilment ||
+          (data.requiresShipping ? "shipping" : "none");
       }
       if (collection === "productVariants") {
         data.name = data.variantName;
@@ -1513,6 +1560,8 @@ function buildDocs(workbook, workbookPath) {
         if (data.requiresShippingOverride === undefined && data.requiresShipping !== undefined) {
           data.requiresShippingOverride = data.requiresShipping;
         }
+        data.physicalFulfilment = data.physicalFulfilment ||
+          (data.requiresShippingOverride ? "shipping" : "none");
       }
       pushDoc(docs, collection, id, {
         ...data,
@@ -1751,6 +1800,24 @@ function buildDocs(workbook, workbookPath) {
     });
   }
 
+  for (const row of rows.suppliers) {
+    const supplierName = asString(value(row, "SupplierName", "Business", "Name"));
+    if (!supplierName) continue;
+    const supplierId = asString(value(row, "SupplierID")) || `SUPPLIER-${slugId(supplierName)}`;
+    pushDoc(docs, "suppliers", supplierId, {
+      supplierId,
+      name: supplierName,
+      contactName: asString(value(row, "ContactName", "Contact")),
+      website: asString(value(row, "Website")),
+      orderingUrl: asString(value(row, "OrderingURL", "Ordering URL")),
+      email: asString(value(row, "Email")),
+      phone: asString(value(row, "Phone")),
+      status: asStatus(value(row, "Status")) || "active",
+      notes: asString(value(row, "Notes")),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+
   for (const row of rows.users) {
     const userId = asString(value(row, "UserID"));
     if (!userId) continue;
@@ -1775,6 +1842,74 @@ function buildDocs(workbook, workbookPath) {
       },
       stripeCustomerId: asString(value(row, "StripeCustomerID")),
       status: asStatus(value(row, "UserStatus")),
+      notes: asString(value(row, "Notes")),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+
+  for (const row of rows.affiliates) {
+    const affiliateId = asString(value(row, "AffiliateID"));
+    if (!affiliateId) continue;
+    pushDoc(docs, "affiliates", affiliateId, {
+      affiliateId,
+      userId: asString(value(row, "UserID")),
+      status: asStatus(value(row, "Status")),
+      affiliateCode: asString(value(row, "Affiliate Code")),
+      approvedAt: asDate(value(row, "ApprovedAt")),
+      commissionRate: asNumber(value(row, "CommissionRate")),
+      stripeAccountId: asString(value(row, "StripeAccountID")),
+      stripeOnboardingStatus: asStatus(value(row, "StripeOnboardingStatus")),
+      payoutStatus: asStatus(value(row, "PayoutStatus")),
+      pickupEnabled: asBool(value(row, "PickupEnabled")),
+      pickupApprovalStatus: asStatus(value(row, "PickupApprovalStatus")),
+      defaultPickupLocationId: asString(value(row, "DefaultPickupLocationID")),
+      pickupContactName: asString(value(row, "PickupContactName")),
+      pickupContactPhone: asString(value(row, "PickupContactPhone")),
+      pickupNotes: asString(value(row, "PickupNotes")),
+      approvedByUserId: asString(value(row, "ApprovedByUserID")),
+      createdAt: asDate(value(row, "CreatedAt")),
+      updatedAt: FieldValue.serverTimestamp(),
+      notes: asString(value(row, "Notes")),
+    });
+  }
+
+  for (const row of rows.pickupLocations) {
+    const pickupLocationId = asString(value(row, "PickupLocationID"));
+    if (!pickupLocationId) continue;
+    pushDoc(docs, "pickupLocations", pickupLocationId, {
+      pickupLocationId,
+      locationType: normalizeKey(value(row, "LocationType")),
+      affiliateId: asString(value(row, "AffiliateID")),
+      workshopId: asString(value(row, "WorkshopID")),
+      workshopSessionId: asString(value(row, "WorkshopSessionID")),
+      locationName: asString(value(row, "LocationName")),
+      addressLine1: asString(value(row, "AddressLine1")),
+      addressLine2: asString(value(row, "AddressLine2")),
+      suburb: asString(value(row, "Suburb")),
+      state: asString(value(row, "State")),
+      postcode: asString(value(row, "Postcode")),
+      country: asString(value(row, "Country")) || "Australia",
+      customerInstructions: asString(value(row, "CustomerInstructions")),
+      contactName: asString(value(row, "ContactName")),
+      contactPhone: asString(value(row, "ContactPhone")),
+      active: asBool(value(row, "Active")),
+      approvalStatus: asStatus(value(row, "ApprovalStatus")),
+      availableFrom: asDate(value(row, "AvailableFrom")),
+      availableUntil: asDate(value(row, "AvailableUntil")),
+      notes: asString(value(row, "Notes")),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+
+  for (const row of rows.productVariantPickupLocations) {
+    const linkId = asString(value(row, "ProductVariantPickupLocationID"));
+    if (!linkId) continue;
+    pushDoc(docs, "productVariantPickupLocations", linkId, {
+      productVariantPickupLocationId: linkId,
+      productVariantId: asString(value(row, "ProductVariantID")),
+      pickupLocationId: asString(value(row, "PickupLocationID")),
+      active: asBool(value(row, "Active")),
+      sortOrder: asNumber(value(row, "SortOrder")),
       notes: asString(value(row, "Notes")),
       updatedAt: FieldValue.serverTimestamp(),
     });
