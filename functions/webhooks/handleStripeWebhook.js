@@ -243,6 +243,7 @@ async function productSnapshotFromLineItem(lineItem, commissionRates = {}, archi
     pickupLocation: metadata.pickupLocationId ? {
       pickupLocationId: metadata.pickupLocationId,
       sourceType: metadata.pickupSourceType || "",
+      businessName: metadata.pickupBusinessName || "",
       locationName: metadata.pickupLocationName || "",
       address: metadata.pickupAddress || "",
       customerInstructions: metadata.pickupInstructions || "",
@@ -296,6 +297,11 @@ export async function writeCheckoutCompleted({ stripe, session, event }) {
   const gstAmount = Number((total / 11).toFixed(2));
   const currency = String(session.currency || "aud").toUpperCase();
   const orderLines = canonicalOrderLines(items, currency);
+  const affiliatePickupLocation = items
+    .filter((item) => item.physicalFulfilment === "pickup")
+    .map((item) => item.pickupLocation)
+    .find((location) => location?.sourceType === "affiliate") || null;
+  const fulfilmentRequired = hasPhysicalItems || Boolean(affiliatePickupLocation);
   const orderData = {
     orderId,
     userId,
@@ -309,7 +315,7 @@ export async function writeCheckoutCompleted({ stripe, session, event }) {
     dueDate: orderDueDate(session.created),
     orderStatus: "paid",
     paymentStatus: session.payment_status || "paid",
-    fulfilmentStatus: hasPhysicalItems ? "new" : "not_required",
+    fulfilmentStatus: fulfilmentRequired ? "new" : "not_required",
     subtotal,
     shippingAmount,
     gstAmount,
@@ -333,6 +339,14 @@ export async function writeCheckoutCompleted({ stripe, session, event }) {
     adminNotes: "",
     itemsSummary: items.map((item) => `${item.productTitle} x${item.quantity}`).join("; "),
     hasPhysicalItems,
+    fulfilmentDestination: affiliatePickupLocation ? {
+      type: "affiliate_pickup",
+      businessName: affiliatePickupLocation.businessName || "",
+      locationName: affiliatePickupLocation.locationName || "",
+      address: affiliatePickupLocation.address || "",
+      contactName: affiliatePickupLocation.contactName || "",
+      contactPhone: affiliatePickupLocation.contactPhone || "",
+    } : null,
     accessStatus: accessItems.length ? "granted" : "none",
     referredBy: session.metadata?.referrer_uid || null,
     referralEvent: session.metadata?.ref_event || null,

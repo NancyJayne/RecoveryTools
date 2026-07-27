@@ -2,7 +2,7 @@
 
 ## Current Handoff
 
-Last updated July 19 after the deployed purchase, admin-order, packing-slip, shipping, variant, and approval-notification pass.
+Last updated July 27 after reconciling the current repository, recent user-confirmed tests, affiliate application/approval work, Stripe Connect diagnostics, and remaining V1 gates.
 
 The approved safety-first Product/Asset refactor is documented in `PRODUCT-ASSET-REFACTOR-MIGRATION-PLAN.md`. Products and Assets remain independent first-class entities; Product and Asset are not Item types. Implementation must remain additive and dual-read until the repeatable emulator migration, checkout/access/inventory parity tests, order-history checks, and rollback gates pass.
 
@@ -10,21 +10,21 @@ Phase 1 additive groundwork is now implemented: shared runtime schemas, canonica
 
 Phase 2's deterministic migration and isolated emulator verifier are also implemented. The verified first run created 63 canonical records and updated 23 existing records additively; the second run produced zero creates and zero updates. Legacy collection counts were unchanged. Ten legacy Product access references point to Plan/Course IDs that are not present in the workbook, so they were reported and deliberately skipped. These IDs must be mapped to valid Plan records before canonical access cutover.
 
-Phase 3 dual-read adapters are now implemented. Catalogue hydration, checkout creation, purchase confirmation, Stripe webhook access grants, Content Builder hydration, and inventory updates prefer canonical ProductVariants, EntityAssets/Assets/AssetRenditions, ProductAccessGrants, and ProductPrice records while retaining legacy fallbacks. Existing `type` values remain available for filters and commission settings; canonical `productType` is exposed separately. Inventory writes update ProductVariants when the selected canonical variant exists, otherwise they retain ItemVariants compatibility. Run `npm run verify:product-adapters` for the fast adapter regression suite. The next phase is canonical-first admin writes plus checkout/emulator parity testing before any legacy retirement.
+Phase 3 dual-read adapters are now implemented. Catalogue hydration, checkout creation, purchase confirmation, Stripe webhook access grants, Content Builder hydration, and inventory updates prefer canonical ProductVariants, EntityAssets/Assets/AssetRenditions, ProductAccessGrants, and ProductPrice records while retaining legacy fallbacks. Existing `type` values remain available for filters and commission settings; canonical `productType` is exposed separately. Inventory writes update ProductVariants when the selected canonical variant exists, otherwise they retain ItemVariants compatibility. Run `npm run verify:product-adapters` for the fast adapter regression suite. Keep the adapters in place until the remaining access and publication checks pass.
 
-Phase 4's canonical admin foundation is now implemented. Saving a sellable Item, Blueprint, or Plan writes canonical Product identity fields, ProductLinks, ProductVariants, ProductAccessGrants for Plans, and EntityAssets while retaining compatibility records needed by the current UI. `CreatesProduct` is available to Blueprints and Plans as well as Items. The editor can create a new Product or select an existing Product and choose its ProductLink role without rewriting the selected Product. Turning the toggle off does not alter existing ProductLinks; the explicit Unlink product action archives only the relationship and preserves both entities. The top-level Product manager uses canonical Product types, creates Products as Draft by default, writes canonical base prices, and no longer exposes a destructive delete button. The Asset Library creates independent Assets, edits and archives renditions, displays EntityAsset usage, and explicitly links or unlinks Items, Blueprints, Plans, Products, and ProductVariants without deleting either side. The focused emulator regression is `npm run verify:canonical-admin-writes:emulator`. The next safety gate is Phase 5 checkout, inventory, access, webhook replay, and versioned order-line parity.
+Phase 4's canonical admin foundation is now implemented. Saving a sellable Item, Blueprint, or Plan writes canonical Product identity fields, ProductLinks, ProductVariants, ProductAccessGrants for Plans, and EntityAssets while retaining compatibility records needed by the current UI. `CreatesProduct` is available to Blueprints and Plans as well as Items. The editor can create a new Product or select an existing Product and choose its ProductLink role without rewriting the selected Product. Turning the toggle off does not alter existing ProductLinks; the explicit Unlink product action archives only the relationship and preserves both entities. The top-level Product manager uses canonical Product types, creates Products as Draft by default, writes canonical base prices, and no longer exposes a destructive delete button. The Asset Library creates independent Assets, edits and archives renditions, displays EntityAsset usage, and explicitly links or unlinks Items, Blueprints, Plans, Products, and ProductVariants without deleting either side. The focused emulator regression is `npm run verify:canonical-admin-writes:emulator`.
 
-Phase 5's checkout safety gate is now implemented. New orders retain the legacy `products` snapshot and also write immutable schema-version-2 `orderLines` plus canonical `orderItems`. Product, selected ProductVariant, and ProductComponent inventory deductions are validated and committed in the same transaction as the root order, so webhook replays cannot deduct stock twice. ProductAccessGrants create deterministic `userAccess` records with duration-based expiry and revocation metadata. Both the webhook and purchase-confirmation paths repair missing order-item and access side effects when an existing paid order is replayed. Order history, fulfilment, and invoice readers prefer canonical order lines with legacy fallback. Run `npm run verify:order-lines` and `npm run verify:phase5:emulator`; the emulator regression includes a simulated post-order crash and verifies recovery without a second inventory deduction. The remaining release gate is a real Stripe test purchase against deployed functions and manual invoice/order-history review before any legacy field retirement.
+Phase 5's checkout safety gate is now implemented. New orders retain the legacy `products` snapshot and also write immutable schema-version-2 `orderLines` plus canonical `orderItems`. Product, selected ProductVariant, and ProductComponent inventory deductions are validated and committed in the same transaction as the root order, so webhook replays cannot deduct stock twice. ProductAccessGrants create deterministic `userAccess` records with duration-based expiry and revocation metadata. Both the webhook and purchase-confirmation paths repair missing order-item and access side effects when an existing paid order is replayed. Order history, fulfilment, and invoice readers prefer canonical order lines with legacy fallback. Run `npm run verify:order-lines` and `npm run verify:phase5:emulator`; the emulator regression includes a simulated post-order crash and verifies recovery without a second inventory deduction. A deployed Stripe purchase and the associated admin order flow have since been confirmed; access/unlock and the remaining admin workflow checks are the next release gates.
 
-The July 19 deployed Stripe test confirmed Marketplace display, payment, customer order history, Admin Order receipt, and invoice generation. Its inventory result exposed a compatibility gap: some tracked records use a variant flag or a stable workbook InventoryID rather than the Product boolean and constructed `INV-*` ID. Checkout now recognises all three tracking sources and updates the matching Inventory document; the emulator regression uses a non-derived InventoryID to protect this case. Admin Orders also load the latest linked customer issue and display its type, affected items, requested outcome, customer, and full message. Rating has been removed from the Order Help and complaint UI because ratings belong to the separate product-review workflow; historical stored issue ratings remain intact. Re-test one tracked deployed purchase before beginning the access review.
+The July 19 deployed Stripe test confirmed Marketplace display, payment, customer order history, Admin Order receipt, and invoice generation. Its inventory result exposed a compatibility gap: some tracked records use a variant flag or a stable workbook InventoryID rather than the Product boolean and constructed `INV-*` ID. Checkout now recognises all three tracking sources and updates the matching Inventory document; the emulator regression uses a non-derived InventoryID to protect this case. Admin Orders also load the latest linked customer issue and display its type, affected items, requested outcome, customer, and full message. Rating has been removed from the Order Help and complaint UI because ratings belong to the separate product-review workflow; historical stored issue ratings remain intact. The tracked purchase, including variants and replay protection, has since been re-tested successfully; the access review is next.
 
-Admin approval alerts now share the purple profile-image badge with unassigned orders. Pending approvals take the badge link to the Approvals page, the count refreshes every minute for signed-in admins, and the Admin Menu shows its own approval count. The Approvals page highlights and counts Content, Workshop, Course, Affiliate, Therapist, Review, and Feedback queues independently so the admin can open the affected queue directly. Purple is reserved for notifications and deliberate actions such as Clear filters; ordinary information panels retain neutral styling.
+Admin approval alerts now share the purple profile-image badge with unassigned orders. Pending approvals take the badge link to the Approvals page, the count refreshes every minute for signed-in admins, and the Admin Menu shows its own approval count. The Approvals page highlights and counts Content, Workshop, Course, Affiliate Application, Affiliate Pickup Address, Therapist, Review, and Feedback queues independently so the admin can open the affected queue directly. Purple is reserved for notifications and deliberate actions such as Clear filters; ordinary information panels retain neutral styling.
 
 The app is now moving from a basic shop into a scalable marketplace/admin system. The current architecture supports physical products, digital products, sessions, courses, workshops, programs, assets, policies, order fulfilment, customer feedback, reviews, and admin business settings.
 
 ## Completed
 
-Confirmed by the latest user test:
+Implemented or confirmed. Test-only gaps are kept in the launch checklist below rather than being silently treated as complete.
 
 - [x] Product appears in Marketplace and Stripe test payment completes.
 - [x] Customer order history and the Admin Order record show the purchase correctly.
@@ -37,6 +37,15 @@ Confirmed by the latest user test:
 - [x] Australia-only shipping pricing and the free-shipping threshold work end to end.
 - [x] The complete customer complaint workflow works from submission through resolution, completion, and archive.
 - [x] SendGrid production smoke tests completed successfully.
+- [x] Affiliate signup is application-only: new applications remain pending and do not receive the affiliate role or dashboard access until an admin approves them.
+- [x] Admin Affiliate management separates application approvals from pickup-address approvals, supports decision notes, retains rejected applications, and sends approval/rejection email notifications.
+- [x] Affiliate signup now shows application state, has its own timezone field, validates logo type/size, records Terms/Privacy/Affiliate Agreement acceptance, and prevents duplicate pending applications.
+- [x] Affiliate dashboard sidebar navigation and legacy panel nesting were repaired, including removal of the duplicate workshop-panel ID.
+- [x] Marketplace tiles use the short Product description while Product detail pages use the long description, with compatibility fallbacks for older records.
+- [x] Affiliate pickup orders use the affiliate destination for packing/shipping and send the customer a ready-for-pickup email when the affiliate marks the order ready.
+- [x] Affiliate signup timezone options are always available, with Australian choices and a Brisbane fallback.
+- [x] The cart drawer scrolls as one panel so items, pickup/affiliate selection, totals, and checkout remain reachable on short screens.
+- [x] Stripe Connect onboarding now has approved-affiliate checks, loading/error states, dual User/Affiliate account lookup, safe return URLs, and non-silent failure handling.
 
 ## To Do Before V1 Launch
 
@@ -45,7 +54,11 @@ Confirmed by the latest user test:
 - [ ] Navigate to every public policy page and verify the selected PDF loads correctly in the PDF viewer, including deployed mode.
 - [ ] Finish and end-to-end test the Admin Content Builder.
 - [ ] Finish and end-to-end test the CRM workflows.
-- [ ] Finish and end-to-end test the approval submission, queue, review, approve/reject, notification, and publishing workflows.
+- [ ] Finish and end-to-end test the remaining Content, Course/Workshop, and Therapist approval submission, queue, review, approve/reject, notification, and publication workflows. Affiliate application, affiliate pickup-address, Product Review, and customer-feedback queues are implemented.
+- [ ] Emulator-test a new affiliate application through pending access denial, admin approval, refreshed custom claims, dashboard access, and approval email; repeat with rejection and resubmission.
+- [ ] Add or connect the final legal Affiliate Agreement policy page/PDF before accepting production applications.
+- [ ] Activate Stripe Connect on the Recovery Tools Stripe platform account, then test Express onboarding, return/refresh handling, dashboard login, and payout-account persistence with an approved affiliate.
+- [ ] Verify the remaining shop edge cases: hidden Products disappear publicly, archived Products cannot be purchased from a stale cart, and digital/session Products do not require shipping.
 - [ ] Run the final V1 regression from content/product creation through checkout, fulfilment, customer history, and archive.
 - [ ] Confirm public navigation visibility, admin route protection, policy links, invoice links, and the order-help link in deployed mode.
 - [ ] Polish the V1 product images and copy, shipping/returns wording, policies, and About page content.
@@ -61,6 +74,7 @@ Confirmed by the latest user test:
 - [ ] Consider storing Stripe product/price IDs in the workbook if the workbook becomes the long-term Stripe source of truth.
 - [ ] Add server-side CRM search, filtering, and pagination when the user list becomes too large for client-side loading.
 - [ ] Expand CRM follow-up, assignment, ownership, reminders, and staff workload tools after the V1 customer-support workflow is stable.
+- [ ] Replace the legacy affiliate course/workshop proposal forms with the shared Item/Blueprint/Plan Content Builder submission workflow, retaining affiliate ownership and the admin approval gate.
 
 ## Detailed Implementation Reference
 
@@ -313,9 +327,9 @@ Next:
 * Decide whether V1 should show all Marketplace/Library sublinks or hide unfinished sections with feature flags.
 * Add a proper Marketplace landing/filter page later so `/shop`, `/courses`, `/workshops`, and `/programs` feel like filtered views of one marketplace.
 
-## Start Here Next
+## Current Verification Sequence
 
-### 1. Restart And Retest The Latest Changes
+### 1. Restart And Verify The Remaining Shop Cases
 
 Restart:
 
@@ -412,6 +426,12 @@ Status: [x] Completed, including the customer complaint, resolution, completion,
   - [ ] Emulator-test user creation, role records, invitation/password setup, reactivate, manual unlock, access display, revoke, and audit history using disposable accounts.
   - [ ] After the Content Builder is complete, run the full Product -> ProductAccessGrant -> active Item/Blueprint/Plan -> manual unlock or purchase -> userAccess -> customer-visible content test.
 - [ ] Complete approval submission, per-type queues, admin review, approve/reject, notifications, and resulting publication/visibility changes.
+  - [x] Affiliate applications remain pending without a role until admin approval; admin can approve/reject with notes and an email decision.
+  - [x] Affiliate pickup-address approvals are a separate queue.
+  - [x] Product Review and customer feedback/order-help admin queues are implemented.
+  - [ ] Complete representative Content approval and resulting visibility/publication tests.
+  - [ ] Complete Course and Workshop proposal approval tests, or replace their legacy forms with the shared Content Builder first.
+  - [ ] Complete Therapist application/role approval and notification tests.
 
 ## To Do Before V1 Launch - Detailed Gate
 
@@ -422,6 +442,7 @@ Do these before public launch:
 - [x] Run a complete Stripe purchase against deployed functions and confirm payment, order/invoice parity, inventory decrement, variant handling, and replay protection.
 - [ ] Finish the access/unlock process and verify customer access.
 - [ ] Finish the Admin Content Builder, CRM, and approvals workflows.
+- [ ] Activate and end-to-end test Stripe Connect for approved affiliate payouts.
 - [ ] Decide and enforce V1 public navigation visibility.
 - [ ] Change Business Settings policy fields to AssetID/ItemID selectors and confirm policies open correctly in deployed mode.
 - [ ] Confirm PDF invoice links work from email and profile.
@@ -485,6 +506,7 @@ Remaining workbook checks:
 * Need to verify order help link after login in deployed mode.
 * Need low-stock and out-of-stock admin warnings.
 * Need product/session/course detail pages to feel unified under Marketplace.
+* Stripe Connect onboarding code is ready, but the Recovery Tools Stripe platform account must activate Connect before Stripe will allow Express account creation.
 
 ## Validation Commands Used Recently
 

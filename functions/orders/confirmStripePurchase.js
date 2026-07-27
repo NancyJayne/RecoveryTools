@@ -285,6 +285,7 @@ const confirmStripePurchaseHandler = async (request) => {
         pickupLocation: metadata.pickupLocationId ? {
           pickupLocationId: metadata.pickupLocationId,
           sourceType: metadata.pickupSourceType || "",
+          businessName: metadata.pickupBusinessName || "",
           locationName: metadata.pickupLocationName || "",
           address: metadata.pickupAddress || "",
           customerInstructions: metadata.pickupInstructions || "",
@@ -321,6 +322,11 @@ const confirmStripePurchaseHandler = async (request) => {
   const billingAddressId = `${invoiceNumber}_billing`;
   const orderLines = canonicalOrderLines(enrichedProducts, String(session.currency || "aud").toUpperCase());
 
+  const affiliatePickupLocation = enrichedProducts
+    .filter((item) => item.physicalFulfilment === "pickup")
+    .map((item) => item.pickupLocation)
+    .find((location) => location?.sourceType === "affiliate") || null;
+  const fulfilmentRequired = hasPhysicalItems || Boolean(affiliatePickupLocation);
   const orderData = {
     buyerUid: uid,
     userId: uid,
@@ -363,6 +369,15 @@ const confirmStripePurchaseHandler = async (request) => {
     shippingEmail: customerEmail,
     shippingPhone: customerPhone,
     hasPhysicalItems,
+    fulfilmentStatus: fulfilmentRequired ? "new" : "not_required",
+    fulfilmentDestination: affiliatePickupLocation ? {
+      type: "affiliate_pickup",
+      businessName: affiliatePickupLocation.businessName || "",
+      locationName: affiliatePickupLocation.locationName || "",
+      address: affiliatePickupLocation.address || "",
+      contactName: affiliatePickupLocation.contactName || "",
+      contactPhone: affiliatePickupLocation.contactPhone || "",
+    } : null,
 
     invoiceNumber,
     invoiceId: invoiceNumber,

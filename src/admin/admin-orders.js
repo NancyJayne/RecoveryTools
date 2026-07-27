@@ -19,6 +19,14 @@ const FULFILMENT_STEPS = [
   { value: "delivered", label: "Delivered" },
   { value: "completed", label: "Completed" },
 ];
+const AFFILIATE_PICKUP_STEPS = [
+  { value: "new", label: "New" },
+  { value: "packing", label: "Packing" },
+  { value: "packed", label: "Packed" },
+  { value: "shipped_to_affiliate", label: "Sent to affiliate" },
+  { value: "ready_for_pickup", label: "Ready for pickup" },
+  { value: "completed", label: "Collected / completed" },
+];
 
 const CUSTOMER_FOLLOW_UP_OPTIONS = [
   { value: "none", label: "No customer issue" },
@@ -80,7 +88,8 @@ function currentFulfilmentStatus(order) {
   const status = String(order.fulfilmentStatus || order.status || "new").toLowerCase();
   if (status === "paid" || status === "pending" || status === "approved") return "new";
   if (status === "complete") return "completed";
-  if (FULFILMENT_STEPS.some((step) => step.value === status)) return status;
+  if ([...FULFILMENT_STEPS, ...AFFILIATE_PICKUP_STEPS]
+    .some((step) => step.value === status)) return status;
   return "new";
 }
 
@@ -262,7 +271,10 @@ function itemPackingReference(item) {
     variant ? `Variant: ${variant}` : "",
     item.sku ? `SKU: ${item.sku}` : "",
     fulfilment ? `Fulfilment: ${fulfilment}` : "",
-    item.pickupLocation?.locationName ? `Pickup: ${item.pickupLocation.locationName}` : "",
+    item.pickupLocation?.businessName
+      ? `Pickup business: ${item.pickupLocation.businessName}`
+      : "",
+    item.pickupLocation?.locationName ? `Pickup location: ${item.pickupLocation.locationName}` : "",
     item.pickupLocation?.address ? item.pickupLocation.address : "",
   ].filter(Boolean).join(" | ") || "-";
 }
@@ -473,9 +485,14 @@ async function printPackingSlip(order, button) {
 
 function renderFulfilmentSteps(order) {
   const current = currentFulfilmentStatus(order);
-  const currentIndex = FULFILMENT_STEPS.findIndex((step) => step.value === current);
+  const steps = orderItems(order).some((item) =>
+    item.physicalFulfilment === "pickup" &&
+    item.pickupLocation?.sourceType === "affiliate")
+    ? AFFILIATE_PICKUP_STEPS
+    : FULFILMENT_STEPS;
+  const currentIndex = steps.findIndex((step) => step.value === current);
 
-  return FULFILMENT_STEPS.map((step, index) => {
+  return steps.map((step, index) => {
     const checked = step.value === current ? "checked" : "";
     const completeClass = index <= currentIndex ? "text-green-300" : "text-gray-400";
     return `
@@ -681,6 +698,14 @@ export function renderOrderGrid(orders) {
 
   orders.forEach((data) => {
     const fulfilmentStatus = currentFulfilmentStatus(data);
+    const fulfilmentDestinationName = escapeHTML(
+      data.fulfilmentDestination?.businessName ||
+      data.fulfilmentDestination?.locationName ||
+      "Affiliate pickup location",
+    );
+    const fulfilmentDestinationPhone = data.fulfilmentDestination?.contactPhone
+      ? `<div class="text-gray-400">${escapeHTML(data.fulfilmentDestination.contactPhone)}</div>`
+      : "";
     const div = document.createElement("div");
     div.className = `order-card bg-gray-800 p-4 rounded mb-4 ${formatStatusClass(fulfilmentStatus)}`;
     if (data.archived === true) div.classList.add("opacity-75");
@@ -723,7 +748,25 @@ export function renderOrderGrid(orders) {
         <div class="rounded border border-gray-700 bg-gray-900/60 p-3">
           <div class="text-xs uppercase tracking-wide text-gray-400 mb-2">Items purchased</div>
           ${renderOrderItems(data)}
+          ${data.referredBy ? `
+            <div class="mt-3 border-t border-gray-700 pt-3 text-sm">
+              <strong>Affiliate:</strong>
+              ${escapeHTML(data.affiliateBusinessName || data.affiliateId || data.referredBy)}
+            </div>
+          ` : ""}
         </div>
+        ${data.fulfilmentDestination?.type === "affiliate_pickup" ? `
+          <div class="rounded border border-[#407471] bg-gray-900/60 p-3 text-sm">
+            <div class="text-xs uppercase tracking-wide text-gray-400 mb-1">
+              Ship replacement stock to
+            </div>
+            <div class="font-semibold">
+              ${fulfilmentDestinationName}
+            </div>
+            <div class="text-gray-300">${escapeHTML(data.fulfilmentDestination.address || "")}</div>
+            ${fulfilmentDestinationPhone}
+          </div>
+        ` : ""}
 
         <div class="flex flex-wrap gap-3 border-y border-gray-700 py-3">
           ${renderFulfilmentSteps(data)}

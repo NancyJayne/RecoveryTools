@@ -341,6 +341,28 @@ function packingReference(item) {
   ].filter(Boolean).join(" | ") || "-";
 }
 
+function affiliatePickupLocation(items = []) {
+  return items
+    .filter((item) => String(item.physicalFulfilment || "").toLowerCase() === "pickup")
+    .map((item) => item.pickupLocation)
+    .find((location) =>
+      location && String(location.sourceType || "").toLowerCase() === "affiliate") || null;
+}
+
+function affiliatePickupRecipientLines(orderData, location) {
+  const address = String(location.address || "")
+    .split(",")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return [
+    location.businessName || location.locationName || "Affiliate pickup",
+    ...address,
+    location.contactName,
+    location.contactPhone,
+    `Customer pickup for: ${customerName(orderData)}`,
+  ].filter(Boolean);
+}
+
 export async function generatePackingSlipPDF(invoiceId, orderData, overrides = {}) {
   const business = await getBusinessProfile();
   const fileName = `packing-slips/${invoiceId}.pdf`;
@@ -354,6 +376,17 @@ export async function generatePackingSlipPDF(invoiceId, orderData, overrides = {
   const right = left + width;
   const orderProducts = products(orderData);
   const shippingLines = addressLines(orderData.shippingAddress || orderData.shipping?.address);
+  const pickupLocation = affiliatePickupLocation(
+    Array.isArray(orderData.products) ? orderData.products : orderProducts,
+  ) || (orderData.fulfilmentDestination?.type === "affiliate_pickup"
+    ? {
+      sourceType: "affiliate",
+      ...orderData.fulfilmentDestination,
+    }
+    : null);
+  const recipientLines = pickupLocation
+    ? affiliatePickupRecipientLines(orderData, pickupLocation)
+    : [customerName(orderData), ...shippingLines, customerPhone(orderData), customerEmail(orderData)];
   const dueDate = overrides.dueDate || orderData.dueDate || "Not set";
   const notes = overrides.notes || orderData.adminNotes || orderData.note || "No packing notes";
 
@@ -375,8 +408,8 @@ export async function generatePackingSlipPDF(invoiceId, orderData, overrides = {
 
   drawAddressBlock(
     pdfDoc,
-    "Recipient",
-    [customerName(orderData), ...shippingLines, customerPhone(orderData), customerEmail(orderData)],
+    pickupLocation ? "Ship to affiliate pickup location" : "Recipient",
+    recipientLines,
     left,
     184,
     width,

@@ -341,6 +341,11 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /pickupLocations/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /therapists/{docId} {
       allow get: if isAdmin() || (signedIn() && request.auth.uid == resource.data.userId);
       allow list: if isAdmin() || isTherapist();

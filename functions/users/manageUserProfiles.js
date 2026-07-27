@@ -46,6 +46,58 @@ function profileUpdate(data = {}, adminUid) {
   };
 }
 
+async function affiliateRefForUser(uid) {
+  const direct = db.collection("affiliates").doc(uid);
+  if ((await direct.get()).exists) return direct;
+  const match = await db.collection("affiliates").where("userId", "==", uid).limit(1).get();
+  return match.empty ? direct : match.docs[0].ref;
+}
+
+async function saveAffiliatePickup(uid, value = {}, adminUid) {
+  const affiliateRef = await affiliateRefForUser(uid);
+  const affiliateSnap = await affiliateRef.get();
+  if (!affiliateSnap.exists) return;
+  const enabled = value.enabled === true;
+  const approvalStatus = clean(value.approvalStatus || "draft", 30).toLowerCase();
+  const addressLine1 = clean(value.addressLine1, 200);
+  const suburb = clean(value.suburb, 100);
+  const state = clean(value.state, 30).toUpperCase();
+  const postcode = clean(value.postcode, 20);
+  if (enabled && (!addressLine1 || !suburb || !state || !postcode)) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Pickup requires an address line, suburb, state and postcode.",
+    );
+  }
+  const locationId = clean(affiliateSnap.data()?.defaultPickupLocationId, 200) ||
+    `affiliate-${affiliateRef.id}`;
+  const batch = db.batch();
+  batch.set(affiliateRef, {
+    pickupEnabled: enabled,
+    pickupApprovalStatus: approvalStatus,
+    defaultPickupLocationId: enabled ? locationId : "",
+    updatedAt: stamp(),
+    updatedByUid: adminUid,
+  }, { merge: true });
+  batch.set(db.collection("pickupLocations").doc(locationId), {
+    affiliateId: affiliateRef.id,
+    locationType: "affiliate",
+    locationName: clean(value.locationName, 200) ||
+      clean(affiliateSnap.data()?.businessName, 200) || "Affiliate pickup",
+    addressLine1,
+    addressLine2: clean(value.addressLine2, 200),
+    suburb,
+    state,
+    postcode,
+    country: clean(value.country || "Australia", 100),
+    active: enabled,
+    approvalStatus,
+    updatedAt: stamp(),
+    updatedByUid: adminUid,
+  }, { merge: true });
+  await batch.commit();
+}
+
 async function updateReferences(collectionName, fields, oldUid, primaryUid) {
   for (const field of fields) {
     const snapshot = await db.collection(collectionName).where(field, "==", oldUid).get();
@@ -214,6 +266,10 @@ export const manageUserProfiles = onCall(
             updatedAt: stamp(),
           }, { merge: true });
         }
+      }
+      const currentUser = (await db.collection("users").doc(uid).get()).data() || {};
+      if (currentUser.roles?.affiliate === true && profile.affiliatePickup) {
+        await saveAffiliatePickup(uid, profile.affiliatePickup, request.auth.uid);
       }
       return { success: true };
     }

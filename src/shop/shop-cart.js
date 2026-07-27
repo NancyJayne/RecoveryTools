@@ -5,6 +5,32 @@ import { auth, db, functions } from "../utils/firebase-config.js";
 import { httpsCallable } from "firebase/functions";
 import { doc, getDoc } from "firebase/firestore";
 
+let checkoutAffiliates = [];
+
+function configuredFulfilment(item) {
+  return item.configuredPhysicalFulfilment || item.physicalFulfilment ||
+    (item.requiresShipping ? "shipping" : "none");
+}
+
+function selectedPickupAffiliate() {
+  const selectedId = document.getElementById("affiliateSelector")?.value || "";
+  return checkoutAffiliates.find((affiliate) => affiliate.affiliateId === selectedId) || null;
+}
+
+function cartReadiness(cart) {
+  if (cart.some((item) =>
+    configuredFulfilment(item) === "shipping-or-pickup" &&
+    !["shipping", "pickup"].includes(item.physicalFulfilment))) {
+    return { ready: false, message: "Choose delivery or pickup for each item." };
+  }
+  if (cart.some((item) =>
+    item.physicalFulfilment === "pickup" && item.type !== "workshop") &&
+      !selectedPickupAffiliate()?.pickupAvailable) {
+    return { ready: false, message: "Choose an affiliate with an available pickup address." };
+  }
+  return { ready: true, message: "" };
+}
+
 async function loadSharedCart() {
   const sharedCartId = new URLSearchParams(window.location.search).get("sharedCart");
   if (!sharedCartId) return;
@@ -49,6 +75,21 @@ export async function initCartUI() {
       e.stopPropagation();
 
       console.log("🛒 Checkout button clicked");
+      const cart = getCurrentCart();
+      const readiness = cartReadiness(cart);
+      if (!readiness.ready) {
+        showToast(readiness.message, "error");
+        return;
+      }
+      const affiliate = selectedPickupAffiliate();
+      if (affiliate?.pickupLocation?.pickupLocationId) {
+        cart.forEach((item) => {
+          if (item.physicalFulfilment === "pickup") {
+            item.pickupLocationId = affiliate.pickupLocation.pickupLocationId;
+          }
+        });
+        setCart(cart);
+      }
       window.location.assign("/checkout");
     });
   } else {
@@ -96,7 +137,13 @@ export function addToCart(item) {
       quantity: item.quantity || 1,
       type: item.type || "tool",
       requiresShipping: item.requiresShipping === true,
-      physicalFulfilment: item.physicalFulfilment || (item.requiresShipping ? "shipping" : "none"),
+      configuredPhysicalFulfilment:
+        item.configuredPhysicalFulfilment ||
+        item.physicalFulfilment ||
+        (item.requiresShipping ? "shipping" : "none"),
+      physicalFulfilment: item.configuredPhysicalFulfilment === "shipping-or-pickup"
+        ? (item.physicalFulfilment || "")
+        : (item.physicalFulfilment || (item.requiresShipping ? "shipping" : "none")),
       variantId: item.variantId || "",
       variantName: item.variantName || "",
       sku: item.sku || "",
@@ -122,12 +169,13 @@ export async function renderCartItems() {
   const shippingEl = document.getElementById("estimatedShippingCost");
   const estimatedTotalEl = document.getElementById("cartEstimatedTotal");
   const affiliateSelect = document.getElementById("affiliateSelector");
+  const affiliateLabel = document.getElementById("affiliateSelectorLabel");
+  const affiliateDetails = document.getElementById("affiliatePickupDetails");
+  const checkoutBtn = document.getElementById("cartCheckoutBtn");
   if (!container || !subtotalEl) return;
 
   let cart = JSON.parse(localStorage.getItem("recovery_cart") || "[]");
   const hasShippingItems = cart.some((item) => item.requiresShipping === true);
-  const typePriority = { tool: 1, course: 2, workshop: 3 };
-  cart.sort((a, b) => (typePriority[a.type] || 99) - (typePriority[b.type] || 99));
 
   const grouped = cart.reduce((acc, item) => {
     acc[item.type] = acc[item.type] || [];
@@ -190,6 +238,39 @@ export async function renderCartItems() {
       if (item.variantName) info.appendChild(variant);
       if (fulfilment.textContent) info.appendChild(fulfilment);
       info.appendChild(details);
+      if (configuredFulfilment(item) === "shipping-or-pickup") {
+        const choices = document.createElement("fieldset");
+        choices.className = "mt-2 flex gap-3 text-xs text-gray-200";
+        const legend = document.createElement("legend");
+        legend.className = "sr-only";
+        legend.textContent = `Fulfilment for ${item.name}`;
+        choices.appendChild(legend);
+        [
+          { value: "shipping", label: "Delivery" },
+          { value: "pickup", label: "Pickup" },
+        ].forEach((choice) => {
+          const label = document.createElement("label");
+          label.className = "inline-flex cursor-pointer items-center gap-1";
+          const input = document.createElement("input");
+          input.type = "radio";
+          input.name = `cart-fulfilment-${cart.indexOf(item)}`;
+          input.value = choice.value;
+          input.checked = item.physicalFulfilment === choice.value;
+          input.addEventListener("change", () => {
+            const current = getCurrentCart();
+            const currentItem = current[cart.indexOf(item)];
+            if (!currentItem) return;
+            currentItem.physicalFulfilment = choice.value;
+            currentItem.requiresShipping = choice.value === "shipping";
+            delete currentItem.pickupLocationId;
+            setCart(current);
+            renderCartItems();
+          });
+          label.append(input, document.createTextNode(choice.label));
+          choices.appendChild(label);
+        });
+        info.appendChild(choices);
+      }
       left.appendChild(img);
       left.appendChild(info);
 
@@ -224,7 +305,13 @@ export async function renderCartItems() {
   };
 
   try {
-    if (!hasShippingItems) {
+    const hasUnresolvedFulfilment = cart.some((item) =>
+      configuredFulfilment(item) === "shipping-or-pickup" &&
+      !["shipping", "pickup"].includes(item.physicalFulfilment));
+    if (hasUnresolvedFulfilment) {
+      if (shippingEl) shippingEl.textContent = "Choose delivery or pickup";
+      showEstimatedTotal(0);
+    } else if (!hasShippingItems) {
       if (shippingEl) shippingEl.textContent = "$0.00";
       showEstimatedTotal(0);
     } else {
@@ -254,35 +341,75 @@ export async function renderCartItems() {
 
   const hasTools = cart.some((item) => item.type === "tool");
   const hasPickupItems = cart.some((item) => item.physicalFulfilment === "pickup");
-  const canChooseAffiliate = (hasTools || hasPickupItems) && Boolean(auth?.currentUser);
+  const pickupRequiresAffiliate = cart.some((item) =>
+    item.physicalFulfilment === "pickup" && item.type !== "workshop");
+  const canChooseAffiliate = hasPickupItems || (hasTools && Boolean(auth?.currentUser));
   const affiliateBlock = affiliateSelect?.closest(".p-4.border-t");
   if (affiliateBlock) affiliateBlock.style.display = canChooseAffiliate ? "block" : "none";
 
-  if (canChooseAffiliate && affiliateSelect && !affiliateSelect.dataset.loaded) {
-    const getCheckoutAffiliates = httpsCallable(functions, "getCheckoutAffiliates");
-    getCheckoutAffiliates()
-      .then((response) => {
-          affiliateSelect.innerHTML = "<option value=\"\">No Affiliate / I found this myself</option>";
-          (response.data?.affiliates || []).forEach((affiliate) => {
-            const option = document.createElement("option");
-            option.value = affiliate.affiliateId;
-            option.textContent = affiliate.businessName || affiliate.affiliateId;
-            affiliateSelect.appendChild(option);
-          });
+  if (canChooseAffiliate && affiliateSelect && !checkoutAffiliates.length) {
+    try {
+      const getCheckoutAffiliates = httpsCallable(functions, "getCheckoutAffiliates");
+      const response = await getCheckoutAffiliates();
+      checkoutAffiliates = response.data?.affiliates || [];
+    } catch (err) {
+      console.error("Failed to load affiliates:", err);
+      showToast("Unable to load affiliate list", "error");
+    }
+  }
 
-          const storedAffiliate = localStorage.getItem("referrer_uid");
-          if (storedAffiliate) affiliateSelect.value = storedAffiliate;
-
-          affiliateSelect.dataset.loaded = true;
-      })
-      .catch((err) => {
-        console.error("Failed to load affiliates:", err);
-        showToast("Unable to load referrer list", "error");
-      });
-
-    affiliateSelect.addEventListener("change", () => {
-      localStorage.setItem("referrer_uid", affiliateSelect.value);
+  if (canChooseAffiliate && affiliateSelect) {
+    const storedAffiliate = localStorage.getItem("referrer_uid") || "";
+    affiliateSelect.innerHTML = pickupRequiresAffiliate
+      ? "<option value=\"\">Choose an affiliate pickup location</option>"
+      : "<option value=\"\">No Affiliate / I found this myself</option>";
+    checkoutAffiliates.forEach((affiliate) => {
+      const option = document.createElement("option");
+      option.value = affiliate.affiliateId;
+      option.textContent = affiliate.businessName || affiliate.affiliateId;
+      option.disabled = pickupRequiresAffiliate && !affiliate.pickupAvailable;
+      if (option.disabled) option.textContent += " — pickup unavailable";
+      affiliateSelect.appendChild(option);
     });
+    if ([...affiliateSelect.options].some((option) =>
+      option.value === storedAffiliate && !option.disabled)) {
+      affiliateSelect.value = storedAffiliate;
+    }
+    if (affiliateLabel) {
+      affiliateLabel.textContent = pickupRequiresAffiliate ? "Pickup affiliate" : "Referred By";
+    }
+    affiliateSelect.onchange = () => {
+      localStorage.setItem("referrer_uid", affiliateSelect.value);
+      renderCartItems();
+    };
+    const selected = selectedPickupAffiliate();
+    if (affiliateDetails) {
+      if (hasPickupItems && selected?.pickupAvailable && selected.pickupLocation) {
+        affiliateDetails.replaceChildren();
+        const business = document.createElement("div");
+        business.className = "font-semibold";
+        business.textContent = selected.businessName;
+        const address = document.createElement("div");
+        address.className = "mt-1 text-gray-300";
+        address.textContent = [
+          selected.pickupLocation.locationName,
+          selected.pickupLocation.address,
+        ].filter(Boolean).join(" — ");
+        affiliateDetails.append(business, address);
+        affiliateDetails.classList.remove("hidden");
+      } else {
+        affiliateDetails.classList.add("hidden");
+        affiliateDetails.replaceChildren();
+      }
+    }
+  }
+
+  const readiness = cartReadiness(cart);
+  if (checkoutBtn) {
+    checkoutBtn.disabled = !cart.length || !readiness.ready;
+    checkoutBtn.classList.toggle("opacity-50", checkoutBtn.disabled);
+    checkoutBtn.classList.toggle("cursor-not-allowed", checkoutBtn.disabled);
+    checkoutBtn.title = readiness.message;
   }
 
   container.querySelectorAll("button[data-action]").forEach((button) => {

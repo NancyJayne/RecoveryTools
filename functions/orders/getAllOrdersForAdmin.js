@@ -54,6 +54,37 @@ async function attachLatestCustomerIssues(db, orders) {
   }));
 }
 
+async function attachAffiliateDetails(db, orders) {
+  const referrers = [...new Set(orders.map((order) => order.referredBy).filter(Boolean))];
+  if (!referrers.length) return orders;
+  const profiles = await Promise.all(referrers.map(async (referrerId) => {
+    const direct = await db.collection("affiliates").doc(referrerId).get();
+    if (direct.exists) return [referrerId, { id: direct.id, ...direct.data() }];
+    const match = await db.collection("affiliates")
+      .where("userId", "==", referrerId)
+      .limit(1)
+      .get();
+    return [referrerId, match.empty ? null : {
+      id: match.docs[0].id,
+      ...match.docs[0].data(),
+    }];
+  }));
+  const byReferrer = new Map(profiles);
+  return orders.map((order) => {
+    const affiliate = byReferrer.get(order.referredBy);
+    return {
+      ...order,
+      affiliateBusinessName: affiliate?.businessName || affiliate?.name ||
+        affiliate?.email || "",
+      affiliateId: affiliate?.id || order.referredBy || "",
+    };
+  });
+}
+
+async function attachAdminOrderDetails(db, orders) {
+  return attachAffiliateDetails(db, await attachLatestCustomerIssues(db, orders));
+}
+
 export const getAllOrdersForAdmin = onCall(
   { region: "australia-southeast1" },
   async (request) => {
@@ -86,7 +117,7 @@ export const getAllOrdersForAdmin = onCall(
       if (issueOnly && !hasOpenCustomerIssue(order)) {
         return { orders: [] };
       }
-      return { orders: await attachLatestCustomerIssues(db, [order]) };
+      return { orders: await attachAdminOrderDetails(db, [order]) };
     }
 
     if (referredBy) {
@@ -106,6 +137,6 @@ export const getAllOrdersForAdmin = onCall(
       )
       .slice(0, 50);
 
-    return { orders: await attachLatestCustomerIssues(db, orders) };
+    return { orders: await attachAdminOrderDetails(db, orders) };
   },
 );

@@ -1,5 +1,3 @@
-import admin from "firebase-admin";
-
 const clean = (value) => String(value ?? "").trim();
 const lower = (value) => clean(value).toLowerCase();
 
@@ -32,6 +30,7 @@ function publicLocation(id, location, sourceType = location.locationType) {
   return {
     pickupLocationId: id,
     sourceType: lower(sourceType),
+    businessName: clean(location.businessName),
     locationName: clean(location.locationName) || "Pickup location",
     address: addressText(location),
     customerInstructions: clean(location.customerInstructions),
@@ -107,6 +106,7 @@ export async function eligiblePickupLocations(db, {
       });
     affiliateLocations.forEach(([id, location]) => add(publicLocation(id, {
       ...location,
+      businessName: affiliate.businessName || affiliate.name || affiliate.email,
       contactName: location.contactName || affiliate.pickupContactName,
       contactPhone: location.contactPhone || affiliate.pickupContactPhone,
     }, "affiliate")));
@@ -134,6 +134,7 @@ export function pickupLocationMetadata(location) {
     pickupLocationId: clean(location?.pickupLocationId),
     pickupSourceType: clean(location?.sourceType),
     pickupLocationName: clean(location?.locationName),
+    pickupBusinessName: clean(location?.businessName),
     pickupAddress: clean(location?.address),
     pickupInstructions: clean(location?.customerInstructions),
     pickupContactName: clean(location?.contactName),

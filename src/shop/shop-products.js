@@ -36,6 +36,14 @@ function getProductImageAlt(product) {
     getProductName(product);
 }
 
+function getProductShortDescription(product) {
+  return product.shortDescription || product.description || product.longDescription || "";
+}
+
+function getProductLongDescription(product) {
+  return product.longDescription || product.description || product.shortDescription || "";
+}
+
 function getProductPrice(product) {
   return Number(product.onSale && product.salePrice ? product.salePrice : product.price ?? product.priceFrom ?? 0);
 }
@@ -294,7 +302,7 @@ export function createProductTile(product) {
   wrapper.dataset.productName = productName;
   wrapper.dataset.productPrice = finalPrice;
   wrapper.dataset.productImage = productImage;
-  wrapper.dataset.productDescription = product.shortDescription || "";
+  wrapper.dataset.productDescription = getProductShortDescription(product);
   wrapper.dataset.productStock = product.stock ?? 0;
   wrapper.dataset.productFull = JSON.stringify(product);
 
@@ -412,13 +420,9 @@ export function showProductDetail(product, options = {}) {
   price.className = "text-green-400 text-xl font-bold mb-2";
 
 
-  const shortDesc = document.createElement("p");
-  shortDesc.textContent = product.shortDescription || "";
-  shortDesc.className = "text-sm text-gray-300 mb-2";
-
   const longDesc = document.createElement("p");
-  longDesc.textContent = product.longDescription || "";
-  longDesc.className = "text-sm text-gray-400 mb-4";
+  longDesc.textContent = getProductLongDescription(product);
+  longDesc.className = "whitespace-pre-line text-sm text-gray-300 mb-4";
 
   const featureList = document.createElement("ul");
   featureList.className = "list-disc ml-5 text-sm text-gray-300 mb-4";
@@ -446,31 +450,10 @@ export function showProductDetail(product, options = {}) {
 
   const priceWrap = document.createElement("div");
   priceWrap.className = "flex flex-col gap-4 mb-4";
-  let selectedPhysicalFulfilment =
-    selectedVariant?.physicalFulfilment || product.physicalFulfilment ||
-    (product.requiresShipping ? "shipping" : "none");
-  const fulfilmentLabel = document.createElement("label");
-  fulfilmentLabel.className = "hidden text-sm text-gray-300";
-  fulfilmentLabel.textContent = "Choose physical fulfilment";
-  const fulfilmentSelect = document.createElement("select");
-  fulfilmentSelect.className = "mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white";
-  fulfilmentSelect.innerHTML = `
-    <option value="shipping">Shipping within Australia</option>
-    <option value="pickup">Pickup</option>
-  `;
-  fulfilmentSelect.addEventListener("change", () => {
-    selectedPhysicalFulfilment = fulfilmentSelect.value;
-  });
-  fulfilmentLabel.appendChild(fulfilmentSelect);
-
-  function updatePhysicalFulfilmentChoice() {
-    const configured = selectedVariant?.physicalFulfilment || product.physicalFulfilment ||
+  function configuredPhysicalFulfilment() {
+    return selectedVariant?.physicalFulfilment || product.physicalFulfilment ||
       (product.requiresShipping ? "shipping" : "none");
-    selectedPhysicalFulfilment = configured === "shipping-or-pickup" ? "shipping" : configured;
-    fulfilmentSelect.value = selectedPhysicalFulfilment;
-    fulfilmentLabel.classList.toggle("hidden", configured !== "shipping-or-pickup");
   }
-  updatePhysicalFulfilmentChoice();
 
   let variantSelect = null;
   if (variants.length) {
@@ -492,7 +475,6 @@ export function showProductDetail(product, options = {}) {
       ) || null;
       updatePriceDisplay();
       updateExperienceDetails();
-      updatePhysicalFulfilmentChoice();
       updateAddButtonState();
     });
 
@@ -500,8 +482,6 @@ export function showProductDetail(product, options = {}) {
     if (selectedVariant) variantSelect.value = selectedVariant.variantId || selectedVariant.id;
     priceWrap.appendChild(variantLabel);
   }
-  priceWrap.appendChild(fulfilmentLabel);
-
   const qtyWrap = document.createElement("div");
   qtyWrap.className = "flex items-center gap-4";
 
@@ -556,8 +536,11 @@ export function showProductDetail(product, options = {}) {
       price: finalPrice,
       quantity,
       type: product.type || "tool",
-      physicalFulfilment: selectedPhysicalFulfilment,
-      requiresShipping: selectedPhysicalFulfilment === "shipping",
+      configuredPhysicalFulfilment: configuredPhysicalFulfilment(),
+      physicalFulfilment: configuredPhysicalFulfilment() === "shipping-or-pickup"
+        ? ""
+        : configuredPhysicalFulfilment(),
+      requiresShipping: configuredPhysicalFulfilment() === "shipping",
       variantId: selectedVariant?.variantId || selectedVariant?.id || "",
       variantName: selectedVariant ? getVariantLabel(selectedVariant) : "",
       sku: selectedVariant?.sku || product.sku || "",
@@ -580,7 +563,6 @@ export function showProductDetail(product, options = {}) {
 
   content.appendChild(title);
   content.appendChild(price);
-  content.appendChild(shortDesc);
   content.appendChild(longDesc);
   content.appendChild(featureList);
   if (experienceDetails.children.length) content.appendChild(experienceDetails);
@@ -647,7 +629,7 @@ export function showProductDetail(product, options = {}) {
 
   setPageMeta({
     title: `${productName} | Recovery Tools`,
-    description: product.shortDescription || product.longDescription?.slice(0, 140),
+    description: getProductShortDescription(product).slice(0, 160),
     url: `https://recoverytools.au/shop/${productSlug}`,
   });
 
@@ -671,7 +653,7 @@ export function injectProductSchema(product) {
     "@type": "Product",
     "name": productName,
     "image": productImage,
-    "description": product.shortDescription || product.longDescription,
+    "description": getProductShortDescription(product) || getProductLongDescription(product),
     "sku": product.sku || productSlug,
     "brand": { "@type": "Organization", "name": "Recovery Tools" },
     "offers": {

@@ -87,7 +87,12 @@ async function handleSectionFromURL() {
   if (path === "/login" || path === "/signup" || path === "/reset") return;
 
   const pathSegment = path.split("/").filter(Boolean)[0];
-  const sectionId = pathSegment ? `${pathSegment}Section` : "homeSection";
+  let sectionId = pathSegment ? `${pathSegment}Section` : "homeSection";
+  if (path === "/affiliateSignup") {
+    sectionId = new URLSearchParams(window.location.search).has("register")
+      ? "affiliateRegisterSection"
+      : "affiliateWhySection";
+  }
 
   if (path.startsWith("/admin")) {
     const roles = await getUserRole();

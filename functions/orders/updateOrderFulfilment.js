@@ -17,6 +17,8 @@ const FULFILMENT_STEPS = new Set([
   "packing",
   "packed",
   "shipped",
+  "shipped_to_affiliate",
+  "ready_for_pickup",
   "delivered",
   "completed",
   "cancelled",
@@ -346,7 +348,7 @@ const updateOrderFulfilmentHandler = async (request) => {
     throw new HttpsError("invalid-argument", "Invalid fulfilment status.");
   }
 
-  if (cleanStatus === "shipped" && !cleanTracking) {
+  if (["shipped", "shipped_to_affiliate"].includes(cleanStatus) && !cleanTracking) {
     throw new HttpsError("invalid-argument", "Tracking number is required before marking an order shipped.");
   }
 
@@ -444,6 +446,12 @@ const updateOrderFulfilmentHandler = async (request) => {
   if (cleanStatus === "packing" && !order.packingStartedAt) updateData.packingStartedAt = now;
   if (cleanStatus === "packed" && !order.packedAt) updateData.packedAt = now;
   if (cleanStatus === "shipped" && !order.shippedAt) updateData.shippedAt = now;
+  if (cleanStatus === "shipped_to_affiliate" && !order.shippedToAffiliateAt) {
+    updateData.shippedToAffiliateAt = now;
+  }
+  if (cleanStatus === "ready_for_pickup" && !order.readyForPickupAt) {
+    updateData.readyForPickupAt = now;
+  }
   if (cleanStatus === "delivered" && !order.deliveredAt) updateData.deliveredAt = now;
   if (cleanStatus === "delivered" && !order.autoCompleteAfter) {
     updateData.autoCompleteAfter = autoCompleteAfterDeliveryDate();

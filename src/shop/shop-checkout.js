@@ -169,6 +169,27 @@ export async function setupCheckoutPage() {
             fulfilment.textContent = `Fulfilment: ${itemPhysicalFulfilment(item)}`;
             left.appendChild(fulfilment);
           }
+          if (item.physicalFulfilment === "pickup" && item.pickupLocation) {
+            const pickupBusiness = document.createElement("div");
+            pickupBusiness.className = "text-gray-300";
+            pickupBusiness.textContent = `Pickup from: ${
+              item.pickupLocation.businessName ||
+              item.pickupLocation.locationName ||
+              "Selected pickup location"
+            }`;
+            left.appendChild(pickupBusiness);
+            if (item.pickupLocation.address) {
+              const pickupAddress = document.createElement("div");
+              pickupAddress.className = "text-gray-400";
+              pickupAddress.textContent = item.pickupLocation.address;
+              left.appendChild(pickupAddress);
+            }
+            const pickupNotice = document.createElement("div");
+            pickupNotice.className = "mt-1 text-amber-300";
+            pickupNotice.textContent =
+              "Please wait until the affiliate confirms your order is ready before collecting it.";
+            left.appendChild(pickupNotice);
+          }
           left.appendChild(typeQty);
 
           const right = document.createElement("div");
@@ -487,7 +508,7 @@ export async function setupCheckoutPage() {
 
   const billingContainer = document.createElement("div");
   billingContainer.id = "billingAddressContainer";
-  billingContainer.className = "mt-6 hidden";
+  billingContainer.className = hasShippingItems ? "mt-6 hidden" : "mt-6";
 
   const billingHeader = document.createElement("h4");
   billingHeader.className = "text-white";
@@ -510,14 +531,12 @@ export async function setupCheckoutPage() {
   });
 
   billingContainer.appendChild(billingGroup);
-  if (hasShippingItems) {
-    form.appendChild(billingContainer);
-  }
+  form.appendChild(billingContainer);
 
   // 🔄 Toggle billing section visibility
   const toggleCheckbox = form.querySelector("#sameAsShipping");
   billingGroup.querySelectorAll("input").forEach((input) => {
-    input.disabled = toggleCheckbox?.checked ?? true;
+    input.disabled = hasShippingItems && (toggleCheckbox?.checked ?? true);
   });
 
   toggleCheckbox?.addEventListener("change", (e) => {
@@ -646,9 +665,7 @@ export async function setupCheckoutPage() {
     const saveAsDefaultShipping =
   form.querySelector("#saveAsDefaultShipping")?.checked || false;
 
-    if (!hasShippingItems) {
-      customerInfo.billingAddress = {};
-    } else if (form.querySelector("#sameAsShipping")?.checked) {
+    if (hasShippingItems && form.querySelector("#sameAsShipping")?.checked) {
       customerInfo.billingAddress = {
         line1: customerInfo.shippingAddress_line1,
         line2: customerInfo.shippingAddress_line2,

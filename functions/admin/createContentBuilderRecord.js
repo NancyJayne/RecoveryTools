@@ -178,6 +178,7 @@ function cleanEntityVariants(value) {
       .filter(([, enabled]) => typeof enabled === "boolean")),
     shopEnabled: variant?.shopEnabled === true,
     libraryVisible: variant?.libraryVisible === true,
+    manufacturingRecipe: variant?.manufacturingRecipe === true,
     stockQty: asNumber(variant?.stockQty),
     reorderLevel: asNumber(variant?.reorderLevel),
     inventoryUnit: cleanString(variant?.inventoryUnit),

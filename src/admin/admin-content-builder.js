@@ -258,12 +258,26 @@ function updateBlueprintEstimatedCost() {
   return total;
 }
 
+function blueprintVariantRecipeCostFromBuilder() {
+  const firstRecipe = document.querySelector(".content-entity-variant-row");
+  if (!firstRecipe) return 0;
+  return [...firstRecipe.querySelectorAll(".blueprint-variant-recipe-row")]
+    .reduce((total, row) => {
+      const itemId = row.querySelector(".blueprint-variant-recipe-item")?.value || "";
+      const item = (state.records.items || []).find((record) => record.id === itemId);
+      const quantity = optionalNumberFromElement(
+        row.querySelector(".blueprint-variant-recipe-quantity"),
+      ) ?? 0;
+      return total + quantity * (Number(item?.itemUnitCost ?? 0) || 0);
+    }, 0);
+}
+
 function updateConnectedProductCostPreview() {
   let cost = 0;
   const blueprintId = document.getElementById("contentProductBlueprintId")?.value || "";
   const costBlueprint = (state.records.blueprints || []).find((blueprint) => blueprint.id === blueprintId);
   if (costBlueprint) cost = Number(costBlueprint.estimatedUnitCost ?? 0) || 0;
-  else if (currentRecordType() === "blueprint") cost = updateBlueprintEstimatedCost();
+  else if (currentRecordType() === "blueprint") cost = blueprintVariantRecipeCostFromBuilder();
   if (!costBlueprint && currentRecordType() === "item") {
     cost = optionalNumberFromElement(document.querySelector(
       ".content-variant-connection-row .variant-unit-cost",
@@ -368,7 +382,7 @@ function renderRelationshipPickers() {
     plan: document.getElementById("contentPlanPickerSection"),
   };
 
-  sections.item?.classList.toggle("hidden", recordType === "item");
+  sections.item?.classList.toggle("hidden", recordType !== "plan");
   sections.blueprint?.classList.toggle("hidden", recordType !== "plan");
   sections.plan?.classList.toggle("hidden", recordType !== "plan");
 
@@ -828,6 +842,15 @@ function renderVariantStepRows(variants) {
           <input class="variant-add-to-library accent-[#407471]" type="checkbox" ${variant.libraryVisible === true ? "checked" : ""}>
           Add this variant to the Library
         </label>
+        ${currentRecordType() === "blueprint" ? `
+        <label class="inline-flex items-center gap-2 md:col-span-2">
+          <input class="variant-use-as-manufacturing accent-[#407471]" type="checkbox"
+            ${variant.manufacturingRecipe === true ||
+              (variant.manufacturingRecipe !== false && isProductManufactureBlueprint()) ? "checked" : ""}>
+          Use this Blueprint variant as a Product manufacturing / cost recipe
+        </label>
+        <p class="text-xs text-gray-400 md:col-span-2">Internal only. The Item recipe entered on Build supplies the parts, quantities and estimated cost.</p>
+        ` : ""}
       </div>
       ${currentRecordType() === "item" ? variantBehaviourMarkup(template) : ""}
       ${variantStockMarkup(variant, defaults)}
@@ -838,12 +861,18 @@ function renderVariantStepRows(variants) {
     const template = definitions.find((candidate) => candidate.id === variant.templateVariantId);
     const entityDefaults = variant.behaviourDefaults || templateBehaviourDefaults(template);
     const enabled = entityDefaults.inventoryTracked === true ? "Track entity inventory" : "";
+    const connections = [
+      variant.shopEnabled ? "Shop Product" : "",
+      variant.libraryVisible ? "Library" : "",
+      variant.manufacturingRecipe ? "Manufacturing recipe" : "",
+    ].filter(Boolean).join(", ");
     return `<details class="rounded border border-gray-700 bg-gray-900/60" ${index === 0 ? "open" : ""}>
       <summary class="cursor-pointer bg-gray-800/70 p-3 text-sm text-white">${escapeHTML(variant.name || `Variant ${index + 1}`)} · ${escapeHTML(template ? templateOptionLabel(template) : "No template")} · ${escapeHTML(variant.owner || "Recovery Tools")}</summary>
       <div class="p-3">
       <dl class="mt-2 grid gap-2 text-xs text-gray-300 sm:grid-cols-2">
         <div><dt class="text-gray-500">Template</dt><dd>${escapeHTML(templateOptionLabel(template))}</dd></div>
         <div><dt class="text-gray-500">Status</dt><dd>${escapeHTML(variant.status || "draft")}</dd></div>
+        <div class="sm:col-span-2"><dt class="text-gray-500">Connections</dt><dd>${escapeHTML(connections || "None")}</dd></div>
         ${currentRecordType() === "item" ? `<div class="sm:col-span-2"><dt class="text-gray-500">Enabled behaviours</dt><dd>${escapeHTML(enabled || "Standard Item")}</dd></div>` : ""}
       </dl>
       </div>
@@ -1056,6 +1085,8 @@ function entityVariantsFromBuilder() {
       behaviourDefaults: templateBehaviourDefaults(definition),
       shopEnabled: connectionRow?.querySelector(".variant-add-to-shop")?.checked === true,
       libraryVisible: connectionRow?.querySelector(".variant-add-to-library")?.checked === true,
+      manufacturingRecipe:
+        connectionRow?.querySelector(".variant-use-as-manufacturing")?.checked === true,
       linkedItemComponents: recipeComponents,
       estimatedUnitCost: recipeComponents.reduce((sum, component) => sum + component.estimatedCost, 0),
       stockQty: optionalNumberFromElement(connectionRow?.querySelector(".variant-stock-qty")),
@@ -1381,8 +1412,14 @@ function currentRecordType() {
   return document.getElementById("contentRecordType")?.value || "item";
 }
 
+function isProductManufactureBlueprint() {
+  return currentRecordType() === "blueprint" &&
+    normalizedType(document.getElementById("contentType")?.value) === "product manufacture";
+}
+
 function isShopProductSelected() {
   if ([...document.querySelectorAll(".variant-add-to-shop")].some((input) => input.checked)) return true;
+  if ([...document.querySelectorAll(".variant-use-as-manufacturing")].some((input) => input.checked)) return true;
   if (currentRecordType() === "item") {
     const hasShopVariant = [...document.querySelectorAll(".content-entity-variant-template")].some((select) => {
       const template = templateDefinitions("item", document.getElementById("contentType")?.value)
@@ -2567,6 +2604,10 @@ function updateFormForRecordType() {
   applyTypeDrivenFieldGroups();
   updateItemInventoryFields();
   updateProductRelationshipControl();
+  document.getElementById("contentAudienceGoalFields")?.classList.toggle(
+    "hidden",
+    isProductManufactureBlueprint(),
+  );
 }
 
 function updateProductRelationshipControl(role = "") {
@@ -2574,11 +2615,20 @@ function updateProductRelationshipControl(role = "") {
   const roleInput = document.getElementById("contentProductLinkRole");
   const manufacturingRow = document.getElementById("contentProductManufacturingRoleRow");
   const manufacturingCheckbox = document.getElementById("contentProductManufacturingRecipe");
+  const variantManufacturing = [...document.querySelectorAll(".variant-use-as-manufacturing")]
+    .some((input) => input.checked);
   const resolvedRole = role || roleInput?.value || "Represents";
-  const manufacturing = isBlueprint && resolvedRole === "ManufacturedFrom";
-  manufacturingRow?.classList.toggle("hidden", !isBlueprint);
+  const manufacturing = isBlueprint &&
+    (resolvedRole === "ManufacturedFrom" || variantManufacturing || isProductManufactureBlueprint());
+  manufacturingRow?.classList.add("hidden");
   if (manufacturingCheckbox) manufacturingCheckbox.checked = manufacturing;
   if (roleInput) roleInput.value = manufacturing ? "ManufacturedFrom" : "Represents";
+  const productButton = document.getElementById("openVariantShopProductBtn");
+  if (productButton) {
+    productButton.textContent = manufacturing
+      ? "Connect or edit manufacturing Product"
+      : "Add or edit Shop Product";
+  }
 }
 
 function updateEditBanner() {
@@ -3396,7 +3446,8 @@ function populateBuilderFromRecord(record) {
   setInputValue("contentLongDescription", record.longDescription);
   renderTagControls(record.tags || []);
   const storedVariants = Array.isArray(record.entityVariants) ? record.entityVariants : [];
-  const legacyShopEnabled = Boolean(record.productId || record.createsProduct || record.isShopProduct);
+  const legacyShopEnabled = record.productLinkRole !== "ManufacturedFrom" &&
+    Boolean(record.productId || record.createsProduct || record.isShopProduct);
   const legacyLibraryVisible = Boolean(record.websiteVisible || record.requestedWebsiteVisible);
   const hydratedVariants = storedVariants.length ? storedVariants.map((variant, index) => ({
     ...(index === 0 ? {
@@ -3409,9 +3460,14 @@ function populateBuilderFromRecord(record) {
       costReference: record.itemCostReference || record.costReference,
       purchaseUrl: record.itemPurchaseUrl || record.purchaseUrl,
     } : {}),
+    ...variant,
     shopEnabled: variant?.shopEnabled ?? legacyShopEnabled,
     libraryVisible: variant?.libraryVisible ?? legacyLibraryVisible,
-    ...variant,
+    linkedItemComponents: variant?.linkedItemComponents?.length
+      ? variant.linkedItemComponents
+      : index === 0 ? record.linkedItemComponents || [] : [],
+    manufacturingRecipe: variant?.manufacturingRecipe ??
+      (record.productLinkRole === "ManufacturedFrom" || isProductManufactureBlueprint()),
   })) : [{
     entityVariantId: "VAR-PRIMARY",
     name: "Primary",
@@ -3433,6 +3489,9 @@ function populateBuilderFromRecord(record) {
     purchaseUrl: record.itemPurchaseUrl || record.purchaseUrl,
     shopEnabled: legacyShopEnabled,
     libraryVisible: legacyLibraryVisible,
+    linkedItemComponents: record.linkedItemComponents || [],
+    manufacturingRecipe:
+      record.productLinkRole === "ManufacturedFrom" || isProductManufactureBlueprint(),
   }];
   renderEntityVariantRows(hydratedVariants);
 
@@ -4425,6 +4484,18 @@ async function formPayload(confirmDuplicate = false) {
     templateFieldValuesFromBuilder({ validate: true, root: row });
   });
   const primaryVariant = entityVariants[0];
+  const blueprintRecipeVariants = recordType === "blueprint"
+    ? entityVariants.filter((variant) => variant.linkedItemComponents.length)
+    : [];
+  const primaryBlueprintRecipe = blueprintRecipeVariants[0]?.linkedItemComponents || [];
+  const blueprintRecipeItemIds = uniqueValues(
+    blueprintRecipeVariants.flatMap((variant) =>
+      variant.linkedItemComponents.map((component) => component.itemId)),
+  );
+  const primaryBlueprintRecipeCost = primaryBlueprintRecipe.reduce(
+    (sum, component) => sum + Number(component.estimatedCost || 0),
+    0,
+  );
   const primaryBehaviours = primaryVariant.behaviourDefaults || {};
   const templateFieldValues = primaryVariant.templateFieldValues || {};
   const templateId = primaryVariant.templateVariantId || "";
@@ -4502,13 +4573,14 @@ async function formPayload(confirmDuplicate = false) {
     linkedItemIds: [
       ...splitCsv(document.getElementById("contentLinkedItemIds")?.value),
       ...blueprintItemIds,
+      ...blueprintRecipeItemIds,
     ],
-    linkedItemComponents: recordType === "blueprint" ? blueprintItemComponentsFromPicker() : [],
-    estimatedUnitCost: recordType === "blueprint" ? updateBlueprintEstimatedCost() : null,
+    linkedItemComponents: recordType === "blueprint" ? primaryBlueprintRecipe : [],
+    estimatedUnitCost: recordType === "blueprint" ? primaryBlueprintRecipeCost : null,
     linkedBlueprintIds: [...new Set(linkedBlueprintIds)],
     linkedPlanIds: splitCsv(document.getElementById("contentLinkedPlanIds")?.value),
-    audience: document.getElementById("contentAudience")?.value || "",
-    goal: document.getElementById("contentGoal")?.value || "",
+    audience: isProductManufactureBlueprint() ? "" : document.getElementById("contentAudience")?.value || "",
+    goal: isProductManufactureBlueprint() ? "" : document.getElementById("contentGoal")?.value || "",
     durationMinutes: Number(templateInput("contentDurationMinutes") || 0) || null,
     sizeLabel: templateInput("contentSizeLabel"),
     startDate: templateInput("contentStartDate"),
@@ -4913,6 +4985,11 @@ export async function setupContentBuilder() {
     renderSimilarList();
     renderRelationshipPickers();
     updateBuilderFilterButtons(currentRecordType());
+    updateProductRelationshipControl();
+    document.getElementById("contentAudienceGoalFields")?.classList.toggle(
+      "hidden",
+      isProductManufactureBlueprint(),
+    );
   });
   document.getElementById("contentTemplate")?.addEventListener("change", applyTemplateDefaults);
   document.getElementById("editContentTemplateBtn")?.addEventListener(
@@ -5046,21 +5123,26 @@ export async function setupContentBuilder() {
     updateSaveWorkflow();
   });
   document.getElementById("contentVariantConnectionRows")?.addEventListener("change", (event) => {
-    if (!event.target.matches(".variant-add-to-shop, .variant-add-to-library")) return;
+    if (!event.target.matches(
+      ".variant-add-to-shop, .variant-add-to-library, .variant-use-as-manufacturing",
+    )) return;
     const variants = entityVariantsFromBuilder();
     setCheckboxValue("contentIsShopProduct", variants.some((variant) => variant.shopEnabled));
     setCheckboxValue("contentWebsiteVisible", variants.some((variant) => variant.libraryVisible));
+    updateProductRelationshipControl();
     state.isDirty = true;
     updateSaveWorkflow();
     renderBuilderSummaries();
   });
   document.getElementById("openVariantShopProductBtn")?.addEventListener("click", () => {
     const variants = entityVariantsFromBuilder();
-    if (!variants.some((variant) => variant.shopEnabled)) {
-      showToast("Select at least one variant to add to the Shop Product.", "error");
+    const manufacturing = variants.some((variant) => variant.manufacturingRecipe);
+    if (!variants.some((variant) => variant.shopEnabled) && !manufacturing) {
+      showToast("Select a Shop or manufacturing connection on at least one variant.", "error");
       return;
     }
     setCheckboxValue("contentIsShopProduct", true);
+    if (manufacturing) updateProductRelationshipControl("ManufacturedFrom");
     openContentProductDrawer();
   });
   document.getElementById("applyVariantLibraryBtn")?.addEventListener("click", () => {
@@ -5202,6 +5284,7 @@ export async function setupContentBuilder() {
     if (removeRecipe) {
       removeRecipe.closest(".blueprint-variant-recipe-row")?.remove();
       updateBlueprintVariantRecipeTotals();
+      updateConnectedProductCostPreview();
       state.isDirty = true;
       return;
     }
@@ -5225,6 +5308,7 @@ export async function setupContentBuilder() {
       if (output) output.textContent = event.target.value || "Recovery Tools";
     }
     updateBlueprintVariantRecipeTotals();
+    updateConnectedProductCostPreview();
     renderBuilderSummaries();
   });
   document.getElementById("contentEntityVariantRows")?.addEventListener("toggle", (event) => {
@@ -5251,6 +5335,7 @@ export async function setupContentBuilder() {
       renderEntityVariantRows(variants);
     }
     updateBlueprintVariantRecipeTotals();
+    updateConnectedProductCostPreview();
     renderBuilderSummaries();
   });
   document.getElementById("contentVariantConnectionRows")?.addEventListener("input", (event) => {

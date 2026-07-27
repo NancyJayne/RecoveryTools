@@ -331,6 +331,17 @@ async function saveCrmProfile() {
     businessEmail: document.getElementById("crmBusinessEmail")?.value.trim(),
     businessPhone: document.getElementById("crmBusinessPhone")?.value.trim(),
     businessAddress: document.getElementById("crmBusinessAddress")?.value.trim(),
+    affiliatePickup: {
+      enabled: document.getElementById("crmAffiliatePickupEnabled")?.checked === true,
+      approvalStatus: document.getElementById("crmAffiliatePickupApproval")?.value || "draft",
+      locationName: document.getElementById("crmAffiliatePickupName")?.value.trim(),
+      addressLine1: document.getElementById("crmAffiliatePickupLine1")?.value.trim(),
+      addressLine2: document.getElementById("crmAffiliatePickupLine2")?.value.trim(),
+      suburb: document.getElementById("crmAffiliatePickupSuburb")?.value.trim(),
+      state: document.getElementById("crmAffiliatePickupState")?.value.trim(),
+      postcode: document.getElementById("crmAffiliatePickupPostcode")?.value.trim(),
+      country: document.getElementById("crmAffiliatePickupCountry")?.value.trim() || "Australia",
+    },
   };
   if (!profile.name || !profile.email) return showToast("Name and email are required.", "error");
   if (creatingCrmUser) {
@@ -359,6 +370,16 @@ async function saveCrmProfile() {
   }
   await loadUsers();
   await selectUser(selectedUserId);
+}
+
+async function approveCrmAffiliatePickup() {
+  if (!selectedUserId) return showToast("Select an affiliate first.", "error");
+  const enabled = document.getElementById("crmAffiliatePickupEnabled");
+  const approval = document.getElementById("crmAffiliatePickupApproval");
+  if (enabled) enabled.checked = true;
+  if (approval) approval.value = "approved";
+  await saveCrmProfile();
+  showToast("Pickup address approved", "success");
 }
 
 function startCreateCrmUser() {
@@ -652,6 +673,8 @@ export function setupRoleManager() {
   }
 
   document.getElementById("resetPasswordBtn")?.addEventListener("click", resetUserPasswordAsAdmin);
+  document.getElementById("crmApproveAffiliatePickupBtn")
+    ?.addEventListener("click", approveCrmAffiliatePickup);
   document.getElementById("addCrmNoteBtn")?.addEventListener("click", addCrmNote);
   document.getElementById("createCrmCartLinkBtn")?.addEventListener("click", () => createSharedCart());
   document.getElementById("emailCrmCartLinkBtn")?.addEventListener("click", () => (
@@ -761,7 +784,15 @@ async function selectUser(uid) {
   document.getElementById("selectedUserMeta").textContent = `${user.email || "No email"} | ${resolvedUid}`;
   const roleProfiles = await Promise.all(["affiliates", "therapists"].map(async (collectionName) => {
     const snapshot = await getDoc(doc(db, collectionName, resolvedUid));
-    return snapshot.exists() ? snapshot.data() : {};
+    if (snapshot.exists()) return snapshot.data();
+    if (collectionName === "affiliates") {
+      const matches = await getDocs(query(
+        collection(db, "affiliates"),
+        where("userId", "==", resolvedUid),
+      ));
+      return matches.docs[0]?.data() || {};
+    }
+    return {};
   }));
   const business = { ...roleProfiles[0], ...roleProfiles[1], ...user };
   document.getElementById("crmProfileName").value = user.name || user.displayName || user.fullName || "";
@@ -775,6 +806,30 @@ async function selectUser(uid) {
   document.getElementById("crmBusinessEmail").value = business.businessEmail || "";
   document.getElementById("crmBusinessPhone").value = business.businessPhone || "";
   document.getElementById("crmBusinessAddress").value = business.businessAddress || "";
+  const affiliateProfile = roleProfiles[0] || {};
+  let pickupLocation = {};
+  if (affiliateProfile.defaultPickupLocationId) {
+    const pickupSnapshot = await getDoc(
+      doc(db, "pickupLocations", affiliateProfile.defaultPickupLocationId),
+    );
+    if (pickupSnapshot.exists()) pickupLocation = pickupSnapshot.data() || {};
+  }
+  document.getElementById("crmAffiliatePickupEnabled").checked =
+    affiliateProfile.pickupEnabled === true;
+  document.getElementById("crmAffiliatePickupApproval").value =
+    affiliateProfile.pickupApprovalStatus || "draft";
+  document.getElementById("crmAffiliatePickupName").value = pickupLocation.locationName || "";
+  document.getElementById("crmAffiliatePickupLine1").value = pickupLocation.addressLine1 || "";
+  document.getElementById("crmAffiliatePickupLine2").value = pickupLocation.addressLine2 || "";
+  document.getElementById("crmAffiliatePickupSuburb").value = pickupLocation.suburb || "";
+  document.getElementById("crmAffiliatePickupState").value = pickupLocation.state || "";
+  document.getElementById("crmAffiliatePickupPostcode").value = pickupLocation.postcode || "";
+  document.getElementById("crmAffiliatePickupCountry").value =
+    pickupLocation.country || "Australia";
+  document.getElementById("crmAffiliatePickupFields")?.classList.toggle(
+    "hidden",
+    !userWithRoles.roles.affiliate,
+  );
   document.getElementById("crmBusinessFields")?.classList.toggle(
     "hidden",
     !userWithRoles.roles.affiliate && !userWithRoles.roles.therapist,

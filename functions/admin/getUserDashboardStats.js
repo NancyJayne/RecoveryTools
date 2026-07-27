@@ -109,6 +109,7 @@ export const getUserDashboardStats = onCall(
         itemsSnap,
         blueprintsSnap,
         plansSnap,
+        pickupLocationsSnap,
       ] = await Promise.all([
         admin.firestore().collection("users").get(),
         admin.firestore().collection("orders").get(),
@@ -121,12 +122,20 @@ export const getUserDashboardStats = onCall(
         admin.firestore().collection("items").get(),
         admin.firestore().collection("blueprints").get(),
         admin.firestore().collection("plans").get(),
+        admin.firestore().collection("pickupLocations").get(),
       ]);
 
       const orders = ordersSnap.docs.map((doc) => doc.data());
       const pendingWorkshopApprovals = workshopsSnap.docs.filter((doc) => isPendingApproval(doc.data())).length;
       const pendingCourseApprovals = coursesSnap.docs.filter((doc) => isPendingApproval(doc.data())).length;
-      const pendingAffiliateApprovals = affiliatesSnap.docs.filter((doc) => isPendingApproval(doc.data())).length;
+      const pendingAffiliateProfiles =
+        affiliatesSnap.docs.filter((doc) => isPendingApproval(doc.data())).length;
+      const pendingAffiliatePickups = pickupLocationsSnap.docs.filter((doc) => {
+        const data = doc.data() || {};
+        return String(data.locationType || "").toLowerCase() === "affiliate" &&
+          String(data.approvalStatus || "").toLowerCase() === "pending";
+      }).length;
+      const pendingAffiliateApprovals = pendingAffiliateProfiles + pendingAffiliatePickups;
       const pendingTherapistApprovals = therapistsSnap.docs.filter((doc) => isPendingApproval(doc.data())).length;
       const pendingReviewApprovals = reviewsSnap.docs.filter((doc) => isPendingApproval(doc.data())).length;
       const pendingFeedbackApprovals = orderIssuesSnap.docs.filter((doc) => isPendingFeedback(doc.data())).length;
@@ -165,6 +174,8 @@ export const getUserDashboardStats = onCall(
         pendingWorkshopApprovals,
         pendingCourseApprovals,
         pendingAffiliateApprovals,
+        pendingAffiliateApplicationApprovals: pendingAffiliateProfiles,
+        pendingAffiliatePickupApprovals: pendingAffiliatePickups,
         pendingTherapistApprovals,
         pendingReviewApprovals,
         pendingFeedbackApprovals,

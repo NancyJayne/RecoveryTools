@@ -1,7 +1,8 @@
 // ✅ app-entry.js – Updated to handle /signup and /reset as modal flows with safeImport logic
 
 // Exported helpers for main initialization
-import { initFirebase, auth } from "./utils/firebase-config.js";
+import { initFirebase, auth, functions } from "./utils/firebase-config.js";
+import { httpsCallable } from "firebase/functions";
 import { setupAuthState } from "./auth/user-auth.js";
 import { getUserRole } from "./auth/user-roles.js";
 import { showAuthModal } from "./auth/auth-modal.js";
@@ -27,6 +28,25 @@ function hasRole(roleValue, targetRole) {
 import("./content/homepage.js");
 
 let userRole = null;
+
+async function affiliateApplicationIsActive() {
+  if (!auth?.currentUser) return false;
+  try {
+    const registerAffiliate = httpsCallable(functions, "registerAffiliate");
+    const result = await registerAffiliate({ action: "status" });
+    return result.data?.status === "active";
+  } catch (error) {
+    console.warn("Could not verify affiliate application status:", error);
+    return false;
+  }
+}
+
+async function hasApprovedAffiliateAccess() {
+  if (!await affiliateApplicationIsActive()) return false;
+  await auth.currentUser.getIdToken(true);
+  const refreshedRoles = await getUserRole();
+  return hasRole(refreshedRoles, "affiliate");
+}
 
 export function setupRouterLinks() {
   document.body.addEventListener("click", async (e) => {
@@ -172,8 +192,8 @@ export async function loadModuleByPath(path, role) {
       console.warn("Admin route blocked. Current role:", role);
     }
     break;
-  case path.startsWith("/affiliate"):
-    if (hasRole(role, "affiliate")) {
+  case path === "/affiliate" || path.startsWith("/affiliate/"):
+    if (await hasApprovedAffiliateAccess()) {
       await safeImport(
         () => import("./affiliate/affiliate-dashboard.js"),
         "Affiliate Dashboard",
@@ -181,7 +201,11 @@ export async function loadModuleByPath(path, role) {
     } else if (!auth?.currentUser) {
       showAuthModal("login");
     } else {
-      console.warn("Affiliate route blocked. Current role:", role);
+      history.replaceState({}, "", "/affiliateSignup?register=1");
+      await safeImport(
+        () => import("./affiliate/affiliate-signup.js"),
+        "Affiliate Application",
+      );
     }
     break;
   case path.startsWith("/therapist"):

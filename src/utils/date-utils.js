@@ -14,7 +14,8 @@ export function detectUserTimezone() {
  * @param {HTMLSelectElement} selectEl
  * @param {string} selected
  */
-export function populateTimezoneDropdown(selectEl, selected = "") {
+export function populateTimezoneDropdown(selectEl, selected = "Australia/Brisbane") {
+  if (!selectEl) return;
   const zones = [
     "Australia/Sydney",
     "Australia/Melbourne",
@@ -24,12 +25,14 @@ export function populateTimezoneDropdown(selectEl, selected = "") {
     "Australia/Darwin",
     "Australia/Hobart",
   ];
-  selectEl.innerHTML = zones
-    .map((zone) => {
-      const isSelected = zone === selected ? "selected" : "";
-      return `<option value="${zone}" ${isSelected}>${zone}</option>`;
-    })
-    .join("");
+  const selectedZone = zones.includes(selected) ? selected : "Australia/Brisbane";
+  selectEl.replaceChildren(...zones.map((zone) => {
+    const option = document.createElement("option");
+    option.value = zone;
+    option.textContent = zone.replace("Australia/", "").replaceAll("_", " ");
+    option.selected = zone === selectedZone;
+    return option;
+  }));
 }
 
 /**

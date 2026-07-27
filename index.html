@@ -445,12 +445,13 @@
     <!-- Sidebar -->
     <aside class="w-full lg:w-64 space-y-2">
       <h2 class="text-xl font-semibold text-green-300 mb-4">Affiliate Menu</h2>
-      <a href="#affiliateEarningsTab" class="affiliate-link block px-4 py-2 rounded hover:bg-green-800">My Earnings</a>
-      <a href="#affiliateSettingsTab" class="affiliate-link block px-4 py-2 rounded hover:bg-green-800">Settings</a>
-      <a href="#submitWorkshopTab" class="affiliate-link block px-4 py-2 rounded hover:bg-green-800">Submit Workshop</a>
-      <a href="#mySubmittedWorkshopsTab" class="affiliate-link block px-4 py-2 rounded hover:bg-green-800">My Workshops</a>
-      <a href="#submitCourseProposalTab" class="affiliate-link block px-4 py-2 rounded hover:bg-green-800">Propose Course</a>
-      <a href="#mySubmittedCoursesTab" class="affiliate-link block px-4 py-2 rounded hover:bg-green-800">My Courses</a>
+      <button type="button" data-affiliate-tab="affiliateEarningsTab" class="affiliate-link block w-full px-4 py-2 rounded text-left hover:bg-green-800">My Earnings</button>
+      <button type="button" data-affiliate-tab="affiliateSettingsTab" class="affiliate-link block w-full px-4 py-2 rounded text-left hover:bg-green-800">Settings</button>
+      <button type="button" data-affiliate-tab="affiliatePickupOrdersTab" class="affiliate-link block w-full px-4 py-2 rounded text-left hover:bg-green-800">Pickup Orders</button>
+      <button type="button" data-affiliate-tab="submitWorkshopTab" class="affiliate-link block w-full px-4 py-2 rounded text-left hover:bg-green-800">Submit Workshop</button>
+      <button type="button" data-affiliate-tab="mySubmittedWorkshopsTab" class="affiliate-link block w-full px-4 py-2 rounded text-left hover:bg-green-800">My Workshops</button>
+      <button type="button" data-affiliate-tab="submitCourseProposalTab" class="affiliate-link block w-full px-4 py-2 rounded text-left hover:bg-green-800">Propose Course</button>
+      <button type="button" data-affiliate-tab="mySubmittedCoursesTab" class="affiliate-link block w-full px-4 py-2 rounded text-left hover:bg-green-800">My Courses</button>
     </aside>
 
     <!-- Content -->
@@ -505,10 +506,41 @@
   </div>
 
 </div>
+</div>
         
 <div id="affiliateSettingsTab" class="affiliate-tab hidden">
   <h2 class="text-2xl font-semibold mb-4">Affiliate Settings</h2>
   <p class="text-gray-400 mb-2">Manage your Stripe payouts and update your business profile.</p>
+
+  <form id="affiliateBusinessProfileForm" class="mb-6 space-y-4 rounded border border-gray-700 bg-gray-900/50 p-4">
+    <h3 class="text-lg font-semibold text-white">Business and pickup details</h3>
+    <div class="grid gap-3 md:grid-cols-2">
+      <label class="text-sm">Business name<input id="affiliateSettingsBusinessName" class="input mt-1 w-full" required></label>
+      <label class="text-sm">Website<input id="affiliateSettingsWebsite" type="url" class="input mt-1 w-full"></label>
+      <label class="text-sm">Business email<input id="affiliateSettingsBusinessEmail" type="email" class="input mt-1 w-full"></label>
+      <label class="text-sm">Business phone<input id="affiliateSettingsBusinessPhone" class="input mt-1 w-full"></label>
+      <label class="text-sm md:col-span-2">Business address<input id="affiliateSettingsBusinessAddress" class="input mt-1 w-full"></label>
+    </div>
+    <label class="inline-flex items-center gap-2 text-sm">
+      <input id="affiliateSettingsPickupEnabled" type="checkbox">
+      Offer customer pickup from this business
+    </label>
+    <fieldset id="affiliateSettingsPickupFields" class="hidden rounded border border-gray-700 p-3">
+      <legend class="px-1 font-semibold">Pickup address</legend>
+      <p class="mb-3 text-xs text-gray-400">Pickup remains unavailable in the Cart until an admin approves this address.</p>
+      <div class="grid gap-3 md:grid-cols-2">
+        <label class="text-sm md:col-span-2">Pickup location name<input id="affiliateSettingsPickupName" class="input mt-1 w-full" placeholder="Business name or pickup desk"></label>
+        <label class="text-sm md:col-span-2">Address line 1<input id="affiliateSettingsPickupLine1" class="input mt-1 w-full"></label>
+        <label class="text-sm md:col-span-2">Address line 2<input id="affiliateSettingsPickupLine2" class="input mt-1 w-full"></label>
+        <label class="text-sm">Suburb<input id="affiliateSettingsPickupSuburb" class="input mt-1 w-full"></label>
+        <label class="text-sm">State<input id="affiliateSettingsPickupState" class="input mt-1 w-full"></label>
+        <label class="text-sm">Postcode<input id="affiliateSettingsPickupPostcode" class="input mt-1 w-full"></label>
+        <label class="text-sm">Country<input id="affiliateSettingsPickupCountry" class="input mt-1 w-full" value="Australia"></label>
+      </div>
+    </fieldset>
+    <p id="affiliateSettingsPickupStatus" class="text-sm text-gray-400"></p>
+    <button type="submit" class="rounded bg-[#407471] px-4 py-2 text-white hover:bg-[#315c59]">Save business details</button>
+  </form>
 
   <div class="mb-4">
     <label for="affiliateTimezone" class="block text-sm font-medium text-white mb-1">Your Timezone</label>
@@ -519,22 +551,32 @@
   </div>
 
   <div class="mb-4">
-    <button id="connectStripeBtn" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+    <button id="connectStripeBtn" type="button" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60">
       Connect Stripe
     </button>
     <p id="stripeConnectedMsg" class="hidden mt-2 text-sm text-green-400">
       ✅ Stripe is connected.
     </p>
-    <button id="manageStripeBtn" class="hidden mt-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+    <button id="manageStripeBtn" type="button" class="hidden mt-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
       Manage Stripe Account
     </button>
+    <p id="stripeConnectionStatus" class="mt-2 text-sm text-gray-400"></p>
+  </div>
+</div>
+
+<div id="affiliatePickupOrdersTab" class="affiliate-tab hidden">
+  <h2 class="text-2xl font-semibold mb-4">Pickup Orders</h2>
+  <p class="mb-4 text-sm text-gray-400">
+    Admin sends replacement stock for each pickup order. Mark an order ready when the stock has arrived or when you have supplied the customer from stock already on hand.
+  </p>
+  <div id="affiliatePickupOrdersContainer" class="space-y-3">
+    <p class="text-gray-400">Loading pickup orders...</p>
   </div>
 </div>
 
 
       <div id="submitWorkshopTab" class="affiliate-tab hidden">
         <h2 class="text-2xl font-semibold mb-4">Submit a Workshop</h2>
-       <div id="submitWorkshopTab" class="affiliate-tab hidden">
   <form id="submitWorkshopForm" class="space-y-4">
     <div>
       <label for="workshopName" class="block text-sm font-medium">Workshop Name *</label>
@@ -594,8 +636,6 @@
         <h2 class="text-2xl font-semibold mb-4">My Submitted Workshops</h2>
         <div id="mySubmittedWorkshops" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6"></div>
   </div>
-</div>
-      </div>
 
 <div id="submitCourseProposalTab" class="affiliate-tab hidden">
   <h2 class="text-2xl font-semibold mb-4">Submit a Course Proposal</h2>
@@ -683,8 +723,6 @@
   </form>
 </div>
 
-    </div>
-  </div>
   <!-- My Submitted Courses Tab -->
 <div id="mySubmittedCoursesTab" class="affiliate-tab hidden">
   <h2 class="text-2xl font-semibold mb-4">My Submitted Courses</h2>
@@ -693,6 +731,7 @@
       </div>
     </div>
   </div>
+</section>
 <div id="editWorkshopModal" class="fixed inset-0 bg-black bg-opacity-70 z-50 hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
   <div class="bg-gray-900 text-white p-6 rounded-lg shadow-xl max-w-2xl w-full">
     <h2 class="text-xl font-semibold mb-4">Edit Workshop</h2>
@@ -911,9 +950,13 @@
             <h3 class="flex items-center justify-between gap-3 font-semibold text-white">Course approvals <span data-approval-badge="courses" class="hidden min-w-6 rounded-full bg-purple-600 px-1.5 text-center text-xs text-white">0</span></h3>
             <p class="mt-2 text-sm text-gray-400">Approve course content, updates, and course templates.</p>
           </a>
-          <a href="/admin/affiliates" data-approval-card="affiliates" class="admin-link rounded border border-gray-700 bg-gray-900/50 p-4 hover:border-[#407471]">
-            <h3 class="flex items-center justify-between gap-3 font-semibold text-white">Affiliate requests <span data-approval-badge="affiliates" class="hidden min-w-6 rounded-full bg-purple-600 px-1.5 text-center text-xs text-white">0</span></h3>
-            <p class="mt-2 text-sm text-gray-400">Review users who have requested affiliate access.</p>
+          <a href="/admin/affiliates" data-approval-card="affiliateApplications" class="admin-link rounded border border-gray-700 bg-gray-900/50 p-4 hover:border-[#407471]">
+            <h3 class="flex items-center justify-between gap-3 font-semibold text-white">Affiliate applications <span data-approval-badge="affiliateApplications" class="hidden min-w-6 rounded-full bg-purple-600 px-1.5 text-center text-xs text-white">0</span></h3>
+            <p class="mt-2 text-sm text-gray-400">Approve or reject users applying for affiliate access.</p>
+          </a>
+          <a href="/admin/affiliates" data-approval-card="affiliatePickups" class="admin-link rounded border border-gray-700 bg-gray-900/50 p-4 hover:border-[#407471]">
+            <h3 class="flex items-center justify-between gap-3 font-semibold text-white">Affiliate pickup addresses <span data-approval-badge="affiliatePickups" class="hidden min-w-6 rounded-full bg-purple-600 px-1.5 text-center text-xs text-white">0</span></h3>
+            <p class="mt-2 text-sm text-gray-400">Review pickup locations submitted by approved affiliates.</p>
           </a>
           <a href="/admin/crm" data-approval-card="therapists" class="admin-link rounded border border-gray-700 bg-gray-900/50 p-4 hover:border-[#407471]">
             <h3 class="flex items-center justify-between gap-3 font-semibold text-white">Therapist requests <span data-approval-badge="therapists" class="hidden min-w-6 rounded-full bg-purple-600 px-1.5 text-center text-xs text-white">0</span></h3>
@@ -1351,6 +1394,8 @@
           <button class="filter-btn" data-status="packing">Packing</button>
           <button class="filter-btn" data-status="packed">Packed</button>
           <button class="filter-btn" data-status="shipped">Shipped</button>
+          <button class="filter-btn" data-status="shipped_to_affiliate">Sent to affiliate</button>
+          <button class="filter-btn" data-status="ready_for_pickup">Ready for pickup</button>
           <button class="filter-btn" data-status="delivered">Delivered</button>
           <button class="filter-btn" data-status="completed">Completed</button>
           <button id="openIssuesFilterBtn" class="bg-gray-700 text-white px-3 py-1 rounded" type="button">
@@ -1878,8 +1923,8 @@
               </section>
 
               <section class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="3">
-                  <h3 class="font-semibold text-white">Shop and Library setup</h3>
-                  <p class="mt-1 text-xs text-gray-400">Select variants above, then configure the shared connection here.</p>
+                  <h3 class="font-semibold text-white">Product and Library setup</h3>
+                  <p class="mt-1 text-xs text-gray-400">Select each variant's connection above, then configure the Product or Library details here.</p>
                   <div class="hidden" hidden aria-hidden="true">
                     <label>
                       <input id="contentIsShopProduct" type="checkbox" class="accent-[#407471]">
@@ -1901,9 +1946,9 @@
                 <input id="contentLinkedBlueprintIds" type="hidden">
                 <input id="contentLinkedPlanIds" type="hidden">
 
-                <section id="contentItemPickerSection" data-field-group="relationships" data-record-types="blueprint plan">
+                <section id="contentItemPickerSection" data-field-group="relationships" data-record-types="plan">
                   <h3 class="font-semibold text-white">Reusable Items</h3>
-                  <p class="mt-1 text-xs text-gray-400">Select the Items this Blueprint or Plan uses. Blueprints can record the quantity needed for one completed output.</p>
+                  <p class="mt-1 text-xs text-gray-400">Select additional reusable Items used directly by this Plan.</p>
                   <div id="contentItemPicker" class="mt-2"></div>
                   <p id="contentBlueprintEstimatedCost" class="mt-2 hidden text-sm text-white"></p>
                 </section>
@@ -1919,14 +1964,16 @@
                   <p class="mt-1 text-xs text-gray-400">Link related Plans, such as a treatment plan used by a campaign. Their components remain independent.</p>
                   <div id="contentPlanPicker" class="mt-2"></div>
                 </section>
-                <div class="grid gap-3 md:grid-cols-2" data-field-group="content">
+                <div id="contentAudienceGoalFields" class="grid gap-3 md:grid-cols-2" data-field-group="content">
                   <label class="block">
-                    Audience
+                    Audience <span class="text-xs text-gray-500">(optional descriptive text)</span>
                     <input id="contentAudience" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                    <span class="mt-1 block text-xs text-gray-500">Who this content is intended for. Use Tags for searchable classifications.</span>
                   </label>
                   <label class="block">
-                    Goal
+                    Outcome / purpose <span class="text-xs text-gray-500">(optional descriptive text)</span>
                     <input id="contentGoal" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                    <span class="mt-1 block text-xs text-gray-500">What the content should achieve. This is not a Tag.</span>
                   </label>
                 </div>
               </div>
@@ -2434,6 +2481,30 @@
         </div>
 
         <div id="adminAffiliateStats" class="admin-tab hidden">
+          <section class="mb-8">
+            <div class="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 class="text-2xl font-semibold">Affiliate application approvals</h2>
+                <p class="mt-1 text-sm text-gray-400">Review applicant and business details before granting affiliate access.</p>
+              </div>
+              <button id="refreshAffiliateApplications" type="button" class="rounded bg-gray-700 px-3 py-2 text-sm hover:bg-gray-600">Refresh</button>
+            </div>
+            <div id="affiliateApplicationApprovalContainer" class="space-y-4">
+              <p class="text-gray-400">Loading affiliate applications...</p>
+            </div>
+          </section>
+          <section class="mb-8">
+            <div class="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 class="text-2xl font-semibold">Affiliate pickup approvals</h2>
+                <p class="mt-1 text-sm text-gray-400">Review customer pickup addresses submitted by affiliates.</p>
+              </div>
+              <button id="refreshAffiliatePickupApprovals" type="button" class="rounded bg-gray-700 px-3 py-2 text-sm hover:bg-gray-600">Refresh</button>
+            </div>
+            <div id="affiliatePickupApprovalContainer" class="space-y-3">
+              <p class="text-gray-400">Loading pickup requests...</p>
+            </div>
+          </section>
           <h2 class="text-2xl font-semibold mb-4">Affiliate Performance</h2>
           <div id="affiliateStatsContainer" class="space-y-4"></div>
         </div>
@@ -2566,7 +2637,43 @@
                   <fieldset class="rounded border border-gray-700 p-3"><legend class="px-1 font-semibold">Shipping address</legend><div id="crmShippingFields" class="grid gap-2 sm:grid-cols-2"></div></fieldset>
                   <fieldset class="rounded border border-gray-700 p-3"><legend class="px-1 font-semibold">Billing address</legend><div id="crmBillingFields" class="grid gap-2 sm:grid-cols-2"></div></fieldset>
                 </div>
-                <fieldset id="crmBusinessFields" class="mt-4 rounded border border-gray-700 p-3"><legend class="px-1 font-semibold">Business details (affiliate or therapist)</legend><div class="grid gap-3 md:grid-cols-3"><label class="text-sm">Business name<input id="crmBusinessName" class="input mt-1 w-full"></label><label class="text-sm">ABN<input id="crmBusinessAbn" class="input mt-1 w-full"></label><label class="text-sm">Website<input id="crmBusinessWebsite" class="input mt-1 w-full"></label><label class="text-sm">Business email<input id="crmBusinessEmail" type="email" class="input mt-1 w-full"></label><label class="text-sm">Business phone<input id="crmBusinessPhone" class="input mt-1 w-full"></label><label class="text-sm md:col-span-3">Business address<input id="crmBusinessAddress" class="input mt-1 w-full"></label></div></fieldset>
+                <fieldset id="crmBusinessFields" class="mt-4 rounded border border-gray-700 p-3">
+                  <legend class="px-1 font-semibold">Business details (affiliate or therapist)</legend>
+                  <div class="grid gap-3 md:grid-cols-3">
+                    <label class="text-sm">Business name<input id="crmBusinessName" class="input mt-1 w-full"></label>
+                    <label class="text-sm">ABN<input id="crmBusinessAbn" class="input mt-1 w-full"></label>
+                    <label class="text-sm">Website<input id="crmBusinessWebsite" class="input mt-1 w-full"></label>
+                    <label class="text-sm">Business email<input id="crmBusinessEmail" type="email" class="input mt-1 w-full"></label>
+                    <label class="text-sm">Business phone<input id="crmBusinessPhone" class="input mt-1 w-full"></label>
+                    <label class="text-sm md:col-span-3">Business address<input id="crmBusinessAddress" class="input mt-1 w-full"></label>
+                  </div>
+                  <fieldset id="crmAffiliatePickupFields" class="mt-4 rounded border border-gray-700 p-3">
+                    <legend class="px-1 font-semibold">Affiliate customer pickup</legend>
+                    <div class="mb-3 flex flex-wrap gap-4">
+                      <label><input id="crmAffiliatePickupEnabled" type="checkbox"> Enable pickup</label>
+                      <label class="text-sm">Approval
+                        <select id="crmAffiliatePickupApproval" class="input ml-1">
+                          <option value="draft">Draft</option>
+                          <option value="pending">Pending</option>
+                          <option value="approved">Approved</option>
+                          <option value="rejected">Rejected</option>
+                        </select>
+                      </label>
+                      <button id="crmApproveAffiliatePickupBtn" type="button" class="rounded bg-[#407471] px-3 py-2 text-sm text-white">
+                        Approve pickup address
+                      </button>
+                    </div>
+                    <div class="grid gap-3 md:grid-cols-2">
+                      <label class="text-sm md:col-span-2">Pickup location name<input id="crmAffiliatePickupName" class="input mt-1 w-full"></label>
+                      <label class="text-sm md:col-span-2">Address line 1<input id="crmAffiliatePickupLine1" class="input mt-1 w-full"></label>
+                      <label class="text-sm md:col-span-2">Address line 2<input id="crmAffiliatePickupLine2" class="input mt-1 w-full"></label>
+                      <label class="text-sm">Suburb<input id="crmAffiliatePickupSuburb" class="input mt-1 w-full"></label>
+                      <label class="text-sm">State<input id="crmAffiliatePickupState" class="input mt-1 w-full"></label>
+                      <label class="text-sm">Postcode<input id="crmAffiliatePickupPostcode" class="input mt-1 w-full"></label>
+                      <label class="text-sm">Country<input id="crmAffiliatePickupCountry" class="input mt-1 w-full" value="Australia"></label>
+                    </div>
+                  </fieldset>
+                </fieldset>
               </section>
 
               <fieldset class="mt-5">
@@ -2817,6 +2924,7 @@
 <section id="affiliateRegisterSection" class="tab-content hidden p-6 max-w-2xl mx-auto">
   <h2 class="text-2xl font-bold mb-4">Affiliate Registration</h2>
   <p class="text-sm text-gray-400 mb-6">Already a user? Fill out your affiliate details below. New users will be redirected to sign up first.</p>
+  <div id="affiliateApplicationStatus" class="hidden"></div>
 
   <form id="affiliateRegisterForm" class="space-y-4">
     <div>
@@ -2850,16 +2958,50 @@
     </div>
 
     <div>
+      <label for="affiliateWebsite" class="block text-sm font-medium">Business Website</label>
+      <input id="affiliateWebsite" name="affiliateWebsite" type="url" class="input w-full bg-gray-800 text-white px-3 py-2 rounded" placeholder="https://..." />
+    </div>
+
+    <div>
+      <label for="affiliateApplicationTimezone" class="block text-sm font-medium">Timezone</label>
+      <select id="affiliateApplicationTimezone" name="timezone" class="input w-full bg-gray-800 text-white px-3 py-2 rounded" required>
+        <option value="Australia/Sydney">Sydney</option>
+        <option value="Australia/Melbourne">Melbourne</option>
+        <option value="Australia/Brisbane" selected>Brisbane</option>
+        <option value="Australia/Perth">Perth</option>
+        <option value="Australia/Adelaide">Adelaide</option>
+        <option value="Australia/Darwin">Darwin</option>
+        <option value="Australia/Hobart">Hobart</option>
+      </select>
+    </div>
+
+    <div>
       <label for="affiliateDescription" class="block text-sm font-medium">Business Description</label>
       <textarea id="affiliateDescription" name="affiliateDescription" rows="3" class="input w-full bg-gray-800 text-white px-3 py-2 rounded"></textarea>
     </div>
 
     <div>
       <label for="affiliateLogo" class="block text-sm font-medium">Upload Logo</label>
-      <input id="affiliateLogo" name="affiliateLogo" type="file" accept="image/*" class="input w-full text-white bg-gray-800 rounded" />
+      <input id="affiliateLogo" name="affiliateLogo" type="file" accept="image/jpeg,image/png,image/webp" class="input w-full text-white bg-gray-800 rounded" />
+      <p class="mt-1 text-xs text-gray-400">JPG, PNG or WebP. Maximum 2 MB.</p>
     </div>
 
-    <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">Submit</button>
+    <div class="space-y-3 rounded border border-gray-700 bg-gray-900/50 p-4 text-sm">
+      <label class="flex items-start gap-2">
+        <input id="affiliateAcceptTerms" type="checkbox" class="mt-1" required>
+        <span>I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer" class="text-green-400 underline">Terms and Conditions</a>.</span>
+      </label>
+      <label class="flex items-start gap-2">
+        <input id="affiliateAcceptPrivacy" type="checkbox" class="mt-1" required>
+        <span>I have read the <a href="/privacy" target="_blank" rel="noopener noreferrer" class="text-green-400 underline">Privacy Policy</a>.</span>
+      </label>
+      <label class="flex items-start gap-2">
+        <input id="affiliateAcceptAgreement" type="checkbox" class="mt-1" required>
+        <span>I agree to the Affiliate Agreement.</span>
+      </label>
+    </div>
+
+    <button id="affiliateApplicationSubmit" type="submit" class="bg-green-600 hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60 text-white px-4 py-2 rounded">Submit affiliate application</button>
   </form>
 </section>
 
@@ -3071,9 +3213,9 @@
 <div id="cartOverlay" class="fixed inset-0 bg-black bg-opacity-50 hidden z-40"></div>
 
 <!-- 🛒 Updated Cart Modal Section -->
-<div id="cartDrawer" class="fixed top-0 right-0 w-full sm:w-96 h-full bg-gray-900 text-white shadow-lg z-50 transform translate-x-full transition-transform duration-300">
+<div id="cartDrawer" class="fixed top-0 right-0 flex h-full w-full flex-col overflow-hidden bg-gray-900 text-white shadow-lg z-50 transform translate-x-full transition-transform duration-300 sm:w-96">
   <!-- Header with item count and close button -->
-  <div class="flex items-center justify-between px-4 py-3 border-b border-gray-700">
+  <div class="flex shrink-0 items-center justify-between px-4 py-3 border-b border-gray-700">
     <div>
       <h2 class="text-xl font-bold leading-tight">Your Cart</h2>
       <div id="cartItemCount" class="text-sm text-gray-400">0 items</div>
@@ -3083,15 +3225,18 @@
     </button>
   </div>
 
-  <!-- Dynamic item list -->
-  <div id="cartItemsContainer" class="p-4 space-y-4 overflow-y-auto max-h-[calc(100vh-200px)]">
-    <!-- Items will be dynamically inserted here -->
-  </div>
-  <div class="p-4 border-t border-gray-700">
-    <label for="affiliateSelector" class="block text-sm text-gray-300 mb-1">Referred By</label>
+  <!-- The full cart body scrolls so checkout remains reachable on short screens. -->
+  <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+    <!-- Dynamic item list -->
+    <div id="cartItemsContainer" class="p-4 space-y-4">
+      <!-- Items will be dynamically inserted here -->
+    </div>
+    <div class="p-4 border-t border-gray-700">
+    <label for="affiliateSelector" id="affiliateSelectorLabel" class="block text-sm text-gray-300 mb-1">Referred By</label>
     <select id="affiliateSelector" class="w-full bg-gray-800 text-white px-3 py-2 rounded">
       <option value="">No Affiliate / I found this myself</option>
     </select>
+    <div id="affiliatePickupDetails" class="mt-2 hidden rounded border border-gray-700 bg-gray-800 p-3 text-sm text-gray-200"></div>
   </div>
   <!-- Subtotal and checkout -->
   <div class="p-4 border-t border-gray-700">
@@ -3118,6 +3263,7 @@
   <a href="/privacy" class="underline hover:text-white">Privacy Policy</a>.
 </div>
 
+    </div>
   </div>
 </div>
 

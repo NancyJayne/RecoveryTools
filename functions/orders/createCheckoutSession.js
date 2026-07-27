@@ -228,6 +228,12 @@ const createCheckoutSessionHandler = async (request) => {
         ["shipping", "pickup"].includes(requestedFulfilment)
         ? requestedFulfilment
         : configuredFulfilment;
+      if (physicalFulfilment === "shipping-or-pickup") {
+        throw new HttpsError(
+          "failed-precondition",
+          `Choose delivery or pickup for ${name}.`,
+        );
+      }
       const pickupLocation = physicalFulfilment === "pickup"
         ? await resolveSelectedPickupLocation(db, {
           productId: doc.id,
