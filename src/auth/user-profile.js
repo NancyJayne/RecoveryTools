@@ -200,148 +200,107 @@ window.downloadInvoice = async function (invoiceId) {
   }
 };
 
-export async function loadProfileCourses() {
-  const grid = document.getElementById("myCoursesGrid");
-  if (!grid) return;
-  grid.textContent = "Loading your courses...";
+function accessIsActive(access) {
+  const expiresAt = access.expiresAt?.toMillis?.() ||
+    (access.expiresAt ? new Date(access.expiresAt).getTime() : null);
+  return access.active !== false && !access.revokedAt &&
+    (!expiresAt || Number.isNaN(expiresAt) || expiresAt > Date.now());
+}
 
+async function loadAccessibleContent(contentType) {
+  const uid = auth?.currentUser?.uid;
+  if (!uid) return [];
+  const accessSnap = await getDocs(query(
+    collection(db, "userAccess"),
+    where("userId", "==", uid),
+  ));
+  const records = await Promise.all(accessSnap.docs.map(async (accessDoc) => {
+    const access = accessDoc.data();
+    const accessType = String(access.accessType || access.accessEntityType || "").toLowerCase();
+    const accessId = access.accessId || access.accessEntityId;
+    const collectionName = {
+      item: "items",
+      blueprint: "blueprints",
+      plan: "plans",
+    }[accessType];
+    if (!accessIsActive(access) || !collectionName || !accessId) return null;
+    try {
+      const contentSnap = await getDoc(doc(db, collectionName, accessId));
+      if (!contentSnap.exists()) return null;
+      const content = contentSnap.data();
+      const storedType = String(
+        content.type || content.itemType || content.blueprintType ||
+        content.planType || content.planTypeName || "",
+      ).toLowerCase();
+      return storedType === contentType ? { id: accessId, entityType: accessType, ...content } : null;
+    } catch (error) {
+      console.warn(`Could not load unlocked ${accessType} ${accessId}.`, error);
+      return null;
+    }
+  }));
+  return [...new Map(records.filter(Boolean).map((record) => [record.id, record])).values()];
+}
+
+async function renderAccessibleContent({ gridId, contentType, label, href }) {
+  const grid = document.getElementById(gridId);
+  if (!grid) return;
+  grid.textContent = `Loading your ${label.toLowerCase()}...`;
   try {
-    const uid = auth?.currentUser?.uid;
-    if (!uid) {
+    if (!auth?.currentUser?.uid) {
       grid.textContent = "No user found.";
       return;
     }
-
-    const purchasesSnap = await getDocs(collection(db, "users", uid, "purchases"));
+    const records = await loadAccessibleContent(contentType);
     grid.textContent = "";
-
-    if (purchasesSnap.empty) {
-      grid.textContent = "No courses found.";
+    if (!records.length) {
+      grid.textContent = `No ${label.toLowerCase()} found.`;
       return;
     }
-
-    for (const purchase of purchasesSnap.docs) {
-      const courseId = purchase.id || purchase.data().courseId;
-      const courseSnap = await getDoc(doc(db, "courses", courseId));
-      if (!courseSnap.exists()) continue;
-      const course = courseSnap.data();
-
-      const card = document.createElement("div");
-      card.className = "bg-gray-800 p-4 rounded shadow cursor-pointer hover:bg-gray-700";
-      card.addEventListener("click", () => {
-        window.location.href = `/courses?course=${courseId}`;
-      });
-
-      const title = document.createElement("h4");
-      title.className = "text-white font-semibold";
-      title.textContent = course.title || course.name;
-
-      const desc = document.createElement("p");
-      desc.className = "text-sm text-gray-400";
-      desc.textContent = course.description;
-
-      card.append(title, desc);
-      grid.appendChild(card);
-    }
-  } catch (err) {
-    console.error("Error loading courses:", err);
-    grid.textContent = "Failed to load courses.";
-  }
-}
-
-export async function loadProfileWorkshops() {
-  const grid = document.getElementById("myWorkshopsGrid");
-  if (!grid) return;
-  grid.textContent = "Loading your workshops...";
-
-  try {
-    const uid = auth?.currentUser?.uid;
-    const ticketQuery = query(
-      collection(db, "workshopTickets"),
-      where("userId", "==", uid),
-    );
-
-    const ticketSnap = await getDocs(ticketQuery);
-    grid.textContent = "";
-
-    if (ticketSnap.empty) {
-      grid.textContent = "No workshops found.";
-      return;
-    }
-
-    const workshopDocs = await Promise.all(
-      ticketSnap.docs.map((t) => {
-        const wid = t.data()?.workshopId;
-        return wid ? getDoc(doc(db, "workshops", wid)) : Promise.resolve(null);
-      }),
-    );
-
-    workshopDocs.forEach((wsSnap) => {
-      if (!wsSnap?.exists()) return;
-      const ws = wsSnap.data();
-      const workshopId = wsSnap.id;
-
+    records.forEach((record) => {
       const card = document.createElement("div");
       card.className = "bg-gray-800 p-4 rounded shadow";
-
       const title = document.createElement("h4");
       title.className = "text-white font-semibold";
-      title.textContent = ws.name || ws.title;
-
+      title.textContent = record.title || record.name || record.id;
       const desc = document.createElement("p");
       desc.className = "text-sm text-gray-400";
-      desc.textContent = ws.description || "";
-
+      desc.textContent = record.shortDescription || record.description || record.longDescription || "";
       const link = document.createElement("a");
-      link.href = `/workshops?event=${workshopId}`;
-      link.className = "text-[#407471] text-sm hover:underline mt-2 inline-block";
-      link.textContent = "View Details";
-
+      link.href = `${href}${encodeURIComponent(record.id)}`;
+      link.className = "inline-block mt-3 text-[#407471] hover:underline";
+      link.textContent = `View ${label.replace(/s$/, "")}`;
       card.append(title, desc, link);
       grid.appendChild(card);
     });
   } catch (err) {
-    console.error("Error loading workshops:", err);
-    grid.textContent = "Failed to load workshops.";
+    console.error(`Error loading ${label.toLowerCase()}:`, err);
+    grid.textContent = `Failed to load ${label.toLowerCase()}.`;
   }
 }
 
-export async function loadMyPrograms() {
-  const grid = document.getElementById("myPrograms");
-  if (!grid) return;
-  grid.textContent = "Loading your programs...";
+export function loadProfileCourses() {
+  return renderAccessibleContent({
+    gridId: "myCoursesGrid",
+    contentType: "course",
+    label: "Courses",
+    href: "/courses?course=",
+  });
+}
 
-  try {
-    const q = query(
-      collection(db, "programs"),
-      where("assignedTo", "==", auth?.currentUser?.uid),
-    );
-    const snapshot = await getDocs(q);
-    grid.textContent = "";
+export function loadProfileWorkshops() {
+  return renderAccessibleContent({
+    gridId: "myWorkshopsGrid",
+    contentType: "workshop",
+    label: "Workshops",
+    href: "/workshops?event=",
+  });
+}
 
-    if (snapshot.empty) {
-      grid.textContent = "No programs found.";
-      return;
-    }
-
-    snapshot.forEach((doc) => {
-      const program = doc.data();
-      const block = document.createElement("div");
-      block.className = "bg-gray-800 p-4 rounded shadow mb-4";
-
-      const title = document.createElement("h4");
-      title.className = "text-white font-semibold";
-      title.textContent = program.name;
-
-      const desc = document.createElement("p");
-      desc.className = "text-sm text-gray-400";
-      desc.textContent = program.description;
-
-      block.append(title, desc);
-      grid.appendChild(block);
-    });
-  } catch (err) {
-    console.error("Error loading programs:", err);
-    grid.textContent = "Failed to load programs.";
-  }
+export function loadMyPrograms() {
+  return renderAccessibleContent({
+    gridId: "myPrograms",
+    contentType: "program",
+    label: "Programs",
+    href: "/programs?program=",
+  });
 }

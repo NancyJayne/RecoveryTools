@@ -36,12 +36,134 @@ function getProductImageAlt(product) {
     getProductName(product);
 }
 
+function getVariantImage(product, variant) {
+  return variant?.images?.[0] ||
+    variant?.media?.find((asset) => asset?.type === "image")?.url ||
+    getProductImage(product);
+}
+
+function getVariantImageAlt(product, variant) {
+  return variant?.media?.find((asset) => asset?.url === getVariantImage(product, variant))?.altText ||
+    `${getProductName(product)}${variant ? ` - ${getVariantLabel(variant)}` : ""}`;
+}
+
 function getProductShortDescription(product) {
   return product.shortDescription || product.description || product.longDescription || "";
 }
 
 function getProductLongDescription(product) {
   return product.longDescription || product.description || product.shortDescription || "";
+}
+
+function getVariantLongDescription(product, variant) {
+  return variant?.longDescription || variant?.shortDescription || getProductLongDescription(product);
+}
+
+function courseVideoMedia(product) {
+  return product.coursePreviewVideo?.url ? product.coursePreviewVideo : null;
+}
+
+function youtubeEmbedUrl(value) {
+  try {
+    const url = new URL(value);
+    if (url.hostname.includes("youtube-nocookie.com") && url.pathname.startsWith("/embed/")) {
+      return url.toString();
+    }
+    const videoId = url.hostname === "youtu.be"
+      ? url.pathname.split("/").filter(Boolean)[0]
+      : url.searchParams.get("v") ||
+        (url.pathname.startsWith("/embed/") ? url.pathname.split("/")[2] : "");
+    return videoId ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}` : "";
+  } catch {
+    return "";
+  }
+}
+
+function audibleVideoEmbedUrl(embedUrl, sourceUrl) {
+  const value = embedUrl || youtubeEmbedUrl(sourceUrl);
+  if (!value) return "";
+  try {
+    const url = new URL(value);
+    url.searchParams.delete("mute");
+    url.searchParams.delete("autoplay");
+    url.searchParams.set("controls", "1");
+    url.searchParams.set("playsinline", "1");
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+function protectDisplayedMedia(element) {
+  if (!element) return element;
+  element.draggable = false;
+  element.classList.add("select-none");
+  element.style.webkitUserDrag = "none";
+  element.addEventListener("contextmenu", (event) => event.preventDefault());
+  element.addEventListener("dragstart", (event) => event.preventDefault());
+  return element;
+}
+
+function courseDetailMarkup(product) {
+  if (productCategory(product) !== "courses") return null;
+  const section = document.createElement("section");
+  section.className = "mb-5 space-y-5 rounded border border-gray-700 bg-gray-900/50 p-4";
+  const video = courseVideoMedia(product);
+  if (video?.url) {
+    const videoHeading = document.createElement("h3");
+    videoHeading.className = "text-lg font-semibold text-white";
+    videoHeading.textContent = "Course preview";
+    const embedUrl = audibleVideoEmbedUrl(video.embedUrl, video.url);
+    const player = embedUrl
+      ? document.createElement("iframe")
+      : document.createElement("video");
+    player.className = "aspect-video w-full rounded bg-black";
+    if (embedUrl) {
+      player.src = embedUrl;
+      player.title = video.title || "Course preview video";
+      player.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+      player.allowFullscreen = true;
+      player.loading = "lazy";
+    } else {
+      player.src = video.url;
+      player.controls = true;
+      player.preload = "metadata";
+      player.playsInline = true;
+      player.defaultMuted = false;
+      player.muted = false;
+      player.volume = 1;
+      player.controlsList = "nodownload noremoteplayback";
+      player.disablePictureInPicture = true;
+      player.disableRemotePlayback = true;
+    }
+    protectDisplayedMedia(player);
+    section.append(videoHeading, player);
+  }
+  const modules = Array.isArray(product.courseModules) ? product.courseModules : [];
+  if (modules.length) {
+    const moduleHeading = document.createElement("h3");
+    moduleHeading.className = "text-lg font-semibold text-white";
+    moduleHeading.textContent = `Course modules (${modules.length})`;
+    const list = document.createElement("ol");
+    list.className = "space-y-2";
+    modules.forEach((module, index) => {
+      const item = document.createElement("li");
+      item.className = "rounded border border-gray-700 bg-gray-950/50 p-3";
+      const title = document.createElement("div");
+      title.className = "font-medium text-white";
+      title.textContent = `${index + 1}. ${module.name || module.id}`;
+      item.appendChild(title);
+      if (module.shortDescription) {
+        const description = document.createElement("p");
+        description.className = "mt-1 text-sm text-gray-400";
+        description.textContent = module.shortDescription;
+        item.appendChild(description);
+      }
+      list.appendChild(item);
+    });
+    section.append(moduleHeading, list);
+  }
+  return section.children.length ? section : null;
 }
 
 function getProductPrice(product) {
@@ -85,12 +207,9 @@ function productExperienceDetails(product, variant = null) {
   return [
     ["Starts", formatProductDateTime(variant?.eventStartAt || product.eventStartAt)],
     ["Ends", formatProductDateTime(variant?.eventEndAt || product.eventEndAt)],
-    ["Location", variant?.eventLocation || product.eventLocation],
+    ["Address", variant?.eventLocation || product.eventLocation],
     ["Booking", variant?.calendarBookingReference || product.calendarBookingReference],
-    ["Delivery", variant?.deliveryMode || product.deliveryMode],
-    ["Physical fulfilment", variant?.physicalFulfilment || product.physicalFulfilment],
     ["Instructor", variant?.instructor || product.instructor],
-    ["Tickets / seats", product.tracksSeats ? variant?.seatCapacity ?? product.seatCapacity : ""],
     ["Access", product.unlocksAccess ? product.accessType || "Included after purchase" : ""],
     ["Certificate", product.issuesCertificate ? product.certificateName || "Included" : ""],
   ].filter(([, value]) => value !== "" && value !== null && value !== undefined);
@@ -103,6 +222,7 @@ function isFeatured(product) {
 function productCategory(product) {
   const values = [
     product.categoryId,
+    product.productType,
     product.type,
     product.itemType,
     product.itemKind,
@@ -322,13 +442,14 @@ export function createProductTile(product) {
   image.src = productImage;
   image.alt = getProductImageAlt(product);
   image.className = "w-full h-48 object-cover rounded";
+  protectDisplayedMedia(image);
 
   const name = document.createElement("h3");
   name.textContent = productName;
   name.className = "text-lg font-semibold mt-2 text-white";
 
   const shortDesc = document.createElement("p");
-  shortDesc.textContent = product.shortDescription || "";
+  shortDesc.textContent = getProductShortDescription(product);
   shortDesc.className = "text-sm text-gray-300 mt-1";
 
   const price = document.createElement("p");
@@ -366,6 +487,15 @@ export function createProductTile(product) {
 export function showProductDetail(product, options = {}) {
   const detail = document.getElementById("productDetailContainer");
   if (detail.dataset.currentId === product.id) return;
+  if (detail.dataset.mediaProtectionBound !== "true") {
+    detail.dataset.mediaProtectionBound = "true";
+    detail.addEventListener("contextmenu", (event) => {
+      if (event.target.closest("img, video")) event.preventDefault();
+    });
+    detail.addEventListener("dragstart", (event) => {
+      if (event.target.closest("img, video")) event.preventDefault();
+    });
+  }
   const productName = getProductName(product);
   const productImage = getProductImage(product);
   const variants = Array.isArray(product.variants) ? product.variants : [];
@@ -396,6 +526,7 @@ export function showProductDetail(product, options = {}) {
   img.src = productImage;
   img.alt = getProductImageAlt(product);
   img.className = "w-full h-auto max-h-[400px] object-cover rounded md:max-w-[600px]";
+  protectDisplayedMedia(img);
 
   const content = document.createElement("div");
   content.className = "flex flex-col md:w-1/2 px-4";
@@ -416,12 +547,22 @@ export function showProductDetail(product, options = {}) {
            </span>`
         : asMoney(finalPrice);
   }
+  function updateProductImage() {
+    img.src = getVariantImage(product, selectedVariant);
+    img.alt = getVariantImageAlt(product, selectedVariant);
+  }
+  updateProductImage();
   updatePriceDisplay();
   price.className = "text-green-400 text-xl font-bold mb-2";
 
 
   const longDesc = document.createElement("p");
-  longDesc.textContent = getProductLongDescription(product);
+  function updateDescription() {
+    const description = getVariantLongDescription(product, selectedVariant);
+    const inclusions = selectedVariant?.inclusions || "";
+    longDesc.textContent = [description, inclusions].filter(Boolean).join("\n\n");
+  }
+  updateDescription();
   longDesc.className = "whitespace-pre-line text-sm text-gray-300 mb-4";
 
   const featureList = document.createElement("ul");
@@ -431,6 +572,19 @@ export function showProductDetail(product, options = {}) {
     li.textContent = f;
     featureList.appendChild(li);
   });
+  let courseDetails = courseDetailMarkup(product);
+  function updateCourseDetails() {
+    if (productCategory(product) !== "courses") return;
+    const replacement = courseDetailMarkup(product);
+    if (courseDetails?.isConnected) {
+      if (replacement) courseDetails.replaceWith(replacement);
+      else courseDetails.remove();
+    } else if (replacement) {
+      const anchor = experienceDetails.isConnected ? experienceDetails : priceWrap;
+      content.insertBefore(replacement, anchor);
+    }
+    courseDetails = replacement;
+  }
 
   const experienceDetails = document.createElement("dl");
   experienceDetails.className = "mb-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm";
@@ -447,6 +601,22 @@ export function showProductDetail(product, options = {}) {
     });
   }
   updateExperienceDetails();
+
+  const capacityWarning = document.createElement("p");
+  capacityWarning.className = "mb-4 hidden rounded border border-amber-600/60 bg-amber-950/40 px-3 py-2 text-sm font-semibold text-amber-200";
+  function updateCapacityWarning() {
+    const remaining = Number(selectedVariant?.ticketsRemaining);
+    const threshold = Number(selectedVariant?.nearCapacityWarning);
+    const shouldWarn = productCategory(product) === "workshops" &&
+      selectedVariant?.ticketsRemaining !== null &&
+      Number.isFinite(remaining) && Number.isFinite(threshold) &&
+      threshold > 0 && remaining <= threshold;
+    capacityWarning.classList.toggle("hidden", !shouldWarn);
+    capacityWarning.textContent = remaining > 0
+      ? `Almost sold out — only ${remaining} place${remaining === 1 ? "" : "s"} left.`
+      : "Sold out.";
+  }
+  updateCapacityWarning();
 
   const priceWrap = document.createElement("div");
   priceWrap.className = "flex flex-col gap-4 mb-4";
@@ -474,7 +644,11 @@ export function showProductDetail(product, options = {}) {
         (variant.variantId || variant.id) === variantSelect.value,
       ) || null;
       updatePriceDisplay();
+      updateProductImage();
+      updateDescription();
+      updateCourseDetails();
       updateExperienceDetails();
+      updateCapacityWarning();
       updateAddButtonState();
     });
 
@@ -546,7 +720,7 @@ export function showProductDetail(product, options = {}) {
       sku: selectedVariant?.sku || product.sku || "",
       creatorId: product.creatorId,
       affiliatePercent: product.affiliatePercent,
-      image: productImage,
+      image: getVariantImage(product, selectedVariant),
     });
   });
 
@@ -565,7 +739,9 @@ export function showProductDetail(product, options = {}) {
   content.appendChild(price);
   content.appendChild(longDesc);
   content.appendChild(featureList);
+  if (courseDetails) content.appendChild(courseDetails);
   if (experienceDetails.children.length) content.appendChild(experienceDetails);
+  content.appendChild(capacityWarning);
   content.appendChild(priceWrap);
   content.appendChild(backBtn);
 

@@ -7,6 +7,7 @@ import { showToast, showSection, redirectToPayment } from "../utils/utils.js";
 import { formatCalendarDate } from "../utils/calendar.js";
 import { formatWorkshopForViewer } from "../utils/date-utils.js";
 import { renderProductCatalog, setupCatalogClickHandler } from "./product-catalog.js";
+import { handleUnlockedPlanFromURL } from "./course.js";
 
 const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -295,9 +296,18 @@ export function downloadICS(title, startDateISO, location, description) {
   showToast("Workshop added to your calendar!", "success");
 }
 
-export function initWorkshopsPage() {
+export async function initWorkshopsPage() {
   setupCatalogClickHandler("workshopGrid");
-  loadWorkshops();
+  if (await handleUnlockedPlanFromURL({
+    queryParam: "event",
+    contentType: "workshop",
+    contentLabel: "Workshop",
+    containerId: "workshopDetailContainer",
+    sectionId: "workshopDetailSection",
+    profileHash: "myWorkshops",
+  })) return;
+  showSection("workshopsSection");
+  await loadWorkshops();
 }
 
 export default initWorkshopsPage;

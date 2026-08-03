@@ -45,10 +45,10 @@ let state = {
 };
 
 const BUILDER_STEP_LABELS = {
-  item: ["1. Details", "2. Build", "3. Connections", "4. Review", "5. Actions"],
-  blueprint: ["1. Details", "2. Build", "3. Connections", "4. Review", "5. Actions"],
-  plan: ["1. Details", "2. Build", "3. Connections", "4. Review", "5. Actions"],
-  campaign: ["1. Details", "2. Build", "3. Connections", "4. Review", "5. Actions"],
+  item: ["1. Details", "2. Build", "3. Review & save", "4. Connections"],
+  blueprint: ["1. Details", "2. Build", "3. Review & save", "4. Connections"],
+  plan: ["1. Details", "2. Build", "3. Review & save", "4. Connections"],
+  campaign: ["1. Details", "2. Build", "3. Review & save", "4. Connections"],
 };
 
 function escapeHTML(value) {
@@ -548,7 +548,16 @@ function optionalNumberFromInput(id) {
 }
 
 function parseProductVariants(value) {
-  return String(value || "")
+  const raw = String(value || "").trim();
+  if (raw.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // Continue with the legacy pipe-delimited format.
+    }
+  }
+  return raw
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
@@ -571,6 +580,9 @@ function parseProductVariants(value) {
         instructor = "",
         deliveryMode = "",
         physicalFulfilment = "",
+        shortDescription = "",
+        longDescription = "",
+        inclusions = "",
       ] = line.split("|").map((part) => part.trim());
       return {
         variantId,
@@ -590,30 +602,37 @@ function parseProductVariants(value) {
         eventEndAt,
         eventLocation,
         instructor,
+        shortDescription,
+        longDescription,
+        inclusions,
       };
     });
 }
 
 function serializeProductVariants(variants = []) {
-  return variants.map((variant) => [
-    variant.variantId || variant.id || "",
-    variant.name || "",
-    variant.colour || "",
-    variant.size || "",
-    variant.sku || "",
-    variant.priceOverride ?? "",
-    variant.stock ?? 0,
-    variant.status || "active",
-    variant.contentVariantId || "",
-    variant.calendarBookingReference || "",
-    variant.seatCapacity ?? "",
-    variant.eventStartAt || "",
-    variant.eventEndAt || "",
-    variant.eventLocation || "",
-    variant.instructor || "",
-    variant.deliveryMode || "",
-    variant.physicalFulfilment || "",
-  ].join(" | ")).join("\n");
+  return JSON.stringify(variants.map((variant) => ({
+    variantId: variant.variantId || variant.productVariantId || variant.id || "",
+    name: variant.name || variant.variantName || "",
+    colour: variant.colour || "",
+    size: variant.size || "",
+    sku: variant.sku || "",
+    priceOverride: variant.priceOverride ?? null,
+    stock: variant.stock ?? variant.stockQuantity ?? 0,
+    status: variant.status || "active",
+    contentVariantId: variant.contentVariantId || "",
+    calendarBookingReference: variant.calendarBookingReference || "",
+    seatCapacity: variant.seatCapacity ?? null,
+    nearCapacityWarning: variant.nearCapacityWarning ?? null,
+    eventStartAt: variant.eventStartAt || "",
+    eventEndAt: variant.eventEndAt || "",
+    eventLocation: variant.eventLocation || "",
+    instructor: variant.instructor || "",
+    deliveryMode: variant.deliveryMode || "",
+    physicalFulfilment: variant.physicalFulfilment || "",
+    shortDescription: variant.shortDescription || "",
+    longDescription: variant.longDescription || "",
+    inclusions: variant.inclusions || "",
+  })));
 }
 
 function normalizedText(value) {
@@ -922,13 +941,43 @@ function blueprintRecipeItemOptions(selectedId = "") {
   })].join("");
 }
 
+function itemVariantsForRecipe(itemId) {
+  const item = (state.records.items || []).find((record) => record.id === itemId);
+  return Array.isArray(item?.entityVariants) ? item.entityVariants : [];
+}
+
+function blueprintRecipeVariantOptions(itemId, selectedId = "") {
+  const variants = itemVariantsForRecipe(itemId);
+  if (!variants.length) return "<option value=\"\">Default Item stock</option>";
+  return [
+    `<option value="">${variants.length > 1 ? "Choose Item variant" : "Default Item variant"}</option>`,
+    ...variants.map((variant) => {
+      const variantId = variant.entityVariantId || "";
+      return `<option value="${escapeHTML(variantId)}"${variantId === selectedId ? " selected" : ""}>` +
+        `${escapeHTML(variant.name || variantId)}</option>`;
+    }),
+  ].join("");
+}
+
+function recipeComponentUnitCost(itemId, itemVariantId = "") {
+  const item = (state.records.items || []).find((record) => record.id === itemId);
+  const variant = itemVariantsForRecipe(itemId).find((candidate) =>
+    candidate.entityVariantId === itemVariantId);
+  return Number(variant?.unitCost ?? item?.itemUnitCost ?? 0) || 0;
+}
+
 function blueprintVariantRecipeMarkup(variant) {
   if (currentRecordType() !== "blueprint") return "";
   const components = Array.isArray(variant.linkedItemComponents) ? variant.linkedItemComponents : [];
-  const rows = components.map((component) => `
-    <div class="blueprint-variant-recipe-row grid gap-2 md:grid-cols-[1fr_8rem_auto]">
+  const rows = components.map((component, index) => `
+    <div class="blueprint-variant-recipe-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_1fr_7rem_auto]"
+      data-component-id="${escapeHTML(component.componentId || `COMPONENT-${index + 1}`)}">
       <select class="blueprint-variant-recipe-item rounded bg-gray-800 px-2 py-2 text-white">
         ${blueprintRecipeItemOptions(component.itemId)}
+      </select>
+      <select class="blueprint-variant-recipe-item-variant rounded bg-gray-800 px-2 py-2 text-white"
+        aria-label="Item variant">
+        ${blueprintRecipeVariantOptions(component.itemId, component.itemVariantId)}
       </select>
       <input class="blueprint-variant-recipe-quantity rounded bg-gray-800 px-2 py-2 text-white"
         type="number" min="0" step="0.01" value="${escapeHTML(component.quantity ?? 1)}" aria-label="Quantity">
@@ -1061,12 +1110,21 @@ function entityVariantsFromBuilder() {
       .find((candidate) => candidate.id === templateVariantId);
     const recipeComponents = [...row.querySelectorAll(".blueprint-variant-recipe-row")].map((recipeRow) => {
       const itemId = recipeRow.querySelector(".blueprint-variant-recipe-item")?.value || "";
-      const item = (state.records.items || []).find((record) => record.id === itemId);
+      const itemVariantId =
+        recipeRow.querySelector(".blueprint-variant-recipe-item-variant")?.value || "";
       const quantity = optionalNumberFromElement(
         recipeRow.querySelector(".blueprint-variant-recipe-quantity"),
       ) ?? 0;
-      const unitCost = Number(item?.itemUnitCost ?? 0) || 0;
-      return { itemId, quantity, unitCost, estimatedCost: quantity * unitCost };
+      const unitCost = recipeComponentUnitCost(itemId, itemVariantId);
+      return {
+        componentId: recipeRow.dataset.componentId || `COMPONENT-${index + 1}`,
+        itemId,
+        itemVariantId,
+        quantity,
+        unit: "each",
+        unitCost,
+        estimatedCost: quantity * unitCost,
+      };
     }).filter((component) => component.itemId && component.quantity > 0);
     const references = uniqueValues([...row.querySelectorAll(".content-entity-variant-reference")]
       .map((input) => input.value));
@@ -1132,11 +1190,12 @@ function updateBlueprintVariantRecipeTotals() {
     let total = 0;
     variantRow.querySelectorAll(".blueprint-variant-recipe-row").forEach((recipeRow) => {
       const itemId = recipeRow.querySelector(".blueprint-variant-recipe-item")?.value || "";
-      const item = (state.records.items || []).find((record) => record.id === itemId);
+      const itemVariantId =
+        recipeRow.querySelector(".blueprint-variant-recipe-item-variant")?.value || "";
       const quantity = optionalNumberFromElement(
         recipeRow.querySelector(".blueprint-variant-recipe-quantity"),
       ) ?? 0;
-      total += quantity * (Number(item?.itemUnitCost ?? 0) || 0);
+      total += quantity * recipeComponentUnitCost(itemId, itemVariantId);
     });
     const output = variantRow.querySelector(".blueprint-variant-recipe-total");
     if (output) output.textContent = `Estimated cost: $${total.toFixed(2)}`;
@@ -1160,11 +1219,12 @@ function populateProductVariantsFromEntity() {
   if (!input) return;
   const current = parseProductVariants(input.value);
   const entityVariants = entityVariantsFromBuilder();
-  const entityVariantIds = new Set(entityVariants.map((variant) => variant.entityVariantId));
   const selected = entityVariants.filter((variant) => variant.shopEnabled === true);
-  const selectedIds = new Set(selected.map((variant) => variant.entityVariantId));
-  const retained = current.filter((variant) =>
-    !entityVariantIds.has(variant.contentVariantId) || selectedIds.has(variant.contentVariantId));
+  // Product variants are independent records once created. Entity-variant Shop
+  // checkboxes may add a Product variant, but deselecting a checkbox must not
+  // silently delete an existing sellable variant. Use the explicit Remove
+  // Product variant control for deletion.
+  const retained = [...current];
   const usedVariantIds = new Set();
 
   selected.forEach((entityVariant) => {
@@ -1186,7 +1246,7 @@ function populateProductVariantsFromEntity() {
       size: entityVariant.sizeLabel || "",
       sku: "",
       priceOverride: null,
-      stock: entityVariant.stockQty ?? 0,
+      stock: 0,
       status: "draft",
       contentVariantId: entityVariant.entityVariantId,
     };
@@ -1207,19 +1267,32 @@ function renderSelectedProductVariantRows(
   const container = document.getElementById("contentProductVariantRows");
   if (!container) return;
   const summary = document.getElementById("contentProductVariantSummary");
-  if (!selectedEntityVariants.length) {
-    if (summary) summary.textContent = "No variants selected for Shop.";
-    container.innerHTML = "<p class=\"text-sm text-gray-400\">No variants are selected for Shop. Close this drawer and select at least one variant on the Connections page.</p>";
+  if (!productVariants.length) {
+    if (summary) summary.textContent = "No Product variants yet.";
+    container.innerHTML = "<p class=\"text-sm text-gray-400\">Add a Product variant or select an entity variant for Shop.</p>";
     return;
   }
   if (summary) {
-    summary.textContent = `${selectedEntityVariants.length} selected variant${selectedEntityVariants.length === 1 ? "" : "s"}`;
+    summary.textContent = `${productVariants.length} Product variant${productVariants.length === 1 ? "" : "s"}`;
   }
-  container.innerHTML = selectedEntityVariants.map((entityVariant, index) => {
-    const productVariant = productVariants.find((variant) =>
-      variant.contentVariantId === entityVariant.entityVariantId) || {};
+  const instructorOptions = (selectedInstructor = "") => {
+    const options = [...(state.options.instructorOptions || [])];
+    if (selectedInstructor && !options.some((option) => option.name === selectedInstructor)) {
+      options.push({ id: selectedInstructor, name: selectedInstructor, email: "" });
+    }
+    return options.map((option) => {
+      const selected = option.name === selectedInstructor ? " selected" : "";
+      const label = option.email ? `${option.name} (${option.email})` : option.name;
+      return `<option value="${escapeHTML(option.name)}"${selected}>${escapeHTML(label)}</option>`;
+    }).join("");
+  };
+  container.innerHTML = productVariants.map((productVariant, index) => {
+    const entityVariant = selectedEntityVariants.find((variant) =>
+      variant.entityVariantId === productVariant.contentVariantId) || {};
     return `
-      <details class="content-product-variant-row overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80" ${index === 0 ? "open" : ""} data-content-variant-id="${escapeHTML(entityVariant.entityVariantId)}">
+      <details class="content-product-variant-row overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80" ${index === 0 ? "open" : ""}
+        data-content-variant-id="${escapeHTML(productVariant.contentVariantId || "")}"
+        data-product-variant-id="${escapeHTML(productVariant.variantId || "")}">
         <summary class="cursor-pointer bg-gray-800/90 p-3 hover:bg-gray-800">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex items-center gap-3">
@@ -1229,7 +1302,7 @@ function renderSelectedProductVariantRows(
                 <p class="text-xs text-gray-400">${index === 0 ? "Primary Product variant" : `Additional Product variant ${index + 1}`}</p>
               </div>
             </div>
-            <span class="rounded bg-gray-900 px-2 py-1 text-xs text-gray-300">${escapeHTML(productVariant.status || "draft")}</span>
+            <span class="product-variant-status-badge rounded bg-gray-900 px-2 py-1 text-xs text-gray-300">${escapeHTML(productVariant.status || "draft")}</span>
           </div>
         </summary>
         <div class="grid gap-3 border-t border-gray-700 bg-gray-950/30 p-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1253,12 +1326,24 @@ function renderSelectedProductVariantRows(
           <label class="block text-sm">Size / weight
             <input class="product-variant-size mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.size || entityVariant.sizeLabel || "")}">
           </label>
+          <label class="block text-sm md:col-span-2">Short description override
+            <input class="product-variant-short-description mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+              value="${escapeHTML(productVariant.shortDescription || "")}" placeholder="Leave blank to use the main Product description">
+          </label>
+          <label class="block text-sm md:col-span-2">Inclusions summary
+            <textarea class="product-variant-inclusions mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+              rows="2" placeholder="Example: Includes 2 small cups, 2 large cups, box and keychain.">${escapeHTML(productVariant.inclusions || "")}</textarea>
+          </label>
+          <label class="block text-sm md:col-span-2 xl:col-span-4">Long description override
+            <textarea class="product-variant-long-description mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+              rows="3" placeholder="Leave blank to use the main Product description">${escapeHTML(productVariant.longDescription || "")}</textarea>
+          </label>
           <label class="block text-sm">Price override
             <input class="product-variant-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="0.01" value="${escapeHTML(productVariant.priceOverride ?? "")}">
           </label>
           <label class="product-variant-stock-field block text-sm">Product stock
-            <input class="product-variant-stock mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.stock ?? entityVariant.stockQty ?? 0)}">
-            <span class="mt-1 block text-xs text-gray-400">Sellable stock for this variant.</span>
+            <input class="product-variant-stock mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.stock ?? 0)}">
+            <span class="mt-1 block text-xs text-gray-400">Finished sellable stock. This is separate from the connected Item variant stock.</span>
           </label>
           <label class="product-variant-calendar-field hidden block text-sm">Calendar / booking reference
             <input class="product-variant-calendar-reference mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.calendarBookingReference || "")}" placeholder="Calendar ID, booking link or reference">
@@ -1274,18 +1359,20 @@ function renderSelectedProductVariantRows(
               <option value="digital-download"${productVariant.deliveryMode === "digital-download" ? " selected" : ""}>Digital download</option>
             </select>
           </label>
-          <label class="block text-sm">Physical fulfilment
+          <label class="product-variant-physical-fulfilment-field hidden block text-sm">Physical fulfilment
             <select class="product-variant-physical-fulfilment mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
               ${compactSelectOptions(
     ["none", "shipping", "pickup", "shipping-or-pickup"],
-    productVariant.physicalFulfilment ||
-      document.getElementById("contentProductPhysicalFulfilment")?.value ||
-      "none",
+    productVariant.physicalFulfilment || "none",
   )}
             </select>
           </label>
           <label class="product-variant-seats-field hidden block text-sm">Ticket / seat capacity
             <input class="product-variant-seat-capacity mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.seatCapacity ?? "")}">
+          </label>
+          <label class="product-variant-seats-field hidden block text-sm">Near capacity warning
+            <input class="product-variant-near-capacity-warning mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.nearCapacityWarning ?? "")}" placeholder="Example: 10">
+            <span class="mt-1 block text-xs text-gray-400">Show “Almost sold out” when this many seats or fewer remain.</span>
           </label>
           <label class="product-variant-session-field hidden block text-sm">Session starts
             <input class="product-variant-event-start mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="datetime-local" value="${escapeHTML(productVariant.eventStartAt || "")}">
@@ -1296,6 +1383,30 @@ function renderSelectedProductVariantRows(
           <label class="product-variant-location-field hidden block text-sm md:col-span-2">Location
             <input class="product-variant-event-location mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.eventLocation || "")}" placeholder="Venue, address or online location">
           </label>
+          <label class="product-variant-instructor-field hidden block text-sm md:col-span-2">Instructor
+            <select class="product-variant-instructor mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+              <option value="">Choose instructor</option>
+              ${instructorOptions(productVariant.instructor || "") ||
+                "<option value=\"\" disabled>No instructors saved</option>"}
+            </select>
+          </label>
+          <div class="md:col-span-2 xl:col-span-4">
+            <div class="mb-3 flex flex-wrap gap-2">
+              <button type="button" data-product-variant-action="active"
+                class="product-variant-status-action rounded border border-[#407471] px-3 py-2 text-sm text-[#9bd3cf]">
+                Activate session
+              </button>
+              <button type="button" data-product-variant-action="paused"
+                class="product-variant-status-action rounded border border-amber-700 px-3 py-2 text-sm text-amber-200">
+                Hide / cancel session
+              </button>
+              <button type="button" data-product-variant-action="archived"
+                class="product-variant-status-action rounded border border-red-700 px-3 py-2 text-sm text-red-200">
+                Archive session
+              </button>
+            </div>
+            <button type="button" class="remove-content-product-variant rounded border border-red-700 px-3 py-2 text-sm text-red-200">Remove session from sale</button>
+          </div>
         </div>
       </details>`;
   }).join("");
@@ -1305,33 +1416,60 @@ function syncSelectedProductVariantRows() {
   const input = document.getElementById("contentProductVariants");
   if (!input) return;
   const current = parseProductVariants(input.value);
-  const byContentVariantId = new Map(current.map((variant) => [variant.contentVariantId, variant]));
-  document.querySelectorAll(".content-product-variant-row").forEach((row) => {
+  const variants = [...document.querySelectorAll(".content-product-variant-row")].map((row, index) => {
     const contentVariantId = row.dataset.contentVariantId || "";
-    const existing = byContentVariantId.get(contentVariantId) || {};
-    byContentVariantId.set(contentVariantId, {
-      ...existing,
+    const existingId = row.dataset.productVariantId || "";
+    const existing = current.find((variant) =>
+      variant.variantId === existingId ||
+      contentVariantId && variant.contentVariantId === contentVariantId) || {};
+    return {
       variantId: row.querySelector(".product-variant-id")?.value.trim() ||
-        generatedProductVariantId(contentVariantId),
+        existingId || generatedProductVariantId(contentVariantId || `CUSTOM-${index + 1}`),
       name: row.querySelector(".product-variant-name")?.value.trim() || "Variant",
       colour: row.querySelector(".product-variant-colour")?.value.trim() || "",
       size: row.querySelector(".product-variant-size")?.value.trim() || "",
       sku: row.querySelector(".product-variant-sku")?.value.trim() || "",
       priceOverride: optionalNumberFromElement(row.querySelector(".product-variant-price")),
       stock: optionalNumberFromElement(row.querySelector(".product-variant-stock")) ?? 0,
-      status: row.querySelector(".product-variant-status")?.value || "draft",
+      status: row.dataset.pendingStatus ||
+        row.querySelector(".product-variant-status")?.value || "draft",
       contentVariantId,
+      shortDescription: row.querySelector(".product-variant-short-description")?.value.trim() || "",
+      longDescription: row.querySelector(".product-variant-long-description")?.value.trim() || "",
+      inclusions: row.querySelector(".product-variant-inclusions")?.value.trim() || "",
       deliveryMode: row.querySelector(".product-variant-delivery-mode")?.value || "",
       physicalFulfilment: row.querySelector(".product-variant-physical-fulfilment")?.value || "none",
       calendarBookingReference: row.querySelector(".product-variant-calendar-reference")?.value.trim() || "",
       seatCapacity: optionalNumberFromElement(row.querySelector(".product-variant-seat-capacity")),
-      eventStartAt: row.querySelector(".product-variant-event-start")?.value || "",
-      eventEndAt: row.querySelector(".product-variant-event-end")?.value || "",
-      eventLocation: row.querySelector(".product-variant-event-location")?.value.trim() || "",
-      instructor: existing.instructor || "",
-    });
+      nearCapacityWarning: optionalNumberFromElement(
+        row.querySelector(".product-variant-near-capacity-warning"),
+      ),
+      eventStartAt: row.querySelector(".product-variant-event-start")?.value || existing.eventStartAt || "",
+      eventEndAt: row.querySelector(".product-variant-event-end")?.value || existing.eventEndAt || "",
+      eventLocation: row.querySelector(".product-variant-event-location")?.value.trim() ||
+        existing.eventLocation || "",
+      instructor: row.querySelector(".product-variant-instructor")?.value || "",
+    };
   });
-  input.value = serializeProductVariants([...byContentVariantId.values()]);
+  input.value = serializeProductVariants(variants);
+}
+
+function addIndependentProductVariant() {
+  syncSelectedProductVariantRows();
+  const variants = currentProductVariants();
+  const customId = generatedProductVariantId(`CUSTOM-${variants.length + 1}`);
+  variants.push({
+    variantId: customId,
+    name: `Product variant ${variants.length + 1}`,
+    status: "draft",
+    contentVariantId: "",
+    priceOverride: null,
+    stock: 0,
+  });
+  setInputValue("contentProductVariants", serializeProductVariants(variants));
+  renderSelectedProductVariantRows(variants);
+  updateProductPhysicalFields();
+  state.isDirty = true;
 }
 
 function templateOptionLabel(template) {
@@ -1460,9 +1598,9 @@ function panelAllowedForRecordType(panel) {
 }
 
 function showBuilderStep(step = state.currentStep) {
-  const nextStep = Math.max(1, Math.min(Number(step || 1), 5));
+  const nextStep = Math.max(1, Math.min(Number(step || 1), 4));
   state.currentStep = nextStep;
-  if (nextStep >= 3 && document.querySelector(".content-entity-variant-row")) {
+  if (nextStep >= 2 && document.querySelector(".content-entity-variant-row")) {
     renderVariantStepRows(entityVariantsFromBuilder());
   }
 
@@ -1476,11 +1614,12 @@ function showBuilderStep(step = state.currentStep) {
     const panelStep = Number(panel.dataset.builderPanel || 1);
     panel.classList.toggle("hidden", panelStep !== nextStep || !panelAllowedForRecordType(panel));
   });
+  if (nextStep >= 3) renderBuilderSummaries();
 
   const backBtn = document.getElementById("builderBackStepBtn");
   const nextBtn = document.getElementById("builderNextStepBtn");
   if (backBtn) backBtn.disabled = nextStep === 1;
-  if (nextBtn) nextBtn.classList.toggle("hidden", nextStep === 5);
+  if (nextBtn) nextBtn.classList.toggle("hidden", nextStep === 4);
 }
 
 function setupBuilderStepControls() {
@@ -1500,6 +1639,22 @@ function setupBuilderStepControls() {
     await navigateBuilderStep(state.currentStep + 1);
   });
 
+  const addConnectionsButton = document.getElementById("contentBuilderAddConnectionsBtn");
+  if (addConnectionsButton && addConnectionsButton.dataset.bound !== "true") {
+    addConnectionsButton.dataset.bound = "true";
+    addConnectionsButton.addEventListener("click", () => {
+      const confirmation = document.getElementById("contentBuilderConfirmation");
+      confirmation?.classList.add("hidden");
+      confirmation?.classList.remove("flex");
+      document.getElementById("contentBuilderForm")?.classList.remove("hidden");
+      showBuilderStep(4);
+      document.getElementById("contentBuilderStepBar")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
+
   document.getElementById("contentBuilderForm")?.addEventListener("input", () => {
     state.isDirty = true;
     renderBuilderSummaries();
@@ -1513,10 +1668,11 @@ function setupBuilderStepControls() {
 }
 
 async function navigateBuilderStep(targetStep) {
-  const nextStep = Math.max(1, Math.min(Number(targetStep || 1), 5));
-  if (state.currentStep === 2 && nextStep > 2 && state.isDirty) {
-    const saved = await saveVariantsFromBuild();
-    if (!saved) return;
+  const nextStep = Math.max(1, Math.min(Number(targetStep || 1), 4));
+  if (nextStep === 4 && !state.editingRecord?.id) {
+    showToast("Review and save this content before adding connections.", "error");
+    showBuilderStep(3);
+    return;
   }
   showBuilderStep(nextStep);
 }
@@ -2690,16 +2846,22 @@ function updateSaveWorkflow() {
 function productRelationPayload() {
   if (!isShopProductSelected()) return null;
   syncSelectedProductVariantRows();
-  const instructor = applyProductInstructorAssignments();
   populateGeneratedProductSku();
-  const physical = isPhysicalProductConnection();
-
   const variants = parseProductVariants(document.getElementById("contentProductVariants")?.value);
-  const physicalFulfilment =
-    document.getElementById("contentProductPhysicalFulfilment")?.value || "none";
-  const requiresShipping = [physicalFulfilment, ...variants.map((variant) => variant.physicalFulfilment)]
+  const variantInstructors = [...new Set(variants.map((variant) => variant.instructor).filter(Boolean))];
+  const instructor = variantInstructors.length === 1 ? variantInstructors[0] : "";
+  const fulfilmentEnabled = document.getElementById("contentProductHasPhysicalFulfilment")?.checked === true;
+  const variantFulfilment = fulfilmentEnabled
+    ? variants.map((variant) => variant.physicalFulfilment).filter((value) => value && value !== "none")
+    : [];
+  const physicalFulfilment = variantFulfilment.includes("shipping-or-pickup") ||
+    variantFulfilment.includes("shipping") && variantFulfilment.includes("pickup")
+    ? "shipping-or-pickup"
+    : variantFulfilment[0] || "none";
+  setInputValue("contentProductPhysicalFulfilment", physicalFulfilment);
+  const requiresShipping = variantFulfilment
     .some((value) => ["shipping", "shipping-or-pickup"].includes(value));
-  const inventoryTracked = physical &&
+  const inventoryTracked =
     document.getElementById("contentProductInventoryTracked")?.checked === true;
   const totalVariantStock = variants.reduce((total, variant) => total + Number(variant.stock || 0), 0);
   setInputValue("contentProductStock", inventoryTracked ? totalVariantStock : "");
@@ -2811,9 +2973,15 @@ function chooseExistingProduct(productId) {
     product.productType,
     product.requiresShipping,
   ));
-  setSelectValue(
+  setInputValue(
     "contentProductPhysicalFulfilment",
     product.physicalFulfilment || (product.requiresShipping ? "shipping" : "none"),
+  );
+  setCheckboxValue(
+    "contentProductHasPhysicalFulfilment",
+    product.physicalFulfilment && product.physicalFulfilment !== "none" ||
+      product.requiresShipping === true ||
+      (product.variants || []).some((variant) => variant.physicalFulfilment && variant.physicalFulfilment !== "none"),
   );
   setCheckboxValue("contentProductRequiresShipping", product.requiresShipping === true);
   setCheckboxValue("contentProductInventoryTracked", product.inventoryTracked === true);
@@ -2822,7 +2990,7 @@ function chooseExistingProduct(productId) {
   setCheckboxValue("contentProductTracksSeats", product.tracksSeats === true);
   setCheckboxValue("contentProductRequiresLocation", product.requiresLocation === true);
   setCheckboxValue("contentProductRequiresInstructor", product.requiresInstructor === true);
-  setSelectValue("contentProductShopStatus", product.status || "draft");
+  setSelectValue("contentProductShopStatus", product.shopStatus || product.status || "draft");
   if (currentRecordType() === "blueprint") {
     setInputValue("contentProductLinkRole", "ManufacturedFrom");
     updateProductRelationshipControl("ManufacturedFrom");
@@ -2842,7 +3010,6 @@ function chooseExistingProduct(productId) {
   renderProductBlueprintOptions(product.manufacturingBlueprintId || "");
   renderProductVariantContentLinkRows(product.variantContentLinks || []);
   renderProductUnlockRows(product.accessGrants || []);
-  renderProductInstructorRows(productInstructorAssignments(product));
   updateProductRelationStatus({ productId: product.id });
   renderProductChoiceList(document.getElementById("contentProductSearch")?.value || "", product.id);
   state.isDirty = true;
@@ -2858,7 +3025,8 @@ function chooseNewProduct() {
   setInputValue("contentProductSku", "");
   setSelectValue("contentProductCategoryId", "");
   setSelectValue("contentProductDeliveryType", "Physical");
-  setSelectValue("contentProductPhysicalFulfilment", "none");
+  setInputValue("contentProductPhysicalFulfilment", "none");
+  setCheckboxValue("contentProductHasPhysicalFulfilment", false);
   updateProductRelationshipControl("Represents");
   ["contentProductRequiresShipping", "contentProductInventoryTracked", "contentProductRequiresCalendar",
     "contentProductRequiresSessionTime", "contentProductTracksSeats", "contentProductRequiresLocation",
@@ -2877,7 +3045,6 @@ function chooseNewProduct() {
   renderProductVariantContentLinkRows([]);
   renderProductBlueprintOptions("");
   renderProductUnlockRows([]);
-  renderProductInstructorRows([]);
   updateProductRelationStatus(null);
   renderProductChoiceList(document.getElementById("contentProductSearch")?.value || "");
   state.isDirty = true;
@@ -2887,6 +3054,7 @@ function chooseNewProduct() {
 function openContentProductDrawer() {
   const drawer = document.getElementById("contentProductDrawer");
   if (!drawer) return;
+  if (drawer.parentElement !== document.body) document.body.appendChild(drawer);
   drawer.classList.remove("hidden");
   drawer.setAttribute("aria-hidden", "false");
   updateProductRelationshipControl();
@@ -2899,6 +3067,30 @@ function openContentProductDrawer() {
   updateConnectedProductCostPreview();
   updateProductPhysicalFields();
   document.getElementById("contentProductSearch")?.focus();
+}
+
+export async function openProductDrawerFromAdmin({ productId, entityType, entityId }) {
+  await setupContentBuilder();
+  const record = findRecord(entityType, entityId);
+  if (!record) throw new Error("The Product's connected content record could not be loaded.");
+  populateBuilderFromRecord(record);
+  chooseExistingProduct(productId);
+  state.isDirty = false;
+  openContentProductDrawer();
+}
+
+function orderProductDrawerSections() {
+  const variants = document.getElementById("contentProductVariants")?.closest("details");
+  const fulfilment = document.getElementById("contentProductPhysicalFulfilment")?.closest("details");
+  const manufacturing = document.getElementById("contentProductBlueprintId")?.closest("details");
+  if (!variants || !fulfilment || fulfilment.nextElementSibling === variants) return;
+  variants.before(fulfilment);
+  const fulfilmentNumber = fulfilment.querySelector("summary span");
+  const variantsNumber = variants.querySelector("summary span");
+  const manufacturingNumber = manufacturing?.querySelector("summary span");
+  if (fulfilmentNumber) fulfilmentNumber.textContent = "1";
+  if (variantsNumber) variantsNumber.textContent = "2";
+  if (manufacturingNumber) manufacturingNumber.textContent = "3";
 }
 
 function closeContentProductDrawer() {
@@ -2932,7 +3124,7 @@ function isPhysicalProductConnection() {
     .some((select) => select.value && select.value !== "none");
   return ["Physical", "Hybrid"]
     .includes(document.getElementById("contentProductDeliveryType")?.value || "") ||
-    document.getElementById("contentProductPhysicalFulfilment")?.value !== "none" ||
+    document.getElementById("contentProductHasPhysicalFulfilment")?.checked === true ||
     hasPhysicalVariant;
 }
 
@@ -2942,19 +3134,31 @@ function productDeliveryControlValue(productType, requiresShipping) {
 
 function updateProductPhysicalFields() {
   const physical = isPhysicalProductConnection();
-  const physicalFulfilment =
-    document.getElementById("contentProductPhysicalFulfilment")?.value || "none";
+  const physicalFulfilmentEnabled =
+    document.getElementById("contentProductHasPhysicalFulfilment")?.checked === true;
+  if (!physicalFulfilmentEnabled) {
+    document.querySelectorAll(".product-variant-physical-fulfilment").forEach((select) => {
+      select.value = "none";
+    });
+    setInputValue("contentProductPhysicalFulfilment", "none");
+  }
+  const requiresShipping = physicalFulfilmentEnabled &&
+    [...document.querySelectorAll(".product-variant-physical-fulfilment")]
+      .some((select) => ["shipping", "shipping-or-pickup"].includes(select.value));
   setCheckboxValue(
     "contentProductRequiresShipping",
-    ["shipping", "shipping-or-pickup"].includes(physicalFulfilment),
+    requiresShipping,
   );
-  const tracked = physical && document.getElementById("contentProductInventoryTracked")?.checked === true;
+  const tracked = document.getElementById("contentProductInventoryTracked")?.checked === true;
   document.getElementById("contentProductRequiresShipping")?.closest("label")
     ?.classList.toggle("hidden", !physical);
-  document.getElementById("contentProductInventoryTrackedField")?.classList.toggle("hidden", !physical);
-  document.getElementById("contentProductInventoryHelp")?.classList.toggle("hidden", !physical);
+  document.getElementById("contentProductInventoryTrackedField")?.classList.remove("hidden");
+  document.getElementById("contentProductInventoryHelp")?.classList.remove("hidden");
   document.querySelectorAll(".product-variant-stock-field").forEach((field) => {
     field.classList.toggle("hidden", !tracked);
+  });
+  document.querySelectorAll(".product-variant-physical-fulfilment-field").forEach((field) => {
+    field.classList.toggle("hidden", !physicalFulfilmentEnabled);
   });
   const calendar = document.getElementById("contentProductRequiresCalendar")?.checked === true;
   const seats = document.getElementById("contentProductTracksSeats")?.checked === true;
@@ -2973,7 +3177,9 @@ function updateProductPhysicalFields() {
   document.querySelectorAll(".product-variant-location-field").forEach((field) => {
     field.classList.toggle("hidden", !location);
   });
-  document.getElementById("contentProductInstructorSection")?.classList.toggle("hidden", !instructor);
+  document.querySelectorAll(".product-variant-instructor-field").forEach((field) => {
+    field.classList.toggle("hidden", !instructor);
+  });
   if (!tracked) setInputValue("contentProductStock", "");
 }
 
@@ -3056,91 +3262,17 @@ function addProductVariantContentLinkRow() {
   ]);
 }
 
-function productInstructorAssignmentsFromRows(includeIncomplete = false) {
-  return [...document.querySelectorAll(".content-product-instructor-row")].map((row) => ({
-    productVariantId: row.querySelector(".content-product-instructor-variant")?.value || "",
-    instructor: row.querySelector(".content-product-instructor-name")?.value.trim() || "",
-  })).filter((assignment) => includeIncomplete || assignment.instructor);
-}
-
-function renderProductInstructorRows(assignments = []) {
-  const container = document.getElementById("contentProductInstructorRows");
-  if (!container) return;
-  const variants = currentProductVariants();
-  const savedInstructors = state.options.instructorOptions || [];
-  container.innerHTML = assignments.map((assignment) => {
-    const options = variants.map((variant) => {
-      const selected = variant.variantId === assignment.productVariantId ? " selected" : "";
-      return `<option value="${escapeHTML(variant.variantId)}"${selected}>${escapeHTML(variant.name || variant.variantId)}</option>`;
-    }).join("");
-    const instructorOptions = [...savedInstructors];
-    if (assignment.instructor && !instructorOptions.some((option) => option.name === assignment.instructor)) {
-      instructorOptions.push({ id: assignment.instructor, name: assignment.instructor, email: "" });
-    }
-    const instructorSelectOptions = instructorOptions.map((option) => {
-      const selected = option.name === assignment.instructor ? " selected" : "";
-      const label = option.email ? `${option.name} (${option.email})` : option.name;
-      return `<option value="${escapeHTML(option.name)}"${selected}>${escapeHTML(label)}</option>`;
-    }).join("");
-    return `
-      <div class="content-product-instructor-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_1.5fr_auto]">
-        <select class="content-product-instructor-variant rounded bg-gray-800 px-2 py-2 text-white">
-          <option value="">All Product variants</option>${options}
-        </select>
-        <select class="content-product-instructor-name rounded bg-gray-800 px-3 py-2 text-white">
-          <option value="">Choose instructor</option>
-          ${instructorSelectOptions || "<option value=\"\" disabled>No instructors saved</option>"}
-        </select>
-        <button type="button" class="remove-content-product-instructor rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
-      </div>`;
-  }).join("") || "<p class=\"text-xs text-gray-400\">No instructor assigned.</p>";
-  setInputValue("contentProductInstructorAssignments", JSON.stringify(assignments));
-}
-
-function productInstructorAssignments(product = {}) {
-  const variants = Array.isArray(product.variants) ? product.variants : [];
-  const defaultInstructor = product.instructor || "";
-  const assignments = defaultInstructor
-    ? [{ productVariantId: "", instructor: defaultInstructor }]
-    : [];
-  variants.forEach((variant) => {
-    if (variant.instructor && variant.instructor !== defaultInstructor) {
-      assignments.push({ productVariantId: variant.variantId || variant.id || "", instructor: variant.instructor });
-    }
-  });
-  return assignments;
-}
-
-function applyProductInstructorAssignments() {
-  const assignments = productInstructorAssignmentsFromRows();
-  const defaultInstructor = assignments.find((assignment) => !assignment.productVariantId)?.instructor || "";
-  const overrides = new Map(assignments
-    .filter((assignment) => assignment.productVariantId)
-    .map((assignment) => [assignment.productVariantId, assignment.instructor]));
-  const variants = currentProductVariants().map((variant) => ({
-    ...variant,
-    instructor: overrides.get(variant.variantId) || defaultInstructor,
-  }));
-  setInputValue("contentProductVariants", serializeProductVariants(variants));
-  setInputValue("contentProductInstructorAssignments", JSON.stringify(assignments));
-  return defaultInstructor;
-}
-
-function addProductInstructorRow() {
-  renderProductInstructorRows([
-    ...productInstructorAssignmentsFromRows(true),
-    { productVariantId: "", instructor: "" },
-  ]);
-}
-
 function productUnlocksFromRows() {
   return [...document.querySelectorAll(".content-product-unlock-row")].map((row) => ({
     productVariantId: row.querySelector(".content-product-unlock-variant")?.value || "",
     accessEntityType: row.querySelector(".content-product-unlock-type")?.value || "Plan",
     accessEntityId: row.querySelector(".content-product-unlock-target")?.value || "",
     grantTiming: "on-payment-confirmed",
-    durationType: "permanent",
-    durationValue: null,
+    durationType: row.querySelector(".content-product-unlock-duration-type")?.value || "permanent",
+    durationValue: optionalNumberFromElement(
+      row.querySelector(".content-product-unlock-duration-value"),
+    ),
+    endsAt: row.querySelector(".content-product-unlock-ends-at")?.value || "",
     revocable: true,
     status: "active",
   })).filter((grant) => grant.accessEntityId);
@@ -3170,7 +3302,7 @@ function renderProductUnlockRows(grants = []) {
     }).join("");
     return `
       <div class="content-product-unlock-row grid gap-2 rounded border border-gray-700 p-2
-        md:grid-cols-[12rem_10rem_1fr_auto]">
+        md:grid-cols-2 xl:grid-cols-[12rem_9rem_1fr_9rem_7rem_13rem_auto]">
         <select class="content-product-unlock-variant rounded bg-gray-800 px-2 py-2 text-white">
           <option value="">All Product variants</option>
           ${variantOptions}
@@ -3183,6 +3315,16 @@ function renderProductUnlockRows(grants = []) {
           <option value="">Choose content to unlock</option>
           ${targetOptions}
         </select>
+        <select class="content-product-unlock-duration-type rounded bg-gray-800 px-2 py-2 text-white">
+          ${compactSelectOptions(["permanent", "days", "weeks", "months", "years"], grant.durationType || "permanent")}
+        </select>
+        <input class="content-product-unlock-duration-value rounded bg-gray-800 px-2 py-2 text-white"
+          type="number" min="1" step="1" value="${escapeHTML(grant.durationValue ?? "")}"
+          placeholder="Duration">
+        <label class="text-xs text-gray-400">Or expires on
+          <input class="content-product-unlock-ends-at mt-1 w-full rounded bg-gray-800 px-2 py-2 text-white"
+            type="datetime-local" value="${escapeHTML(grant.endsAt || "")}">
+        </label>
         <button type="button"
           class="remove-content-product-unlock rounded border border-red-700 px-3 py-1 text-red-200">
           Remove
@@ -3195,7 +3337,14 @@ function renderProductUnlockRows(grants = []) {
 function addProductUnlockRow() {
   renderProductUnlockRows([
     ...productUnlocksFromRows(),
-    { productVariantId: "", accessEntityType: "Plan", accessEntityId: "" },
+    {
+      productVariantId: "",
+      accessEntityType: "Plan",
+      accessEntityId: "",
+      durationType: "permanent",
+      durationValue: null,
+      endsAt: "",
+    },
   ]);
 }
 
@@ -3235,24 +3384,124 @@ function renderCurrentAssets(record) {
   `).join("");
 }
 
-function summaryCard(label, value, tone = "default") {
-  const toneClass = tone === "warning"
-    ? "border-yellow-700 bg-yellow-900/20 text-yellow-100"
-    : tone === "ok"
-      ? "border-green-800 bg-green-900/20 text-green-100"
-      : "border-gray-700 bg-gray-900/60 text-gray-200";
-  return `
-    <div class="rounded border ${toneClass} p-3">
-      <div class="text-xs uppercase tracking-wide text-gray-400">${escapeHTML(label)}</div>
-      <div class="mt-1 break-words font-medium">${escapeHTML(value || "-")}</div>
-    </div>
-  `;
-}
-
 function moneyLabel(value) {
   if (value === "" || value === null || value === undefined) return "No price set";
   const amount = Number(value);
   return Number.isFinite(amount) ? `$${amount.toFixed(2)}` : "No price set";
+}
+
+function reviewFieldLabel(key) {
+  return String(key || "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function reviewRecord(id) {
+  const value = String(id || "").trim();
+  if (!value) return null;
+  for (const collection of ["items", "blueprints", "plans", "assets"]) {
+    const record = (state.records[collection] || []).find((candidate) => candidate.id === value);
+    if (record) return { ...record, collection };
+  }
+  return null;
+}
+
+function reviewValue(value) {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) return value.map(reviewValue).filter(Boolean).join(", ");
+  if (typeof value === "object") {
+    const linkedId = value.assetId || value.itemId || value.blueprintId || value.planId || value.id;
+    if (linkedId) {
+      const linked = reviewRecord(linkedId);
+      return linked ? `${linked.name || linked.title || linked.id} (${linked.id})` : String(linkedId);
+    }
+    return Object.entries(value)
+      .map(([key, entry]) => `${reviewFieldLabel(key)}: ${reviewValue(entry)}`)
+      .filter((entry) => !entry.endsWith(": "))
+      .join("; ");
+  }
+  const linked = reviewRecord(value);
+  return linked ? `${linked.name || linked.title || linked.id} (${linked.id})` : String(value);
+}
+
+function reviewLinkedRecords(value, collection) {
+  const ids = [];
+  const visit = (entry) => {
+    if (Array.isArray(entry)) {
+      entry.forEach(visit);
+      return;
+    }
+    if (entry && typeof entry === "object") {
+      Object.values(entry).forEach(visit);
+      return;
+    }
+    const record = reviewRecord(entry);
+    if (record?.collection === collection) ids.push(record.id);
+  };
+  visit(value);
+  return uniqueValues(ids).map((id) => reviewRecord(id));
+}
+
+function reviewConnectionChips(label, records) {
+  if (!records.length) return "";
+  return `<div>
+    <div class="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">${escapeHTML(label)}</div>
+    <div class="flex flex-wrap gap-2">${records.map((record) => `
+      <span class="rounded-full border border-[#407471]/70 bg-[#153b38]/40 px-3 py-1 text-xs text-[#bce7e4]">
+        ${escapeHTML(record.name || record.title || record.id)}
+      </span>`).join("")}</div>
+  </div>`;
+}
+
+function renderDetailedVariantReview(variants) {
+  const container = document.getElementById("contentVariantReviewRows");
+  if (!container) return;
+  const definitions = templateDefinitions(currentRecordType(), document.getElementById("contentType")?.value);
+  container.innerHTML = variants.map((variant, index) => {
+    const definition = definitions.find((candidate) => candidate.id === variant.templateVariantId);
+    const values = variant.templateFieldValues || {};
+    const fields = Object.entries(values)
+      .map(([key, value]) => ({ key, value: reviewValue(value) }))
+      .filter((field) => field.value);
+    const recipeItems = (variant.linkedItemComponents || []).map((component) => {
+      const item = reviewRecord(component.itemId);
+      const itemVariant = component.itemVariantId ? ` / ${component.itemVariantId}` : "";
+      return `<li>${escapeHTML(`${component.quantity} × ${item?.name || component.itemId}${itemVariant}`)}</li>`;
+    }).join("");
+    const linkedItems = reviewLinkedRecords(values, "items");
+    const linkedBlueprints = reviewLinkedRecords(values, "blueprints");
+    const linkedPlans = reviewLinkedRecords(values, "plans");
+    const linkedAssets = reviewLinkedRecords(values, "assets");
+    return `<details class="overflow-hidden rounded border border-gray-700 bg-gray-900/60" ${index === 0 ? "open" : ""}>
+      <summary class="cursor-pointer bg-gray-800/80 p-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 class="font-semibold text-white">${escapeHTML(variant.name || `Variant ${index + 1}`)}</h4>
+            <p class="mt-1 text-xs text-gray-400">${escapeHTML(definition ? templateOptionLabel(definition) : "No template selected")}</p>
+          </div>
+          <span class="rounded-full bg-gray-950 px-3 py-1 text-xs text-gray-300">${escapeHTML(variant.status || "draft")}</span>
+        </div>
+      </summary>
+      <div class="space-y-5 p-4">
+        ${fields.length ? `<dl class="grid gap-x-6 gap-y-4 md:grid-cols-2">${fields.map((field) => `
+          <div class="border-b border-gray-800 pb-3">
+            <dt class="text-xs font-medium uppercase tracking-wide text-gray-500">${escapeHTML(reviewFieldLabel(field.key))}</dt>
+            <dd class="mt-1 whitespace-pre-wrap text-sm text-gray-100">${escapeHTML(field.value)}</dd>
+          </div>`).join("")}</dl>` : `<p class="text-sm text-gray-400">No template field content entered.</p>`}
+        ${recipeItems ? `<div><div class="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">Recipe Items</div><ul class="space-y-1 text-sm text-gray-200">${recipeItems}</ul></div>` : ""}
+        ${reviewConnectionChips("Connected Items", linkedItems)}
+        ${reviewConnectionChips("Connected Blueprints", linkedBlueprints)}
+        ${reviewConnectionChips("Connected Plans", linkedPlans)}
+        ${reviewConnectionChips("Connected Assets", linkedAssets)}
+        <div class="grid gap-3 border-t border-gray-800 pt-4 text-xs text-gray-400 sm:grid-cols-2">
+          <div><span class="text-gray-500">Owner:</span> ${escapeHTML(variant.owner || "Not entered")}</div>
+          <div><span class="text-gray-500">References:</span> ${escapeHTML((variant.references || []).join(", ") || "None")}</div>
+        </div>
+      </div>
+    </details>`;
+  }).join("");
 }
 
 function renderBuilderSummaries(record = state.editingRecord) {
@@ -3262,16 +3511,12 @@ function renderBuilderSummaries(record = state.editingRecord) {
 
   const productRelation = productRelationPayload() || {};
   const isShopProduct = isShopProductSelected();
-  const productId = productRelation.productId || record?.productId || record?.itemProductId || "";
   const price = productRelation.effectiveShopPrice ??
     record?.productEffectiveShopPrice ??
     record?.productPrice ??
     "";
   const variants = productRelation.variants || record?.variants || [];
   const recordType = currentRecordType();
-  const linkedItemCount = hiddenRelationshipIds("contentLinkedItemIds").length;
-  const linkedBlueprintCount = hiddenRelationshipIds("contentLinkedBlueprintIds").length;
-  const linkedPlanCount = hiddenRelationshipIds("contentLinkedPlanIds").length;
   const entityVariants = entityVariantsFromBuilder();
   const selectedAssetIds = uniqueValues([
     ...entityVariants.flatMap((variant) => templateAssetLinksForVariant(variant)).map((link) => link.assetId),
@@ -3284,80 +3529,116 @@ function renderBuilderSummaries(record = state.editingRecord) {
   };
   const selectedAssetLabels = selectedAssetIds.map(assetLabel);
   const assetSummary = selectedAssetLabels.join(", ") || "No linked assets";
-  const variantAssetIds = new Set();
-  const variantAssetSummaries = entityVariants.map((variant) => {
-    const assetIds = uniqueValues(templateAssetLinksForVariant(variant).map((link) => link.assetId));
-    assetIds.forEach((assetId) => variantAssetIds.add(assetId));
-    return assetIds.length
-      ? `${variant.name}: ${assetIds.map(assetLabel).join(", ")}`
-      : "";
-  }).filter(Boolean);
-  const unassignedAssetIds = selectedAssetIds.filter((assetId) => !variantAssetIds.has(assetId));
-  const reviewAssetSummary = [
-    ...variantAssetSummaries,
-    ...(unassignedAssetIds.length
-      ? [`Other linked assets: ${unassignedAssetIds.map(assetLabel).join(", ")}`]
-      : []),
-  ].join(" | ") || "No linked assets";
-  const entityVariantSummary = entityVariants.length
-    ? entityVariants.map((variant) => variant.name).join(", ")
-    : "Primary version only";
   const libraryVisible = document.getElementById("contentWebsiteVisible")?.checked === true;
   const accessGrants = productRelation.accessGrants || record?.productAccessGrants || [];
-  const estimatedCost = recordType === "blueprint" ? updateBlueprintEstimatedCost() : null;
-  const itemCostSummary = recordType === "item"
-    ? entityVariants
-      .filter((variant) => variant.unitCost !== null && variant.unitCost !== undefined)
-      .map((variant) => entityVariants.length > 1
-        ? `${variant.name}: $${Number(variant.unitCost).toFixed(2)}`
-        : `$${Number(variant.unitCost).toFixed(2)}`)
-      .join(", ")
-    : "";
 
   if (relationships) {
-    relationships.innerHTML = [
-      summaryCard(
-        "Shop product",
-        isShopProduct ? productId || "New product" : "Not connected",
-        isShopProduct ? "ok" : "default",
-      ),
-      summaryCard("Library", libraryVisible ? "Add to library" : "Not in library", libraryVisible ? "ok" : "default"),
-      summaryCard("Reusable Items", `${linkedItemCount} selected`, linkedItemCount ? "ok" : "default"),
-      summaryCard("Blueprint components", `${linkedBlueprintCount} selected`, linkedBlueprintCount ? "ok" : "default"),
-      summaryCard("Related Plans", `${linkedPlanCount} linked`, linkedPlanCount ? "ok" : "default"),
-      summaryCard("Linked assets", assetSummary, selectedAssetIds.length ? "ok" : "warning"),
-      summaryCard("Product unlocks", accessGrants.length ? `${accessGrants.length} targets` : "No unlocks"),
-    ].join("");
+    const name = document.getElementById("contentName")?.value || record?.name || "Untitled content";
+    const shortDescription = document.getElementById("contentShortDescription")?.value ||
+      record?.shortDescription || "No short description entered.";
+    const manufacturingBlueprintId = productRelation.manufacturingBlueprintId ||
+      record?.manufacturingBlueprintId || "";
+    const manufacturingBlueprint = (state.records.blueprints || [])
+      .find((candidate) => candidate.id === manufacturingBlueprintId);
+    const isManufacturingBlueprint = recordType === "blueprint" && (
+      productRelation.linkRole === "ManufacturedFrom" ||
+      entityVariants.some((variant) => variant.manufacturingRecipe === true) ||
+      isProductManufactureBlueprint()
+    );
+    const productVariantPreview = variants.length
+      ? variants.map((variant, index) => {
+        const variantName = variant.name || variant.variantName || `Variant ${index + 1}`;
+        const variantPrice = variant.overridePrice ?? variant.price ?? price;
+        const status = variant.status || productRelation.shopStatus || "draft";
+        return `<div class="rounded border border-gray-700 bg-gray-950/60 p-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <strong class="text-white">${escapeHTML(variantName)}</strong>
+            <span class="rounded bg-gray-800 px-2 py-1 text-xs text-gray-300">${escapeHTML(status)}</span>
+          </div>
+          <div class="mt-2 text-sm text-[#9edbd7]">${escapeHTML(moneyLabel(variantPrice))}</div>
+          <div class="mt-1 text-xs text-gray-400">${escapeHTML(variant.sku || "SKU will be generated")}</div>
+        </div>`;
+      }).join("")
+      : `<div class="rounded border border-gray-700 bg-gray-950/60 p-3 text-sm text-gray-400">Overall Product connection; no Product variants added.</div>`;
+    const libraryVariants = entityVariants.filter((variant) => variant.libraryVisible === true);
+    const manufacturingLabel = manufacturingBlueprint?.name || manufacturingBlueprintId ||
+      (isManufacturingBlueprint ? `${name} is the manufacturing Blueprint` : "Not connected");
+
+    relationships.innerHTML = `
+      <article class="rounded border border-gray-700 bg-gray-900/60 p-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div class="text-xs uppercase tracking-wide text-gray-400">Shop preview</div>
+            <h4 class="mt-1 text-lg font-semibold text-white">${escapeHTML(isShopProduct ? name : "Not connected to a Shop Product")}</h4>
+            ${isShopProduct ? `<p class="mt-1 text-sm text-gray-300">${escapeHTML(shortDescription)}</p>` : ""}
+          </div>
+          <button type="button" data-connection-edit="product" class="rounded bg-[#407471] px-3 py-2 text-sm text-white hover:bg-[#305a56]">
+            ${isShopProduct ? "Edit Product" : "Add Product"}
+          </button>
+        </div>
+        ${isShopProduct ? `<div class="mt-3 grid gap-3 md:grid-cols-2">${productVariantPreview}</div>` : ""}
+      </article>
+      <article class="rounded border border-gray-700 bg-gray-900/60 p-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div class="text-xs uppercase tracking-wide text-gray-400">Library preview</div>
+            <h4 class="mt-1 text-lg font-semibold text-white">${escapeHTML(libraryVisible ? name : "Not included in the Library")}</h4>
+            ${libraryVisible ? `<p class="mt-1 text-sm text-gray-300">${escapeHTML(shortDescription)}</p>
+              <p class="mt-2 text-xs text-[#9edbd7]">${escapeHTML(libraryVariants.map((variant) => variant.name).join(", ") || "Overall content")}</p>` : ""}
+          </div>
+          <button type="button" data-connection-edit="build" class="rounded border border-[#407471] px-3 py-2 text-sm text-[#9edbd7] hover:bg-[#153b38]">Edit content</button>
+        </div>
+      </article>
+      <article class="rounded border border-gray-700 bg-gray-900/60 p-4">
+        <div class="text-xs uppercase tracking-wide text-gray-400">Manufacturing connection</div>
+        <div class="mt-1 font-medium text-white">${escapeHTML(manufacturingLabel)}</div>
+        <p class="mt-2 text-xs text-gray-400">${isManufacturingBlueprint
+    ? "This Blueprint can be selected as the Product recipe."
+    : manufacturingBlueprintId
+      ? "This Product uses the linked Blueprint for its recipe and estimated cost."
+      : "No manufacturing Blueprint is connected to this Product."}</p>
+      </article>
+      <article class="rounded border border-gray-700 bg-gray-900/60 p-4">
+        <div class="text-xs uppercase tracking-wide text-gray-400">Assets and access</div>
+        <div class="mt-2 text-sm text-white">${escapeHTML(assetSummary)}</div>
+        <div class="mt-2 text-xs text-gray-400">${escapeHTML(accessGrants.length ? `${accessGrants.length} unlock target${accessGrants.length === 1 ? "" : "s"}` : "No purchase unlocks")}</div>
+      </article>`;
   }
 
   if (review) {
-    review.innerHTML = [
-      summaryCard("Entity", recordType),
-      summaryCard("Name", document.getElementById("contentName")?.value || record?.name || ""),
-      summaryCard("Type", document.getElementById("contentType")?.value || record?.type || ""),
-      summaryCard("Template", selectedTemplate()?.templateName || selectedTemplate()?.name || "Not selected"),
-      summaryCard("Entity variants", entityVariantSummary),
-      summaryCard("Status", document.getElementById("contentStatus")?.value || record?.status || "draft"),
-      summaryCard("Tags", selectedTagsFromControls().join(", ") || "No tags"),
-      summaryCard("Description", document.getElementById("contentShortDescription")?.value || "Not entered"),
-      ...(estimatedCost === null ? [] : [summaryCard("Estimated unit cost", `$${estimatedCost.toFixed(2)}`)]),
-      ...(recordType === "item"
-        ? [summaryCard("Estimated unit cost", itemCostSummary || "Not entered")]
-        : []),
-      summaryCard("Library", libraryVisible ? "Included" : "Not included", libraryVisible ? "ok" : "default"),
-      summaryCard(
-        "Product",
-        isShopProduct
-          ? `${productId || "New product"} / ${moneyLabel(price)} / ${variants.length} variants`
-          : "Not connected",
-      ),
-      summaryCard("Product unlocks", accessGrants.length ? `${accessGrants.length} targets` : "No unlocks"),
-      summaryCard(
-        "Connected content",
-        `${linkedItemCount} Items / ${linkedBlueprintCount} Blueprints / ${linkedPlanCount} Plans`,
-      ),
-      summaryCard("Assets", reviewAssetSummary),
-    ].join("");
+    const name = document.getElementById("contentName")?.value || record?.name || "Untitled content";
+    const type = document.getElementById("contentType")?.value || record?.type || "Not selected";
+    const status = document.getElementById("contentStatus")?.value || record?.status || "draft";
+    const tags = selectedTagsFromControls();
+    const shortDescription = document.getElementById("contentShortDescription")?.value || "";
+    const longDescription = document.getElementById("contentLongDescription")?.value || "";
+    review.innerHTML = `
+      <article class="overflow-hidden rounded border border-gray-700 bg-gray-900/60">
+        <header class="border-b border-gray-700 bg-gray-800/70 p-5">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div class="text-xs font-medium uppercase tracking-wide text-[#9edbd7]">${escapeHTML(recordType)}</div>
+              <h3 class="mt-1 text-2xl font-semibold text-white">${escapeHTML(name)}</h3>
+              <div class="mt-2 text-sm text-gray-300">${escapeHTML(type)}</div>
+            </div>
+            <span class="rounded-full border border-gray-600 bg-gray-950 px-4 py-2 text-sm font-medium text-white">${escapeHTML(status)}</span>
+          </div>
+          <div class="mt-4 flex flex-wrap gap-2">${tags.length
+    ? tags.map((tag) => `<span class="rounded-full bg-[#153b38] px-3 py-1 text-xs text-[#bce7e4]">${escapeHTML(tag)}</span>`).join("")
+    : `<span class="text-xs text-gray-500">No tags selected</span>`}</div>
+        </header>
+        <div class="grid gap-6 p-5 lg:grid-cols-2">
+          <section>
+            <h4 class="text-xs font-medium uppercase tracking-wide text-gray-500">Short description</h4>
+            <p class="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-100">${escapeHTML(shortDescription || "Not entered")}</p>
+          </section>
+          <section>
+            <h4 class="text-xs font-medium uppercase tracking-wide text-gray-500">Long description</h4>
+            <p class="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-100">${escapeHTML(longDescription || "Not entered")}</p>
+          </section>
+        </div>
+      </article>`;
+    renderDetailedVariantReview(entityVariants);
   }
 }
 
@@ -3529,9 +3810,15 @@ function populateBuilderFromRecord(record) {
       record.productType,
       record.productRequiresShipping,
     ));
-    setSelectValue(
+    setInputValue(
       "contentProductPhysicalFulfilment",
       record.productPhysicalFulfilment || (record.productRequiresShipping ? "shipping" : "none"),
+    );
+    setCheckboxValue(
+      "contentProductHasPhysicalFulfilment",
+      record.productPhysicalFulfilment && record.productPhysicalFulfilment !== "none" ||
+        record.productRequiresShipping === true ||
+        (record.variants || []).some((variant) => variant.physicalFulfilment && variant.physicalFulfilment !== "none"),
     );
     setCheckboxValue("contentProductRequiresShipping", record.productRequiresShipping === true);
     setCheckboxValue("contentProductInventoryTracked", record.productInventoryTracked === true);
@@ -3555,10 +3842,6 @@ function populateBuilderFromRecord(record) {
     renderProductBlueprintOptions(record.manufacturingBlueprintId || "");
     renderProductVariantContentLinkRows(record.productVariantContentLinks || []);
     renderProductUnlockRows(record.productAccessGrants || []);
-    renderProductInstructorRows(productInstructorAssignments({
-      instructor: record.productInstructor,
-      variants: record.variants || [],
-    }));
     updateProductRelationStatus(record);
     renderCurrentAssets(record);
   } else {
@@ -3579,9 +3862,15 @@ function populateBuilderFromRecord(record) {
       record.productType,
       record.productRequiresShipping,
     ));
-    setSelectValue(
+    setInputValue(
       "contentProductPhysicalFulfilment",
       record.productPhysicalFulfilment || (record.productRequiresShipping ? "shipping" : "none"),
+    );
+    setCheckboxValue(
+      "contentProductHasPhysicalFulfilment",
+      record.productPhysicalFulfilment && record.productPhysicalFulfilment !== "none" ||
+        record.productRequiresShipping === true ||
+        (record.variants || []).some((variant) => variant.physicalFulfilment && variant.physicalFulfilment !== "none"),
     );
     setCheckboxValue("contentProductRequiresShipping", record.productRequiresShipping === true);
     setCheckboxValue("contentProductInventoryTracked", record.productInventoryTracked === true);
@@ -3602,10 +3891,6 @@ function populateBuilderFromRecord(record) {
     renderProductBlueprintOptions(record.manufacturingBlueprintId || "");
     renderProductVariantContentLinkRows(record.productVariantContentLinks || []);
     renderProductUnlockRows(record.productAccessGrants || []);
-    renderProductInstructorRows(productInstructorAssignments({
-      instructor: record.productInstructor,
-      variants: record.variants || [],
-    }));
     updateProductRelationStatus(record);
   }
 
@@ -3617,13 +3902,15 @@ function populateBuilderFromRecord(record) {
   state.isDirty = false;
   updateEditBanner();
   renderBuilderSummaries(record);
-  showBuilderStep(2);
+  showBuilderStep(3);
   renderSimilarList();
 }
 
 function applyBuilderRoute() {
   document.getElementById("contentBuilderForm")?.classList.remove("hidden");
-  document.getElementById("contentBuilderConfirmation")?.classList.add("hidden");
+  const confirmation = document.getElementById("contentBuilderConfirmation");
+  confirmation?.classList.add("hidden");
+  confirmation?.classList.remove("flex");
   const params = new URLSearchParams(window.location.search);
   if (params.get("new") === "1") {
     populateNewBuilderFromRoute(params);
@@ -3642,6 +3929,12 @@ function applyBuilderRoute() {
     return;
   }
   populateBuilderFromRecord(record);
+  if (params.get("productDrawer") === "1") {
+    const productId = params.get("productId") || record.productId || "";
+    if (productId) chooseExistingProduct(productId);
+    openContentProductDrawer();
+    state.isDirty = false;
+  }
 }
 
 function updateBuilderFilterButtons(recordType) {
@@ -4668,7 +4961,7 @@ function showDuplicateWarning(similar, payload) {
     <div class="font-semibold">Similar records found. Check these before saving:</div>
     <div class="mt-2 space-y-2">${similar.map(renderRecordPill).join("")}</div>
   `;
-  showBuilderStep(5);
+  showBuilderStep(2);
 }
 
 async function loadData() {
@@ -4724,44 +5017,19 @@ function confirmationCopy(action) {
 }
 
 function showSaveConfirmation({ action, payload, recordId, record }) {
-  const form = document.getElementById("contentBuilderForm");
   const confirmation = document.getElementById("contentBuilderConfirmation");
   if (!confirmation) return;
 
   const copy = confirmationCopy(action);
   const name = record?.name || payload.name || recordId;
-  const productId = record?.productId || record?.itemProductId ||
-    payload.productRelation?.productId || payload.productRelation?.existingProductId || payload.productId || "";
-  const marketplaceVisible = Boolean(
-    productId && (
-      record?.shopVisible === true ||
-      record?.productVisible === true ||
-      record?.visible === true ||
-      payload.shopVisible === true ||
-      payload.productRelation?.visible === true
-    ),
-  );
-  const libraryVisible = Boolean(
-    record?.websiteVisible === true ||
-    payload.websiteVisible === true,
-  );
-
-  form?.classList.add("hidden");
   confirmation.classList.remove("hidden");
+  confirmation.classList.add("flex");
   document.getElementById("contentBuilderConfirmationTitle").textContent = copy.title;
   document.getElementById("contentBuilderConfirmationMessage").textContent = copy.message;
   document.getElementById("contentBuilderConfirmationMeta").textContent =
     [name, recordId].filter(Boolean).join(" • ");
 
-  const marketplaceLink = document.getElementById("contentBuilderMarketplaceLink");
-  marketplaceLink?.classList.toggle("hidden", !marketplaceVisible);
-  if (marketplaceLink) marketplaceLink.href = `/shop/${encodeURIComponent(productId)}`;
-
-  const libraryLink = document.getElementById("contentBuilderLibraryLink");
-  libraryLink?.classList.toggle("hidden", !libraryVisible);
-  if (libraryLink) libraryLink.href = "/anato-me";
-
-  confirmation.scrollIntoView({ behavior: "smooth", block: "start" });
+  document.getElementById("contentBuilderAddConnectionsBtn")?.focus();
 }
 
 async function savePayload(payload, action = "save") {
@@ -4799,6 +5067,14 @@ async function savePayload(payload, action = "save") {
     state.pendingAction = "save";
     await loadData();
     const savedRecord = findRecord(recordType, recordId);
+    if (savedRecord) {
+      populateBuilderFromRecord(savedRecord);
+      history.replaceState(
+        {},
+        "",
+        `/admin/content/builder?type=${encodeURIComponent(recordType)}&id=${encodeURIComponent(recordId)}`,
+      );
+    }
     showSaveConfirmation({ action, payload, recordId, record: savedRecord });
   } catch (err) {
     console.error("Failed to save content record:", err);
@@ -4865,17 +5141,34 @@ async function buildAndSavePayload(confirmDuplicate = false, action = "save") {
   }
 }
 
-async function saveVariantsFromBuild() {
+async function saveProductDetailsFromDrawer() {
+  const button = document.getElementById("applyContentProductBtn");
+  const returnStep = state.currentStep;
+  if (button?.dataset.saving === "true") return;
+  if (button) {
+    button.dataset.saving = "true";
+    button.disabled = true;
+    button.textContent = "Saving product details...";
+  }
   try {
     const payload = await formPayload(false);
-    payload.status = state.editingRecord?.status || "draft";
-    if (!state.editingRecord) {
-      payload.createsProduct = false;
-      payload.isShopProduct = false;
-      payload.productRelation = null;
+    if (!payload.productRelation) throw new Error("Select or create a Product first.");
+    const productVariants = payload.productRelation.variants || [];
+    if (payload.productRelation.requiresSessionTime === true) {
+      const incomplete = productVariants.find((variant) => !variant.eventStartAt || !variant.eventEndAt);
+      if (incomplete) {
+        throw new Error(`Enter the session start and end time for ${incomplete.name || "each Product variant"}.`);
+      }
     }
-    payload.shopVisible = false;
-    payload.websiteVisible = false;
+    if (payload.productRelation.requiresLocation === true) {
+      const incomplete = productVariants.find((variant) => !variant.eventLocation);
+      if (incomplete) {
+        throw new Error(`Enter the location or address for ${incomplete.name || "each Product variant"}.`);
+      }
+    }
+    payload.status = state.editingRecord?.status || payload.status || "draft";
+    payload.shopVisible = payload.productRelation.visible === true;
+    const savedProductId = payload.productRelation.productId || payload.productRelation.existingProductId || "";
 
     if (state.editingRecord) {
       await updateContentControlRecord({
@@ -4887,23 +5180,34 @@ async function saveVariantsFromBuild() {
       const response = await createContentBuilderRecord(payload);
       if (response.data?.duplicateWarning) {
         showDuplicateWarning(response.data.similar || [], payload);
-        showToast("Similar record found. Edit it instead or confirm the new record first.", "error");
-        return false;
+        throw new Error("Review the similar record before creating this Product.");
       }
       const recordId = response.data?.id;
-      if (!recordId) throw new Error("The variants saved, but the new record ID was not returned.");
+      if (!recordId) throw new Error("The Product saved, but the content ID was not returned.");
       state.editingRecord = { id: recordId, recordType: payload.recordType };
-      history.replaceState({}, "", `/admin/content/builder?type=${encodeURIComponent(payload.recordType)}&id=${encodeURIComponent(recordId)}`);
+      history.replaceState({}, "", `/admin/content/builder?type=${encodeURIComponent(payload.recordType)}` +
+        `&id=${encodeURIComponent(recordId)}`);
     }
-
     state.isDirty = false;
+    closeContentProductDrawer();
     await loadData();
-    showToast("Variants saved automatically.", "success");
-    return true;
-  } catch (err) {
-    console.error("Failed to save content variants:", err);
-    showToast(err.message || "Failed to save variants.", "error");
-    return false;
+    if (savedProductId && (state.records.products || []).some((product) => product.id === savedProductId)) {
+      chooseExistingProduct(savedProductId);
+    }
+    state.isDirty = false;
+    showBuilderStep(returnStep);
+    renderBuilderSummaries(state.editingRecord);
+    showToast("Product details saved.", "success");
+    window.dispatchEvent(new CustomEvent("admin-product-saved"));
+  } catch (error) {
+    console.error("Failed to save Product details:", error);
+    showToast(error.message || "Failed to save Product details.", "error");
+  } finally {
+    if (button) {
+      button.dataset.saving = "false";
+      button.disabled = false;
+      button.textContent = "Save product details";
+    }
   }
 }
 
@@ -4965,6 +5269,7 @@ export async function setupContentBuilder() {
   const section = document.getElementById("adminContentBuilderSection");
   if (!section || section.dataset.initialized === "true") return;
   section.dataset.initialized = "true";
+  orderProductDrawerSections();
 
   setupBuilderStepControls();
   document.getElementById("contentRecordType")?.addEventListener("change", () => {
@@ -5127,7 +5432,12 @@ export async function setupContentBuilder() {
       ".variant-add-to-shop, .variant-add-to-library, .variant-use-as-manufacturing",
     )) return;
     const variants = entityVariantsFromBuilder();
-    setCheckboxValue("contentIsShopProduct", variants.some((variant) => variant.shopEnabled));
+    const directProductSelected =
+      document.getElementById("contentIsShopProduct")?.checked === true;
+    setCheckboxValue(
+      "contentIsShopProduct",
+      directProductSelected || variants.some((variant) => variant.shopEnabled),
+    );
     setCheckboxValue("contentWebsiteVisible", variants.some((variant) => variant.libraryVisible));
     updateProductRelationshipControl();
     state.isDirty = true;
@@ -5137,10 +5447,6 @@ export async function setupContentBuilder() {
   document.getElementById("openVariantShopProductBtn")?.addEventListener("click", () => {
     const variants = entityVariantsFromBuilder();
     const manufacturing = variants.some((variant) => variant.manufacturingRecipe);
-    if (!variants.some((variant) => variant.shopEnabled) && !manufacturing) {
-      showToast("Select a Shop or manufacturing connection on at least one variant.", "error");
-      return;
-    }
     setCheckboxValue("contentIsShopProduct", true);
     if (manufacturing) updateProductRelationshipControl("ManufacturedFrom");
     openContentProductDrawer();
@@ -5155,12 +5461,26 @@ export async function setupContentBuilder() {
     state.isDirty = true;
     showToast("Library variants selected. They will be saved with this entity.", "success");
   });
+  document.getElementById("contentRelationshipSummary")?.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-connection-edit]");
+    if (!button) return;
+    if (button.dataset.connectionEdit === "product") {
+      setCheckboxValue("contentIsShopProduct", true);
+      openContentProductDrawer();
+      return;
+    }
+    if (button.dataset.connectionEdit === "build") {
+      await navigateBuilderStep(2);
+      document.getElementById("contentEntityVariantRows")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
   document.getElementById("contentProductPrice")?.addEventListener("input", updateConnectedProductCostPreview);
   document.getElementById("contentProductDeliveryType")?.addEventListener("change", () => {
     updateProductPhysicalFields();
   });
-  document.getElementById("contentProductPhysicalFulfilment")?.addEventListener("change", () => {
+  document.getElementById("contentProductHasPhysicalFulfilment")?.addEventListener("change", () => {
     updateProductPhysicalFields();
+    syncSelectedProductVariantRows();
     state.isDirty = true;
   });
   document.getElementById("contentProductInventoryTracked")?.addEventListener(
@@ -5208,7 +5528,46 @@ export async function setupContentBuilder() {
   });
   document.getElementById("contentProductVariants")?.addEventListener("change", () => {
     renderProductVariantContentLinkRows(productVariantContentLinksFromRows(true));
-    renderProductInstructorRows(productInstructorAssignmentsFromRows(true));
+  });
+  document.getElementById("addContentProductVariantBtn")?.addEventListener(
+    "click",
+    addIndependentProductVariant,
+  );
+  document.getElementById("contentProductVariantRows")?.addEventListener("click", (event) => {
+    const statusAction = event.target.closest(".product-variant-status-action");
+    if (statusAction) {
+      const row = statusAction.closest(".content-product-variant-row");
+      const status = row?.querySelector(".product-variant-status");
+      const nextStatus = statusAction.dataset.productVariantAction || "draft";
+      const sessionName = row?.querySelector(".product-variant-name")?.value || "this session";
+      if (["paused", "archived"].includes(nextStatus) &&
+          !window.confirm(`Are you sure you want to ${nextStatus === "paused" ? "hide or cancel" : "archive"} ${sessionName}?`)) {
+        return;
+      }
+      if (status) status.value = nextStatus;
+      if (row) row.dataset.pendingStatus = nextStatus;
+      const badge = row?.querySelector(".product-variant-status-badge");
+      if (badge) badge.textContent = nextStatus;
+      syncSelectedProductVariantRows();
+      state.isDirty = true;
+      showToast(`${sessionName} marked ${nextStatus}. Save product details when you finish editing.`, "success");
+      return;
+    }
+    const remove = event.target.closest(".remove-content-product-variant");
+    if (!remove) return;
+    const row = remove.closest(".content-product-variant-row");
+    const sessionName = row?.querySelector(".product-variant-name")?.value || "this workshop session";
+    if (!window.confirm(
+      `Are you sure you want to remove ${sessionName}? It will be archived so existing orders and tickets remain intact.`,
+    )) return;
+    const status = row?.querySelector(".product-variant-status");
+    if (status) status.value = "archived";
+    if (row) row.dataset.pendingStatus = "archived";
+    const badge = row?.querySelector(".product-variant-status-badge");
+    if (badge) badge.textContent = "archived";
+    syncSelectedProductVariantRows();
+    state.isDirty = true;
+    showToast(`${sessionName} will be removed from sale when you save product details.`, "success");
   });
   document.getElementById("contentProductVariantRows")?.addEventListener("input", () => {
     syncSelectedProductVariantRows();
@@ -5217,23 +5576,6 @@ export async function setupContentBuilder() {
   document.getElementById("contentProductVariantRows")?.addEventListener("change", () => {
     syncSelectedProductVariantRows();
     renderProductVariantContentLinkRows(productVariantContentLinksFromRows(true));
-    renderProductInstructorRows(productInstructorAssignmentsFromRows(true));
-    state.isDirty = true;
-  });
-  document.getElementById("addContentProductInstructorBtn")?.addEventListener(
-    "click",
-    addProductInstructorRow,
-  );
-  document.getElementById("contentProductInstructorRows")?.addEventListener("click", (event) => {
-    const remove = event.target.closest(".remove-content-product-instructor");
-    if (!remove) return;
-    remove.closest(".content-product-instructor-row")?.remove();
-    state.isDirty = true;
-  });
-  document.getElementById("contentProductInstructorRows")?.addEventListener("change", () => {
-    state.isDirty = true;
-  });
-  document.getElementById("contentProductInstructorRows")?.addEventListener("input", () => {
     state.isDirty = true;
   });
   document.getElementById("addContentEntityVariantBtn")?.addEventListener("click", addEntityVariantRow);
@@ -5276,7 +5618,13 @@ export async function setupContentBuilder() {
       const variantRows = [...document.querySelectorAll(".content-entity-variant-row")];
       const index = variantRows.indexOf(addRecipe.closest(".content-entity-variant-row"));
       const variants = entityVariantsFromBuilder();
-      variants[index].linkedItemComponents.push({ itemId: "", quantity: 1 });
+      variants[index].linkedItemComponents.push({
+        componentId: `COMPONENT-${variants[index].linkedItemComponents.length + 1}`,
+        itemId: "",
+        itemVariantId: "",
+        quantity: 1,
+        unit: "each",
+      });
       renderEntityVariantRows(variants);
       return;
     }
@@ -5318,6 +5666,15 @@ export async function setupContentBuilder() {
     if (chevron) chevron.textContent = row.open ? "−" : "+";
   }, true);
   document.getElementById("contentEntityVariantRows")?.addEventListener("change", (event) => {
+    if (event.target.classList.contains("blueprint-variant-recipe-item")) {
+      const recipeRow = event.target.closest(".blueprint-variant-recipe-row");
+      const variantSelect = recipeRow?.querySelector(".blueprint-variant-recipe-item-variant");
+      if (variantSelect) {
+        variantSelect.innerHTML = blueprintRecipeVariantOptions(event.target.value);
+        const variants = itemVariantsForRecipe(event.target.value);
+        if (variants.length === 1) variantSelect.value = variants[0].entityVariantId || "";
+      }
+    }
     if (event.target.classList.contains("content-entity-variant-template")) {
       const rows = [...document.querySelectorAll(".content-entity-variant-row")];
       const changedRow = event.target.closest(".content-entity-variant-row");
@@ -5392,7 +5749,10 @@ export async function setupContentBuilder() {
     button?.setAttribute("aria-expanded", String(opening));
     if (button) button.textContent = opening ? "Hide help" : "Help";
   });
-  document.getElementById("applyContentProductBtn")?.addEventListener("click", closeContentProductDrawer);
+  document.getElementById("applyContentProductBtn")?.addEventListener(
+    "click",
+    saveProductDetailsFromDrawer,
+  );
   document.getElementById("contentProductDrawer")?.addEventListener("click", (event) => {
     if (event.target.id === "contentProductDrawer") closeContentProductDrawer();
   });

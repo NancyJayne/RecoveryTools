@@ -36,6 +36,10 @@ export async function loadProductArchitecture(db) {
     accessGrants,
     productComponents,
     inventory,
+    productLinks,
+    items,
+    blueprints,
+    plans,
   ] = await Promise.all([
     db.collection("productPrices").get(),
     db.collection("productVariants").get(),
@@ -46,6 +50,10 @@ export async function loadProductArchitecture(db) {
     db.collection("productAccessGrants").get(),
     db.collection("productComponents").get(),
     db.collection("inventory").get(),
+    db.collection("productLinks").get(),
+    db.collection("items").get(),
+    db.collection("blueprints").get(),
+    db.collection("plans").get(),
   ]);
 
   return {
@@ -60,8 +68,32 @@ export async function loadProductArchitecture(db) {
     inventoryByProductId: groupDocs(inventory, "productId"),
     inventoryByVariantId: groupDocs(inventory, "variantId"),
     inventoryByItemId: groupDocs(inventory, "itemId"),
+    productLinksByProductId: groupDocs(productLinks, "productId"),
+    itemsById: new Map(items.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }])),
+    blueprintsById: new Map(blueprints.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }])),
+    plansById: new Map(plans.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }])),
     assetsById: new Map(assets.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }])),
   };
+}
+
+export function primaryContentForProduct(productId, product, architecture) {
+  const links = architecture.productLinksByProductId?.get(productId) || [];
+  const preferred = links
+    .filter((link) => status(link.status, "active") === "active")
+    .filter((link) => status(link.linkRole) !== "manufacturedfrom")
+    .sort((left, right) => {
+      if (left.isPrimary === true && right.isPrimary !== true) return -1;
+      if (right.isPrimary === true && left.isPrimary !== true) return 1;
+      return Number(left.sortOrder ?? 999) - Number(right.sortOrder ?? 999);
+    })[0];
+  const entityType = cleanString(preferred?.linkedEntityType).toLowerCase();
+  const entityId = cleanString(preferred?.linkedEntityId);
+  if (entityType === "item") return architecture.itemsById?.get(entityId) || null;
+  if (entityType === "blueprint") return architecture.blueprintsById?.get(entityId) || null;
+  if (entityType === "plan") return architecture.plansById?.get(entityId) || null;
+
+  const itemId = cleanString(product.itemId || product.legacyItemId);
+  return itemId ? architecture.itemsById?.get(itemId) || null : null;
 }
 
 export function componentsForProduct(productId, variantId, architecture) {
@@ -108,10 +140,17 @@ function normalizedVariant(variant, sourceCollection) {
     physicalFulfilment: variant.physicalFulfilment || "",
     calendarBookingReference: variant.calendarBookingReference || "",
     seatCapacity: Number.isFinite(Number(variant.seatCapacity)) ? Number(variant.seatCapacity) : null,
+    nearCapacityWarning: Number.isFinite(Number(variant.nearCapacityWarning))
+      ? Number(variant.nearCapacityWarning)
+      : null,
     eventStartAt: dateTimeValue(variant.eventStartAt),
     eventEndAt: dateTimeValue(variant.eventEndAt),
     eventLocation: variant.eventLocation || "",
     instructor: variant.instructor || "",
+    shortDescription: variant.shortDescription || "",
+    longDescription: variant.longDescription || "",
+    inclusions: variant.inclusions || "",
+    primaryAssetId: variant.primaryAssetId || "",
     sourceCollection,
   };
 }
@@ -158,12 +197,23 @@ function assetUrl(asset, rendition) {
 }
 
 export function mediaForProduct(productId, product, architecture) {
-  const itemId = cleanString(product.itemId || product.legacyItemId);
+  const content = primaryContentForProduct(productId, product, architecture);
+  const contentId = cleanString(
+    content?.itemId || content?.blueprintId || content?.planId || content?.id ||
+    product.itemId || product.legacyItemId,
+  );
+  const contentType = content?.planId
+    ? "plan"
+    : content?.blueprintId ? "blueprint" : "item";
   const links = (architecture.entityAssetsByEntityId.get(productId) || [])
-    .filter((link) => link.entityType === "Product" && status(link.status, "active") === "active");
-  const itemLinks = links.length ? [] : (architecture.entityAssetsByEntityId.get(itemId) || [])
-    .filter((link) => link.entityType === "Item" && status(link.status, "active") === "active");
-  const canonicalMedia = [...links, ...itemLinks]
+    .filter((link) =>
+      cleanString(link.entityType).toLowerCase() === "product" &&
+      status(link.status, "active") === "active");
+  const contentLinks = links.length ? [] : (architecture.entityAssetsByEntityId.get(contentId) || [])
+    .filter((link) =>
+      cleanString(link.entityType).toLowerCase() === contentType &&
+      status(link.status, "active") === "active");
+  const canonicalMedia = [...links, ...contentLinks]
     .map((link) => {
       const asset = architecture.assetsById.get(link.assetId);
       if (!asset || status(asset.status, "active") === "archived") return null;
@@ -178,6 +228,7 @@ export function mediaForProduct(productId, product, architecture) {
         title: asset.title || asset.assetName || asset.name || "",
         altText: asset.altText || "",
         url: assetUrl(asset),
+        embedUrl: asset.embedUrl || "",
         thumbnailUrl: assetUrl(asset, thumbnail),
         sortOrder: Number(link.sortOrder ?? 999),
         displayStatus: link.displayStatus || link.status || "active",
@@ -187,6 +238,15 @@ export function mediaForProduct(productId, product, architecture) {
     .sort((left, right) => left.sortOrder - right.sortOrder);
 
   if (canonicalMedia.length) return canonicalMedia;
+  const templateAssetIds = [
+    ...assetIdsFromTemplateValues(content?.templateFieldValues),
+    ...(Array.isArray(content?.entityVariants) ? content.entityVariants : [])
+      .flatMap((variant) => assetIdsFromTemplateValues(variant?.templateFieldValues)),
+  ];
+  const templateMedia = [...new Set(templateAssetIds)]
+    .map((assetId, index) => assetMedia(assetId, architecture, index + 1))
+    .filter(Boolean);
+  if (templateMedia.length) return templateMedia;
   if (Array.isArray(product.media) && product.media.length) return product.media;
   const images = Array.isArray(product.images) ? product.images : [];
   return images.map((url, index) => ({
@@ -200,6 +260,80 @@ export function mediaForProduct(productId, product, architecture) {
     sortOrder: index + 1,
     displayStatus: "active",
   }));
+}
+
+function assetMedia(assetId, architecture, sortOrder = 1) {
+  const asset = architecture.assetsById.get(assetId);
+  if (!asset || status(asset.status, "active") === "archived") return null;
+  const renditions = architecture.renditionsByAssetId.get(assetId) || [];
+  const thumbnail = renditions.find((rendition) =>
+    status(rendition.status, "active") === "active" &&
+    cleanString(rendition.purpose).toLowerCase() === "thumbnail");
+  const url = assetUrl(asset);
+  if (!url) return null;
+  return {
+    assetId,
+    type: cleanString(asset.assetType || asset.type).toLowerCase(),
+    purpose: "Variant",
+    title: asset.title || asset.assetName || asset.name || "",
+    altText: asset.altText || "",
+    url,
+    embedUrl: asset.embedUrl || "",
+    thumbnailUrl: assetUrl(asset, thumbnail),
+    sortOrder,
+    displayStatus: "active",
+  };
+}
+
+function assetIdsFromTemplateValues(values) {
+  const ids = [];
+  const visit = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (value && typeof value === "object") {
+      Object.values(value).forEach(visit);
+      return;
+    }
+    const id = cleanString(value);
+    if (id && id.toUpperCase().startsWith("ASSET-")) ids.push(id);
+  };
+  visit(values);
+  return [...new Set(ids)];
+}
+
+export function mediaForProductVariant(productId, product, variant, architecture, fallback = []) {
+  if (!variant) return fallback;
+  const variantId = cleanString(variant.variantId || variant.id);
+  const contentVariantId = cleanString(variant.contentVariantId);
+  const directLinks = [
+    ...(architecture.entityAssetsByEntityId.get(variantId) || []),
+    ...(architecture.entityAssetsByEntityId.get(productId) || []),
+  ].filter((link) =>
+    status(link.status, "active") === "active" &&
+    (
+      cleanString(link.entityType).toLowerCase() === "productvariant" ||
+      cleanString(link.productVariantId) === variantId ||
+      cleanString(link.entityVariantId) === contentVariantId
+    ));
+  const directMedia = directLinks
+    .map((link, index) => assetMedia(link.assetId, architecture, Number(link.sortOrder ?? index + 1)))
+    .filter(Boolean)
+    .sort((left, right) => left.sortOrder - right.sortOrder);
+  if (directMedia.length) return directMedia;
+
+  const content = primaryContentForProduct(productId, product, architecture);
+  const contentVariant = (content?.entityVariants || []).find((candidate) =>
+    cleanString(candidate.entityVariantId) === contentVariantId);
+  const assetIds = [
+    cleanString(variant.primaryAssetId),
+    ...assetIdsFromTemplateValues(contentVariant?.templateFieldValues),
+  ].filter(Boolean);
+  const inferredMedia = [...new Set(assetIds)]
+    .map((assetId, index) => assetMedia(assetId, architecture, index + 1))
+    .filter(Boolean);
+  return inferredMedia.length ? inferredMedia : fallback;
 }
 
 function legacyAccessGrants(productId, product) {

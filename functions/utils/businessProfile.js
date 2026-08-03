@@ -19,6 +19,10 @@ export const DEFAULT_BUSINESS_PROFILE = {
   privacyItemId: "",
   supportItemId: "",
   commerceItemId: "",
+  termsAssetId: "",
+  privacyAssetId: "",
+  supportAssetId: "",
+  commerceAssetId: "",
   seoTitle: "Recovery Tools",
   seoDescription: "Recovery Tools - Real Recovery, Real Results",
   aboutTitle: "About Recovery Tools",
@@ -53,6 +57,10 @@ export function normalizeBusinessProfile(data = {}) {
     privacyItemId: cleanString(data.privacyItemId) || DEFAULT_BUSINESS_PROFILE.privacyItemId,
     supportItemId: cleanString(data.supportItemId) || DEFAULT_BUSINESS_PROFILE.supportItemId,
     commerceItemId: cleanString(data.commerceItemId) || DEFAULT_BUSINESS_PROFILE.commerceItemId,
+    termsAssetId: cleanString(data.termsAssetId) || DEFAULT_BUSINESS_PROFILE.termsAssetId,
+    privacyAssetId: cleanString(data.privacyAssetId) || DEFAULT_BUSINESS_PROFILE.privacyAssetId,
+    supportAssetId: cleanString(data.supportAssetId) || DEFAULT_BUSINESS_PROFILE.supportAssetId,
+    commerceAssetId: cleanString(data.commerceAssetId) || DEFAULT_BUSINESS_PROFILE.commerceAssetId,
     seoTitle: cleanString(data.seoTitle) || DEFAULT_BUSINESS_PROFILE.seoTitle,
     seoDescription: cleanString(data.seoDescription) || DEFAULT_BUSINESS_PROFILE.seoDescription,
     aboutTitle: cleanString(data.aboutTitle) || DEFAULT_BUSINESS_PROFILE.aboutTitle,
@@ -130,6 +138,24 @@ async function resolveItemAsset(db, itemId, preferredTypes = [], preferredPurpos
     null;
 }
 
+async function resolveAsset(db, assetId, preferredTypes = []) {
+  const cleanAssetId = cleanString(assetId);
+  if (!cleanAssetId) return null;
+  const snap = await db.collection("assets").doc(cleanAssetId).get();
+  if (!snap.exists) return null;
+  const asset = snap.data() || {};
+  const type = cleanString(asset.assetType || asset.type).toLowerCase();
+  const url = cleanString(asset.fileUrl || asset.url || asset.FileURL);
+  if (!url || !isActiveStatus(asset.status)) return null;
+  if (preferredTypes.length && !preferredTypes.includes(type)) return null;
+  return {
+    assetId: cleanAssetId,
+    type,
+    url,
+    title: asset.title || asset.assetName || asset.name || cleanAssetId,
+  };
+}
+
 async function resolveBusinessAssets(profile) {
   const db = admin.firestore();
   const [
@@ -139,6 +165,10 @@ async function resolveBusinessAssets(profile) {
     privacy,
     support,
     commerce,
+    termsDirect,
+    privacyDirect,
+    supportDirect,
+    commerceDirect,
   ] = await Promise.all([
     resolveItemAsset(db, profile.logoItemId, ["image", "logo"], "logo"),
     resolveItemAsset(db, profile.faviconItemId, ["image", "icon", "favicon"], "favicon"),
@@ -146,6 +176,10 @@ async function resolveBusinessAssets(profile) {
     resolveItemAsset(db, profile.privacyItemId, ["pdf", "document"], "privacy"),
     resolveItemAsset(db, profile.supportItemId, ["pdf", "document"], "support"),
     resolveItemAsset(db, profile.commerceItemId, ["pdf", "document"], "commerce"),
+    resolveAsset(db, profile.termsAssetId, ["pdf", "document"]),
+    resolveAsset(db, profile.privacyAssetId, ["pdf", "document"]),
+    resolveAsset(db, profile.supportAssetId, ["pdf", "document"]),
+    resolveAsset(db, profile.commerceAssetId, ["pdf", "document"]),
   ]);
 
   return {
@@ -154,14 +188,14 @@ async function resolveBusinessAssets(profile) {
     logoAssetId: logo?.assetId || "",
     faviconUrl: favicon?.url || profile.faviconUrl,
     faviconAssetId: favicon?.assetId || "",
-    termsPdfUrl: terms?.url || profile.termsPdfUrl,
-    termsAssetId: terms?.assetId || "",
-    privacyPdfUrl: privacy?.url || profile.privacyPdfUrl,
-    privacyAssetId: privacy?.assetId || "",
-    supportPdfUrl: support?.url || profile.supportPdfUrl,
-    supportAssetId: support?.assetId || "",
-    commercePdfUrl: commerce?.url || profile.commercePdfUrl,
-    commerceAssetId: commerce?.assetId || "",
+    termsPdfUrl: termsDirect?.url || terms?.url || profile.termsPdfUrl,
+    termsAssetId: termsDirect?.assetId || terms?.assetId || profile.termsAssetId,
+    privacyPdfUrl: privacyDirect?.url || privacy?.url || profile.privacyPdfUrl,
+    privacyAssetId: privacyDirect?.assetId || privacy?.assetId || profile.privacyAssetId,
+    supportPdfUrl: supportDirect?.url || support?.url || profile.supportPdfUrl,
+    supportAssetId: supportDirect?.assetId || support?.assetId || profile.supportAssetId,
+    commercePdfUrl: commerceDirect?.url || commerce?.url || profile.commercePdfUrl,
+    commerceAssetId: commerceDirect?.assetId || commerce?.assetId || profile.commerceAssetId,
   };
 }
 

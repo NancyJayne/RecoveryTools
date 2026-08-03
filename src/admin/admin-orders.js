@@ -86,11 +86,43 @@ function lastUpdatedAdmin(order) {
 
 function currentFulfilmentStatus(order) {
   const status = String(order.fulfilmentStatus || order.status || "new").toLowerCase();
+  if (status === "not_required") return "not_required";
   if (status === "paid" || status === "pending" || status === "approved") return "new";
   if (status === "complete") return "completed";
   if ([...FULFILMENT_STEPS, ...AFFILIATE_PICKUP_STEPS]
     .some((step) => step.value === status)) return status;
   return "new";
+}
+
+function orderHasPhysicalItems(order) {
+  if (typeof order.hasPhysicalItems === "boolean") return order.hasPhysicalItems;
+  return orderItems(order).some((item) =>
+    item.requiresShipping === true ||
+    ["shipping", "pickup", "shipping-or-pickup"].includes(String(item.physicalFulfilment || "").toLowerCase()));
+}
+
+function orderHasDigitalAccess(order) {
+  if (order.accessStatus === "granted") return true;
+  return orderItems(order).some((item) =>
+    item.accessGranted === true ||
+    item.unlocksAccess === true ||
+    (Array.isArray(item.accessTargets) && item.accessTargets.length > 0) ||
+    (Array.isArray(item.accessGrants) && item.accessGrants.length > 0));
+}
+
+function orderFulfilmentType(order) {
+  const physical = orderHasPhysicalItems(order);
+  const digital = orderHasDigitalAccess(order);
+  if (physical && digital) return "hybrid";
+  if (digital) return "digital";
+  return "physical";
+}
+
+function accessEmailStatus(order) {
+  if (order.confirmationEmailSentAt) return "Sent";
+  if (order.confirmationEmailSandboxedAt) return "Sandboxed locally";
+  if (order.confirmationEmailError) return `Failed: ${order.confirmationEmailError}`;
+  return "Not sent";
 }
 
 function trackingValue(order) {
@@ -698,6 +730,15 @@ export function renderOrderGrid(orders) {
 
   orders.forEach((data) => {
     const fulfilmentStatus = currentFulfilmentStatus(data);
+    const fulfilmentType = orderFulfilmentType(data);
+    const hasPhysicalFulfilment = fulfilmentType !== "digital";
+    const hasDigitalAccess = fulfilmentType !== "physical";
+    const orderStatusLabel = data.archived === true
+      ? "archived"
+      : fulfilmentType === "digital" ? "digital access" : fulfilmentStatus;
+    const accessEmailButtonLabel = data.confirmationEmailSentAt || data.confirmationEmailSandboxedAt
+      ? "Resend access email"
+      : "Send access email";
     const fulfilmentDestinationName = escapeHTML(
       data.fulfilmentDestination?.businessName ||
       data.fulfilmentDestination?.locationName ||
@@ -730,7 +771,7 @@ export function renderOrderGrid(orders) {
             <div class="text-xs text-gray-400">${escapeHTML(orderEmail(data))}</div>
           </div>
           <span class="text-xs uppercase tracking-wide bg-gray-700 px-2 py-1 rounded">
-            ${escapeHTML(data.archived === true ? "archived" : fulfilmentStatus)}
+            ${escapeHTML(orderStatusLabel)}
           </span>
         </div>
 
@@ -755,7 +796,30 @@ export function renderOrderGrid(orders) {
             </div>
           ` : ""}
         </div>
-        ${data.fulfilmentDestination?.type === "affiliate_pickup" ? `
+        ${hasDigitalAccess ? `
+          <section class="rounded border border-purple-500/60 bg-purple-950/20 p-3 text-sm">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div class="text-xs uppercase tracking-wide text-purple-200">Digital access</div>
+                <div class="mt-1 font-semibold text-white">Access granted</div>
+                <div class="mt-1 text-xs text-gray-300">
+                  Access email: ${escapeHTML(accessEmailStatus(data))}
+                </div>
+              </div>
+              <button
+                type="button"
+                class="send-access-email-btn rounded bg-purple-700 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-600"
+                data-id="${data.id}"
+              >
+                ${accessEmailButtonLabel}
+              </button>
+            </div>
+            <p class="mt-2 text-xs text-gray-400">
+              The customer can open unlocked courses, workshops, and programs from their profile.
+            </p>
+          </section>
+        ` : ""}
+        ${hasPhysicalFulfilment && data.fulfilmentDestination?.type === "affiliate_pickup" ? `
           <div class="rounded border border-[#407471] bg-gray-900/60 p-3 text-sm">
             <div class="text-xs uppercase tracking-wide text-gray-400 mb-1">
               Ship replacement stock to
@@ -768,7 +832,7 @@ export function renderOrderGrid(orders) {
           </div>
         ` : ""}
 
-        <div class="flex flex-wrap gap-3 border-y border-gray-700 py-3">
+        ${hasPhysicalFulfilment ? `<div class="flex flex-wrap gap-3 border-y border-gray-700 py-3">
           ${renderFulfilmentSteps(data)}
         </div>
 
@@ -797,6 +861,7 @@ export function renderOrderGrid(orders) {
         <div class="text-xs text-gray-400">
           Review/returns email: ${reviewRequestEmailStatus(data)}
         </div>
+        ` : ""}
 
         <section class="rounded border border-gray-700 bg-gray-900/60 p-3">
           <label class="block text-xs text-gray-300">
@@ -820,7 +885,7 @@ export function renderOrderGrid(orders) {
         <textarea
           class="orderNoteInput w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white text-sm"
           data-id="${data.id}"
-          placeholder="Packing notes..."
+          placeholder="${hasPhysicalFulfilment ? "Packing notes..." : "Order or access notes..."}"
         >${escapeHTML(data.adminNotes || data.note || "")}</textarea>
 
         <label class="block text-xs text-gray-300">
@@ -833,7 +898,7 @@ export function renderOrderGrid(orders) {
           />
         </label>
 
-        <button
+        ${hasPhysicalFulfilment ? `<button
           class="save-fulfilment-btn w-full bg-[#407471] hover:bg-[#305a56] text-white px-3 py-2 rounded"
           data-id="${data.id}"
         >
@@ -847,6 +912,13 @@ export function renderOrderGrid(orders) {
         >
           View packing slip PDF
         </button>
+        ` : `<button
+          type="button"
+          class="save-digital-order-btn w-full bg-[#407471] hover:bg-[#305a56] text-white px-3 py-2 rounded"
+          data-id="${data.id}"
+        >
+          Save order notes
+        </button>`}
 
         <button
           class="archive-order-btn w-full bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded"
@@ -887,6 +959,40 @@ export function renderOrderGrid(orders) {
     button.addEventListener("click", async () => {
       const order = orders.find((entry) => entry.id === button.dataset.id);
       if (order) await printPackingSlip(order, button);
+    });
+  });
+
+  document.querySelectorAll(".send-access-email-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const order = orders.find((entry) => entry.id === button.dataset.id);
+      if (!order) return;
+      try {
+        button.disabled = true;
+        button.textContent = "Sending...";
+        const sendEmail = httpsCallable(functions, "sendOrderEmailWithPDF");
+        const result = await sendEmail({
+          to: orderEmail(order),
+          invoiceId: orderInvoiceId(order),
+          userName: orderName(order),
+        });
+        showToast(
+          result.data?.sandboxed ? "Access email sandboxed locally" : "Access email sent",
+          "success",
+        );
+        await loadAllOrdersForAdmin();
+      } catch (err) {
+        console.error("Failed to send access email:", err);
+        showToast(err.message || "Could not send the access email", "error");
+      } finally {
+        button.disabled = false;
+        button.textContent = "Resend access email";
+      }
+    });
+  });
+
+  document.querySelectorAll(".save-digital-order-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await saveOrderNote(button.dataset.id);
     });
   });
 

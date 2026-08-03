@@ -18,6 +18,7 @@ import {
 } from "../utils/productArchitecture.js";
 import { canonicalOrderLines, orderDueDate } from "../utils/orderLineSnapshots.js";
 import { accessExpiry } from "../utils/accessGrantTiming.js";
+import { accessEmailDetails } from "../utils/orderAccessEmail.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -88,9 +89,22 @@ function useLocalSendGridSandbox() {
   return process.env.FUNCTIONS_EMULATOR === "true" && useSendGridSandboxMode();
 }
 
+function orderHasDigitalAccess(orderData = {}) {
+  const lines = orderData.orderLines || orderData.products || [];
+  return lines.some((item) =>
+    item.accessGranted === true ||
+    item.unlocksAccess === true ||
+    (Array.isArray(item.accessTargets) && item.accessTargets.length > 0) ||
+    (Array.isArray(item.accessGrants) && item.accessGrants.length > 0));
+}
+
 async function sendOrderConfirmationEmail({ orderId, orderData, to, userName, userId }) {
   const business = await getBusinessProfile();
-  const subject = `Your ${business.name} receipt - Order ${orderId}`;
+  const hasDigitalAccess = orderHasDigitalAccess(orderData);
+  const accessDetails = hasDigitalAccess ? accessEmailDetails(orderData) : null;
+  const subject = hasDigitalAccess
+    ? `Your ${business.name} ${accessDetails.subjectPrefix} - Order ${orderId}`
+    : `Your ${business.name} receipt - Order ${orderId}`;
 
   if (!to) {
     throw new Error("Order has no customer email for confirmation.");
@@ -123,6 +137,7 @@ async function sendOrderConfirmationEmail({ orderId, orderData, to, userName, us
       <p>Hi ${userName || "Customer"},</p>
       <p>Thanks for your order. You can download your receipt below:</p>
       <p><a href="${pdfUrl}" target="_blank" rel="noopener">Download Invoice PDF</a></p>
+      ${hasDigitalAccess ? accessDetails.html : ""}
       <p>If you have any questions, reply to this email or contact us at
       <a href="mailto:${business.email}">${business.email}</a>.</p>
       <p>- ${business.name} Team</p>
@@ -279,6 +294,10 @@ const confirmStripePurchaseHandler = async (request) => {
           [variant?.colour, variant?.size].filter(Boolean).join(" / ") ||
           metadata.variantName || "",
         variantSourceCollection: variant?.sourceCollection || "",
+        eventStartAt: variant?.eventStartAt || "",
+        eventEndAt: variant?.eventEndAt || "",
+        eventLocation: variant?.eventLocation || "",
+        instructor: variant?.instructor || "",
         sku: variant?.sku || metadata.sku || product.sku || "",
         physicalFulfilment: metadata.physicalFulfilment ||
           variant?.physicalFulfilment || product.physicalFulfilment || "none",
@@ -327,6 +346,7 @@ const confirmStripePurchaseHandler = async (request) => {
     .map((item) => item.pickupLocation)
     .find((location) => location?.sourceType === "affiliate") || null;
   const fulfilmentRequired = hasPhysicalItems || Boolean(affiliatePickupLocation);
+  const hasDigitalAccess = enrichedProducts.some((item) => item.accessGrants.length > 0);
   const orderData = {
     buyerUid: uid,
     userId: uid,
@@ -369,6 +389,10 @@ const confirmStripePurchaseHandler = async (request) => {
     shippingEmail: customerEmail,
     shippingPhone: customerPhone,
     hasPhysicalItems,
+    fulfilmentType: hasPhysicalItems && hasDigitalAccess
+      ? "hybrid"
+      : hasDigitalAccess ? "digital" : "physical",
+    accessStatus: hasDigitalAccess ? "granted" : "none",
     fulfilmentStatus: fulfilmentRequired ? "new" : "not_required",
     fulfilmentDestination: affiliatePickupLocation ? {
       type: "affiliate_pickup",
@@ -590,12 +614,17 @@ const confirmStripePurchaseHandler = async (request) => {
             accessId,
             accessVariantId,
             sourceProductId: item.productId,
+            sourceProductVariantId: item.variantId || "",
+            sourceProductVariantName: item.variantName || "",
             sourceOrderId: invoiceNumber,
             productAccessGrantId: grant.productAccessGrantId || grant.id || "",
             grantedAt: admin.firestore.FieldValue.serverTimestamp(),
             expiresAt: accessExpiry(grant),
             revocable: grant.revocable !== false,
             active: true,
+            revokedAt: null,
+            revokedBy: null,
+            revocationReason: null,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           }, { merge: true });

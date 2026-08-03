@@ -1,7 +1,11 @@
 function dateValue(value) {
   if (!value) return null;
   if (typeof value.toDate === "function") return value.toDate();
-  const parsed = new Date(value);
+  const source = typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(value)
+    ? `${value}+10:00`
+    : value;
+  const parsed = new Date(source);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 

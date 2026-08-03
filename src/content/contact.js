@@ -1,7 +1,6 @@
 // contact.js – Handles contact form submission with reCAPTCHA, Firestore logging, and secure email
-import { functions, db } from "../utils/firebase-config.js";
+import { functions } from "../utils/firebase-config.js";
 import { httpsCallable } from "firebase/functions";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { showToast } from "../utils/utils.js";
 import { executeRecaptcha } from "../utils/verifyRecaptchaToken.js"; // ✅ Use central utility
 
@@ -14,6 +13,8 @@ export function initContactPage() {
   const status = document.getElementById("contactStatus");
 
   if (!form) return;
+  if (form.dataset.bound === "true") return;
+  form.dataset.bound = "true";
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -36,13 +37,6 @@ export function initContactPage() {
       const token = await executeRecaptcha("contact_form");
 
       // ✅ Log to Firestore
-      await addDoc(collection(db, "contactSubmissions"), {
-        name,
-        email,
-        message,
-        submittedAt: serverTimestamp(),
-      });
-
       // ✅ Trigger backend email
       const sendContactMessage = httpsCallable(functions, "sendContactMessage");
       await sendContactMessage({ name, email, message, token });

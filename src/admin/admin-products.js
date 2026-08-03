@@ -1,17 +1,24 @@
 import { httpsCallable } from "firebase/functions";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { functions, storage } from "../utils/firebase-config.js";
-import { showTabContent, showToast } from "../utils/utils.js";
+import { showToast } from "../utils/utils.js";
 
-const createProduct = httpsCallable(functions, "createProduct");
 const updateProduct = httpsCallable(functions, "updateProduct");
 const updateInventory = httpsCallable(functions, "updateProductInventory");
 const getProducts = httpsCallable(functions, "getFirestoreProducts");
 const getAdminAssets = httpsCallable(functions, "getAdminAssets");
 const upsertAdminAsset = httpsCallable(functions, "upsertAdminAsset");
+const getInventoryOperationsData = httpsCallable(functions, "getInventoryOperationsData");
+const updateInventoryStocktake = httpsCallable(functions, "updateInventoryStocktake");
+const recordManufacturingRun = httpsCallable(functions, "recordManufacturingRun");
+const updateWorkshopAttendance = httpsCallable(functions, "updateWorkshopAttendance");
 
 let cachedProducts = [];
 let cachedAssets = [];
+let inventoryOperations = {
+  stocktakeRows: [], productionOptions: [], workshopSessions: [], accessSummaries: [],
+};
+let lastManufacturingPreviewVariantId = "";
 
 function asMoney(value) {
   const amount = Number(value ?? 0);
@@ -52,24 +59,571 @@ function variantLabel(variant) {
 }
 
 export function setupProductManager() {
-  const form = document.getElementById("addProductForm");
   const list = document.getElementById("productList");
 
-  if (form && form.dataset.bound !== "true") {
-    form.dataset.bound = "true";
-    form.addEventListener("submit", handleCreateProduct);
-  }
+  setupProductManagerTools();
 
   if (list) {
     loadProducts();
   }
 
   setupAssetManager();
+  setupInventoryOperations();
 
-  const editForm = document.getElementById("editProductForm");
-  if (editForm && editForm.dataset.bound !== "true") {
-    editForm.dataset.bound = "true";
-    editForm.addEventListener("submit", handleEditProduct);
+  if (document.body.dataset.productSaveRefreshBound !== "true") {
+    document.body.dataset.productSaveRefreshBound = "true";
+    window.addEventListener("admin-product-saved", () => {
+      loadProducts();
+      loadInventoryOperations();
+    });
+  }
+
+}
+
+function showProductManagerTool(toolName) {
+  const panel = document.getElementById("productManagerPanel");
+  if (!panel) return;
+  panel.dataset.activeTool = toolName;
+  panel.querySelectorAll(".product-manager-tool-panel").forEach((section) => {
+    section.classList.toggle("hidden", section.dataset.productManagerPanel !== toolName);
+  });
+  panel.querySelectorAll(".product-manager-tool-btn").forEach((button) => {
+    const active = button.dataset.productManagerTool === toolName;
+    button.classList.toggle("bg-[#407471]", active);
+    button.classList.toggle("border", !active);
+    button.classList.toggle("border-gray-600", !active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function setupProductManagerTools() {
+  const panel = document.getElementById("productManagerPanel");
+  if (!panel) return;
+  panel.querySelectorAll(".product-manager-tool-btn").forEach((button) => {
+    if (button.dataset.bound === "true") return;
+    button.dataset.bound = "true";
+    button.addEventListener("click", () => {
+      const toolName = button.dataset.productManagerTool || "inventory";
+      showProductManagerTool(toolName);
+      if (toolName === "inventory" || toolName === "manufacturing") {
+        loadInventoryOperations();
+      }
+      if (toolName === "products") loadProducts();
+      if (toolName === "assets") loadAssets();
+    });
+  });
+  showProductManagerTool(panel.dataset.activeTool || "inventory");
+}
+
+function setupInventoryOperations() {
+  const list = document.getElementById("inventoryStocktakeList");
+  if (!list) return;
+  const refresh = document.getElementById("refreshInventoryOperationsBtn");
+  const search = document.getElementById("inventoryStocktakeSearch");
+  const save = document.getElementById("saveInventoryStocktakeBtn");
+  const productSelect = document.getElementById("manufacturingProductSelect");
+  const variantSelect = document.getElementById("manufacturingVariantSelect");
+  const record = document.getElementById("recordManufacturingRunBtn");
+  if (refresh?.dataset.bound !== "true") {
+    refresh.dataset.bound = "true";
+    refresh.addEventListener("click", loadInventoryOperations);
+    search?.addEventListener("input", renderStocktakeList);
+    save?.addEventListener("click", saveStocktake);
+    productSelect?.addEventListener("change", renderManufacturingVariants);
+    variantSelect?.addEventListener("change", renderManufacturingPreview);
+    document.getElementById("manufacturingQuantityProduced")
+      ?.addEventListener("input", renderManufacturingPreview);
+    record?.addEventListener("click", submitManufacturingRun);
+  }
+  loadInventoryOperations();
+}
+
+async function loadInventoryOperations() {
+  const list = document.getElementById("inventoryStocktakeList");
+  if (list) list.textContent = "Loading inventory...";
+  try {
+    const result = await getInventoryOperationsData({});
+    inventoryOperations = {
+      stocktakeRows: Array.isArray(result.data?.stocktakeRows) ? result.data.stocktakeRows : [],
+      productionOptions: Array.isArray(result.data?.productionOptions) ? result.data.productionOptions : [],
+      workshopSessions: Array.isArray(result.data?.workshopSessions) ? result.data.workshopSessions : [],
+      accessSummaries: Array.isArray(result.data?.accessSummaries) ? result.data.accessSummaries : [],
+    };
+    renderStocktakeList();
+    renderManufacturingOptions();
+    renderWorkshopSessions();
+    if (document.getElementById("productList")) renderProductManagerList(cachedProducts);
+  } catch (error) {
+    console.error("Failed to load inventory operations:", error);
+    if (list) list.textContent = "Inventory could not be loaded.";
+    showToast("Failed to load inventory operations", "error");
+  }
+}
+
+function workshopDate(value) {
+  if (!value) return "Date not set";
+  const date = typeof value?.toDate === "function" ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : new Intl.DateTimeFormat("en-AU", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Australia/Brisbane",
+    }).format(date);
+}
+
+function renderWorkshopSessions() {
+  const list = document.getElementById("workshopSessionList");
+  if (!list) return;
+  const search = normalized(document.getElementById("workshopSessionSearch")?.value);
+  const sessions = inventoryOperations.workshopSessions.filter((session) =>
+    !search || [
+      session.productName, session.variantName, session.eventLocation,
+      session.instructor, session.productId, session.productVariantId,
+    ].join(" ").toLowerCase().includes(search));
+  if (!sessions.length) {
+    list.textContent = "No Workshop Product sessions match this search.";
+    return;
+  }
+  list.innerHTML = sessions.map((session) => {
+    const capacity = Number(session.capacity || 0);
+    const remaining = session.remaining === null ? "Not limited" : session.remaining;
+    const attendeeRows = session.attendees.length
+      ? session.attendees.map((attendee) => `
+          <tr class="border-t border-gray-800">
+            <td class="px-2 py-2">${escapeHTML(attendee.name)}</td>
+            <td class="px-2 py-2">${escapeHTML(attendee.email || "No email")}</td>
+            <td class="px-2 py-2">${attendee.quantity}</td>
+            <td class="px-2 py-2">
+              <a class="text-purple-300 hover:underline"
+                href="/admin/orders?filter=${encodeURIComponent(attendee.orderId)}">Open order</a>
+            </td>
+          </tr>`).join("")
+      : `<tr><td colspan="4" class="px-2 py-3 text-gray-400">No paid attendees yet.</td></tr>`;
+    return `
+      <details class="mb-3 overflow-hidden rounded border border-gray-700 bg-gray-950/40">
+        <summary class="cursor-pointer p-4 hover:bg-gray-900/70">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h4 class="font-semibold text-white">${escapeHTML(session.productName)}</h4>
+              <p class="text-sm text-gray-300">${escapeHTML(session.variantName)}</p>
+              <p class="text-xs text-gray-400">
+                ${escapeHTML(workshopDate(session.eventStartAt))}
+                ${session.eventLocation ? ` · ${escapeHTML(session.eventLocation)}` : ""}
+              </p>
+            </div>
+            <div class="grid grid-cols-3 gap-4 text-center text-sm">
+              <span><strong class="block text-white">${capacity || "—"}</strong>Capacity</span>
+              <span><strong class="block text-white">${session.sold}</strong>Sold</span>
+              <span><strong class="block text-white">${remaining}</strong>Remaining</span>
+            </div>
+          </div>
+        </summary>
+        <div class="border-t border-gray-700 p-4">
+          <p class="mb-2 text-xs text-gray-400">
+            ${escapeHTML(session.productVariantId || session.productId)}
+            ${session.instructor ? ` · Instructor: ${escapeHTML(session.instructor)}` : ""}
+          </p>
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead><tr class="text-left text-xs uppercase text-gray-400">
+                <th class="px-2 py-2">Attendee</th><th class="px-2 py-2">Email</th>
+                <th class="px-2 py-2">Tickets</th><th class="px-2 py-2">Order</th>
+              </tr></thead>
+              <tbody>${attendeeRows}</tbody>
+            </table>
+          </div>
+        </div>
+      </details>`;
+  }).join("");
+}
+
+function createWorkshopSessionsPanel(product) {
+  const productId = product.id || product.productId || "";
+  const sessions = inventoryOperations.workshopSessions
+    .filter((session) => session.productId === productId);
+  if (!sessions.length) return null;
+  const panel = document.createElement("section");
+  panel.className = "mt-4 rounded border border-gray-700 bg-gray-900/70 p-3";
+  panel.innerHTML = `
+    <h4 class="text-sm font-semibold text-white">Workshop sessions</h4>
+    <p class="mb-3 text-xs text-gray-400">Ticket totals and on-the-day attendee check-in for each Product variant.</p>
+    ${sessions.map((session) => {
+    const capacity = Number(session.capacity || 0);
+    const remaining = session.remaining === null ? "Not limited" : session.remaining;
+    const attendeeRows = session.attendees.length
+      ? session.attendees.map((attendee) => `
+          <tr class="border-t border-gray-800">
+            <td class="px-2 py-2"><input type="checkbox"
+              class="workshop-attendance-checkbox accent-[#407471]"
+              data-product-id="${escapeHTML(session.productId)}"
+              data-product-variant-id="${escapeHTML(session.productVariantId || "")}"
+              data-order-id="${escapeHTML(attendee.orderId)}"
+              data-user-id="${escapeHTML(attendee.userId || "")}"
+              ${attendee.checkedIn ? "checked" : ""}
+              aria-label="Check in ${escapeHTML(attendee.name)}"></td>
+            <td class="px-2 py-2">${escapeHTML(attendee.name)}</td>
+            <td class="px-2 py-2">${escapeHTML(attendee.email || "No email")}</td>
+            <td class="px-2 py-2">${attendee.quantity}</td>
+            <td class="px-2 py-2"><a class="text-purple-300 hover:underline"
+              href="/admin/orders?filter=${encodeURIComponent(attendee.orderId)}">Open order</a></td>
+          </tr>`).join("")
+      : `<tr><td colspan="5" class="px-2 py-3 text-gray-400">No paid attendees yet.</td></tr>`;
+    return `
+      <details class="mb-3 overflow-hidden rounded border border-gray-700 bg-gray-950/40">
+        <summary class="cursor-pointer p-4 hover:bg-gray-900/70">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p class="font-semibold text-white">${escapeHTML(session.variantName)}</p>
+              <p class="text-xs text-gray-400">${escapeHTML(workshopDate(session.eventStartAt))}${session.eventLocation ? ` · ${escapeHTML(session.eventLocation)}` : ""}</p>
+              ${session.instructor ? `<p class="text-xs text-gray-400">Instructor: ${escapeHTML(session.instructor)}</p>` : ""}
+            </div>
+            <div class="grid grid-cols-3 gap-4 text-center text-sm">
+              <span><strong class="block text-white">${capacity || "—"}</strong>Capacity</span>
+              <span><strong class="block text-white">${session.sold}</strong>Sold</span>
+              <span><strong class="block text-white">${remaining}</strong>Remaining</span>
+            </div>
+          </div>
+        </summary>
+        <div class="border-t border-gray-700 p-4">
+          <div class="overflow-x-auto"><table class="min-w-full text-sm">
+            <thead><tr class="text-left text-xs uppercase text-gray-400">
+              <th class="px-2 py-2">Arrived</th><th class="px-2 py-2">Attendee</th>
+              <th class="px-2 py-2">Email</th><th class="px-2 py-2">Tickets</th>
+              <th class="px-2 py-2">Order</th>
+            </tr></thead><tbody>${attendeeRows}</tbody>
+          </table></div>
+        </div>
+      </details>`;
+  }).join("")}`;
+  panel.querySelectorAll(".workshop-attendance-checkbox").forEach((checkbox) => {
+    checkbox.addEventListener("change", async () => {
+      const previous = !checkbox.checked;
+      checkbox.disabled = true;
+      try {
+        await updateWorkshopAttendance({
+          productId: checkbox.dataset.productId,
+          productVariantId: checkbox.dataset.productVariantId,
+          orderId: checkbox.dataset.orderId,
+          userId: checkbox.dataset.userId,
+          checkedIn: checkbox.checked,
+        });
+        showToast(checkbox.checked ? "Attendee checked in" : "Attendee check-in removed", "success");
+      } catch (error) {
+        checkbox.checked = previous;
+        console.error("Failed to update Workshop attendance:", error);
+        showToast("Failed to update attendee check-in", "error");
+      } finally {
+        checkbox.disabled = false;
+      }
+    });
+  });
+  return panel;
+}
+
+function createCourseAccessPanel(product) {
+  const productId = product.id || product.productId || "";
+  const summary = inventoryOperations.accessSummaries.find((entry) => entry.productId === productId);
+  const type = normalized(`${product.productType || ""} ${product.type || ""} ${product.itemType || ""}`);
+  if (!summary && !type.includes("course")) return null;
+  const users = summary?.unlockedUsers || [];
+  const panel = document.createElement("section");
+  panel.className = "mt-4 rounded border border-gray-700 bg-gray-900/70 p-3";
+  panel.innerHTML = `
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h4 class="text-sm font-semibold text-white">Course access</h4>
+        <p class="text-xs text-gray-400">Purchases and currently unlocked users.</p>
+      </div>
+      <div class="grid grid-cols-2 gap-4 text-center text-sm">
+        <span><strong class="block text-white">${Number(summary?.purchased || 0)}</strong>Purchased</span>
+        <span><strong class="block text-white">${users.length}</strong>Unlocked</span>
+      </div>
+    </div>
+    <details class="mt-3 overflow-hidden rounded border border-gray-700 bg-gray-950/40">
+      <summary class="cursor-pointer px-3 py-2 text-sm font-medium text-white hover:bg-gray-900/70">View unlocked users</summary>
+      <div class="overflow-x-auto border-t border-gray-700 p-3">
+        <table class="min-w-full text-sm">
+          <thead><tr class="text-left text-xs uppercase text-gray-400">
+            <th class="px-2 py-2">User</th><th class="px-2 py-2">Email</th><th class="px-2 py-2">Access</th>
+          </tr></thead>
+          <tbody>${users.length ? users.map((user) => `
+            <tr class="border-t border-gray-800">
+              <td class="px-2 py-2">${escapeHTML(user.name)}</td>
+              <td class="px-2 py-2">${escapeHTML(user.email || "No email")}</td>
+              <td class="px-2 py-2">${escapeHTML(user.accessId || "Unlocked")}</td>
+            </tr>`).join("") : `
+            <tr><td colspan="3" class="px-2 py-3 text-gray-400">No active course access yet.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </details>`;
+  return panel;
+}
+
+function renderStocktakeList() {
+  const list = document.getElementById("inventoryStocktakeList");
+  if (!list) return;
+  const search = normalized(document.getElementById("inventoryStocktakeSearch")?.value);
+  const rows = inventoryOperations.stocktakeRows.filter((row) =>
+    !search || [
+      row.entityType, row.entityId, row.itemVariantId, row.productId, row.name, row.variantName,
+    ].join(" ").toLowerCase().includes(search));
+  if (!rows.length) {
+    list.textContent = "No tracked inventory matches this search.";
+    return;
+  }
+  const groups = new Map();
+  rows.forEach((row) => {
+    const isItem = ["Item", "ItemVariant"].includes(row.entityType);
+    const key = `${isItem ? "Item" : "Product"}:${isItem ? row.entityId : row.productId || row.entityId}`;
+    const group = groups.get(key) || {
+      kind: isItem ? "Item" : "Product",
+      name: row.name,
+      id: isItem ? row.entityId : row.productId || row.entityId,
+      rows: [],
+    };
+    group.rows.push(row);
+    groups.set(key, group);
+  });
+  const groupRows = [...groups.values()].map((group) => {
+    const total = group.rows.reduce((sum, row) => sum + Number(row.stock || 0), 0);
+    const stockRows = group.rows.map((row) => `
+      <tr class="border-b border-gray-800" data-stocktake-row
+        data-inventory-id="${escapeHTML(row.inventoryId)}"
+        data-entity-type="${escapeHTML(row.entityType)}"
+        data-entity-id="${escapeHTML(row.entityId)}"
+        data-item-variant-id="${escapeHTML(row.itemVariantId || "")}"
+        data-product-id="${escapeHTML(row.productId || "")}">
+        <td class="px-2 py-2 pl-6">
+          <div class="font-medium text-white">${escapeHTML(row.variantName || "Default")}</div>
+          <div class="text-xs text-gray-500">${escapeHTML(row.itemVariantId || row.entityId)}</div>
+        </td>
+        <td class="px-2 py-2 text-gray-300">${escapeHTML(row.unit || "each")}</td>
+        <td class="px-2 py-2">
+          <input type="number" min="0" step="1" value="${Number(row.stock || 0)}"
+            class="stocktake-quantity input w-28" aria-label="Counted stock for ${escapeHTML(row.name)}">
+        </td>
+      </tr>
+    `).join("");
+    return `
+      <tr class="border-y border-gray-700 bg-gray-900/80">
+        <th colspan="3" class="px-2 py-3 text-left">
+          <span class="font-semibold text-white">${escapeHTML(group.kind)}: ${escapeHTML(group.name)}</span>
+          <span class="ml-2 text-xs font-normal text-gray-400">${escapeHTML(group.id)} · total ${total}</span>
+        </th>
+      </tr>
+      ${stockRows}
+    `;
+  }).join("");
+  list.innerHTML = `
+    <table class="min-w-full border-collapse">
+      <thead><tr class="border-b border-gray-700 text-left text-xs uppercase tracking-wide text-gray-400">
+        <th class="px-2 py-2">Variant</th><th class="px-2 py-2">Unit</th>
+        <th class="px-2 py-2">Counted stock</th>
+      </tr></thead>
+      <tbody>${groupRows}</tbody>
+    </table>
+  `;
+}
+
+async function saveStocktake() {
+  const button = document.getElementById("saveInventoryStocktakeBtn");
+  const rows = [...document.querySelectorAll("[data-stocktake-row]")].map((row) => ({
+    inventoryId: row.dataset.inventoryId,
+    entityType: row.dataset.entityType,
+    entityId: row.dataset.entityId,
+    itemVariantId: row.dataset.itemVariantId,
+    productId: row.dataset.productId,
+    stock: Number(row.querySelector(".stocktake-quantity")?.value),
+  }));
+  if (!rows.length) return showToast("No inventory rows are shown.", "error");
+  try {
+    button.disabled = true;
+    button.textContent = "Saving...";
+    await updateInventoryStocktake({ rows });
+    showToast(`Stocktake saved for ${rows.length} records`, "success");
+    await loadInventoryOperations();
+    await loadProducts();
+  } catch (error) {
+    console.error("Failed to save stocktake:", error);
+    showToast(error.message || "Failed to save stocktake", "error");
+  } finally {
+    button.disabled = false;
+    button.textContent = "Save stocktake";
+  }
+}
+
+function renderManufacturingOptions() {
+  const select = document.getElementById("manufacturingProductSelect");
+  if (!select) return;
+  const current = select.value;
+  const products = [...new Map(inventoryOperations.productionOptions.map((option) => [
+    option.productId,
+    option.productName,
+  ])).entries()];
+  select.innerHTML = `<option value="">Choose a Product</option>` +
+    products.map(([productId, productName]) => `
+      <option value="${escapeHTML(productId)}">${escapeHTML(productName)}</option>
+    `).join("");
+  if ([...select.options].some((option) => option.value === current)) select.value = current;
+  renderManufacturingVariants();
+}
+
+function renderManufacturingVariants() {
+  const productId = document.getElementById("manufacturingProductSelect")?.value || "";
+  const select = document.getElementById("manufacturingVariantSelect");
+  if (!select) return;
+  const previous = select.value;
+  const variants = inventoryOperations.productionOptions
+    .filter((option) => option.productId === productId);
+  select.disabled = !productId;
+  select.innerHTML = productId
+    ? `<option value="">Choose a Product variant</option>` + variants.map((option) => `
+      <option value="${escapeHTML(option.productVariantId || "__DEFAULT__")}">
+        ${escapeHTML(option.variantName || "Default")}
+      </option>
+    `).join("")
+    : `<option value="">Choose a Product first</option>`;
+  if ([...select.options].some((option) => option.value === previous)) {
+    select.value = previous;
+  } else if (variants.length === 1) {
+    select.value = variants[0].productVariantId || "__DEFAULT__";
+  }
+  renderManufacturingPreview();
+}
+
+function selectedManufacturingOption() {
+  const value = document.getElementById("manufacturingVariantSelect")?.value;
+  const productId = document.getElementById("manufacturingProductSelect")?.value || "";
+  if (!value || !productId) return null;
+  return inventoryOperations.productionOptions.find((option) =>
+    option.productId === productId &&
+    (option.productVariantId || "__DEFAULT__") === value) || null;
+}
+
+function preferredComponentVariant(component, finishedVariantName) {
+  if (!Array.isArray(component.variants) || !component.variants.length) return null;
+  const finishedTokens = new Set(normalized(finishedVariantName).split(/[^a-z0-9]+/).filter((token) =>
+    token.length > 1));
+  return [...component.variants].sort((left, right) => {
+    const score = (variant) => normalized(variant.name).split(/[^a-z0-9]+/)
+      .filter((token) => finishedTokens.has(token)).length;
+    return score(right) - score(left);
+  })[0];
+}
+
+function renderManufacturingPreview() {
+  const preview = document.getElementById("manufacturingRecipePreview");
+  if (!preview) return;
+  const option = selectedManufacturingOption();
+  if (!option) {
+    lastManufacturingPreviewVariantId = "";
+    preview.textContent = "Choose a Product and variant to preview its Blueprint recipe.";
+    return;
+  }
+  const finishedVariantId = option.productVariantId || "__DEFAULT__";
+  const finishedVariantChanged = finishedVariantId !== lastManufacturingPreviewVariantId;
+  const produced = Math.max(0, Number(document.getElementById("manufacturingQuantityProduced")?.value || 0));
+  const componentRows = option.components.map((component) => {
+    const required = Number(component.quantity || 0) * produced;
+    const existingSelection = finishedVariantChanged
+      ? ""
+      : document.querySelector(
+        `.manufacturing-component-variant[data-component-id="${CSS.escape(component.componentId)}"]`,
+      )?.value;
+    const storedVariant = component.variants?.find((variant) =>
+      variant.itemVariantId === component.itemVariantId);
+    const preferred = storedVariant || component.variants?.find((variant) =>
+      variant.itemVariantId === existingSelection) ||
+      preferredComponentVariant(component, option.variantName);
+    const available = preferred ? Number(preferred.stock || 0) : Number(component.stock || 0);
+    const enough = available >= required;
+    const variantSelector = storedVariant
+      ? `<div class="mt-1 text-xs text-[#9edbd7]">
+          Uses ${escapeHTML(storedVariant.name)} from the saved Blueprint recipe
+        </div>`
+      : component.variants?.length
+        ? `<select class="manufacturing-component-variant input mt-2 w-full"
+          data-component-id="${escapeHTML(component.componentId)}"
+          data-item-id="${escapeHTML(component.itemId)}">
+          ${component.variants.map((variant) => `
+            <option value="${escapeHTML(variant.itemVariantId)}"
+              ${variant.itemVariantId === preferred?.itemVariantId ? "selected" : ""}>
+              ${escapeHTML(variant.name)} — ${Number(variant.stock || 0)} available
+            </option>
+          `).join("")}
+        </select>`
+        : "";
+    return `<li class="${enough ? "text-gray-300" : "text-red-300"}">
+      <div>
+        ${required} ${escapeHTML(component.unit)} ${escapeHTML(component.name)}
+        <span class="text-xs">(selected stock: ${available}; all variants: ${Number(component.stock || 0)})</span>
+      </div>
+      ${variantSelector}
+    </li>`;
+  }).join("");
+  preview.innerHTML = `
+    <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Manufacturing recipe</div>
+    <div class="mb-2 text-sm font-semibold text-white">
+      Finished variant: ${escapeHTML(option.variantName || "Default")}
+    </div>
+    <div class="font-semibold text-white">${escapeHTML(option.blueprintName)}</div>
+    ${option.blueprintVariantName
+    ? `<div class="text-sm text-[#9edbd7]">
+        Recipe variant: ${escapeHTML(option.blueprintVariantName)}
+        ${Number(option.blueprintVariantCount || 0) === 1 ? " (shared by all Product variants)" : ""}
+      </div>`
+    : ""}
+    <div class="mb-2 text-xs text-gray-400">${escapeHTML(option.blueprintId)}</div>
+    <ul class="space-y-1">${componentRows}</ul>
+  `;
+  preview.querySelectorAll(".manufacturing-component-variant").forEach((select) => {
+    select.addEventListener("change", renderManufacturingPreview);
+  });
+  lastManufacturingPreviewVariantId = finishedVariantId;
+}
+
+async function submitManufacturingRun() {
+  const option = selectedManufacturingOption();
+  const quantityProduced = Number(document.getElementById("manufacturingQuantityProduced")?.value);
+  if (!option) return showToast("Choose a Product and Product variant.", "error");
+  if (!Number.isInteger(quantityProduced) || quantityProduced <= 0) {
+    return showToast("Enter a whole quantity greater than zero.", "error");
+  }
+  const button = document.getElementById("recordManufacturingRunBtn");
+  try {
+    button.disabled = true;
+    button.textContent = "Recording...";
+    await recordManufacturingRun({
+      productId: option.productId,
+      productVariantId: option.productVariantId,
+      blueprintId: option.blueprintId,
+      blueprintVariantId: option.blueprintVariantId,
+      quantityProduced,
+      componentSelections: [...document.querySelectorAll(".manufacturing-component-variant")]
+        .map((select) => ({
+          componentId: select.dataset.componentId,
+          itemId: select.dataset.itemId,
+          itemVariantId: select.value,
+        })),
+    });
+    const completedProductId = option.productId;
+    showToast(`Production recorded: ${quantityProduced} added`, "success");
+    document.getElementById("manufacturingQuantityProduced").value = "0";
+    await loadInventoryOperations();
+    const productSelect = document.getElementById("manufacturingProductSelect");
+    const variantSelect = document.getElementById("manufacturingVariantSelect");
+    if (productSelect) productSelect.value = completedProductId;
+    renderManufacturingVariants();
+    if (variantSelect) variantSelect.value = "";
+    renderManufacturingPreview();
+    await loadProducts();
+  } catch (error) {
+    console.error("Failed to record manufacturing:", error);
+    showToast(error.message || "Failed to record manufacturing", "error");
+  } finally {
+    button.disabled = false;
+    button.textContent = "Record production";
   }
 }
 
@@ -95,20 +649,6 @@ export function setupContentControls() {
   }
 
   loadProducts({ renderManager: false, renderControls: true });
-}
-
-async function handleCreateProduct(e) {
-  e.preventDefault();
-  const data = getFormData("add");
-  try {
-    await createProduct(data);
-    showToast("✅ Product created", "success");
-    e.target.reset();
-    loadProducts();
-  } catch (err) {
-    console.error(err);
-    showToast("❌ Failed to create product", "error");
-  }
 }
 
 async function loadProducts({ renderManager = true, renderControls = true } = {}) {
@@ -169,10 +709,10 @@ function renderProductManagerList(products) {
     meta.textContent = [
       asMoney(p.price ?? p.priceFrom),
       p.type || "unknown",
-      `Stock: ${p.stock ?? 0}`,
+      p.inventoryTracked ? `Stock: ${p.stock ?? 0}` : "",
       `Status: ${p.shopStatus || (p.visible ? "active" : "hidden")}`,
       p.visible ? "Visible" : "Hidden",
-    ].join(" | ");
+    ].filter(Boolean).join(" | ");
 
     const tags = document.createElement("p");
     tags.className = "text-sm text-gray-400";
@@ -228,12 +768,19 @@ function renderProductManagerList(products) {
     });
     body.appendChild(actions);
 
-    const inventoryPanel = document.createElement("div");
-    inventoryPanel.className = "mt-4 rounded border border-gray-700 bg-gray-900/70 p-3";
+    const workshopPanel = createWorkshopSessionsPanel(p);
+    if (workshopPanel) body.appendChild(workshopPanel);
 
-    const inventoryHeading = document.createElement("div");
-    inventoryHeading.className = "mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between";
-    inventoryHeading.innerHTML = `
+    const courseAccessPanel = createCourseAccessPanel(p);
+    if (courseAccessPanel) body.appendChild(courseAccessPanel);
+
+    if (p.inventoryTracked === true) {
+      const inventoryPanel = document.createElement("div");
+      inventoryPanel.className = "mt-4 rounded border border-gray-700 bg-gray-900/70 p-3";
+
+      const inventoryHeading = document.createElement("div");
+      inventoryHeading.className = "mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between";
+      inventoryHeading.innerHTML = `
       <div>
         <h4 class="text-sm font-semibold text-white">Inventory</h4>
         <p class="text-xs text-gray-400">
@@ -241,16 +788,16 @@ function renderProductManagerList(products) {
         </p>
       </div>
     `;
-    inventoryPanel.appendChild(inventoryHeading);
+      inventoryPanel.appendChild(inventoryHeading);
 
-    const stockGrid = document.createElement("div");
-    stockGrid.className = "grid gap-3 md:grid-cols-2";
+      const stockGrid = document.createElement("div");
+      stockGrid.className = "grid gap-3 md:grid-cols-2";
 
-    if (Array.isArray(p.variants) && p.variants.length) {
-      p.variants.forEach((variant) => {
-        const field = document.createElement("label");
-        field.className = "block text-sm text-gray-300";
-        field.innerHTML = `
+      if (Array.isArray(p.variants) && p.variants.length) {
+        p.variants.forEach((variant) => {
+          const field = document.createElement("label");
+          field.className = "block text-sm text-gray-300";
+          field.innerHTML = `
           <span class="mb-1 block">${variantLabel(variant)}</span>
           <input
             type="number"
@@ -261,12 +808,12 @@ function renderProductManagerList(products) {
             value="${Number(variant.stock ?? 0)}"
           >
         `;
-        stockGrid.appendChild(field);
-      });
-    } else {
-      const field = document.createElement("label");
-      field.className = "block text-sm text-gray-300";
-      field.innerHTML = `
+          stockGrid.appendChild(field);
+        });
+      } else {
+        const field = document.createElement("label");
+        field.className = "block text-sm text-gray-300";
+        field.innerHTML = `
         <span class="mb-1 block">Stock quantity</span>
         <input
           type="number"
@@ -276,49 +823,50 @@ function renderProductManagerList(products) {
           value="${Number(p.stock ?? 0)}"
         >
       `;
-      stockGrid.appendChild(field);
-    }
-
-    const saveInventoryBtn = document.createElement("button");
-    saveInventoryBtn.type = "button";
-    saveInventoryBtn.className = [
-      "mt-3 rounded bg-[#407471] px-3 py-2 text-sm font-semibold text-white",
-      "hover:bg-[#305a56]",
-    ].join(" ");
-    saveInventoryBtn.textContent = "Save inventory";
-    saveInventoryBtn.addEventListener("click", async () => {
-      const variantInputs = [...inventoryPanel.querySelectorAll(".variant-stock-input")];
-      const stockInput = inventoryPanel.querySelector(".product-stock-input");
-      const variants = variantInputs.map((input) => ({
-        variantId: input.dataset.variantId,
-        stock: Number(input.value || 0),
-      }));
-      const stock = stockInput
-        ? Number(stockInput.value || 0)
-        : variants.reduce((sum, variant) => sum + Number(variant.stock || 0), 0);
-
-      try {
-        saveInventoryBtn.disabled = true;
-        saveInventoryBtn.textContent = "Saving...";
-        await updateInventory({
-          productId: p.id,
-          stock,
-          variants,
-        });
-        showToast("Inventory updated", "success");
-        loadProducts();
-      } catch (err) {
-        console.error("Failed to update inventory:", err);
-        showToast("Failed to update inventory", "error");
-      } finally {
-        saveInventoryBtn.disabled = false;
-        saveInventoryBtn.textContent = "Save inventory";
+        stockGrid.appendChild(field);
       }
-    });
 
-    inventoryPanel.appendChild(stockGrid);
-    inventoryPanel.appendChild(saveInventoryBtn);
-    body.appendChild(inventoryPanel);
+      const saveInventoryBtn = document.createElement("button");
+      saveInventoryBtn.type = "button";
+      saveInventoryBtn.className = [
+        "mt-3 rounded bg-[#407471] px-3 py-2 text-sm font-semibold text-white",
+        "hover:bg-[#305a56]",
+      ].join(" ");
+      saveInventoryBtn.textContent = "Save inventory";
+      saveInventoryBtn.addEventListener("click", async () => {
+        const variantInputs = [...inventoryPanel.querySelectorAll(".variant-stock-input")];
+        const stockInput = inventoryPanel.querySelector(".product-stock-input");
+        const variants = variantInputs.map((input) => ({
+          variantId: input.dataset.variantId,
+          stock: Number(input.value || 0),
+        }));
+        const stock = stockInput
+          ? Number(stockInput.value || 0)
+          : variants.reduce((sum, variant) => sum + Number(variant.stock || 0), 0);
+
+        try {
+          saveInventoryBtn.disabled = true;
+          saveInventoryBtn.textContent = "Saving...";
+          await updateInventory({
+            productId: p.id,
+            stock,
+            variants,
+          });
+          showToast("Inventory updated", "success");
+          loadProducts();
+        } catch (err) {
+          console.error("Failed to update inventory:", err);
+          showToast("Failed to update inventory", "error");
+        } finally {
+          saveInventoryBtn.disabled = false;
+          saveInventoryBtn.textContent = "Save inventory";
+        }
+      });
+
+      inventoryPanel.appendChild(stockGrid);
+      inventoryPanel.appendChild(saveInventoryBtn);
+      body.appendChild(inventoryPanel);
+    }
 
     row.appendChild(body);
     div.appendChild(row);
@@ -571,17 +1119,24 @@ async function updateProductStatus(product, action) {
   }
 }
 
-function openProductEditor(product) {
-  const container = document.getElementById("adminSection");
-  container?.querySelectorAll(".admin-tab, .admin-section").forEach((el) => {
-    el.classList.add("hidden");
-  });
-  document.getElementById("productManagerPanel")?.classList.remove("hidden");
-  showTabContent("adminSection");
-  history.pushState({}, "", `/admin/products?edit=${encodeURIComponent(product.id)}`);
-  setupProductManager();
-  populateEditForm(product);
-  document.getElementById("editProductForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
+async function openProductEditor(product) {
+  const entityId = product.connectedEntityId;
+  const entityType = String(product.connectedEntityType || "").toLowerCase();
+  if (!entityId || !["item", "blueprint", "plan"].includes(entityType)) {
+    showToast("Connect this Product to an Item, Blueprint, or Plan before editing it here.", "error");
+    return;
+  }
+  try {
+    const { openProductDrawerFromAdmin } = await import("./admin-content-builder.js");
+    await openProductDrawerFromAdmin({
+      productId: product.id,
+      entityType,
+      entityId,
+    });
+  } catch (error) {
+    console.error("Failed to open shared Product editor:", error);
+    showToast(error.message || "Could not open the Product editor.", "error");
+  }
 }
 
 function openRequestedProductEdit(products) {
@@ -589,30 +1144,11 @@ function openRequestedProductEdit(products) {
   const editId = params.get("edit");
   if (!editId) return;
   const product = products.find((item) => item.id === editId || item.productId === editId);
-  if (product) populateEditForm(product);
+  if (product) openProductEditor(product);
 }
 
-function populateEditForm(product) {
-  const form = document.getElementById("editProductForm");
-  if (!form) return;
-  form.classList.remove("hidden");
-  form["edit-id"].value = product.id;
-  form["edit-name"].value = product.name || product.title || "";
-  form["edit-price"].value = product.price ?? product.priceFrom ?? 0;
-  form["edit-type"].value = product.productType || product.type || "Physical";
-  form["edit-status"].value = product.status || product.shopStatus || "draft";
-  form["edit-visible"].checked = product.websiteVisible === true || product.visible === true;
-  form["edit-shipping"].checked = product.requiresShipping === true;
-  form["edit-inventory"].checked = product.inventoryTracked === true;
-  form["edit-stock"].value = product.stock ?? 0;
-  form["edit-tags"].value = productTags(product).join(", ");
-  form["edit-description"].value =
-    product.shortDescription ||
-    product.description ||
-    product.longDescription ||
-    "";
-}
-
+// Retained only for compatibility with cached pre-refactor markup.
+// eslint-disable-next-line no-unused-vars
 async function handleEditProduct(e) {
   e.preventDefault();
   const id = e.target["edit-id"].value;

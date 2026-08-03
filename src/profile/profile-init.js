@@ -269,12 +269,13 @@ export async function setupProfilePage() {
     });
   }
 
-  // Auto-open if linked via hash
-  if (window.location.hash === "#profileSection") {
-    profileSection?.classList.remove("hidden");
-  }
-  // Ensure "My Profile" tab loads by default
-  document.querySelector("[data-profile-tab=\"myProfile\"]")?.click();
+  const requestedTab = window.location.hash.replace(/^#/, "");
+  const initialTab = ["myCourses", "myWorkshops", "orderHistory"]
+    .includes(requestedTab)
+    ? requestedTab
+    : "myProfile";
+  profileSection?.classList.remove("hidden");
+  document.querySelector(`[data-profile-tab="${initialTab}"]`)?.click();
 }
 
 function loadTabContent(tabId) {

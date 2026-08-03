@@ -18,14 +18,10 @@ const FIELD_IDS = [
   "businessAboutTitle",
   "businessAboutDescription",
   "businessAboutImageUrl",
-  "businessTermsItemId",
-  "businessTermsPdfUrl",
-  "businessPrivacyItemId",
-  "businessPrivacyPdfUrl",
-  "businessSupportItemId",
-  "businessSupportPdfUrl",
-  "businessCommerceItemId",
-  "businessCommercePdfUrl",
+  "businessTermsAssetId",
+  "businessPrivacyAssetId",
+  "businessSupportAssetId",
+  "businessCommerceAssetId",
   "businessShippingRate",
   "businessFreeShippingMin",
   "businessShippingLabel",
@@ -56,14 +52,34 @@ function setFormValues(business) {
   document.getElementById("businessAboutTitle").value = business.aboutTitle || "";
   document.getElementById("businessAboutDescription").value = business.aboutDescription || "";
   document.getElementById("businessAboutImageUrl").value = business.aboutImageUrl || "";
-  document.getElementById("businessTermsItemId").value = business.termsItemId || "";
-  document.getElementById("businessTermsPdfUrl").value = business.termsPdfUrl || "";
-  document.getElementById("businessPrivacyItemId").value = business.privacyItemId || "";
-  document.getElementById("businessPrivacyPdfUrl").value = business.privacyPdfUrl || "";
-  document.getElementById("businessSupportItemId").value = business.supportItemId || "";
-  document.getElementById("businessSupportPdfUrl").value = business.supportPdfUrl || "";
-  document.getElementById("businessCommerceItemId").value = business.commerceItemId || "";
-  document.getElementById("businessCommercePdfUrl").value = business.commercePdfUrl || "";
+  document.getElementById("businessTermsAssetId").value = business.termsAssetId || "";
+  document.getElementById("businessPrivacyAssetId").value = business.privacyAssetId || "";
+  document.getElementById("businessSupportAssetId").value = business.supportAssetId || "";
+  document.getElementById("businessCommerceAssetId").value = business.commerceAssetId || "";
+}
+
+function populateDocumentAssetOptions(assets = []) {
+  const selectors = [
+    "businessTermsAssetId",
+    "businessPrivacyAssetId",
+    "businessSupportAssetId",
+    "businessCommerceAssetId",
+  ];
+  selectors.forEach((id) => {
+    const select = document.getElementById(id);
+    if (!select) return;
+    select.textContent = "";
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "No document selected";
+    select.appendChild(empty);
+    assets.forEach((asset) => {
+      const option = document.createElement("option");
+      option.value = asset.assetId;
+      option.textContent = `${asset.name} (${asset.assetId})`;
+      select.appendChild(option);
+    });
+  });
 }
 
 function normalizedShippingZones(settings = {}) {
@@ -117,14 +133,10 @@ function formData() {
     aboutTitle: document.getElementById("businessAboutTitle")?.value.trim(),
     aboutDescription: document.getElementById("businessAboutDescription")?.value.trim(),
     aboutImageUrl: document.getElementById("businessAboutImageUrl")?.value.trim(),
-    termsItemId: document.getElementById("businessTermsItemId")?.value.trim(),
-    termsPdfUrl: document.getElementById("businessTermsPdfUrl")?.value.trim(),
-    privacyItemId: document.getElementById("businessPrivacyItemId")?.value.trim(),
-    privacyPdfUrl: document.getElementById("businessPrivacyPdfUrl")?.value.trim(),
-    supportItemId: document.getElementById("businessSupportItemId")?.value.trim(),
-    supportPdfUrl: document.getElementById("businessSupportPdfUrl")?.value.trim(),
-    commerceItemId: document.getElementById("businessCommerceItemId")?.value.trim(),
-    commercePdfUrl: document.getElementById("businessCommercePdfUrl")?.value.trim(),
+    termsAssetId: document.getElementById("businessTermsAssetId")?.value.trim(),
+    privacyAssetId: document.getElementById("businessPrivacyAssetId")?.value.trim(),
+    supportAssetId: document.getElementById("businessSupportAssetId")?.value.trim(),
+    commerceAssetId: document.getElementById("businessCommerceAssetId")?.value.trim(),
   };
 }
 
@@ -141,10 +153,6 @@ async function formDataWithUploads() {
   data.logoUploadedUrl = await uploadSettingFile("businessLogoFile", "business/logo");
   data.faviconUploadedUrl = await uploadSettingFile("businessFaviconFile", "business/favicon");
   data.aboutImageUploadedUrl = await uploadSettingFile("businessAboutImageFile", "business/about");
-  data.termsPdfUploadedUrl = await uploadSettingFile("businessTermsPdfFile", "business/policies");
-  data.privacyPdfUploadedUrl = await uploadSettingFile("businessPrivacyPdfFile", "business/policies");
-  data.supportPdfUploadedUrl = await uploadSettingFile("businessSupportPdfFile", "business/policies");
-  data.commercePdfUploadedUrl = await uploadSettingFile("businessCommercePdfFile", "business/policies");
   return data;
 }
 
@@ -185,6 +193,7 @@ async function loadBusinessSettings() {
   ]);
   const business = result.data || {};
   const shipping = shippingResult.data || {};
+  populateDocumentAssetOptions(business.documentAssets || []);
   setFormValues(business);
   setShippingFormValues(shipping);
   updatePreview(business, shipping);

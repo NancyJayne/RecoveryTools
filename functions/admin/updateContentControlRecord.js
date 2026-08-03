@@ -60,6 +60,9 @@ function cleanAccessGrants(value) {
     accessEntityId: cleanString(grant?.accessEntityId),
     accessEntityVariantId: cleanString(grant?.accessEntityVariantId || grant?.entityVariantId),
     productVariantId: cleanString(grant?.productVariantId),
+    durationType: cleanString(grant?.durationType || "permanent").toLowerCase(),
+    durationValue: asNumber(grant?.durationValue),
+    endsAt: cleanString(grant?.endsAt),
   })).filter((grant) => {
     const key = `${grant.productVariantId}:${grant.accessEntityType}:${grant.accessEntityId}:` +
       grant.accessEntityVariantId;
@@ -218,11 +221,15 @@ function cleanEntityVariants(value) {
 }
 
 function cleanItemComponents(value) {
-  return (Array.isArray(value) ? value : []).slice(0, 200).map((component) => ({
+  return (Array.isArray(value) ? value : []).slice(0, 200).map((component, index) => ({
+    componentId: cleanString(component?.componentId) || `COMPONENT-${index + 1}`,
     itemId: cleanString(component?.itemId),
+    itemVariantId: cleanString(component?.itemVariantId),
     quantity: asNumber(component?.quantity) ?? 0,
+    unit: cleanString(component?.unit) || "each",
     unitCost: asNumber(component?.unitCost) ?? 0,
     estimatedCost: asNumber(component?.estimatedCost) ?? 0,
+    notes: cleanString(component?.notes),
   })).filter((component) => component.itemId && component.quantity > 0);
 }
 
@@ -237,9 +244,11 @@ function cleanTemplateAssetLinks(value) {
       .replace(/^_+|_+$/g, "")
       .slice(0, 60),
     fieldName: cleanString(link?.fieldName).slice(0, 120) || "Template Asset",
+    entityVariantId: cleanString(link?.entityVariantId).slice(0, 200),
   })).filter((link) => {
-    if (!link.assetId || seen.has(link.assetId)) return false;
-    seen.add(link.assetId);
+    const key = `${link.entityVariantId}:${link.fieldKey}:${link.assetId}`;
+    if (!link.assetId || seen.has(key)) return false;
+    seen.add(key);
     return true;
   }).slice(0, 100);
 }
@@ -294,10 +303,14 @@ function normalizeVariant(value, index, itemId, productId) {
     stock: asNumber(value.stock) ?? 0,
     status: cleanString(value.status || "active").toLowerCase(),
     contentVariantId: cleanString(value.contentVariantId),
+    shortDescription: cleanString(value.shortDescription),
+    longDescription: cleanString(value.longDescription),
+    inclusions: cleanString(value.inclusions),
     deliveryMode: cleanString(value.deliveryMode),
     physicalFulfilment: cleanString(value.physicalFulfilment || "none").toLowerCase(),
     calendarBookingReference: cleanString(value.calendarBookingReference),
     seatCapacity: asNumber(value.seatCapacity),
+    nearCapacityWarning: asNumber(value.nearCapacityWarning),
     eventStartAt: cleanString(value.eventStartAt),
     eventEndAt: cleanString(value.eventEndAt),
     eventLocation: cleanString(value.eventLocation),
@@ -356,7 +369,16 @@ async function updateProductRelation({
   const blueprintLinkId = manufacturingBlueprintId
     ? `PRODUCTLINK-${slugify(productId)}-BLUEPRINT-${slugify(manufacturingBlueprintId)}`
     : "";
-  if (cleanString(relation.existingProductId) && productSnap.exists) {
+  const linksDifferentItem = Boolean(
+    cleanString(productData.itemId) &&
+    !(collection === "items" && cleanString(productData.itemId) === recordId),
+  );
+  const linkOnlyExistingProduct = Boolean(
+    cleanString(relation.existingProductId) &&
+    productSnap.exists &&
+    (isManufacturingLink || linksDifferentItem),
+  );
+  if (linkOnlyExistingProduct) {
     if (!cleanString(productData.sku)) {
       transaction.set(productRef, {
         sku: cleanString(relation.sku) || generatedProductSku(productId),
@@ -422,8 +444,9 @@ async function updateProductRelation({
         accessEntityId,
         accessEntityVariantId: accessEntityVariantId || "",
         grantTiming: "on-payment-confirmed",
-        durationType: "permanent",
-        durationValue: null,
+        durationType: grant.durationType,
+        durationValue: grant.durationValue,
+        endsAt: grant.endsAt,
         revocable: true,
         status: "active",
         contentOrigin: "app",
@@ -623,8 +646,9 @@ async function updateProductRelation({
       accessEntityId,
       accessEntityVariantId: accessEntityVariantId || "",
       grantTiming: "on-payment-confirmed",
-      durationType: "permanent",
-      durationValue: null,
+      durationType: grant.durationType,
+      durationValue: grant.durationValue,
+      endsAt: grant.endsAt,
       revocable: true,
       status: "active",
       contentOrigin: "app",
@@ -704,6 +728,9 @@ async function updateProductRelation({
       sku: variant.sku,
       status: variant.status || "active",
       contentVariantId: variant.contentVariantId,
+      shortDescription: variant.shortDescription,
+      longDescription: variant.longDescription,
+      inclusions: variant.inclusions,
       deliveryMode: variant.deliveryMode,
       physicalFulfilment: variant.physicalFulfilment,
       isDefault: index === 0,
@@ -716,6 +743,7 @@ async function updateProductRelation({
       stockStatus: variant.stock > 0 ? "in-stock" : "out-of-stock",
       calendarBookingReference: variant.calendarBookingReference,
       seatCapacity: variant.seatCapacity,
+      nearCapacityWarning: variant.nearCapacityWarning,
       eventStartAt: variant.eventStartAt,
       eventEndAt: variant.eventEndAt,
       eventLocation: variant.eventLocation,
@@ -808,10 +836,12 @@ async function prepareTemplateAssetSync(db, collection, recordId, updates) {
 function syncTemplateAssets({ transaction, db, recordId, sync, request }) {
   if (!sync) return;
   const now = admin.firestore.FieldValue.serverTimestamp();
-  const selectedIds = new Set(sync.links.map((link) => link.assetId));
+  const linkKey = (link) =>
+    `${cleanString(link.entityVariantId)}:${cleanString(link.fieldKey)}:${cleanString(link.assetId)}`;
+  const selectedKeys = new Set(sync.links.map(linkKey));
   const existingByAssetId = new Map();
   const canonicalByAssetId = new Map(
-    sync.entityRelations.map((relation) => [cleanString(relation.data.assetId), relation]),
+    sync.entityRelations.map((relation) => [linkKey(relation.data), relation]),
   );
   sync.relations.forEach((relation) => {
     const assetId = cleanString(relation.data.assetId);
@@ -819,22 +849,25 @@ function syncTemplateAssets({ transaction, db, recordId, sync, request }) {
       transaction.delete(relation.ref);
       return;
     }
-    if (!selectedIds.has(assetId)) {
+    const key = linkKey(relation.data);
+    if (!selectedKeys.has(key)) {
       if (sync.originalAssetIds.has(assetId)) {
         transaction.delete(relation.ref);
-        const canonical = canonicalByAssetId.get(assetId);
+        const canonical = canonicalByAssetId.get(key);
         if (canonical) transaction.delete(canonical.ref);
       }
       return;
     }
-    existingByAssetId.set(assetId, relation);
+    existingByAssetId.set(key, relation);
   });
 
   sync.links.forEach((link, index) => {
-    const existing = existingByAssetId.get(link.assetId);
+    const key = linkKey(link);
+    const existing = existingByAssetId.get(key);
     const relationId = existing?.id || [
       "ITEMASSET",
       slugify(recordId),
+      slugify(link.entityVariantId || "ALL"),
       slugify(link.fieldKey),
       slugify(link.assetId),
     ].join("-");
@@ -844,6 +877,8 @@ function syncTemplateAssets({ transaction, db, recordId, sync, request }) {
       itemId: recordId,
       assetId: link.assetId,
       purpose: link.fieldName,
+      fieldKey: link.fieldKey,
+      entityVariantId: link.entityVariantId || "",
       sortOrder: index + 1,
       displayStatus: "active",
       contextTitle: cleanString(asset.title || asset.name) || link.assetId,
@@ -857,9 +892,10 @@ function syncTemplateAssets({ transaction, db, recordId, sync, request }) {
       createdAt: existing?.data.createdAt || now,
     }, { merge: true });
 
-    const canonical = canonicalByAssetId.get(link.assetId);
+    const canonical = canonicalByAssetId.get(key);
     const entityAssetId = canonical?.id ||
-      `ENTITYASSET-${sync.entityType.toUpperCase()}-${slugify(recordId)}-${slugify(link.assetId)}`;
+      `ENTITYASSET-${sync.entityType.toUpperCase()}-${slugify(recordId)}-` +
+      `${slugify(link.entityVariantId || "ALL")}-${slugify(link.assetId)}`;
     transaction.set(canonical?.ref || db.collection("entityAssets").doc(entityAssetId), {
       entityAssetId,
       assetId: link.assetId,
@@ -868,6 +904,7 @@ function syncTemplateAssets({ transaction, db, recordId, sync, request }) {
       assetRole: link.fieldName,
       fieldKey: link.fieldKey,
       productVariantId: "",
+      entityVariantId: link.entityVariantId || "",
       isPrimary: index === 0,
       sortOrder: index + 1,
       displayStatus: "active",

@@ -6,6 +6,7 @@ import admin from "firebase-admin";
 import { generateOrderPDF } from "../utils/generateOrderPDFServer.js";
 import { logEmailEvent } from "../utils/emailLog.js";
 import { getBusinessProfile } from "../utils/businessProfile.js";
+import { accessEmailDetails } from "../utils/orderAccessEmail.js";
 
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 
@@ -24,6 +25,35 @@ function useLocalSendGridSandbox() {
   return process.env.FUNCTIONS_EMULATOR === "true" && useSendGridSandboxMode();
 }
 
+function orderHasDigitalAccess(order = {}) {
+  const lines = order.orderLines || order.products || [];
+  return order.accessStatus === "granted" || lines.some((item) =>
+    item.accessGranted === true ||
+    item.unlocksAccess === true ||
+    (Array.isArray(item.accessTargets) && item.accessTargets.length > 0) ||
+    (Array.isArray(item.accessGrants) && item.accessGrants.length > 0));
+}
+
+async function orderWithCurrentVariantDetails(order = {}) {
+  const products = Array.isArray(order.products) ? order.products : [];
+  const enriched = await Promise.all(products.map(async (product) => {
+    const variantId = product.variantId || product.productVariantId || "";
+    if (!variantId || product.eventStartAt && product.eventLocation) return product;
+    const snapshot = await admin.firestore().collection("productVariants").doc(variantId).get();
+    if (!snapshot.exists) return product;
+    const variant = snapshot.data() || {};
+    return {
+      ...product,
+      variantName: product.variantName || variant.variantName || variant.name || "",
+      eventStartAt: product.eventStartAt || variant.eventStartAt || "",
+      eventEndAt: product.eventEndAt || variant.eventEndAt || "",
+      eventLocation: product.eventLocation || variant.eventLocation || "",
+      instructor: product.instructor || variant.instructor || "",
+    };
+  }));
+  return { ...order, products: enriched };
+}
+
 const sendOrderEmailWithPDFHandler = async (request) => {
   const {
     to,
@@ -36,15 +66,20 @@ const sendOrderEmailWithPDFHandler = async (request) => {
   }
 
   const business = await getBusinessProfile();
-  const subject = `Your ${business.name} receipt - Order ${invoiceId}`;
   const orderRef = admin.firestore().collection("orders").doc(invoiceId);
+  let subject = `Your ${business.name} receipt - Order ${invoiceId}`;
 
   try {
     const orderSnap = await orderRef.get();
     if (!orderSnap.exists) throw new Error("Order not found");
 
-    const order = orderSnap.data();
+    const order = await orderWithCurrentVariantDetails(orderSnap.data());
     const userId = order.userId || order.buyerUid || order.uid;
+    const hasDigitalAccess = orderHasDigitalAccess(order);
+    const accessDetails = hasDigitalAccess ? accessEmailDetails(order) : null;
+    subject = hasDigitalAccess
+      ? `Your ${business.name} ${accessDetails.subjectPrefix} - Order ${invoiceId}`
+      : subject;
 
     if (useLocalSendGridSandbox()) {
       await Promise.all([
@@ -76,6 +111,7 @@ const sendOrderEmailWithPDFHandler = async (request) => {
         <p>Hi ${userName},</p>
         <p>Thanks for your order. You can download your receipt below:</p>
         <p><a href="${pdfUrl}" target="_blank" rel="noopener">Download Invoice PDF</a></p>
+        ${hasDigitalAccess ? accessDetails.html : ""}
         <p>If you have any questions, reply to this email or contact us at
         <a href="mailto:${business.email}">${business.email}</a>.</p>
         <p>- ${business.name} Team</p>

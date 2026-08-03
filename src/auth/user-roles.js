@@ -72,7 +72,7 @@ export function applyRoleUI(roles = {}) {
 
   document
     .getElementById("affiliateSignup")
-    ?.classList.toggle("hidden", roles.affiliate);
+    ?.classList.add("hidden");
 }
 
 export async function setupRoleUI(user) {

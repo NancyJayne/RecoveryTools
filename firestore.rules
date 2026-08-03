@@ -42,6 +42,21 @@ service cloud.firestore {
              isActiveStatus();
     }
 
+    function hasContentAccess(entityType, entityId) {
+      return signedIn() &&
+             exists(/databases/$(database)/documents/userAccess/$(request.auth.uid + '_' + entityType + '_' + entityId)) &&
+             get(/databases/$(database)/documents/userAccess/$(request.auth.uid + '_' + entityType + '_' + entityId)).data.active == true &&
+             (
+               !('revokedAt' in get(/databases/$(database)/documents/userAccess/$(request.auth.uid + '_' + entityType + '_' + entityId)).data) ||
+               get(/databases/$(database)/documents/userAccess/$(request.auth.uid + '_' + entityType + '_' + entityId)).data.revokedAt == null
+             ) &&
+             (
+               !('expiresAt' in get(/databases/$(database)/documents/userAccess/$(request.auth.uid + '_' + entityType + '_' + entityId)).data) ||
+               get(/databases/$(database)/documents/userAccess/$(request.auth.uid + '_' + entityType + '_' + entityId)).data.expiresAt == null ||
+               get(/databases/$(database)/documents/userAccess/$(request.auth.uid + '_' + entityType + '_' + entityId)).data.expiresAt > request.time
+             );
+    }
+
     function isActiveDisplayStatus() {
       return resource.data.displayStatus == 'active' ||
              resource.data.displayStatus == 'ACTIVE' ||
@@ -89,11 +104,29 @@ service cloud.firestore {
         match /notes/{noteId} {
           allow read, write: if isAdmin();
         }
+
+        match /courseProgress/{courseId} {
+          allow read, create, update: if isOwner(userId);
+          allow delete: if isOwner(userId) || isAdmin();
+        }
       }
 
     // Public/catalogue master data
     match /items/{itemId} {
-      allow read: if isPublicVisible() || isPrivilegedContentEditor();
+      allow read: if isPublicVisible() || isPrivilegedContentEditor() ||
+                     hasContentAccess('Item', itemId);
+      allow write: if isPrivilegedContentEditor();
+    }
+
+    match /blueprints/{blueprintId} {
+      allow read: if isPublicVisible() || isPrivilegedContentEditor() ||
+                     hasContentAccess('Blueprint', blueprintId);
+      allow write: if isPrivilegedContentEditor();
+    }
+
+    match /plans/{planId} {
+      allow read: if isPublicVisible() || isPrivilegedContentEditor() ||
+                     hasContentAccess('Plan', planId);
       allow write: if isPrivilegedContentEditor();
     }
 

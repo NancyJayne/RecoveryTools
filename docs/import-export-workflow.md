@@ -36,6 +36,16 @@ The import script:
 - writes with merge semantics,
 - never deletes existing Firestore documents.
 
+### Seed customer access
+
+Use the `User Access` sheet to seed or update customer access without creating an
+order. Enter `Item`, `Blueprint`, or `Plan` in `AccessType` and the target's
+stable ID in `AccessID`. The target entity's Type determines whether it appears
+under Courses, Workshops, or Programs. Use a deterministic `UserAccessID` such
+as `{UserID}_{AccessType}_{AccessID}`. `Active` defaults to `Yes`, `Revocable`
+defaults to `Yes`, and a blank `ExpiresAt` means permanent access. Imports merge
+by `UserAccessID` and do not remove access that exists only in Firestore.
+
 ### Canonical Product and Asset sheets
 
 `Recovery Tools Master Database (10).xlsx` adds canonical `Products`, `ProductLinks`,

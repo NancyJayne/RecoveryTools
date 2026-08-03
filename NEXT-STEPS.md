@@ -1,8 +1,88 @@
 # Recovery Tools - Next Steps
 
+## Production Readiness - August 3, 2026
+
+### Confirmed working
+
+- [x] Every public policy PDF link opens the selected document correctly.
+- [x] Content Builder works for Item types `content`, `part`, and `tool`, including Assets.
+- [x] Physical Products and Course Products work through Marketplace and checkout.
+- [x] Manufacturing Blueprints, component recipes, manufacturing stock movements, Course modules, and Course Plans work.
+- [x] Purchased Course access appears in CRM and the customer profile/player.
+- [x] Repeated unlocks are deduplicated: the test customer retained one active Course access record.
+- [x] Hybrid orders show both the physical fulfilment and digital-access workflows.
+- [x] Product hide, activate, and archive actions produce the expected Marketplace visibility.
+- [x] Paused Course Plans are unavailable in the customer Course player.
+- [x] Admin CRM now supports removing and restoring individual Course, Workshop, or Program access without deleting its history.
+- [x] Marketplace now hides Products whose primary linked content is paused or archived.
+- [x] Inventory Stocktake now lists only Items and Products explicitly marked as inventory tracked.
+- [x] Reopening Inventory Stocktake or Record Manufacturing now refreshes current tracked records automatically.
+- [x] Existing Products now persist newly added Product variants instead of returning after the Product-only update.
+- [x] A purchase or manual re-grant clears prior access-revocation metadata when restoring the same deterministic access record.
+- [x] Products & Inventory includes a Workshop Sessions view with capacity, paid tickets sold, remaining places, attendees, quantities, and Admin Order links per Product variant.
+- [x] Product fulfilment controls now appear before Product variants, the drawer saves Product/session details directly, and Products & Inventory opens the shared Product drawer over the current page instead of navigating away or using a separate legacy editor.
+- [x] Content Builder now uses the four-stage operator flow: Details, Build, Review & Save, then Connections.
+- [x] New records no longer auto-save when moving from Build to Review; Connections remains unavailable until the record has been reviewed and saved.
+- [x] Review & Save now presents an admin-readable content proof with identity, status, tags, descriptions, expandable variants, template fields, recipe Items, connected Items/Blueprints/Plans/Assets, owners, and references.
+- [x] Product and Library information is intentionally excluded from Review & Save because it is configured afterward in Connections.
+- [x] Save confirmations now open in a modal with Back to Content and Add Connections actions instead of replacing the Builder page.
+- [x] Connections now provides variant-level Shop, Library, and manufacturing choices plus embedded Shop, Library, manufacturing, Asset, and unlock previews with in-place edit actions.
+- [x] Build-page Add another variant is positioned after the existing variants so the form follows top-to-bottom entry flow.
+- [x] V1 public navigation is fixed as Home, Marketplace, About, Profile, Cart, Contact, and footer Policy links.
+- [x] Library/Anato-me, Programs, and Affiliate registration are held for V2 and hidden/route-guarded without deleting their implementation.
+- [x] Dedicated Course and Workshop discovery pages are not public V1 navigation; unlocked customers retain Course and Workshop access through Profile.
+- [x] Stripe Connect controls are hidden for V1 while the implementation remains available for the V2 affiliate launch.
+
+### Implemented - rebuild and confirmation required
+
+- [ ] Rebuild/restart the Functions emulator and confirm editing an existing Product updates its complete Product and ProductVariant records instead of taking the previous link-only path.
+- [ ] From Connections, reactivate the first Workshop Product variant, save Product details, and confirm the drawer closes while the Builder remains on Connections.
+- [ ] Confirm the Connections Shop preview immediately reloads every saved Product variant and its current status.
+- [ ] Reopen the Product drawer and confirm the first variant remains active with its session fields intact.
+- [ ] Confirm both active Workshop variants appear in Marketplace; then pause one variant and confirm only that session disappears after save/reload.
+
+### To do before V1 launch
+
+1. **Finish the Workshop Product-variant persistence retest.** Complete the rebuild-and-confirmation checklist above, then verify both sessions, timing, venue or approved affiliate pickup, instructor, ticket capacity, checkout, Workshop plus Course multi-unlock, access email, customer access, Admin Order, cancellation/expiry, and ticket behaviour.
+2. **Finish access-control regression.** Test manual removal and restoration in CRM, dated expiry, Product variants with multiple unlocks, paused/archived content, and payment replay protection.
+3. **Finish Content Builder regression.** Test the four-stage flow for at least one representative V1 Item, Blueprint, and Plan: create, add multiple variants, review without auto-saving, save, add Connections, reopen, edit, and verify lifecycle/connection persistence.
+4. **Finish CRM workflows.** Confirm user edit/merge/archive, orders, notes, manual grants/removals, carts, roles, and Course/Workshop/Program lists against production-shaped data.
+5. **Finish approval and publication workflows.** Complete Content, Course/Workshop, and Therapist submission, review, approve/reject, notification, activation, pause, and archive tests.
+6. **Run the remaining V1 production integration.** Perform the deployed Contact form test. Stripe Connect and the final Affiliate Agreement move to V2 with Affiliate registration.
+7. **Run the final V1 regression.** Create content and Products, publish, purchase physical/digital/hybrid variants, verify access and replay safety, fulfil or resolve the order, then pause/archive and confirm every public and admin state.
+
+### V1 launch position
+
+The main V1 architecture and customer purchase paths are now substantially built. The project is in stabilization and release-gate testing rather than core feature construction.
+
+The shortest safe route to launch is:
+
+1. Confirm the existing-Product/ProductVariant persistence fix.
+2. Complete one final Workshop session purchase, access, email, ticket, pause, and expiry regression.
+3. Run representative Content Builder, CRM, and approval tests.
+4. Complete the remaining deployed integration and public-navigation decisions.
+5. Run one clean production-shaped regression from content creation through purchase, fulfilment/access, and archive.
+
+Do not add optional financial reporting, advanced inventory, or larger CRM enhancements to the V1 gate unless a test identifies them as necessary for safe operation.
+
+### Future build
+
+- Course video audio investigation.
+- Re-enable Affiliate registration after adding the final Affiliate Agreement and completing Stripe Connect production onboarding/payout testing.
+- Re-enable Library/Anato-me and Programs after their V2 content, navigation, and publication checks pass.
+- Financial cost-factor and margin reporting upgrades.
+- Advanced inventory warnings, audit views, and purchasing workflows.
+- Larger-scale CRM follow-up, staff assignment, and pagination.
+- Unified public Course, Workshop, Program, session, and Marketplace discovery after each area is launch-ready.
+
 ## Current Handoff
 
-Last updated July 27 after reconciling the current repository, recent user-confirmed tests, affiliate application/approval work, Stripe Connect diagnostics, and remaining V1 gates.
+Last updated August 3 after the Content Builder was reorganized into Details, Build,
+Review & Save, and Connections; the Review page became an operator-readable content
+proof; save confirmation became a modal; and existing Product editing was corrected
+to persist ProductVariant changes. The immediate V1 gate is rebuilding and confirming
+Workshop Product-variant persistence, followed by the remaining focused CRM,
+approval, integration, and final regression checks.
 
 The approved safety-first Product/Asset refactor is documented in `PRODUCT-ASSET-REFACTOR-MIGRATION-PLAN.md`. Products and Assets remain independent first-class entities; Product and Asset are not Item types. Implementation must remain additive and dual-read until the repeatable emulator migration, checkout/access/inventory parity tests, order-history checks, and rollback gates pass.
 
@@ -46,18 +126,50 @@ Implemented or confirmed. Test-only gaps are kept in the launch checklist below 
 - [x] Affiliate signup timezone options are always available, with Australian choices and a Brisbane fallback.
 - [x] The cart drawer scrolls as one panel so items, pickup/affiliate selection, totals, and checkout remain reachable on short screens.
 - [x] Stripe Connect onboarding now has approved-affiliate checks, loading/error states, dual User/Affiliate account lookup, safe return URLs, and non-silent failure handling.
+- [x] Marketplace Product descriptions now fall back to the primary linked customer-facing Item, Blueprint, or Plan when the Product wrapper has no copied description.
+- [x] Product detail removes internal delivery/fulfilment codes and changes the displayed image when a variant with its own linked image is selected.
+- [x] Products & Inventory groups each tracked Item or Product once and lists all Item/content or Product variant stock counts underneath without flattening them.
+- [x] Products & Inventory now includes a manufacturing recorder that previews the selected Blueprint recipe, adds finished stock, deducts component Item stock transactionally, and records a manufacturing-run audit document.
+- [x] Manufacturing recipes show total component Item stock plus each available Item variant, prefer a matching finished-product variant such as Black, and deduct the explicitly selected Item variant.
+- [x] Item-variant inventory keys include both ItemID and EntityVariantID, preventing reused IDs such as `VAR-PRIMARY` from colliding across Trigger Ball and Box Items; single-variant legacy stock is reconciled using the newest stored quantity.
+- [x] Manufacturing selection uses stable ProductVariantIDs rather than refresh-sensitive list positions, displays the finished variant before recording, and blocks a customer-facing Item variant that conflicts with the selected finished Product variant.
+- [x] Removed the redundant legacy direct-Product creation form from Products & Inventory; new Products are created through Content Builder connections while existing Product editing remains available.
+- [x] Products & Inventory uses top-level Inventory Stocktake, Record Manufacturing, Products, and Asset Library tool buttons so only the selected workspace is shown.
+- [x] Products can connect directly to an Item, Blueprint, or Plan without requiring an entity variant; entity-variant Shop checkboxes remain available when a direct variant connection is wanted.
+- [x] Product variants are independent from Item variants, support variant-specific selling names, descriptions and inclusions, and do not copy component Item stock into finished Product stock.
+- [x] Manufacturing Blueprint recipes can use the same Item more than once with different ItemVariantIDs, such as two Small cups and two Large cups, while deducting each selected variant correctly.
+- [x] Direct Products without variants, directly connected Product variants, independent Product variants, Marketplace variant display, cart data, manufacturing deductions, insufficient-stock rollback, and edit/reload persistence have been tested successfully.
+- [x] Unlocked courses open in a dedicated access-controlled player with selectable Blueprint modules and their linked Item content.
+- [x] Admin Orders distinguish digital, physical, and hybrid purchases. Digital-only orders no longer show packing, carrier, tracking, shipping steps, or packing-slip actions; they show access and access-email status instead.
+- [x] Order confirmation/resend email includes a direct unlocked-content profile link when the order grants digital access.
+- [x] The unlocked-course route now opens the dedicated course player instead of being reset to the empty Courses catalogue; locally verified with purchased `PLAN-COURSE`, two selectable Blueprint modules, and linked Item content.
+- [x] The course player opens on a Plan overview instead of auto-opening Module 1, shows module completion checkboxes and a percentage progress bar, and switches to a focused module view with a return-to-overview action. Progress is stored per user and course.
+- [x] Business Settings policy fields use readable active PDF/document Asset dropdowns and store stable AssetIDs; existing Item/URL settings remain supported as fallbacks.
 
 ## To Do Before V1 Launch
 
-- [ ] Test purchased-content access creation, unlock requirements, expiry/revocation behaviour, and customer access display.
-- [ ] Update Business Settings policy selectors to choose the appropriate reusable AssetID or ItemID rather than relying on manually entered URLs.
-- [ ] Navigate to every public policy page and verify the selected PDF loads correctly in the PDF viewer, including deployed mode.
+- [ ] Complete the remaining purchased-content access and unlock regression:
+  - [x] Create a Plan with type `course`.
+  - [x] Create or edit a Product that unlocks that Plan.
+  - [x] Purchase the Product as a test customer.
+  - [x] Confirm exactly one active `userAccess` record is created.
+  - [x] Confirm the course appears in the customer's unlocked content.
+  - [x] Purchase or manually unlock the same course again and confirm access is deduplicated.
+  - [ ] Test a Product variant that grants multiple unlocks.
+  - [ ] Test access expiry and revocation.
+  - [ ] Confirm archived or paused content cannot be newly accessed incorrectly.
+  - [x] Confirm payment replay does not create duplicate access or repeat inventory deductions.
+  - [ ] Purchase a new digital-only course order and confirm Admin Orders shows only the digital access workflow.
+  - [ ] Confirm the automatic access email is sent after purchase and the Admin resend action works.
+  - [x] Purchase a hybrid physical-plus-access Product and confirm both access and shipping workflows appear.
+- [x] Navigate to every public policy page and verify the selected PDF loads correctly in the PDF viewer, including deployed mode.
+- [ ] Submit the repaired Contact form once locally and once in deployed production; local submissions are sandboxed while production retains reCAPTCHA and SendGrid delivery.
 - [ ] Finish and end-to-end test the Admin Content Builder.
 - [ ] Finish and end-to-end test the CRM workflows.
 - [ ] Finish and end-to-end test the remaining Content, Course/Workshop, and Therapist approval submission, queue, review, approve/reject, notification, and publication workflows. Affiliate application, affiliate pickup-address, Product Review, and customer-feedback queues are implemented.
 - [ ] Emulator-test a new affiliate application through pending access denial, admin approval, refreshed custom claims, dashboard access, and approval email; repeat with rejection and resubmission.
-- [ ] Add or connect the final legal Affiliate Agreement policy page/PDF before accepting production applications.
-- [ ] Activate Stripe Connect on the Recovery Tools Stripe platform account, then test Express onboarding, return/refresh handling, dashboard login, and payout-account persistence with an approved affiliate.
+- [ ] V2: Add or connect the final legal Affiliate Agreement policy page/PDF before accepting production applications.
+- [ ] V2: Activate Stripe Connect on the Recovery Tools Stripe platform account, then test Express onboarding, return/refresh handling, dashboard login, and payout-account persistence with an approved affiliate.
 - [ ] Verify the remaining shop edge cases: hidden Products disappear publicly, archived Products cannot be purchased from a stale cart, and digital/session Products do not require shipping.
 - [ ] Run the final V1 regression from content/product creation through checkout, fulfilment, customer history, and archive.
 - [ ] Confirm public navigation visibility, admin route protection, policy links, invoice links, and the order-help link in deployed mode.
@@ -65,6 +177,7 @@ Implemented or confirmed. Test-only gaps are kept in the launch checklist below 
 
 ## Future Build
 
+- [ ] Investigate and resolve inaudible course-preview video audio. The uploaded MP4 exposes an audio track and the browser player reports that it is unmuted, but no sound is currently heard; verify the source track's audible levels and browser/device audio routing before changing the player again.
 - [ ] Add the dedicated Claim order action, operational order filter tabs, and one-click copy buttons.
 - [ ] Add configurable low-stock warnings, optional out-of-stock hiding, and a stock-movement audit log.
 - [ ] Add template revision history and a fuller Template Manager if template administration outgrows the Builder drawer.
@@ -350,11 +463,11 @@ Then verify:
 - [x] Confirm product stock decrements once after the latest compatibility fix.
 - [x] Confirm variant stock decrements if a variant was purchased.
 - [x] Refresh checkout success/profile and confirm stock does not decrement a second time.
-- [ ] Hide a product and confirm it disappears from the public shop.
-- [ ] Archive a product and confirm stale cart checkout is blocked.
-- [ ] Buy a digital/session product and confirm no shipping is required.
+- [x] Hide a product and confirm it disappears from the public shop.
+- [x] Archive a product and confirm it disappears from the public shop; retain final stale-cart blocking in the release regression.
+- [x] Buy a digital/session product and confirm no shipping is required.
 - [x] Confirm physical shipping totals follow Business Settings and the free-shipping threshold.
-- [ ] Test ProductAccessGrant creation and the customer's purchased-content access.
+- [x] Test ProductAccessGrant creation and the customer's purchased-content access for Courses and Workshops.
 
 ### 2. Content Builder Dry Run
 
@@ -395,18 +508,18 @@ Status: [x] Completed, including the customer complaint, resolution, completion,
 
 ### 4. Access And Unlock Test
 
-- [ ] Purchase a Product with a ProductAccessGrant.
-- [ ] Confirm deterministic access is created for the correct Item, Blueprint, or Plan.
-- [ ] Confirm unlock requirements and permitted visibility are enforced.
-- [ ] Confirm the customer can find and open the purchased content.
+- [x] Purchase a Product with a ProductAccessGrant.
+- [x] Confirm deterministic access is created for the correct Plan.
+- [x] Confirm unlock requirements and permitted visibility are enforced for tested Course and Workshop Plans.
+- [x] Confirm the customer can find and open purchased Course and Workshop content.
 - [ ] Confirm expiry and revocation states behave correctly.
-- [ ] Replay purchase confirmation and confirm access is not duplicated.
+- [x] Replay or repeat access creation and confirm access is not duplicated.
 
 ### 5. Policy Asset Selection And PDF Viewer
 
-- [ ] Change Business Settings policy inputs to readable Asset or Item selectors while storing stable IDs.
-- [ ] Confirm each selected record resolves to its current PDF Asset/rendition.
-- [ ] Test every policy navigation link locally and in deployed mode.
+- [x] Change Business Settings policy inputs to readable Asset selectors while storing stable IDs.
+- [x] Confirm each selected record resolves to its current PDF Asset/rendition.
+- [x] Test every configured policy navigation link successfully.
 - [ ] Confirm the PDF viewer loads, downloads, and handles a missing or archived file safely.
 
 ### 6. Finish Admin Operations
@@ -442,9 +555,8 @@ Do these before public launch:
 - [x] Run a complete Stripe purchase against deployed functions and confirm payment, order/invoice parity, inventory decrement, variant handling, and replay protection.
 - [ ] Finish the access/unlock process and verify customer access.
 - [ ] Finish the Admin Content Builder, CRM, and approvals workflows.
-- [ ] Activate and end-to-end test Stripe Connect for approved affiliate payouts.
-- [ ] Decide and enforce V1 public navigation visibility.
-- [ ] Change Business Settings policy fields to AssetID/ItemID selectors and confirm policies open correctly in deployed mode.
+- [x] Decide and enforce V1 public navigation visibility.
+- [x] Change Business Settings policy fields to AssetID selectors and confirm policies open correctly.
 - [ ] Confirm PDF invoice links work from email and profile.
 - [ ] Confirm admin-only routes do not redirect incorrectly.
 - [x] Confirm stock cannot decrement twice for the same paid order.

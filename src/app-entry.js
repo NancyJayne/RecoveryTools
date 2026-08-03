@@ -140,6 +140,17 @@ export async function loadModuleByPath(path, role) {
     }
   };
 
+  const heldForV2 = ["/programs", "/anato-me", "/affiliateSignup"]
+    .some((route) => path === route || path.startsWith(`${route}/`));
+  if (heldForV2) {
+    history.replaceState({}, "", "/");
+    await safeImport(
+      () => import("./content/homepage.js"),
+      "Homepage",
+    );
+    return;
+  }
+
   switch (true) {
   case path === "/cart":
     await safeImport(
@@ -198,13 +209,11 @@ export async function loadModuleByPath(path, role) {
         () => import("./affiliate/affiliate-dashboard.js"),
         "Affiliate Dashboard",
       );
-    } else if (!auth?.currentUser) {
-      showAuthModal("login");
     } else {
-      history.replaceState({}, "", "/affiliateSignup?register=1");
+      history.replaceState({}, "", "/");
       await safeImport(
-        () => import("./affiliate/affiliate-signup.js"),
-        "Affiliate Application",
+        () => import("./content/homepage.js"),
+        "Homepage",
       );
     }
     break;

@@ -88,8 +88,12 @@ async function handleSectionFromURL() {
 
   const pathSegment = path.split("/").filter(Boolean)[0];
   let sectionId = pathSegment ? `${pathSegment}Section` : "homeSection";
+  const params = new URLSearchParams(window.location.search);
+  if (path === "/courses" && params.has("course")) {
+    sectionId = "courseDetailSection";
+  }
   if (path === "/affiliateSignup") {
-    sectionId = new URLSearchParams(window.location.search).has("register")
+    sectionId = params.has("register")
       ? "affiliateRegisterSection"
       : "affiliateWhySection";
   }

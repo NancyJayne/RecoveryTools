@@ -704,12 +704,15 @@ function buildDocs(workbook, workbookPath) {
     const components = rows.blueprintItems
       .filter((component) => asString(value(component, "BlueprintID")) === blueprintId)
       .map((component) => ({
+        componentId: asString(value(component, "BlueprintItemID")),
         blueprintItemId: asString(value(component, "BlueprintItemID")),
         itemId: asString(value(component, "ItemID")),
+        itemVariantId: asString(value(component, "ItemVariantID", "VariantID")),
         itemName: asString(value(component, "ItemName")),
         fieldName: asString(value(component, "FieldName")),
         role: asString(value(component, "ItemRole", "Role")),
         quantity: asNumber(value(component, "Quantity")),
+        unit: asString(value(component, "Unit")) || "each",
         instructions: asString(value(component, "Instructions")),
         sortOrder: asNumber(value(component, "SortOrder")),
         required: asBool(value(component, "Required")),
@@ -747,6 +750,7 @@ function buildDocs(workbook, workbookPath) {
       sourceBlueprintId: asString(value(row, "SourceBlueprintID")),
       linkedItemIds,
       itemComponents: components,
+      linkedItemComponents: components,
       methodSteps,
       dosageEntries,
       references: asString(value(row, "References")),
@@ -775,6 +779,7 @@ function buildDocs(workbook, workbookPath) {
       blueprintItemId,
       blueprintId,
       itemId,
+      itemVariantId: asString(value(row, "ItemVariantID", "VariantID")),
       itemName: asString(value(row, "ItemName")),
       itemType: canonicalType(value(row, "Item Type", "ItemType")),
       templateFieldId: asString(value(row, "TemplateFieldID")),
@@ -1915,13 +1920,49 @@ function buildDocs(workbook, workbookPath) {
     });
   }
 
+  for (const row of rows.userAccess) {
+    const userAccessId = asString(value(row, "UserAccessID"));
+    if (!userAccessId) continue;
+    const userId = asString(value(row, "UserID"));
+    const accessType = asString(value(row, "AccessType"));
+    const accessId = asString(value(row, "AccessID"));
+    const grantedAt = asDate(value(row, "GrantedAt", "GrantedDate"));
+    const expiresAt = asDate(value(row, "ExpiresAt", "ExpiryDate"));
+    const revokedAt = asDate(value(row, "RevokedAt", "RevokedDate"));
+    if (!userId) warnings.push(`User Access ${userAccessId} is missing UserID.`);
+    if (!["Item", "Blueprint", "Plan"].includes(accessType)) {
+      warnings.push(
+        `User Access ${userAccessId} has invalid AccessType ${accessType || "(blank)"}; ` +
+        "use Item, Blueprint, or Plan.",
+      );
+    }
+    if (!accessId) warnings.push(`User Access ${userAccessId} is missing AccessID.`);
+    pushDoc(docs, "userAccess", userAccessId, {
+      userAccessId,
+      userId,
+      accessType,
+      accessId,
+      accessVariantId: asString(value(row, "AccessVariantID")),
+      sourceProductId: asString(value(row, "SourceProductID")),
+      sourceOrderId: asString(value(row, "SourceOrderID")),
+      sourceItemId: asString(value(row, "SourceItemID")),
+      grantedAt: grantedAt || FieldValue.serverTimestamp(),
+      expiresAt,
+      revocable: value(row, "Revocable") === null ? true : asBool(value(row, "Revocable")),
+      active: value(row, "Active") === null ? true : asBool(value(row, "Active")),
+      revokedAt,
+      notes: asString(value(row, "Notes")),
+      createdAt: grantedAt || FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+
   const simpleSheets = [
     ["orders", rows.orders, "OrderID"],
     ["orderItems", rows.orderItems, "OrderItemID"],
     ["customerAddresses", rows.customerAddresses, "AddressID"],
     ["shipments", rows.shipments, "ShipmentID"],
     ["stripeEvents", rows.stripeEvents, "StripeEventID"],
-    ["userAccess", rows.userAccess, "UserAccessID"],
   ];
 
   for (const [collection, sheetRows, idColumn] of simpleSheets) {

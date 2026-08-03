@@ -230,6 +230,10 @@ async function productSnapshotFromLineItem(lineItem, commissionRates = {}, archi
     variantName: variant?.name ||
       [variant?.colour, variant?.size].filter(Boolean).join(" / ") ||
       metadata.variantName || "",
+    eventStartAt: variant?.eventStartAt || "",
+    eventEndAt: variant?.eventEndAt || "",
+    eventLocation: variant?.eventLocation || "",
+    instructor: variant?.instructor || "",
     sku: product.sku || metadata.sku || "",
     quantity,
     unitPrice,
@@ -339,6 +343,9 @@ export async function writeCheckoutCompleted({ stripe, session, event }) {
     adminNotes: "",
     itemsSummary: items.map((item) => `${item.productTitle} x${item.quantity}`).join("; "),
     hasPhysicalItems,
+    fulfilmentType: hasPhysicalItems && accessItems.length
+      ? "hybrid"
+      : accessItems.length ? "digital" : "physical",
     fulfilmentDestination: affiliatePickupLocation ? {
       type: "affiliate_pickup",
       businessName: affiliatePickupLocation.businessName || "",
@@ -440,6 +447,8 @@ export async function writeCheckoutCompleted({ stripe, session, event }) {
         accessVariantId,
         sourceItemId: item.itemId || item.productId,
         sourceProductId: item.productId,
+        sourceProductVariantId: item.variantId || "",
+        sourceProductVariantName: item.variantName || "",
         sourceOrderId: orderId,
         productAccessGrantId: grant.productAccessGrantId || grant.id || "",
         grantedAt: admin.firestore.FieldValue.serverTimestamp(),

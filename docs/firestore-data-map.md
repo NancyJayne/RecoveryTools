@@ -71,6 +71,29 @@ rewrite these historical values.
 `{userId}_{accessEntityType}_{accessEntityId}`. ProductAccessGrant duration settings
 are resolved to `expiresAt` when access is granted; permanent grants use `null`.
 
+`userAccess` can target any reusable Item, Blueprint, or Plan. The referenced
+entity's `type` (`course`, `workshop`, or `program`) determines which customer
+profile section displays it. The `User Access` workbook sheet uses:
+
+| Sheet column | Firestore field |
+|---|---|
+| `UserAccessID` | document ID, `userAccessId` |
+| `UserID` | `userId` |
+| `AccessType` | `accessType` (`Item`, `Blueprint`, or `Plan`) |
+| `AccessID` | `accessId` (the target entity's stable ID) |
+| `AccessVariantID` | `accessVariantId` |
+| `SourceProductID` | `sourceProductId` |
+| `SourceOrderID` | `sourceOrderId` |
+| `GrantedAt` | `grantedAt` |
+| `ExpiresAt` | `expiresAt`; blank means no expiry |
+| `Revocable` | `revocable` |
+| `Active` | `active` |
+| `RevokedAt` | `revokedAt` |
+| `Notes` | `notes` |
+
+Workbook rows merge by `UserAccessID`; they never delete Firestore access records.
+To revoke seeded access, set `Active` to `No` and optionally record `RevokedAt`.
+
 ## items
 
 Source sheet: `Items`

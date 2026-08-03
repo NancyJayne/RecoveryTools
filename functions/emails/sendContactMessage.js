@@ -15,6 +15,10 @@ if (!Array.isArray(admin.apps) || admin.apps.length === 0) {
 
 const db = admin.firestore();
 
+function useLocalEmailSandbox() {
+  return process.env.FUNCTIONS_EMULATOR === "true";
+}
+
 // Simple HTML escape to prevent injection
 function escapeHTML(str) {
   return str?.replace(/[&<>"']/g, (match) => {
@@ -32,8 +36,21 @@ function escapeHTML(str) {
 const sendContactMessageHandler = async (request) => {
   const { name, email, message, token } = request.data || {};
 
-  if (!name || !email || !message || !token) {
+  if (!name || !email || !message || (!token && !useLocalEmailSandbox())) {
     throw new HttpsError("invalid-argument", "Missing required fields.");
+  }
+
+  if (useLocalEmailSandbox()) {
+    await db.collection("contactMessages").add({
+      name,
+      email,
+      message,
+      verified: false,
+      emailSent: false,
+      sandboxed: true,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { success: true, sandboxed: true, message: "Contact message sandboxed locally." };
   }
 
   const recaptchaKey = RECAPTCHA_SECRET_KEY.value();

@@ -273,8 +273,12 @@ async function loadCrmRelationships() {
   accessSnapshot.docs.forEach((accessDoc) => {
     const access = accessDoc.data();
     const type = String(access.accessType || access.accessEntityType || "").toLowerCase();
-    const map = crmRelationships[`${type}s`];
-    if (map) addRelationship(map, access.accessId || access.accessEntityId, access.userId || access.uid);
+    const accessId = access.accessId || access.accessEntityId;
+    const catalogType = Object.entries(accessCatalog).find(([, entries]) => (
+      entries.some((entry) => entry.id === accessId)
+    ))?.[0]?.toLowerCase();
+    const map = crmRelationships[`${catalogType || type}s`];
+    if (map) addRelationship(map, accessId, access.userId || access.uid);
   });
   applyCrmUserFilters();
 }
@@ -479,17 +483,30 @@ async function loadUsers() {
 async function loadAccessCatalog() {
   const rows = document.getElementById("crmProductRows");
   if (rows) rows.innerHTML = "<p data-loading-products class='text-sm text-gray-400'>Loading Products...</p>";
-  await Promise.allSettled([
-    ["Course", "courses"],
-    ["Workshop", "workshops"],
-    ["Program", "programs"],
-  ].map(async ([type, collectionName]) => {
+  Object.values(accessCatalog).forEach((entries) => entries.splice(0));
+  await Promise.allSettled(["items", "blueprints", "plans"].map(async (collectionName) => {
     const snapshot = await getDocs(collection(db, collectionName));
-    accessCatalog[type] = snapshot.docs.map((record) => ({
-      id: record.id,
-      name: record.data().name || record.data().title || record.id,
-    })).sort((a, b) => a.name.localeCompare(b.name));
+    snapshot.docs.forEach((record) => {
+      const content = record.data();
+      const contentType = String(
+        content.type || content.itemType || content.blueprintType ||
+        content.planType || content.planTypeName || "",
+      ).trim().toLowerCase();
+      const catalogType = {
+        course: "Course",
+        workshop: "Workshop",
+        program: "Program",
+      }[contentType];
+      if (!catalogType || accessCatalog[catalogType].some((entry) => entry.id === record.id)) return;
+      accessCatalog[catalogType].push({
+        id: record.id,
+        name: content.name || content.title || record.id,
+      });
+    });
   }));
+  Object.values(accessCatalog).forEach((entries) => {
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+  });
   try {
     const [productsSnap, grantsSnap, pricesSnap] = await Promise.all([
       getDocs(collection(db, "products")),
@@ -611,7 +628,8 @@ async function grantManualProductAccess() {
       productAccessGrantId: grant.productAccessGrantId || grant.id,
       source: "admin-manual", manualGrantReason: reason, manualGrantNote: reasonNote,
       grantedAt: serverTimestamp(), grantedBy: auth?.currentUser?.uid || "admin",
-      active: true, revocable: true, updatedAt: serverTimestamp(),
+      active: true, revokedAt: null, revokedBy: null, revocationReason: null,
+      revocable: true, updatedAt: serverTimestamp(),
     }, { merge: true });
   })));
   showToast(`${products.length} Product${products.length === 1 ? "" : "s"} unlocked`, "success");
@@ -644,7 +662,10 @@ export function setupRoleManager() {
   const billingFields = document.getElementById("crmBillingFields");
   if (shippingFields) shippingFields.innerHTML = addressFieldsHtml("crmShipping");
   if (billingFields) billingFields.innerHTML = addressFieldsHtml("crmBilling");
-  Promise.all([loadUsers(), loadAccessCatalog(), loadCrmRelationships()]);
+  Promise.all([
+    loadUsers(),
+    loadAccessCatalog().then(() => loadCrmRelationships()),
+  ]);
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const uid = document.getElementById("roleUid").value;
@@ -893,18 +914,56 @@ async function renderUserAccess(uid, accessType) {
     where("userId", "==", uid),
   );
   const accessSnapshot = await getDocs(q);
-  const records = accessSnapshot.docs.filter((accessDoc) => (
-    String(accessDoc.data().accessType || "").toLowerCase() === accessType.toLowerCase()
-  ));
   const names = new Map(accessCatalog[accessType].map((entry) => [entry.id, entry.name]));
+  const records = accessSnapshot.docs.filter((accessDoc) => {
+    const data = accessDoc.data();
+    const storedType = String(data.accessType || data.accessEntityType || "").toLowerCase();
+    const accessId = data.accessId || data.accessEntityId;
+    return storedType === accessType.toLowerCase() || names.has(accessId);
+  });
   container.innerHTML = !records.length
     ? "<p class='text-sm text-gray-400'>None unlocked.</p>"
     : records.map((accessDoc) => {
       const data = accessDoc.data();
-      const name = escapeHTML(names.get(data.accessId) || data.accessId);
-      const status = data.active === false ? "Revoked" : "Unlocked";
-      return `<div class="mb-2 rounded bg-gray-700 p-2"><strong>${name}</strong> (${status})</div>`;
+      const accessId = data.accessId || data.accessEntityId;
+      const name = escapeHTML(names.get(accessId) || accessId);
+      const revoked = data.active === false || Boolean(data.revokedAt);
+      const status = revoked ? "Removed" : "Unlocked";
+      return `<div class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded
+        bg-gray-700 p-2">
+        <span><strong>${name}</strong> (${status})</span>
+        <button type="button"
+          class="crm-access-action rounded border border-purple-400 px-2 py-1 text-xs
+            text-purple-100 hover:bg-purple-900/40"
+          data-access-record-id="${escapeHTML(accessDoc.id)}"
+          data-access-action="${revoked ? "restore" : "revoke"}">
+          ${revoked ? "Restore access" : "Remove access"}
+        </button>
+      </div>`;
     }).join("");
+  container.querySelectorAll(".crm-access-action").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const action = button.dataset.accessAction;
+      const confirmed = action === "restore" || window.confirm(
+        "Remove this access? The history will be retained and access can be restored later.",
+      );
+      if (!confirmed) return;
+      button.disabled = true;
+      try {
+        const manageAccess = httpsCallable(functions, "manageUserAccess");
+        await manageAccess({
+          accessRecordId: button.dataset.accessRecordId,
+          action,
+        });
+        showToast(action === "restore" ? "Access restored" : "Access removed", "success");
+        await renderUserAccess(uid, accessType);
+      } catch (error) {
+        console.error("Failed to update user access:", error);
+        showToast(error.message || "Could not update access", "error");
+        button.disabled = false;
+      }
+    });
+  });
 }
 
 async function renderUserCRMNotes(uid) {

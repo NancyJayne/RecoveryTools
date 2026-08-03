@@ -61,6 +61,7 @@ export { adminCreateUser, sendPasswordReset as PasswordReset } from "./users/aut
 export { getUserByEmailOrUID } from "./users/getUserByEmailOrUID.js";
 export { searchUsersByName } from "./users/searchUsersByName.js";
 export { manageUserProfiles } from "./users/manageUserProfiles.js";
+export { manageUserAccess } from "./users/manageUserAccess.js";
 
 // Affiliate
 export { createStripeConnectLink } from "./affiliates/createStripeConnectLink.js";
@@ -79,8 +80,15 @@ export { manageAffiliateApplications } from "./admin/manageAffiliateApplications
 export { createProduct } from "./products/createProduct.js";
 export { updateProduct } from "./products/updateProduct.js";
 export { updateProductInventory } from "./products/updateProductInventory.js";
+export { getInventoryOperationsData } from "./products/getInventoryOperationsData.js";
+export { updateInventoryStocktake } from "./products/updateInventoryStocktake.js";
+export { recordManufacturingRun } from "./products/recordManufacturingRun.js";
+export { updateWorkshopAttendance } from "./products/updateWorkshopAttendance.js";
 export { deleteProduct } from "./products/deleteProduct.js";
 export { getFirestoreProducts } from "./products/getFirestoreProducts.js";
+
+// Unlocked content
+export { getUnlockedCourse } from "./content/getUnlockedCourse.js";
 
 // Utils
 export { logError } from "./utils/logError.js";

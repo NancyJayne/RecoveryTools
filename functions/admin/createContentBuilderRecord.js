@@ -71,6 +71,9 @@ function cleanAccessGrants(value) {
     accessEntityId: cleanString(grant?.accessEntityId),
     accessEntityVariantId: cleanString(grant?.accessEntityVariantId || grant?.entityVariantId),
     productVariantId: cleanString(grant?.productVariantId),
+    durationType: cleanString(grant?.durationType || "permanent").toLowerCase(),
+    durationValue: asNumber(grant?.durationValue),
+    endsAt: cleanString(grant?.endsAt),
   })).filter((grant) => {
     const key = `${grant.productVariantId}:${grant.accessEntityType}:${grant.accessEntityId}:` +
       grant.accessEntityVariantId;
@@ -197,11 +200,15 @@ function cleanEntityVariants(value) {
 }
 
 function cleanItemComponents(value) {
-  return (Array.isArray(value) ? value : []).slice(0, 200).map((component) => ({
+  return (Array.isArray(value) ? value : []).slice(0, 200).map((component, index) => ({
+    componentId: cleanString(component?.componentId) || `COMPONENT-${index + 1}`,
     itemId: cleanString(component?.itemId),
+    itemVariantId: cleanString(component?.itemVariantId),
     quantity: asNumber(component?.quantity) ?? 0,
+    unit: cleanString(component?.unit) || "each",
     unitCost: asNumber(component?.unitCost) ?? 0,
     estimatedCost: asNumber(component?.estimatedCost) ?? 0,
+    notes: cleanString(component?.notes),
   })).filter((component) => component.itemId && component.quantity > 0);
 }
 
@@ -278,6 +285,22 @@ function selectedAssetLinks(template, values) {
     seen.add(key);
     return true;
   }).slice(0, 100);
+}
+
+function cleanTemplateAssetLinks(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  return value.map((link) => ({
+    assetId: cleanString(link?.assetId),
+    fieldKey: templateFieldKey(link?.fieldKey),
+    fieldName: cleanString(link?.fieldName) || "Template Asset",
+    entityVariantId: cleanString(link?.entityVariantId),
+  })).filter((link) => {
+    const key = `${link.entityVariantId}:${link.fieldKey}:${link.assetId}`;
+    if (!link.assetId || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 200);
 }
 
 function mergeUnique(left = [], right = []) {
@@ -366,10 +389,14 @@ function normalizeVariant(value, index) {
     stockQty: asNumber(value.stockQty ?? value.stock) ?? 0,
     status: cleanString(value.status || "active").toLowerCase(),
     contentVariantId: cleanString(value.contentVariantId),
+    shortDescription: cleanString(value.shortDescription),
+    longDescription: cleanString(value.longDescription),
+    inclusions: cleanString(value.inclusions),
     deliveryMode: cleanString(value.deliveryMode),
     physicalFulfilment: cleanString(value.physicalFulfilment || "none").toLowerCase(),
     calendarBookingReference: cleanString(value.calendarBookingReference),
     seatCapacity: asNumber(value.seatCapacity),
+    nearCapacityWarning: asNumber(value.nearCapacityWarning),
     eventStartAt: cleanString(value.eventStartAt),
     eventEndAt: cleanString(value.eventEndAt),
     eventLocation: cleanString(value.eventLocation),
@@ -465,8 +492,11 @@ export const createContentBuilderRecord = onCall(
       }
       validateTemplateFieldValues(variantTemplate, variant.templateFieldValues);
     });
+    const variantAssetSelections = cleanTemplateAssetLinks(data.templateAssetLinks);
     const linkedAssetSelections = ["item", "blueprint", "plan"].includes(recordType)
-      ? selectedAssetLinks(selectedTemplate, templateFieldValues)
+      ? variantAssetSelections.length
+        ? variantAssetSelections
+        : selectedAssetLinks(selectedTemplate, templateFieldValues)
       : [];
     const similar = await findSimilar(db, config.collection, name);
     if (similar.length && data.confirmDuplicate !== true) {
@@ -723,10 +753,14 @@ export const createContentBuilderRecord = onCall(
         if (["item", "blueprint", "plan"].includes(recordType) && linkedAssets.length) {
           const entityType = recordType.charAt(0).toUpperCase() + recordType.slice(1);
           linkedAssets.forEach((asset, index) => {
-            const entityAssetId = `ENTITYASSET-${entityType.toUpperCase()}-${slugify(id)}-${slugify(asset.assetId)}`;
+            const entityAssetId = [
+              "ENTITYASSET", entityType.toUpperCase(), slugify(id),
+              slugify(asset.entityVariantId || "ALL"), slugify(asset.assetId),
+            ].join("-");
             if (recordType === "item") {
               const itemAssetId = [
-                "ITEMASSET", slugify(id), slugify(asset.fieldKey), slugify(asset.assetId),
+                "ITEMASSET", slugify(id), slugify(asset.entityVariantId || "ALL"),
+                slugify(asset.fieldKey), slugify(asset.assetId),
               ].join("-");
               transaction.create(db.collection("itemAssets").doc(itemAssetId), {
                 ...appManagedFields,
@@ -734,6 +768,8 @@ export const createContentBuilderRecord = onCall(
                 itemId: id,
                 assetId: asset.assetId,
                 purpose: asset.fieldName,
+                fieldKey: asset.fieldKey,
+                entityVariantId: asset.entityVariantId || "",
                 sortOrder: uploadedAssets.length + index + 1,
                 displayStatus: "active",
                 contextTitle: cleanString(asset.data.title || asset.data.name) || asset.assetId,
@@ -752,6 +788,7 @@ export const createContentBuilderRecord = onCall(
               assetRole: asset.fieldName,
               fieldKey: asset.fieldKey,
               productVariantId: "",
+              entityVariantId: asset.entityVariantId || "",
               isPrimary: uploadedAssets.length === 0 && index === 0,
               sortOrder: uploadedAssets.length + index + 1,
               displayStatus: "active",
@@ -804,7 +841,12 @@ export const createContentBuilderRecord = onCall(
           const retailPrice = asNumber(data.price) ?? 0;
           const salePrice = asNumber(data.salePrice);
           const effectivePrice = salePrice ?? retailPrice;
-          const variants = (Array.isArray(data.variants) ? data.variants : [])
+          // Product variants belong to the Product drawer. `data.variants` is the
+          // content entity's Build variants and does not contain Product-only
+          // workshop fields such as session time, location, or seat capacity.
+          const variants = (Array.isArray(data.productRelation?.variants)
+            ? data.productRelation.variants
+            : [])
             .map(normalizeVariant)
             .filter(Boolean);
           const accessTargets = cleanAccessGrants(data.productRelation?.accessGrants);
@@ -852,6 +894,12 @@ export const createContentBuilderRecord = onCall(
               manufacturingBlueprintId,
               estimatedUnitCost: asNumber(data.productRelation?.estimatedUnitCost) ?? 0,
               variantContentLinks,
+              hasVariants: variants.length > 0,
+              priceFrom: variants
+                .map((variant) => variant.priceOverride)
+                .filter((price) => price !== null)
+                .concat([effectivePrice])
+                .sort((a, b) => a - b)[0],
               updatedAt: now,
             }, { merge: true });
             transaction.set(db.collection("productLinks").doc(productLinkId), {
@@ -888,6 +936,62 @@ export const createContentBuilderRecord = onCall(
                 updatedAt: now,
               }, { merge: true });
             }
+            variants.forEach((variant, index) => {
+              const variantId = variant.variantId || `VAR-${slugify(productId)}-${index + 1}`;
+              transaction.set(db.collection("productVariants").doc(variantId), {
+                ...appManagedFields,
+                productVariantId: variantId,
+                productId,
+                variantName: variant.name || `Variant ${index + 1}`,
+                variantCode: variantId,
+                sku: variant.sku,
+                status: variant.status || "active",
+                contentVariantId: variant.contentVariantId,
+                shortDescription: variant.shortDescription,
+                longDescription: variant.longDescription,
+                inclusions: variant.inclusions,
+                isDefault: index === 0,
+                optionSummary: [variant.colour, variant.size].filter(Boolean).join(" / "),
+                priceOverride: variant.priceOverride,
+                currency: "AUD",
+                requiresShippingOverride: ["shipping", "shipping-or-pickup"]
+                  .includes(variant.physicalFulfilment),
+                inventoryTracked: data.productRelation?.inventoryTracked === true,
+                deliveryMode: variant.deliveryMode,
+                physicalFulfilment: variant.physicalFulfilment,
+                stockQuantity: variant.stockQty,
+                stockStatus: variant.stockQty > 0 ? "in-stock" : "out-of-stock",
+                calendarBookingReference: variant.calendarBookingReference,
+                seatCapacity: variant.seatCapacity,
+                nearCapacityWarning: variant.nearCapacityWarning,
+                eventStartAt: variant.eventStartAt,
+                eventEndAt: variant.eventEndAt,
+                eventLocation: variant.eventLocation,
+                instructor: variant.instructor,
+                sortOrder: index + 1,
+                createdAt: now,
+                updatedAt: now,
+              }, { merge: true });
+              if (variant.priceOverride !== null) {
+                const variantPriceId = `PRICE-${slugify(productId)}-${index + 1}`;
+                transaction.set(db.collection("productPrices").doc(variantPriceId), {
+                  ...appManagedFields,
+                  priceId: variantPriceId,
+                  productId,
+                  variantId,
+                  currency: "AUD",
+                  retailPrice: variant.priceOverride,
+                  salePrice: null,
+                  onSale: false,
+                  effectiveShopPrice: variant.priceOverride,
+                  gstIncluded: true,
+                  gstAmount: Number((variant.priceOverride / 11).toFixed(2)),
+                  status: "active",
+                  createdAt: now,
+                  updatedAt: now,
+                }, { merge: true });
+              }
+            });
             accessTargets.forEach((grant) => {
               const { accessEntityType, accessEntityId, accessEntityVariantId, productVariantId } = grant;
               const grantId = [
@@ -903,8 +1007,9 @@ export const createContentBuilderRecord = onCall(
                 accessEntityId,
                 accessEntityVariantId: accessEntityVariantId || "",
                 grantTiming: "on-payment-confirmed",
-                durationType: "permanent",
-                durationValue: null,
+                durationType: grant.durationType,
+                durationValue: grant.durationValue,
+                endsAt: grant.endsAt,
                 revocable: true,
                 status: "active",
                 createdAt: now,
@@ -960,7 +1065,8 @@ export const createContentBuilderRecord = onCall(
             featured: data.featured === true,
             requiresShipping: data.productRelation?.requiresShipping === true,
             physicalFulfilment: cleanString(
-              data.productRelation?.physicalFulfilment || (data.productRelation?.requiresShipping ? "shipping" : "none"),
+              data.productRelation?.physicalFulfilment ||
+                (data.productRelation?.requiresShipping ? "shipping" : "none"),
             ).toLowerCase(),
             inventoryTracked: data.productRelation?.inventoryTracked === true,
             manufacturingBlueprintId,
@@ -1077,11 +1183,15 @@ export const createContentBuilderRecord = onCall(
               priceOverride: variant.priceOverride,
               status: variant.status || "active",
               contentVariantId: variant.contentVariantId,
+              shortDescription: variant.shortDescription,
+              longDescription: variant.longDescription,
+              inclusions: variant.inclusions,
               deliveryMode: variant.deliveryMode,
               physicalFulfilment: variant.physicalFulfilment,
               stock: variant.stockQty,
               calendarBookingReference: variant.calendarBookingReference,
               seatCapacity: variant.seatCapacity,
+              nearCapacityWarning: variant.nearCapacityWarning,
               eventStartAt: variant.eventStartAt,
               eventEndAt: variant.eventEndAt,
               eventLocation: variant.eventLocation,
@@ -1098,6 +1208,9 @@ export const createContentBuilderRecord = onCall(
               sku: variant.sku,
               status: variant.status || "active",
               contentVariantId: variant.contentVariantId,
+              shortDescription: variant.shortDescription,
+              longDescription: variant.longDescription,
+              inclusions: variant.inclusions,
               isDefault: index === 0,
               optionSummary: [variant.colour, variant.size].filter(Boolean).join(" / "),
               priceOverride: variant.priceOverride,
@@ -1110,6 +1223,7 @@ export const createContentBuilderRecord = onCall(
               stockStatus: variant.stockQty > 0 ? "in-stock" : "out-of-stock",
               calendarBookingReference: variant.calendarBookingReference,
               seatCapacity: variant.seatCapacity,
+              nearCapacityWarning: variant.nearCapacityWarning,
               eventStartAt: variant.eventStartAt,
               eventEndAt: variant.eventEndAt,
               eventLocation: variant.eventLocation,
@@ -1183,8 +1297,9 @@ export const createContentBuilderRecord = onCall(
               accessEntityId,
               accessEntityVariantId: accessEntityVariantId || "",
               grantTiming: "on-payment-confirmed",
-              durationType: "permanent",
-              durationValue: null,
+              durationType: grant.durationType,
+              durationValue: grant.durationValue,
+              endsAt: grant.endsAt,
               revocable: true,
               status: "active",
               createdAt: now,

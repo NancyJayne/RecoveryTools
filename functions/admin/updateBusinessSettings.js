@@ -150,8 +150,10 @@ export const updateBusinessSettings = onCall(
       throw new HttpsError("permission-denied", "Only admins can update business settings.");
     }
 
-    const profile = normalizeBusinessProfile(request.data || {});
     const db = admin.firestore();
+    const existingSnapshot = await db.collection("settings").doc("business").get();
+    const existing = existingSnapshot.exists ? existingSnapshot.data() : {};
+    const profile = normalizeBusinessProfile({ ...existing, ...(request.data || {}) });
     const batch = db.batch();
     const now = admin.firestore.FieldValue.serverTimestamp();
 

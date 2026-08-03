@@ -90,6 +90,7 @@ export const CANONICAL_WORKBOOK_SCHEMAS = {
     sheet: "ProductVariants", idField: "productVariantId",
     fields: [
       field("ProductVariantID"), field("ProductID"), field("VariantName"), field("SKU"),
+      field("ShortDescription"), field("LongDescription"), field("Inclusions"),
       field("Status"), field("IsDefault", "boolean"), field("Colour"), field("Size"), field("SizeUnit"),
       field("Weight", "number"), field("WeightUnit"), field("Price", "number", "priceOverride"),
       field("CompareAtPrice", "number", "compareAtPriceOverride"), field("TaxableOverride", "boolean"),
