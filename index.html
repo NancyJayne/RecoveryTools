@@ -983,11 +983,19 @@
             </p>
           </div>
           <div class="shrink-0 sm:text-right">
-            <button id="downloadContentBackupBtn" type="button" class="w-full rounded border border-[#407471] px-3 py-2 text-sm text-white hover:bg-[#407471] disabled:cursor-wait disabled:opacity-60 sm:w-auto">
-              Download full backup
-            </button>
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <button id="downloadMasterWorkbookBtn" type="button" class="w-full rounded bg-[#407471] px-3 py-2 text-sm text-white hover:bg-[#315c59] disabled:cursor-wait disabled:opacity-60 sm:w-auto">
+                Download editable workbook
+              </button>
+              <button id="downloadContentBackupBtn" type="button" class="w-full rounded border border-[#407471] px-3 py-2 text-sm text-white hover:bg-[#407471] disabled:cursor-wait disabled:opacity-60 sm:w-auto">
+                Download full JSON backup
+              </button>
+            </div>
+            <p class="mt-1 max-w-sm text-xs text-gray-400 sm:max-w-md">
+              The workbook contains editable master content for reseeding. JSON is the complete recovery backup.
+            </p>
             <p class="mt-1 max-w-sm text-xs text-amber-300 sm:max-w-xs">
-              Includes sensitive customer and order data. Store securely.
+              The JSON backup includes sensitive customer and order data. Store it securely.
             </p>
           </div>
         </div>
@@ -1066,110 +1074,6 @@
         <div id="contentControlsSummary" class="mb-3 text-sm text-gray-400"></div>
         <div id="contentControlsList" class="space-y-4 text-sm">Loading content controls...</div>
 
-        <aside
-          id="contentQuickEditDrawer"
-          class="fixed inset-y-0 right-0 z-50 hidden w-full max-w-xl overflow-y-auto border-l border-gray-700 bg-gray-950 p-5 shadow-2xl"
-        >
-          <div class="mb-4 flex items-start justify-between gap-4">
-            <div>
-              <h3 class="text-xl font-semibold text-white">Quick Edit</h3>
-              <p id="contentQuickEditMeta" class="mt-1 break-all text-xs text-gray-400"></p>
-            </div>
-            <button id="closeContentQuickEditBtn" type="button" class="rounded bg-gray-800 px-3 py-2 text-sm text-white hover:bg-gray-700">
-              Close
-            </button>
-          </div>
-
-          <form id="contentQuickEditForm" class="space-y-4 text-sm">
-            <input id="quickEditRecordId" type="hidden">
-            <input id="quickEditRecordType" type="hidden">
-
-            <section class="rounded border border-gray-700 bg-gray-900/60 p-4">
-              <h4 class="mb-3 font-semibold text-white">Core content</h4>
-              <label class="block">
-                Name
-                <input id="quickEditName" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-              </label>
-              <div class="mt-3 grid gap-3 md:grid-cols-2">
-                <label class="block md:col-span-2">
-                  Status
-                  <select id="quickEditStatus" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
-                </label>
-                <label class="block">
-                  Visibility
-                  <select id="quickEditVisibility" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
-                </label>
-              </div>
-              <label class="mt-3 block">
-                Owner
-                <input id="quickEditOwner" list="contentOwnerSuggestions" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Recovery Tools or other business">
-                <datalist id="contentOwnerSuggestions">
-                  <option value="Recovery Tools"></option>
-                  <option value="Other business"></option>
-                </datalist>
-              </label>
-              <div class="mt-3">
-                <div class="flex items-center justify-between gap-2">
-                  <span>Tags</span>
-                  <div class="flex flex-wrap gap-2">
-                    <button id="addQuickEditTagBtn" type="button" class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add another tag</button>
-                    <button id="createQuickEditTagBtn" type="button" class="rounded bg-[#407471] px-3 py-1 text-xs text-white">Create new tag</button>
-                  </div>
-                </div>
-                <div id="quickEditTagRows" class="mt-2 space-y-2"></div>
-              </div>
-            </section>
-
-            <section class="rounded border border-gray-700 bg-gray-900/60 p-4">
-              <h4 class="font-semibold text-white">Admin workflow</h4>
-              <div class="mt-3 flex flex-wrap gap-2">
-                <button type="button" data-content-action="active" class="rounded bg-[#407471] px-3 py-2">Approve / active</button>
-                <button type="button" data-content-action="paused" class="rounded bg-gray-700 px-3 py-2">Pause</button>
-                <button type="button" data-content-action="archived" class="rounded bg-gray-700 px-3 py-2">Archive</button>
-                <button type="button" data-content-action="draft" class="rounded bg-amber-800 px-3 py-2">Return for amendment</button>
-              </div>
-              <div class="mt-3 grid gap-3 md:grid-cols-2">
-                <label class="block">Schedule active <input id="quickEditScheduledActiveAt" type="datetime-local" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></label>
-                <label class="block">Schedule pause <input id="quickEditScheduledPauseAt" type="datetime-local" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></label>
-              </div>
-              <label class="mt-3 block">Amendment comments
-                <textarea id="quickEditAmendmentComments" class="mt-1 h-20 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Required when returning to draft"></textarea>
-              </label>
-            </section>
-
-            <section id="quickEditCommerceFields" class="hidden rounded border border-gray-700 bg-gray-900/60 p-4">
-              <h4 class="font-semibold text-white">Website and sale controls</h4>
-              <div class="mt-3 grid gap-3 sm:grid-cols-3">
-                <label data-control-toggle class="cursor-pointer rounded border border-gray-700 bg-gray-800 px-3 py-3 text-center text-gray-300 transition"><input id="quickEditWebsiteVisible" type="checkbox" class="sr-only"> Visible on website</label>
-                <label data-control-toggle class="cursor-pointer rounded border border-gray-700 bg-gray-800 px-3 py-3 text-center text-gray-300 transition"><input id="quickEditIsShopProduct" type="checkbox" class="sr-only"> Is shop product</label>
-                <label data-control-toggle class="cursor-pointer rounded border border-gray-700 bg-gray-800 px-3 py-3 text-center text-gray-300 transition"><input id="quickEditFeatured" type="checkbox" class="sr-only"> Featured</label>
-              </div>
-              <div id="quickEditPricingFields" class="mt-4 grid gap-3 md:grid-cols-2">
-                <label class="block">Normal price <input id="quickEditNormalPrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></label>
-                <label class="block">Sale price <input id="quickEditSalePrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></label>
-                <label class="block">Sale starts <input id="quickEditSaleStartsAt" type="datetime-local" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></label>
-                <label class="block">Sale ends <input id="quickEditSaleEndsAt" type="datetime-local" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></label>
-                <p class="text-xs text-gray-400 md:col-span-2">The normal price remains stored and is restored when the sale end time passes.</p>
-              </div>
-            </section>
-
-            <section id="quickEditTypeSection" class="rounded border border-gray-700 bg-gray-900/60 p-4">
-              <h4 class="mb-3 font-semibold text-white">Classification</h4>
-              <div id="quickEditTypeFields" class="grid gap-3 md:grid-cols-2"></div>
-            </section>
-
-            <section id="quickEditRelationshipSummary" class="rounded border border-gray-700 bg-gray-900/60 p-4 text-gray-300"></section>
-
-            <div class="flex flex-wrap justify-end gap-3">
-              <button type="button" id="cancelContentQuickEditBtn" class="rounded bg-gray-700 px-4 py-2 text-white hover:bg-gray-600">
-                Cancel
-              </button>
-              <button type="submit" class="rounded bg-[#407471] px-4 py-2 text-white hover:bg-[#305a56]">
-                Save changes
-              </button>
-            </div>
-          </form>
-        </aside>
       </div>
 
         <div id="commissionRatesPanel" class="admin-section hidden">
@@ -1206,7 +1110,30 @@
     <button type="button" class="product-manager-tool-btn rounded border border-gray-600 px-4 py-2 text-sm font-semibold text-white" data-product-manager-tool="assets">
       Asset Library
     </button>
+    <button type="button" class="product-manager-tool-btn rounded border border-gray-600 px-4 py-2 text-sm font-semibold text-white" data-product-manager-tool="promotions">Promotions</button>
   </nav>
+
+  <section id="productPromotionsToolPanel" class="product-manager-tool-panel hidden mb-8 rounded border border-gray-700 bg-gray-900/50 p-4" data-product-manager-panel="promotions">
+    <div class="flex flex-wrap items-start justify-between gap-3"><div><h3 class="text-lg font-semibold">Promotions and discount codes</h3><p class="text-sm text-gray-400">Create each code once, then select eligible Products or variants.</p></div><button id="newPromotionBtn" type="button" class="rounded border border-[#407471] px-3 py-2 text-sm text-[#9edbd7]">New promotion</button></div>
+    <form id="promotionForm" class="mt-4 grid gap-3 rounded border border-gray-700 p-4 md:grid-cols-2">
+      <input id="promotionId" type="hidden">
+      <label class="block text-sm">Code<input id="promotionCode" required class="input mt-1 w-full uppercase" placeholder="WELCOME10"></label>
+      <label class="block text-sm">Internal name<input id="promotionName" required class="input mt-1 w-full" placeholder="Welcome discount"></label>
+      <label class="block text-sm">Discount type<select id="promotionDiscountType" class="input mt-1 w-full"><option value="percentage">Percentage</option><option value="fixed">Fixed amount</option><option value="free-shipping">Free shipping</option></select></label>
+      <label class="block text-sm">Discount value<input id="promotionDiscountValue" type="number" min="0" step="0.01" class="input mt-1 w-full"><span class="mt-1 block text-xs text-gray-400">Enter 10 for 10%, or an AUD amount.</span></label>
+      <label class="block text-sm">Starts<input id="promotionStartsAt" type="datetime-local" class="input mt-1 w-full"></label>
+      <label class="block text-sm">Ends<input id="promotionEndsAt" type="datetime-local" class="input mt-1 w-full"></label>
+      <label class="block text-sm">Minimum order (AUD)<input id="promotionMinimumOrder" type="number" min="0" step="0.01" class="input mt-1 w-full"></label>
+      <label class="block text-sm">Maximum total uses<input id="promotionMaxUses" type="number" min="0" step="1" class="input mt-1 w-full" placeholder="Blank means unlimited"></label>
+      <label class="block text-sm">Uses per customer<input id="promotionUsesPerCustomer" type="number" min="1" step="1" value="1" class="input mt-1 w-full"></label>
+      <label class="block text-sm">Customer group<select id="promotionAudience" class="input mt-1 w-full"><option value="all">All customers</option><option value="retail">Retail only</option><option value="affiliate">Approved affiliates only</option></select></label>
+      <label class="block text-sm md:col-span-2">Eligible Products<select id="promotionProductIds" multiple class="input mt-1 min-h-32 w-full"></select><span class="mt-1 block text-xs text-gray-400">Leave empty to allow every Product.</span></label>
+      <label class="block text-sm md:col-span-2">Eligible Product variants<select id="promotionVariantIds" multiple class="input mt-1 min-h-32 w-full"></select><span class="mt-1 block text-xs text-gray-400">Leave empty to include every variant of selected Products.</span></label>
+      <div class="flex flex-wrap gap-4 md:col-span-2"><label class="inline-flex items-center gap-2"><input id="promotionActive" type="checkbox" checked class="accent-[#407471]">Active</label><label class="inline-flex items-center gap-2"><input id="promotionStackable" type="checkbox" class="accent-[#407471]">Can combine with another promotion</label></div>
+      <div class="flex justify-end gap-2 md:col-span-2"><button id="cancelPromotionBtn" type="button" class="rounded border border-gray-600 px-4 py-2">Clear</button><button type="submit" class="rounded bg-[#407471] px-4 py-2 font-semibold text-white">Save promotion</button></div>
+    </form>
+    <div id="promotionList" class="mt-4 space-y-3">Loading promotions...</div>
+  </section>
 
   <section id="productInventoryToolPanel" class="product-manager-tool-panel mb-8 rounded border border-gray-700 bg-gray-900/50 p-4" data-product-manager-panel="inventory">
     <div class="flex flex-wrap items-start justify-between gap-3">
@@ -1784,18 +1711,11 @@
                       <option value="Hybrid">Hybrid</option>
                     </select>
                   </label>
-                  <label class="block">
-                    Shop status
-                    <select id="contentProductShopStatus" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-                      <option value="draft">Draft</option>
-                      <option value="active">Active</option>
-                      <option value="archived">Archived</option>
-                    </select>
-                  </label>
-                  <label class="block">
-                    Effective shop price
-                    <input id="contentProductPrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-                  </label>
+                  <select id="contentProductShopStatus" class="hidden" aria-hidden="true">
+                    <option value="draft">Draft</option>
+                    <option value="active">Active</option>
+                    <option value="archived">Archived</option>
+                  </select>
                 </div>
                 <details class="mt-4 overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80 shadow-md" open>
                   <summary class="cursor-pointer bg-gray-800/90 p-4 hover:bg-gray-800">
@@ -1868,15 +1788,64 @@
                     <p id="contentProductInventoryHelp" class="mt-3 text-xs text-gray-400">When enabled, enter stock on each Product variant. Overall Product stock is calculated automatically.</p>
                   </div>
                 </details>
+                <details class="mt-4 overflow-hidden rounded-lg border border-gray-600 bg-gray-900/80">
+                  <summary class="cursor-pointer bg-gray-800/90 p-3 font-semibold text-white hover:bg-gray-800">
+                    Marketplace visibility
+                  </summary>
+                  <div class="grid gap-3 border-t border-gray-700 p-4 md:grid-cols-2">
+                    <input id="contentProductVisible" type="hidden">
+                    <label class="block">
+                      Marketplace listing
+                      <select id="contentProductMarketplaceMode" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                        <option value="hidden">Hidden</option>
+                        <option value="active">Visible and available now</option>
+                        <option value="scheduled">Hidden until the start date</option>
+                        <option value="coming-soon">Coming soon until the start date</option>
+                      </select>
+                    </label>
+                    <label class="inline-flex items-center gap-2 self-end rounded border border-gray-700 p-3">
+                      <input id="contentProductFeatured" type="checkbox" class="accent-[#407471]">
+                      Featured in Marketplace
+                    </label>
+                    <label class="block">Start selling
+                      <input id="contentProductMarketplaceStartsAt" type="datetime-local" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                    </label>
+                    <label class="block">Stop selling / hide
+                      <input id="contentProductMarketplaceEndsAt" type="datetime-local" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                    </label>
+                    <p class="text-xs text-gray-400 md:col-span-2">
+                      Coming soon displays the Product before its start date but prevents checkout. Scheduled keeps it hidden.
+                    </p>
+                  </div>
+                </details>
+                <details class="mt-4 overflow-hidden rounded-lg border border-gray-600 bg-gray-900/80">
+                  <summary class="cursor-pointer bg-gray-800/90 p-3 font-semibold text-white hover:bg-gray-800">
+                    Price and sale
+                  </summary>
+                  <div class="grid gap-3 border-t border-gray-700 p-4 md:grid-cols-2">
+                    <label class="block">Regular shop price
+                      <input id="contentProductPrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                    </label>
+                    <label class="block">Sale price
+                      <input id="contentProductSalePrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                    </label>
+                    <label class="block">Affiliate wholesale price
+                      <input id="contentProductWholesalePrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                      <span class="mt-1 block text-xs text-gray-400">Only available to approved affiliates.</span>
+                    </label>
+                    <label class="block">Minimum wholesale quantity
+                      <input id="contentProductWholesaleMinQuantity" type="number" min="1" step="1" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="1">
+                    </label>
+                    <label class="block">Sale starts
+                      <input id="contentProductSaleStartsAt" type="datetime-local" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                    </label>
+                    <label class="block">Sale ends
+                      <input id="contentProductSaleEndsAt" type="datetime-local" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                    </label>
+                    <p class="text-xs text-gray-400 md:col-span-2">The regular price returns automatically when the sale ends.</p>
+                  </div>
+                </details>
                 <div class="mt-3 grid gap-3 md:grid-cols-2">
-                  <label class="inline-flex items-center gap-2">
-                    <input id="contentProductVisible" type="checkbox" class="accent-[#407471]">
-                    Visible in Marketplace
-                  </label>
-                  <label class="inline-flex items-center gap-2">
-                    <input id="contentProductFeatured" type="checkbox" class="accent-[#407471]">
-                    Featured
-                  </label>
                   <label class="inline-flex items-center gap-2">
                     <input id="contentProductArchived" type="checkbox" class="accent-[#407471]">
                     Archived
@@ -1975,6 +1944,12 @@
                   Check how each variant will appear in the Shop or Library and edit its connection without leaving this record.
                 </p>
                 <div id="contentRelationshipSummary" class="mt-3 space-y-3"></div>
+              </section>
+
+              <section class="builder-step-panel flex justify-end rounded border border-gray-700 bg-gray-950/40 p-3" data-builder-panel="4">
+                <button id="saveContentConnectionsBtn" type="button" class="rounded bg-[#407471] px-5 py-2 font-medium text-white hover:bg-[#305a56]">
+                  Save connections
+                </button>
               </section>
 
               <div id="contentDuplicateWarning" class="builder-step-panel hidden rounded border border-yellow-500/60 bg-yellow-900/30 p-3 text-sm text-yellow-100" data-builder-panel="3"></div>

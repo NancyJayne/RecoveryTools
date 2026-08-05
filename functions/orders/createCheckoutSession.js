@@ -8,6 +8,8 @@ import { appBaseUrl, stripeSecretValue } from "../utils/stripeEnvironment.js";
 import {
   accessGrantsForProduct,
   loadProductArchitecture,
+  activePriceForProduct,
+  activePriceForVariant,
   mediaForProduct,
   productDisplayName,
   productDisplayType,
@@ -56,6 +58,75 @@ function firstImage(data) {
 
 function cleanString(value) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+async function applyPromotionCode(db, { code, items, uid, approvedAffiliate }) {
+  const normalizedCode = cleanString(code).toUpperCase();
+  if (!normalizedCode) return { code: "", discountAmount: 0, freeShipping: false };
+  const snapshot = await db.collection("promotions").where("code", "==", normalizedCode).limit(1).get();
+  if (snapshot.empty) throw new HttpsError("not-found", "That discount code is not valid.");
+  const doc = snapshot.docs[0];
+  const promotion = doc.data() || {};
+  const now = Date.now();
+  if (promotion.active === false || promotion.archivedAt ||
+      promotion.startsAt && Date.parse(promotion.startsAt) > now ||
+      promotion.endsAt && Date.parse(promotion.endsAt) <= now) {
+    throw new HttpsError("failed-precondition", "That discount code is not currently active.");
+  }
+  if (promotion.audience === "affiliate" && !approvedAffiliate ||
+      promotion.audience === "retail" && approvedAffiliate) {
+    throw new HttpsError("permission-denied", "That discount code is not available for this account.");
+  }
+  if (Number(promotion.maxUses || 0) > 0 &&
+      Number(promotion.usageCount || 0) >= Number(promotion.maxUses)) {
+    throw new HttpsError("resource-exhausted", "That discount code has reached its usage limit.");
+  }
+  const redemptionId = `${doc.id}_${uid}`;
+  const redemption = await db.collection("promotionRedemptions").doc(redemptionId).get();
+  if (Number(redemption.data()?.usageCount || 0) >= Number(promotion.usesPerCustomer || 1)) {
+    throw new HttpsError("resource-exhausted", "You have already used that discount code.");
+  }
+  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  if (subtotal < Number(promotion.minimumOrder || 0)) {
+    throw new HttpsError(
+      "failed-precondition",
+      `This code requires an order of at least $${Number(promotion.minimumOrder).toFixed(2)}.`,
+    );
+  }
+  const productIds = Array.isArray(promotion.productIds) ? promotion.productIds : [];
+  const variantIds = Array.isArray(promotion.variantIds) ? promotion.variantIds : [];
+  const eligible = items.filter((item) =>
+    (!productIds.length || productIds.includes(item.id)) &&
+    (!variantIds.length || variantIds.includes(item.variantId)),
+  );
+  if (!eligible.length) {
+    throw new HttpsError("failed-precondition", "That code does not apply to the Products in this cart.");
+  }
+  const eligibleSubtotal = eligible.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  let discountAmount = 0;
+  if (promotion.discountType === "percentage") {
+    const rate = Math.min(Math.max(Number(promotion.discountValue || 0) / 100, 0), 1);
+    eligible.forEach((item) => {
+      const original = item.price;
+      item.price = Number((original * (1 - rate)).toFixed(2));
+      discountAmount += (original - item.price) * item.quantity;
+    });
+  } else if (promotion.discountType === "fixed" && eligibleSubtotal > 0) {
+    const fixed = Math.min(Number(promotion.discountValue || 0), eligibleSubtotal);
+    eligible.forEach((item) => {
+      const share = item.price * item.quantity / eligibleSubtotal;
+      const lineDiscount = fixed * share;
+      const original = item.price;
+      item.price = Number(Math.max(original - lineDiscount / item.quantity, 0).toFixed(2));
+      discountAmount += (original - item.price) * item.quantity;
+    });
+  }
+  return {
+    id: doc.id,
+    code: normalizedCode,
+    discountAmount: Number(discountAmount.toFixed(2)),
+    freeShipping: promotion.discountType === "free-shipping",
+  };
 }
 
 function cleanEmail(value) {
@@ -148,6 +219,7 @@ const createCheckoutSessionHandler = async (request) => {
     collectShipping = false,
     customerInfo = {},
     saveAsDefaultShipping = false,
+    promotionCode = "",
     token,
   } = data;
 
@@ -196,25 +268,83 @@ const createCheckoutSessionHandler = async (request) => {
     const shopSettings = shopSettingsSnap.exists ? shopSettingsSnap.data() || {} : {};
 
     const architecture = await loadProductArchitecture(db);
+    const userRef = db.collection("users").doc(uid);
+    const userSnap = await userRef.get();
+    const userData = userSnap.exists ? userSnap.data() || {} : {};
+    const affiliateStatus = cleanString(
+      userData.affiliateApplicationStatus || userData.status,
+    ).toLowerCase();
+    const approvedAffiliate = request.auth?.token?.affiliate === true &&
+      userData.roles?.affiliate === true &&
+      !["pending", "rejected", "inactive", "archived"].includes(affiliateStatus);
 
     const validatedItems = await Promise.all(productDocs.map(async (doc, i) => {
       if (!doc.exists) throw new HttpsError("not-found", `Product not found: ${productIds[i]}`);
 
       const data = doc.data();
       const shopStatus = cleanString(data.shopStatus).toLowerCase();
-      if (data.archived === true || data.visible === false || shopStatus === "archived") {
+      if (data.archived === true || shopStatus === "archived" ||
+          !data.marketplaceMode && data.visible === false) {
         throw new HttpsError("failed-precondition", `${data.name || doc.id} is no longer available.`);
+      }
+      const nowMs = Date.now();
+      const marketplaceMode = cleanString(data.marketplaceMode || (data.visible ? "active" : "hidden"))
+        .toLowerCase();
+      const marketplaceStartsMs = data.marketplaceStartsAt ? Date.parse(data.marketplaceStartsAt) : null;
+      const marketplaceEndsMs = data.marketplaceEndsAt ? Date.parse(data.marketplaceEndsAt) : null;
+      const marketplaceStarted = !marketplaceStartsMs || marketplaceStartsMs <= nowMs;
+      const marketplaceEnded = marketplaceEndsMs && marketplaceEndsMs <= nowMs;
+      if (marketplaceEnded || marketplaceMode === "hidden" ||
+          ["scheduled", "coming-soon"].includes(marketplaceMode) && !marketplaceStarted) {
+        throw new HttpsError("failed-precondition", `${data.name || doc.id} is not available for purchase yet.`);
       }
       const quantity = cart[i].quantity || 1;
       const variantId = cleanString(cart[i].variantId);
       const variant = variantForProduct(doc.id, data.itemId || data.legacyItemId || "", variantId, architecture);
+      const activePrice = activePriceForProduct(doc.id, architecture);
+      const variantPrice = activePriceForVariant(doc.id, variantId, architecture);
       if (variantId && !variant) {
         throw new HttpsError("invalid-argument", `Invalid variant for: ${data.name || doc.id}`);
       }
-      const productPrice = data.onSale && data.salePrice
+      if (variant) {
+        const variantMode = cleanString(variant.marketplaceMode || "inherit").toLowerCase();
+        const variantStartsMs = variant.marketplaceStartsAt ? Date.parse(variant.marketplaceStartsAt) : null;
+        const variantEndsMs = variant.marketplaceEndsAt ? Date.parse(variant.marketplaceEndsAt) : null;
+        if (variantMode === "hidden" || variantEndsMs && variantEndsMs <= nowMs ||
+            ["scheduled", "coming-soon"].includes(variantMode) &&
+              variantStartsMs && variantStartsMs > nowMs) {
+          throw new HttpsError("failed-precondition", `${variant.name || doc.id} is not available for purchase yet.`);
+        }
+      }
+      const saleStartsMs = data.saleStartsAt ? Date.parse(data.saleStartsAt) : null;
+      const saleEndsMs = data.saleEndsAt ? Date.parse(data.saleEndsAt) : null;
+      const saleActive = data.salePrice !== null && data.salePrice !== undefined && data.salePrice !== "" &&
+        (!saleStartsMs || saleStartsMs <= nowMs) && (!saleEndsMs || saleEndsMs > nowMs);
+      const productPrice = saleActive
         ? data.salePrice
-        : data.basePrice ?? data.price ?? data.priceFrom;
-      const price = variant?.priceOverride ?? productPrice;
+        : data.retailPrice ?? data.basePrice ?? data.price ?? data.priceFrom;
+      const variantSaleStartsMs = variant?.saleStartsAt ? Date.parse(variant.saleStartsAt) : null;
+      const variantSaleEndsMs = variant?.saleEndsAt ? Date.parse(variant.saleEndsAt) : null;
+      const variantSaleActive = variant?.salePrice !== null && variant?.salePrice !== undefined &&
+        variant?.salePrice !== "" && (!variantSaleStartsMs || variantSaleStartsMs <= nowMs) &&
+        (!variantSaleEndsMs || variantSaleEndsMs > nowMs);
+      const wholesalePrice = approvedAffiliate
+        ? variant?.wholesalePrice ?? variantPrice?.wholesalePrice ?? variantPrice?.affiliatePrice ??
+          data.wholesalePrice ?? activePrice?.wholesalePrice ?? activePrice?.affiliatePrice ?? null
+        : null;
+      const wholesaleMinQuantity = Math.max(Number(
+        variant?.wholesaleMinQuantity || variantPrice?.wholesaleMinQuantity ||
+          data.wholesaleMinQuantity || activePrice?.wholesaleMinQuantity || 1,
+      ), 1);
+      if (wholesalePrice !== null && Number(wholesalePrice) > 0 && quantity < wholesaleMinQuantity) {
+        throw new HttpsError(
+          "failed-precondition",
+          `${variant?.name || data.name || doc.id} requires at least ${wholesaleMinQuantity} for wholesale pricing.`,
+        );
+      }
+      const price = Number(wholesalePrice) > 0
+        ? Number(wholesalePrice)
+        : variantSaleActive ? variant.salePrice : variant?.priceOverride ?? productPrice;
       const baseName = productDisplayName(data, doc.id);
       const variantName = variant?.name || [variant?.colour, variant?.size].filter(Boolean).join(" / ");
       const name = variantName ? `${baseName} - ${variantName}` : baseName;
@@ -273,11 +403,18 @@ const createCheckoutSessionHandler = async (request) => {
         productType: productDisplayType(data, "item"),
         accessGrants,
         price,
+        pricingTier: Number(wholesalePrice) > 0 ? "affiliate-wholesale" : "retail",
         quantity,
         creatorId: data.creatorId || null,
         stripeAccountId: creatorMap[data.creatorId] || null,
       };
     }));
+    const promotion = await applyPromotionCode(db, {
+      code: promotionCode,
+      items: validatedItems,
+      uid,
+      approvedAffiliate,
+    });
 
     // 💳 Stripe line items
     const hasPhysicalItems = validatedItems.some((item) => item.requiresShipping);
@@ -304,6 +441,7 @@ const createCheckoutSessionHandler = async (request) => {
             physicalFulfilment: item.physicalFulfilment || "none",
             ...pickupLocationMetadata(item.pickupLocation),
             unlocksAccess: item.unlocksAccess ? "true" : "false",
+            pricingTier: item.pricingTier || "retail",
           },
         },
       },
@@ -315,11 +453,7 @@ const createCheckoutSessionHandler = async (request) => {
       0,
     );
     const shipping = shippingQuote(shopSettings, subtotal, hasPhysicalItems);
-    const shippingCost = shipping.costInCents;
-
-    const userRef = db.collection("users").doc(uid);
-    const userSnap = await userRef.get();
-    const userData = userSnap.exists ? userSnap.data() : {};
+    const shippingCost = promotion.freeShipping ? 0 : shipping.costInCents;
 
     let stripeCustomerId = userData.stripeCustomerId || null;
 
@@ -386,6 +520,10 @@ const createCheckoutSessionHandler = async (request) => {
       ...(contact.name && { customer_name: contact.name }),
       ...(contact.email && { customer_email: contact.email }),
       ...(contact.phone && { customer_phone: contact.phone }),
+      ...(promotion.code && { promotionCode: promotion.code }),
+      ...(promotion.id && { promotionId: promotion.id }),
+      ...(promotion.discountAmount > 0 && { discountAmount: promotion.discountAmount.toFixed(2) }),
+      ...(promotion.freeShipping && { freeShippingPromotion: "true" }),
       products: validatedItems.map((p) => `${p.type}:${p.name} x${p.quantity}`).join("; "),
     };
 

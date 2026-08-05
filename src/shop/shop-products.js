@@ -438,6 +438,20 @@ export function createProductTile(product) {
     wrapper.appendChild(badge);
   }
 
+  if (product.comingSoon === true) {
+    const badge = document.createElement("span");
+    badge.textContent = "Coming soon";
+    badge.className = `absolute left-2 ${isFeatured(product) ? "top-10" : "top-2"} rounded bg-purple-700
+      px-2 py-1 text-xs font-semibold text-white`;
+    wrapper.appendChild(badge);
+  }
+  if (product.pricingTier === "affiliate-wholesale") {
+    const badge = document.createElement("span");
+    badge.textContent = "Affiliate wholesale";
+    badge.className = "absolute bottom-2 left-2 rounded bg-[#407471] px-2 py-1 text-xs font-semibold text-white";
+    wrapper.appendChild(badge);
+  }
+
   const image = document.createElement("img");
   image.src = productImage;
   image.alt = getProductImageAlt(product);
@@ -456,7 +470,7 @@ export function createProductTile(product) {
   price.innerHTML =
   product.onSale && product.salePrice
     ? `<span class="line-through text-gray-500 mr-2">
-         ${asMoney(product.price)}
+         ${asMoney(product.retailPrice)}
        </span><span class="text-green-400 font-bold">
          ${asMoney(finalPrice)}
        </span>`
@@ -499,7 +513,9 @@ export function showProductDetail(product, options = {}) {
   const productName = getProductName(product);
   const productImage = getProductImage(product);
   const variants = Array.isArray(product.variants) ? product.variants : [];
-  let selectedVariant = variants.find((variant) => Number(variant.stock ?? 0) > 0) || variants[0] || null;
+  let selectedVariant = variants.find((variant) =>
+    variant.purchasable !== false && Number(variant.stock ?? 0) > 0,
+  ) || variants.find((variant) => variant.purchasable !== false) || variants[0] || null;
   let finalPrice = getVariantPrice(product, selectedVariant);
 
   detail.dataset.currentId = product.id;
@@ -539,13 +555,19 @@ export function showProductDetail(product, options = {}) {
   function updatePriceDisplay() {
     finalPrice = getVariantPrice(product, selectedVariant);
     price.innerHTML =
-      product.onSale && product.salePrice && !selectedVariant?.priceOverride
+      selectedVariant?.onSale
         ? `<span class="line-through text-gray-500 mr-2">
-             ${asMoney(product.price)}
+             ${asMoney(selectedVariant.retailPriceOverride)}
            </span><span class="text-green-400 font-bold">
              ${asMoney(finalPrice)}
            </span>`
-        : asMoney(finalPrice);
+        : product.onSale && product.salePrice && !selectedVariant?.priceOverride
+          ? `<span class="line-through text-gray-500 mr-2">
+             ${asMoney(product.retailPrice)}
+           </span><span class="text-green-400 font-bold">
+             ${asMoney(finalPrice)}
+           </span>`
+          : asMoney(finalPrice);
   }
   function updateProductImage() {
     img.src = getVariantImage(product, selectedVariant);
@@ -636,7 +658,9 @@ export function showProductDetail(product, options = {}) {
     variants.forEach((variant) => {
       const option = document.createElement("option");
       option.value = variant.variantId || variant.id;
-      option.textContent = `${getVariantLabel(variant)} - ${asMoney(getVariantPrice(product, variant))}`;
+      option.textContent = `${getVariantLabel(variant)} - ${asMoney(getVariantPrice(product, variant))}` +
+        (variant.comingSoon ? " - Coming soon" : "");
+      option.disabled = variant.purchasable === false;
       variantSelect.appendChild(option);
     });
     variantSelect.addEventListener("change", () => {
@@ -649,6 +673,8 @@ export function showProductDetail(product, options = {}) {
       updateCourseDetails();
       updateExperienceDetails();
       updateCapacityWarning();
+      quantity = Math.max(quantity, minimumQuantity());
+      qtyDisplay.textContent = String(quantity);
       updateAddButtonState();
     });
 
@@ -664,16 +690,22 @@ export function showProductDetail(product, options = {}) {
   minusBtn.className = "bg-gray-700 text-white w-8 h-8 rounded text-lg";
 
   const qtyDisplay = document.createElement("span");
-  qtyDisplay.textContent = "1";
+  function minimumQuantity() {
+    return selectedVariant?.pricingTier === "affiliate-wholesale" ||
+      product.pricingTier === "affiliate-wholesale"
+      ? Math.max(Number(selectedVariant?.wholesaleMinQuantity || product.wholesaleMinQuantity || 1), 1)
+      : 1;
+  }
+  qtyDisplay.textContent = String(minimumQuantity());
   qtyDisplay.className = "text-white font-semibold w-8 text-center select-none";
 
   const plusBtn = document.createElement("button");
   plusBtn.textContent = "+";
   plusBtn.className = "bg-gray-700 text-white w-8 h-8 rounded text-lg";
 
-  let quantity = 1;
+  let quantity = minimumQuantity();
   minusBtn.onclick = () => {
-    if (quantity > 1) {
+    if (quantity > minimumQuantity()) {
       quantity--;
       qtyDisplay.textContent = quantity;
     }
@@ -696,10 +728,13 @@ export function showProductDetail(product, options = {}) {
   function updateAddButtonState() {
     const tracksInventory = product.inventoryTracked !== false;
     const isOutOfStock = tracksInventory && currentStock() === 0;
-    btn.textContent = isOutOfStock ? "Out of Stock" : "Add to Cart";
-    btn.disabled = isOutOfStock;
-    btn.classList.toggle("opacity-50", isOutOfStock);
-    btn.classList.toggle("cursor-not-allowed", isOutOfStock);
+    const isComingSoon = selectedVariant
+      ? selectedVariant.purchasable === false || selectedVariant.comingSoon === true
+      : product.purchasable === false || product.comingSoon === true;
+    btn.textContent = isComingSoon ? "Coming soon" : isOutOfStock ? "Out of Stock" : "Add to Cart";
+    btn.disabled = isOutOfStock || isComingSoon;
+    btn.classList.toggle("opacity-50", btn.disabled);
+    btn.classList.toggle("cursor-not-allowed", btn.disabled);
   }
   updateAddButtonState();
   btn.addEventListener("click", () => {
@@ -720,6 +755,8 @@ export function showProductDetail(product, options = {}) {
       sku: selectedVariant?.sku || product.sku || "",
       creatorId: product.creatorId,
       affiliatePercent: product.affiliatePercent,
+      pricingTier: selectedVariant?.pricingTier || product.pricingTier || "retail",
+      wholesaleMinQuantity: selectedVariant?.wholesaleMinQuantity || product.wholesaleMinQuantity || 1,
       image: getVariantImage(product, selectedVariant),
     });
   });

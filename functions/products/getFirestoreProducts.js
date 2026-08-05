@@ -2,6 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
 import {
   activePriceForProduct,
+  activePriceForVariant,
   loadProductArchitecture,
   mediaForProduct,
   mediaForProductVariant,
@@ -17,6 +18,13 @@ if (!admin.apps.length) {
 
 function normalizeStatus(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function dateMillis(value) {
+  if (!value) return null;
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function firstImageFromMedia(media) {
@@ -139,7 +147,7 @@ function ticketSalesFromOrders(snapshot) {
   return sales;
 }
 
-function normalizeProduct(doc, architecture, ticketSales = new Map()) {
+function normalizeProduct(doc, architecture, ticketSales = new Map(), approvedAffiliate = false) {
   const data = doc.data() || {};
   const variants = variantsForProduct(doc.id, data.itemId || data.legacyItemId || "", architecture);
   const activePrice = activePriceForProduct(doc.id, architecture);
@@ -157,13 +165,26 @@ function normalizeProduct(doc, architecture, ticketSales = new Map()) {
   const canonicalImages = media.filter((asset) => normalizeStatus(asset.type) === "image").map((asset) => asset.url);
   const mediaImage = firstImageFromMedia(media);
   const image = images[0] || mediaImage || data.image || data.imageUrl || "";
-  const price = positiveNumber(
-    activePrice?.effectiveShopPrice,
-    data.price,
-    data.priceFrom,
+  const regularPrice = positiveNumber(
     activePrice?.retailPrice,
     data.retailPrice,
+    data.basePrice,
+    data.price,
+    data.priceFrom,
   );
+  const salePrice = data.salePrice ?? activePrice?.salePrice ?? null;
+  const saleStartsAt = data.saleStartsAt || activePrice?.saleStartsAt || "";
+  const saleEndsAt = data.saleEndsAt || activePrice?.saleEndsAt || "";
+  const nowMs = Date.now();
+  const saleStartsMs = dateMillis(saleStartsAt);
+  const saleEndsMs = dateMillis(saleEndsAt);
+  const onSale = Number(salePrice) >= 0 && salePrice !== null && salePrice !== "" &&
+    (!saleStartsMs || saleStartsMs <= nowMs) && (!saleEndsMs || saleEndsMs > nowMs);
+  const productWholesalePrice = data.wholesalePrice ?? activePrice?.wholesalePrice ?? activePrice?.affiliatePrice;
+  const wholesalePrice = approvedAffiliate && Number(productWholesalePrice) > 0
+    ? Number(productWholesalePrice)
+    : null;
+  const price = wholesalePrice ?? (onSale ? Number(salePrice) : regularPrice);
   const searchTags = [...new Set([
     ...normalizeTags(data),
     ...normalizeTags(linkedContent || {}),
@@ -175,22 +196,68 @@ function normalizeProduct(doc, architecture, ticketSales = new Map()) {
   const linkedContentStatus = normalizeStatus(linkedContent?.status);
   const linkedContentUnavailable = linkedContent?.archived === true ||
     ["paused", "archived"].includes(linkedContentStatus);
-  const visible =
+  const marketplaceMode = normalizeStatus(data.marketplaceMode ||
+    (data.visible === true || data.websiteVisible === true ? "active" : "hidden"));
+  const marketplaceStartsAt = data.marketplaceStartsAt || "";
+  const marketplaceEndsAt = data.marketplaceEndsAt || "";
+  const marketplaceStartsMs = dateMillis(marketplaceStartsAt);
+  const marketplaceEndsMs = dateMillis(marketplaceEndsAt);
+  const marketplaceEnded = marketplaceEndsMs && marketplaceEndsMs <= nowMs;
+  const marketplaceStarted = !marketplaceStartsMs || marketplaceStartsMs <= nowMs;
+  const comingSoon = marketplaceMode === "coming-soon" && !marketplaceStarted && !marketplaceEnded;
+  const scheduledVisible = marketplaceMode === "scheduled" && marketplaceStarted;
+  const modeVisible = marketplaceMode === "active" || marketplaceMode === "coming-soon" || scheduledVisible;
+  let visible =
     data.archived !== true &&
     !linkedContentUnavailable &&
-    (data.visible === true ||
-      (
-        data.visible !== false &&
-        normalizeStatus(data.shopStatus) === "active" &&
-        data.websiteVisible !== false
-      ));
+    !marketplaceEnded &&
+    modeVisible;
+  const purchasable = visible && !comingSoon;
 
   const normalizedVariants = variants.map((variant) => {
+    const variantPrice = activePriceForVariant(doc.id, variant.variantId || variant.id, architecture);
     const variantMedia = mediaForProductVariant(doc.id, data, variant, architecture, media);
     const sold = ticketSales.get(`${doc.id}:${variant.variantId || variant.id || ""}`) || 0;
     const capacity = Number(variant.seatCapacity || 0);
+    const variantMode = normalizeStatus(variant.marketplaceMode || "inherit");
+    const variantStartsMs = dateMillis(variant.marketplaceStartsAt);
+    const variantEndsMs = dateMillis(variant.marketplaceEndsAt);
+    const variantStarted = !variantStartsMs || variantStartsMs <= nowMs;
+    const variantEnded = variantEndsMs && variantEndsMs <= nowMs;
+    const variantComingSoon = variantMode === "inherit"
+      ? comingSoon
+      : variantMode === "coming-soon" && !variantStarted && !variantEnded;
+    const variantVisible = !variantEnded && (variantMode === "inherit"
+      ? visible
+      : variantMode === "active" || variantMode === "coming-soon" ||
+        variantMode === "scheduled" && variantStarted);
+    const variantSaleStartsMs = dateMillis(variant.saleStartsAt);
+    const variantSaleEndsMs = dateMillis(variant.saleEndsAt);
+    const variantOnSale = variant.salePrice !== null && variant.salePrice !== undefined &&
+      variant.salePrice !== "" && (!variantSaleStartsMs || variantSaleStartsMs <= nowMs) &&
+      (!variantSaleEndsMs || variantSaleEndsMs > nowMs);
+    const variantRetailPrice = Number(variant.priceOverride) > 0
+      ? Number(variant.priceOverride)
+      : regularPrice;
+    const variantWholesaleValue = variant.wholesalePrice ?? variantPrice?.wholesalePrice ??
+      variantPrice?.affiliatePrice;
+    const variantWholesalePrice = approvedAffiliate && Number(variantWholesaleValue) > 0
+      ? Number(variantWholesaleValue)
+      : wholesalePrice;
     return {
       ...variant,
+      visible: variantVisible,
+      purchasable: variantVisible && !variantComingSoon,
+      comingSoon: variantComingSoon,
+      retailPriceOverride: variantRetailPrice,
+      priceOverride: variantWholesalePrice ?? (variantOnSale ? Number(variant.salePrice) : variantRetailPrice),
+      onSale: !variantWholesalePrice && variantOnSale,
+      wholesalePrice: variantWholesalePrice,
+      pricingTier: variantWholesalePrice ? "affiliate-wholesale" : "retail",
+      wholesaleMinQuantity: Math.max(Number(
+        variant.wholesaleMinQuantity || variantPrice?.wholesaleMinQuantity ||
+          data.wholesaleMinQuantity || activePrice?.wholesaleMinQuantity || 1,
+      ), 1),
       ticketsSold: sold,
       ticketsRemaining: capacity > 0 ? Math.max(capacity - sold, 0) : null,
       media: variantMedia,
@@ -198,7 +265,8 @@ function normalizeProduct(doc, architecture, ticketSales = new Map()) {
         .filter((asset) => normalizeStatus(asset.type) === "image")
         .map((asset) => asset.url),
     };
-  });
+  }).filter((variant) => variant.visible !== false);
+  if (variants.length && !normalizedVariants.length) visible = false;
   const shortDescription = data.shortDescription || data.description ||
     linkedContent?.shortDescription || linkedContent?.description || "";
   const longDescription = data.longDescription ||
@@ -217,9 +285,16 @@ function normalizeProduct(doc, architecture, ticketSales = new Map()) {
     name: productDisplayName(data),
     price,
     priceFrom: positiveNumber(data.priceFrom, price),
-    retailPrice: positiveNumber(activePrice?.retailPrice, data.retailPrice, price),
-    salePrice: data.salePrice ?? activePrice?.salePrice ?? null,
-    onSale: data.onSale === true || activePrice?.salePrice !== null && activePrice?.salePrice !== undefined,
+    retailPrice: regularPrice,
+    salePrice,
+    saleStartsAt,
+    saleEndsAt,
+    onSale: !wholesalePrice && onSale,
+    wholesalePrice,
+    wholesaleMinQuantity: Math.max(Number(
+      data.wholesaleMinQuantity || activePrice?.wholesaleMinQuantity || 1,
+    ), 1),
+    pricingTier: wholesalePrice ? "affiliate-wholesale" : "retail",
     stock: Number(data.stock ?? 0),
     requiresShipping,
     physicalFulfilment,
@@ -228,6 +303,11 @@ function normalizeProduct(doc, architecture, ticketSales = new Map()) {
     productType: displayType,
     shopStatus: normalizeStatus(data.shopStatus || (visible ? "active" : "draft")),
     visible,
+    purchasable,
+    comingSoon,
+    marketplaceMode,
+    marketplaceStartsAt,
+    marketplaceEndsAt,
     archived: data.archived === true,
     image: canonicalImages[0] || image,
     images: canonicalImages.length ? canonicalImages : images.length ? images : image ? [image] : [],
@@ -258,6 +338,14 @@ export const getFirestoreProducts = onCall(
     try {
       const { type, tag, includeHidden = false } = request.data || {};
       const isAdmin = request.auth?.token?.admin === true;
+      let approvedAffiliate = false;
+      if (request.auth?.uid && request.auth.token?.affiliate === true) {
+        const userSnap = await admin.firestore().collection("users").doc(request.auth.uid).get();
+        const user = userSnap.exists ? userSnap.data() || {} : {};
+        const affiliateStatus = normalizeStatus(user.affiliateApplicationStatus || user.status);
+        approvedAffiliate = user.roles?.affiliate === true &&
+          !["pending", "rejected", "inactive", "archived"].includes(affiliateStatus);
+      }
 
       let query = admin.firestore().collection("products");
 
@@ -273,7 +361,7 @@ export const getFirestoreProducts = onCall(
       const ticketSales = ticketSalesFromOrders(ordersSnapshot);
 
       const products = snapshot.docs
-        .map((doc) => normalizeProduct(doc, architecture, ticketSales))
+        .map((doc) => normalizeProduct(doc, architecture, ticketSales, approvedAffiliate))
         .filter((product) => includeHidden && isAdmin ? true : product.visible !== false)
         .filter((product) => tag ? product.searchTags.includes(tag) : true)
         .sort((a, b) => (a.name || a.title || "").localeCompare(b.name || b.title || ""));

@@ -562,6 +562,11 @@ export const createContentBuilderRecord = onCall(
       requestedWebsiteVisible: data.requestedWebsiteVisible === true,
       requestedProductVisible: data.requestedProductVisible === true,
       createsProduct: data.createsProduct === true || data.isShopProduct === true,
+      productId: data.createsProduct === true || data.isShopProduct === true
+        ? cleanString(data.productRelation?.productId || data.productRelation?.existingProductId || data.productId) ||
+          `PROD-${slugify(id).replace(/^ITEM-/, "")}`
+        : "",
+      productLinkRole: cleanString(data.productRelation?.linkRole),
       websiteVisible: data.websiteVisible === true,
       visible: data.websiteVisible === true,
       updatedAt: now,

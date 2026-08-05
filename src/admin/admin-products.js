@@ -12,6 +12,7 @@ const getInventoryOperationsData = httpsCallable(functions, "getInventoryOperati
 const updateInventoryStocktake = httpsCallable(functions, "updateInventoryStocktake");
 const recordManufacturingRun = httpsCallable(functions, "recordManufacturingRun");
 const updateWorkshopAttendance = httpsCallable(functions, "updateWorkshopAttendance");
+const managePromotions = httpsCallable(functions, "managePromotions");
 
 let cachedProducts = [];
 let cachedAssets = [];
@@ -19,6 +20,7 @@ let inventoryOperations = {
   stocktakeRows: [], productionOptions: [], workshopSessions: [], accessSummaries: [],
 };
 let lastManufacturingPreviewVariantId = "";
+let cachedPromotions = [];
 
 function asMoney(value) {
   const amount = Number(value ?? 0);
@@ -69,6 +71,7 @@ export function setupProductManager() {
 
   setupAssetManager();
   setupInventoryOperations();
+  setupPromotionsManager();
 
   if (document.body.dataset.productSaveRefreshBound !== "true") {
     document.body.dataset.productSaveRefreshBound = "true";
@@ -110,9 +113,134 @@ function setupProductManagerTools() {
       }
       if (toolName === "products") loadProducts();
       if (toolName === "assets") loadAssets();
+      if (toolName === "promotions") {
+        loadProducts().then(renderPromotionEligibilityOptions);
+        loadPromotions();
+      }
     });
   });
   showProductManagerTool(panel.dataset.activeTool || "inventory");
+}
+
+function selectedValues(select) {
+  return [...(select?.selectedOptions || [])].map((option) => option.value).filter(Boolean);
+}
+
+function localDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 16);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+function dateTimeIso(id) {
+  const value = document.getElementById(id)?.value || "";
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function renderPromotionEligibilityOptions(selectedProducts = [], selectedVariants = []) {
+  const products = document.getElementById("promotionProductIds");
+  const variants = document.getElementById("promotionVariantIds");
+  if (products) products.innerHTML = cachedProducts.map((product) =>
+    `<option value="${escapeHTML(product.id)}"${selectedProducts.includes(product.id) ? " selected" : ""}>` +
+    `${escapeHTML(product.name || product.id)}</option>`,
+  ).join("");
+  if (variants) variants.innerHTML = cachedProducts.flatMap((product) =>
+    (product.variants || []).map((variant) => {
+      const id = variant.variantId || variant.id;
+      return `<option value="${escapeHTML(id)}"${selectedVariants.includes(id) ? " selected" : ""}>` +
+        `${escapeHTML(product.name || product.id)} / ${escapeHTML(variantLabel(variant))}</option>`;
+    }),
+  ).join("");
+}
+
+function resetPromotionForm() {
+  document.getElementById("promotionForm")?.reset();
+  document.getElementById("promotionId").value = "";
+  document.getElementById("promotionActive").checked = true;
+  document.getElementById("promotionUsesPerCustomer").value = "1";
+  renderPromotionEligibilityOptions();
+}
+
+function editPromotion(promotion) {
+  document.getElementById("promotionId").value = promotion.id || promotion.promotionId || "";
+  document.getElementById("promotionCode").value = promotion.code || "";
+  document.getElementById("promotionName").value = promotion.name || "";
+  document.getElementById("promotionDiscountType").value = promotion.discountType || "percentage";
+  document.getElementById("promotionDiscountValue").value = promotion.discountValue ?? "";
+  document.getElementById("promotionStartsAt").value = localDateTime(promotion.startsAt);
+  document.getElementById("promotionEndsAt").value = localDateTime(promotion.endsAt);
+  document.getElementById("promotionMinimumOrder").value = promotion.minimumOrder ?? "";
+  document.getElementById("promotionMaxUses").value = promotion.maxUses || "";
+  document.getElementById("promotionUsesPerCustomer").value = promotion.usesPerCustomer || 1;
+  document.getElementById("promotionAudience").value = promotion.audience || "all";
+  document.getElementById("promotionActive").checked = promotion.active !== false;
+  document.getElementById("promotionStackable").checked = promotion.stackable === true;
+  renderPromotionEligibilityOptions(promotion.productIds || [], promotion.variantIds || []);
+}
+
+function renderPromotions() {
+  const list = document.getElementById("promotionList");
+  if (!list) return;
+  list.innerHTML = cachedPromotions.length ? cachedPromotions.map((promotion) => `
+    <article class="flex flex-wrap items-center justify-between gap-3 rounded border border-gray-700 p-3">
+      <div><p class="font-semibold text-white">${escapeHTML(promotion.code)} - ${escapeHTML(promotion.name)}</p>
+        <p class="text-xs text-gray-400">${escapeHTML(promotion.discountType)} ${escapeHTML(promotion.discountValue || "")} / ${promotion.active === false ? "inactive" : "active"} / ${Number(promotion.usageCount || 0)} uses</p></div>
+      <div class="flex gap-2"><button type="button" data-edit-promotion="${escapeHTML(promotion.id)}" class="rounded border border-[#407471] px-3 py-1 text-sm">Edit</button><button type="button" data-archive-promotion="${escapeHTML(promotion.id)}" class="rounded border border-red-700 px-3 py-1 text-sm text-red-200">Archive</button></div>
+    </article>`).join("") : "<p class=\"text-sm text-gray-400\">No promotions created.</p>";
+}
+
+async function loadPromotions() {
+  const response = await managePromotions({ action: "list" });
+  cachedPromotions = response.data?.promotions || [];
+  renderPromotions();
+}
+
+function setupPromotionsManager() {
+  const form = document.getElementById("promotionForm");
+  if (!form || form.dataset.bound === "true") return;
+  form.dataset.bound = "true";
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = form.querySelector("button[type='submit']");
+    submit.disabled = true;
+    try {
+      await managePromotions({ action: "upsert", promotion: {
+        id: document.getElementById("promotionId").value,
+        code: document.getElementById("promotionCode").value,
+        name: document.getElementById("promotionName").value,
+        discountType: document.getElementById("promotionDiscountType").value,
+        discountValue: document.getElementById("promotionDiscountValue").value,
+        startsAt: dateTimeIso("promotionStartsAt"), endsAt: dateTimeIso("promotionEndsAt"),
+        minimumOrder: document.getElementById("promotionMinimumOrder").value,
+        maxUses: document.getElementById("promotionMaxUses").value,
+        usesPerCustomer: document.getElementById("promotionUsesPerCustomer").value,
+        audience: document.getElementById("promotionAudience").value,
+        productIds: selectedValues(document.getElementById("promotionProductIds")),
+        variantIds: selectedValues(document.getElementById("promotionVariantIds")),
+        active: document.getElementById("promotionActive").checked,
+        stackable: document.getElementById("promotionStackable").checked,
+      } });
+      showToast("Promotion saved.", "success");
+      resetPromotionForm();
+      await loadPromotions();
+    } catch (error) {
+      showToast(error.message || "Unable to save promotion.", "error");
+    } finally { submit.disabled = false; }
+  });
+  document.getElementById("newPromotionBtn")?.addEventListener("click", resetPromotionForm);
+  document.getElementById("cancelPromotionBtn")?.addEventListener("click", resetPromotionForm);
+  document.getElementById("promotionList")?.addEventListener("click", async (event) => {
+    const editId = event.target.closest("[data-edit-promotion]")?.dataset.editPromotion;
+    if (editId) editPromotion(cachedPromotions.find((item) => item.id === editId) || {});
+    const archiveId = event.target.closest("[data-archive-promotion]")?.dataset.archivePromotion;
+    if (archiveId && window.confirm("Archive this promotion code?")) {
+      await managePromotions({ action: "archive", promotionId: archiveId });
+      await loadPromotions();
+    }
+  });
 }
 
 function setupInventoryOperations() {

@@ -5,6 +5,7 @@ import { showToast } from "../utils/utils.js";
 const getContentBuilderData = httpsCallable(functions, "getContentBuilderData");
 const updateContentControlRecord = httpsCallable(functions, "updateContentControlRecord");
 const exportContentBackup = httpsCallable(functions, "exportContentBackup", { timeout: 120000 });
+const exportMasterWorkbook = httpsCallable(functions, "exportMasterWorkbook", { timeout: 120000 });
 
 let state = {
   primary: "all",
@@ -464,39 +465,53 @@ function relationshipSummary(record) {
 }
 
 function relationshipHighlights(record) {
-  if (record.collectionKey === "items") {
-    if (record.hasItemProduct || record.isShopProduct) {
-      const productName = record.productName || record.productId || "Product relationship";
-      const price = record.productEffectiveShopPrice ?? record.productPrice;
-      const numericPrice = Number(price);
-      const details = [
-        record.productShopStatus || "draft",
-        price === null || price === undefined || price === "" || !Number.isFinite(numericPrice)
-          ? "No price"
-          : `$${numericPrice.toFixed(2)}`,
-        record.productVisible ? "Marketplace visible" : "Marketplace hidden",
-        record.hasVariants ? `${record.variantCount || 0} variants` : "No variants",
-        record.hasPrimaryAsset ? "Primary asset" : "No primary asset",
-      ];
-      return `
-        <div class="mt-3 rounded border border-green-800/70 bg-green-950/30 p-3 text-sm">
-          <div class="font-semibold text-green-200">Product: ${escapeHTML(productName)}</div>
-          <div class="mt-1 text-xs text-green-100/80">${escapeHTML(details.join(" / "))}</div>
-        </div>
-      `;
-    }
-    return `
-      <div class="mt-3 text-xs text-gray-500">Not linked to a product.</div>
-    `;
-  }
+  const productId = record.productId || record.itemProductId || record.linkedProductIds?.[0] || "";
+  const productName = record.productName || productId || "Connected Product";
+  const price = record.productEffectiveShopPrice ?? record.productPrice;
+  const numericPrice = Number(price);
+  const productDetails = [
+    record.productShopStatus || "draft",
+    price === null || price === undefined || price === "" || !Number.isFinite(numericPrice)
+      ? "No price"
+      : `$${numericPrice.toFixed(2)}`,
+    record.hasVariants || record.variantCount > 0 ? `${record.variantCount || 0} variants` : "No variants",
+  ];
+  const productConnection = productId ? `
+    <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+      <span class="font-semibold text-green-200" title="${escapeHTML(productId)}">
+        Product: ${escapeHTML(productName)}
+      </span>
+      <span class="text-gray-500">${escapeHTML(productDetails.join(" / "))}</span>
+      <button
+        type="button"
+        class="content-product-drawer-btn rounded border border-green-800 px-2 py-1 font-semibold
+          text-green-100 hover:border-green-400"
+        data-record-type="${escapeHTML(record.collectionKey)}"
+        data-record-id="${escapeHTML(record.id)}"
+        data-product-id="${escapeHTML(productId)}"
+      >Edit Product</button>
+    </div>
+  ` : `
+    <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+      <span>No Product</span>
+      <button
+        type="button"
+        class="content-product-drawer-btn rounded border border-gray-700 px-2 py-1 font-semibold text-white
+          hover:border-[#407471]"
+        data-record-type="${escapeHTML(record.collectionKey)}"
+        data-record-id="${escapeHTML(record.id)}"
+        data-product-id=""
+      >Add</button>
+    </div>
+  `;
 
   const relationships = [
     ["Items", record.linkedItemIds?.length || 0],
     ["Blueprints", record.linkedBlueprintIds?.length || 0],
     ["Plans", record.linkedPlanIds?.length || 0],
   ].filter(([, count]) => count > 0);
-  if (!relationships.length) return `<div class="mt-3 text-xs text-gray-500">No linked components.</div>`;
-  return `
+  if (!relationships.length) return productConnection;
+  return `${productConnection}
     <div class="mt-3 flex flex-wrap gap-2">
       ${relationships.map(([label, count]) => `
         <span class="rounded bg-gray-800 px-2 py-1 text-xs text-gray-300">
@@ -539,14 +554,6 @@ function renderRows() {
           ${relationshipHighlights(record)}
         </div>
         <div class="flex flex-wrap gap-2">
-          <button
-            type="button"
-            class="quick-edit-content-btn rounded bg-gray-700 px-3 py-2 text-sm text-white"
-            data-record-type="${escapeHTML(record.collectionKey)}"
-            data-record-id="${escapeHTML(record.id)}"
-          >
-            Quick Edit
-          </button>
           <button
             type="button"
             class="edit-content-builder-btn rounded border border-gray-600 px-3 py-2 text-sm text-white
@@ -795,6 +802,48 @@ function saveJsonDownload(payload, fileName) {
   URL.revokeObjectURL(url);
 }
 
+function saveBase64Download(base64, fileName, mimeType) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  const blob = new Blob([bytes], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function downloadMasterWorkbook() {
+  const button = document.getElementById("downloadMasterWorkbookBtn");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Preparing workbook...";
+  }
+  try {
+    const response = await exportMasterWorkbook();
+    const result = response.data || {};
+    if (!result.base64) throw new Error("The workbook export was empty.");
+    saveBase64Download(
+      result.base64,
+      result.suggestedFileName || `recovery-tools-master-${Date.now()}.xlsx`,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    showToast("Editable master workbook downloaded. It can be updated and used with seed:all.", "success");
+  } catch (err) {
+    console.error("Failed to download master workbook:", err);
+    showToast(err.message || "Failed to download the master workbook.", "error");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Download editable workbook";
+    }
+  }
+}
+
 async function downloadContentBackup() {
   const button = document.getElementById("downloadContentBackupBtn");
   if (button) {
@@ -895,6 +944,7 @@ function bindEvents() {
     });
   });
   document.getElementById("downloadContentBackupBtn")?.addEventListener("click", downloadContentBackup);
+  document.getElementById("downloadMasterWorkbookBtn")?.addEventListener("click", downloadMasterWorkbook);
   document.getElementById("createFilteredContentBtn")?.addEventListener("click", createContentFromFilters);
 
   document.getElementById("contentControlsAddFilter")?.addEventListener("change", (event) => {
@@ -903,10 +953,25 @@ function bindEvents() {
   });
 
   document.getElementById("contentControlsList")?.addEventListener("click", (event) => {
-    const quickEditButton = event.target.closest(".quick-edit-content-btn");
-    if (quickEditButton) {
-      const record = findRecord(quickEditButton.dataset.recordType, quickEditButton.dataset.recordId);
-      if (record) openQuickEdit({ ...record, collectionKey: quickEditButton.dataset.recordType });
+    const productButton = event.target.closest(".content-product-drawer-btn");
+    if (productButton) {
+      const originalLabel = productButton.textContent;
+      productButton.disabled = true;
+      productButton.textContent = "Opening...";
+      import("./admin-content-builder.js")
+        .then(({ openProductDrawerFromAdmin }) => openProductDrawerFromAdmin({
+          productId: productButton.dataset.productId || "",
+          entityType: productButton.dataset.recordType || "",
+          entityId: productButton.dataset.recordId || "",
+        }))
+        .catch((err) => {
+          console.error("Failed to open Product drawer:", err);
+          showToast(err.message || "Failed to open the Product editor.", "error");
+        })
+        .finally(() => {
+          productButton.disabled = false;
+          productButton.textContent = originalLabel;
+        });
       return;
     }
 
@@ -950,6 +1015,14 @@ function bindEvents() {
   document.querySelectorAll("[data-control-toggle] input").forEach((input) =>
     input.addEventListener("change", syncCommerceControls),
   );
+  if (document.body.dataset.contentProductSaveRefreshBound !== "true") {
+    document.body.dataset.contentProductSaveRefreshBound = "true";
+    window.addEventListener("admin-product-saved", () => {
+      loadData().catch((err) => {
+        console.error("Product saved, but Content records could not be refreshed:", err);
+      });
+    });
+  }
 }
 
 export async function setupContentControls() {

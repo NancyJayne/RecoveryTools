@@ -139,6 +139,8 @@ async function seedUsers() {
           email: user.email,
           name: user.displayName,
           roles: user.roles,
+          status: "active",
+          ...(user.roles.affiliate && { affiliateApplicationStatus: "active" }),
           role: Object.entries(user.roles)
             .filter(([, value]) => value)
             .map(([key]) => key)
@@ -174,6 +176,7 @@ async function seedUsers() {
             clicks: 0,
             conversions: 0,
             earnings: 0,
+            status: "active",
             createdAt: FieldValue.serverTimestamp(),
           },
           { merge: true },

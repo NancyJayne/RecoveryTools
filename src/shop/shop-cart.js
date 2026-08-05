@@ -6,6 +6,52 @@ import { httpsCallable } from "firebase/functions";
 import { doc, getDoc } from "firebase/firestore";
 
 let checkoutAffiliates = [];
+let productPricingCache = { key: "", loadedAt: 0, products: [] };
+
+function minimumCartQuantity(item) {
+  return item.pricingTier === "affiliate-wholesale"
+    ? Math.max(Number(item.wholesaleMinQuantity || 1), 1)
+    : 1;
+}
+
+async function refreshAuthenticatedCartPricing(cart) {
+  if (!cart.length) return cart;
+  const key = auth?.currentUser?.uid || "guest";
+  if (productPricingCache.key !== key || Date.now() - productPricingCache.loadedAt > 30000) {
+    const getFirestoreProducts = httpsCallable(functions, "getFirestoreProducts");
+    const response = await getFirestoreProducts({});
+    productPricingCache = { key, loadedAt: Date.now(), products: response.data?.products || [] };
+  }
+  const products = new Map(productPricingCache.products.map((product) => [product.id, product]));
+  let changed = false;
+  cart.forEach((item) => {
+    const product = products.get(item.id);
+    if (!product) return;
+    const variant = item.variantId
+      ? (product.variants || []).find((entry) =>
+        (entry.variantId || entry.id || "") === item.variantId)
+      : null;
+    const pricingTier = variant?.pricingTier || product.pricingTier || "retail";
+    const price = Number(variant?.priceOverride ?? product.price ?? product.priceFrom ?? item.price ?? 0);
+    const wholesaleMinQuantity = Math.max(Number(
+      variant?.wholesaleMinQuantity || product.wholesaleMinQuantity || 1,
+    ), 1);
+    if (Number(item.price) !== price || item.pricingTier !== pricingTier ||
+        Number(item.wholesaleMinQuantity || 1) !== wholesaleMinQuantity) changed = true;
+    item.price = price;
+    item.pricingTier = pricingTier;
+    item.wholesaleMinQuantity = wholesaleMinQuantity;
+    const minimum = minimumCartQuantity(item);
+    if (Number(item.quantity || 1) < minimum) changed = true;
+    item.quantity = Math.max(Number(item.quantity || 1), minimum);
+  });
+  if (changed) localStorage.setItem("recovery_cart", JSON.stringify(cart));
+  return cart;
+}
+
+export async function refreshCurrentCartPricing() {
+  return refreshAuthenticatedCartPricing(getCurrentCart());
+}
 
 function configuredFulfilment(item) {
   return item.configuredPhysicalFulfilment || item.physicalFulfilment ||
@@ -128,7 +174,13 @@ export function addToCart(item) {
   );
 
   if (existingItem) {
-    existingItem.quantity += item.quantity || 1;
+    existingItem.price = item.price;
+    existingItem.pricingTier = item.pricingTier || "retail";
+    existingItem.wholesaleMinQuantity = Math.max(Number(item.wholesaleMinQuantity || 1), 1);
+    existingItem.quantity = Math.max(
+      existingItem.quantity + (item.quantity || 1),
+      minimumCartQuantity(existingItem),
+    );
   } else {
     cart.push({
       id: item.id,
@@ -151,6 +203,8 @@ export function addToCart(item) {
       affiliatePercent:
         item.affiliatePercent ??
         (item.type === "tool" ? 0.1 : item.type === "course" ? 0.8 : 0.5),
+      pricingTier: item.pricingTier || "retail",
+      wholesaleMinQuantity: Math.max(Number(item.wholesaleMinQuantity || 1), 1),
       image: item.image || "/images/product-placeholder.png",
     });
   }
@@ -175,6 +229,11 @@ export async function renderCartItems() {
   if (!container || !subtotalEl) return;
 
   let cart = JSON.parse(localStorage.getItem("recovery_cart") || "[]");
+  try {
+    cart = await refreshAuthenticatedCartPricing(cart);
+  } catch (error) {
+    console.error("Unable to refresh current cart pricing:", error);
+  }
   const hasShippingItems = cart.some((item) => item.requiresShipping === true);
 
   const grouped = cart.reduce((acc, item) => {
@@ -222,6 +281,13 @@ export async function renderCartItems() {
       details.className = "text-sm text-gray-400";
       details.textContent = `$${itemPrice.toFixed(2)} × ${item.quantity}`;
 
+      const pricingTier = document.createElement("div");
+      pricingTier.className = "text-xs text-purple-300";
+      pricingTier.textContent = item.pricingTier === "affiliate-wholesale"
+        ? `Affiliate wholesale${minimumCartQuantity(item) > 1
+          ? ` · minimum ${minimumCartQuantity(item)}` : ""}`
+        : "";
+
       const variant = document.createElement("div");
       variant.className = "text-xs text-gray-300";
       variant.textContent = item.variantName ? `Variant: ${item.variantName}` : "";
@@ -237,6 +303,7 @@ export async function renderCartItems() {
       info.appendChild(name);
       if (item.variantName) info.appendChild(variant);
       if (fulfilment.textContent) info.appendChild(fulfilment);
+      if (pricingTier.textContent) info.appendChild(pricingTier);
       info.appendChild(details);
       if (configuredFulfilment(item) === "shipping-or-pickup") {
         const choices = document.createElement("fieldset");
@@ -428,7 +495,9 @@ function updateCartItem(index, action) {
   if (!cart[index]) return;
 
   if (action === "increase") cart[index].quantity += 1;
-  if (action === "decrease") cart[index].quantity = Math.max(1, cart[index].quantity - 1);
+  if (action === "decrease") {
+    cart[index].quantity = Math.max(minimumCartQuantity(cart[index]), cart[index].quantity - 1);
+  }
   if (action === "remove") cart.splice(index, 1);
 
   localStorage.setItem("recovery_cart", JSON.stringify(cart));

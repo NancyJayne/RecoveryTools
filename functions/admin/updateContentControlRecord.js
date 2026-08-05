@@ -300,6 +300,14 @@ function normalizeVariant(value, index, itemId, productId) {
     size: cleanString(value.size),
     sku: cleanString(value.sku),
     priceOverride: (asNumber(value.priceOverride) ?? 0) > 0 ? asNumber(value.priceOverride) : null,
+    marketplaceMode: cleanString(value.marketplaceMode || "inherit").toLowerCase(),
+    marketplaceStartsAt: cleanString(value.marketplaceStartsAt),
+    marketplaceEndsAt: cleanString(value.marketplaceEndsAt),
+    salePrice: asNumber(value.salePrice),
+    wholesalePrice: asNumber(value.wholesalePrice),
+    wholesaleMinQuantity: Math.max(asNumber(value.wholesaleMinQuantity) ?? 1, 1),
+    saleStartsAt: cleanString(value.saleStartsAt),
+    saleEndsAt: cleanString(value.saleEndsAt),
     stock: asNumber(value.stock) ?? 0,
     status: cleanString(value.status || "active").toLowerCase(),
     contentVariantId: cleanString(value.contentVariantId),
@@ -508,6 +516,10 @@ async function updateProductRelation({
     : asNumber(relation.salePrice) ?? (storedSalePrice > 0 ? storedSalePrice : null);
   const saleStartsAt = cleanString(relation.saleStartsAt) || cleanString(productData.saleStartsAt);
   const saleEndsAt = cleanString(relation.saleEndsAt) || cleanString(productData.saleEndsAt);
+  const marketplaceMode = cleanString(relation.marketplaceMode || productData.marketplaceMode ||
+    (relation.visible === true ? "active" : "hidden")).toLowerCase();
+  const marketplaceStartsAt = cleanString(relation.marketplaceStartsAt);
+  const marketplaceEndsAt = cleanString(relation.marketplaceEndsAt);
   const nowMs = Date.now();
   const startsMs = saleStartsAt ? Date.parse(saleStartsAt) : null;
   const endsMs = saleEndsAt ? Date.parse(saleEndsAt) : null;
@@ -546,6 +558,9 @@ async function updateProductRelation({
     shopStatus: cleanString(relation.shopStatus || "draft").toLowerCase(),
     visible: asBoolean(relation.visible),
     websiteVisible: asBoolean(relation.visible),
+    marketplaceMode,
+    marketplaceStartsAt,
+    marketplaceEndsAt,
     archived: asBoolean(relation.archived),
     featured: asBoolean(relation.featured),
     requiresShipping: asBoolean(relation.requiresShipping),
@@ -579,6 +594,8 @@ async function updateProductRelation({
       .sort((a, b) => a - b)[0],
     retailPrice,
     salePrice,
+    wholesalePrice: asNumber(relation.wholesalePrice),
+    wholesaleMinQuantity: Math.max(asNumber(relation.wholesaleMinQuantity) ?? 1, 1),
     onSale,
     saleStartsAt,
     saleEndsAt,
@@ -687,6 +704,8 @@ async function updateProductRelation({
     currency: "AUD",
     retailPrice,
     salePrice,
+    wholesalePrice: asNumber(relation.wholesalePrice),
+    wholesaleMinQuantity: Math.max(asNumber(relation.wholesaleMinQuantity) ?? 1, 1),
     onSale,
     saleStartsAt,
     saleEndsAt,
@@ -736,6 +755,14 @@ async function updateProductRelation({
       isDefault: index === 0,
       optionSummary: [variant.colour, variant.size].filter(Boolean).join(" / "),
       priceOverride: variant.priceOverride,
+      marketplaceMode: variant.marketplaceMode,
+      marketplaceStartsAt: variant.marketplaceStartsAt,
+      marketplaceEndsAt: variant.marketplaceEndsAt,
+      salePrice: variant.salePrice,
+      wholesalePrice: variant.wholesalePrice,
+      wholesaleMinQuantity: variant.wholesaleMinQuantity,
+      saleStartsAt: variant.saleStartsAt,
+      saleEndsAt: variant.saleEndsAt,
       currency: "AUD",
       requiresShippingOverride: ["shipping", "shipping-or-pickup"].includes(variant.physicalFulfilment),
       inventoryTracked: asBoolean(relation.inventoryTracked),
@@ -765,8 +792,12 @@ async function updateProductRelation({
         variantId: variant.variantId,
         currency: "AUD",
         retailPrice: variant.priceOverride,
-        salePrice: null,
-        onSale: false,
+        wholesalePrice: variant.wholesalePrice,
+        wholesaleMinQuantity: variant.wholesaleMinQuantity,
+        salePrice: variant.salePrice,
+        saleStartsAt: variant.saleStartsAt,
+        saleEndsAt: variant.saleEndsAt,
+        onSale: variant.salePrice !== null,
         effectiveShopPrice: variant.priceOverride,
         gstIncluded: true,
         gstAmount: Number((variant.priceOverride / 11).toFixed(2)),
@@ -981,6 +1012,14 @@ export const updateContentControlRecord = onCall(
     applyBoolean(update, updates, "websiteVisible");
     applyBoolean(update, updates, "websiteVisible", "visible");
     applyString(update, updates, "approvalStatus");
+    if (updates.productRelation && typeof updates.productRelation === "object") {
+      update.productId = cleanString(
+        updates.productRelation.productId || updates.productRelation.existingProductId || updates.productId,
+      ) || `PROD-${slugify(recordId).replace(/^ITEM-/, "")}`;
+      update.productLinkRole = cleanString(updates.productRelation.linkRole) || "Represents";
+      update.createsProduct = true;
+      if (collection === "items") update.isShopProduct = true;
+    }
     if (update.status === "review") {
       update.approvalStatus = "awaiting-approval";
       update.approvalRequestedAt = now;
@@ -1080,6 +1119,12 @@ export const updateContentControlRecord = onCall(
       ? await prepareTemplateAssetSync(db, collection, recordId, updates)
       : null;
     const unlinkProductIds = new Set(cleanArray(updates.unlinkProductIds));
+    if (unlinkProductIds.has(cleanString(existing.productId))) {
+      update.productId = "";
+      update.productLinkRole = "";
+      update.createsProduct = false;
+      if (collection === "items") update.isShopProduct = false;
+    }
     const productLinksToUnlink = unlinkProductIds.size
       ? (await db.collection("productLinks").where("linkedEntityId", "==", recordId).get()).docs
         .filter((doc) => unlinkProductIds.has(cleanString(doc.data()?.productId)))

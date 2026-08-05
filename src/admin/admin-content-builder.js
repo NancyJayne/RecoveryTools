@@ -105,6 +105,19 @@ function setInputValue(id, value = "") {
   input.value = value ?? "";
 }
 
+function datetimeLocalValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 16);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+function isoFromDatetimeLocal(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
 function setCheckboxValue(id, value) {
   const input = document.getElementById(id);
   if (!input) return;
@@ -1338,9 +1351,6 @@ function renderSelectedProductVariantRows(
             <textarea class="product-variant-long-description mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
               rows="3" placeholder="Leave blank to use the main Product description">${escapeHTML(productVariant.longDescription || "")}</textarea>
           </label>
-          <label class="block text-sm">Price override
-            <input class="product-variant-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="0.01" value="${escapeHTML(productVariant.priceOverride ?? "")}">
-          </label>
           <label class="product-variant-stock-field block text-sm">Product stock
             <input class="product-variant-stock mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.stock ?? 0)}">
             <span class="mt-1 block text-xs text-gray-400">Finished sellable stock. This is separate from the connected Item variant stock.</span>
@@ -1390,6 +1400,58 @@ function renderSelectedProductVariantRows(
                 "<option value=\"\" disabled>No instructors saved</option>"}
             </select>
           </label>
+          <div class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
+            <h5 class="font-semibold text-white">Marketplace visibility</h5>
+            <div class="mt-3 grid gap-3 md:grid-cols-3">
+              <label class="block text-sm">Marketplace listing
+                <select class="product-variant-marketplace-mode mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                  <option value="inherit"${!productVariant.marketplaceMode || productVariant.marketplaceMode === "inherit" ? " selected" : ""}>Use main Product setting</option>
+                  <option value="active"${productVariant.marketplaceMode === "active" ? " selected" : ""}>Visible and available now</option>
+                  <option value="scheduled"${productVariant.marketplaceMode === "scheduled" ? " selected" : ""}>Hidden until the start date</option>
+                  <option value="coming-soon"${productVariant.marketplaceMode === "coming-soon" ? " selected" : ""}>Coming soon until the start date</option>
+                  <option value="hidden"${productVariant.marketplaceMode === "hidden" ? " selected" : ""}>Hidden</option>
+                </select>
+                <span class="mt-1 block text-xs text-gray-400">Inherit uses the main Product schedule.</span>
+              </label>
+              <label class="block text-sm">Start selling
+                <input class="product-variant-marketplace-start mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                  type="datetime-local" value="${escapeHTML(datetimeLocalValue(productVariant.marketplaceStartsAt))}">
+              </label>
+              <label class="block text-sm">Stop selling / hide
+                <input class="product-variant-marketplace-end mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                  type="datetime-local" value="${escapeHTML(datetimeLocalValue(productVariant.marketplaceEndsAt))}">
+              </label>
+            </div>
+          </div>
+          <div class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
+            <h5 class="font-semibold text-white">Price and sale</h5>
+            <div class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <label class="block text-sm">Regular price override
+                <input class="product-variant-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                  type="number" min="0" step="0.01" value="${escapeHTML(productVariant.priceOverride ?? "")}">
+              </label>
+              <label class="block text-sm">Sale price
+                <input class="product-variant-sale-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                  type="number" min="0" step="0.01" value="${escapeHTML(productVariant.salePrice ?? "")}">
+              </label>
+              <label class="block text-sm">Affiliate wholesale price
+                <input class="product-variant-wholesale-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                  type="number" min="0" step="0.01" value="${escapeHTML(productVariant.wholesalePrice ?? "")}">
+              </label>
+              <label class="block text-sm">Wholesale minimum quantity
+                <input class="product-variant-wholesale-min-quantity mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                  type="number" min="1" step="1" value="${escapeHTML(productVariant.wholesaleMinQuantity ?? "")}">
+              </label>
+              <label class="block text-sm">Sale starts
+                <input class="product-variant-sale-start mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                  type="datetime-local" value="${escapeHTML(datetimeLocalValue(productVariant.saleStartsAt))}">
+              </label>
+              <label class="block text-sm">Sale ends
+                <input class="product-variant-sale-end mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                  type="datetime-local" value="${escapeHTML(datetimeLocalValue(productVariant.saleEndsAt))}">
+              </label>
+            </div>
+          </div>
           <div class="md:col-span-2 xl:col-span-4">
             <div class="mb-3 flex flex-wrap gap-2">
               <button type="button" data-product-variant-action="active"
@@ -1430,6 +1492,20 @@ function syncSelectedProductVariantRows() {
       size: row.querySelector(".product-variant-size")?.value.trim() || "",
       sku: row.querySelector(".product-variant-sku")?.value.trim() || "",
       priceOverride: optionalNumberFromElement(row.querySelector(".product-variant-price")),
+      marketplaceMode: row.querySelector(".product-variant-marketplace-mode")?.value || "inherit",
+      marketplaceStartsAt: isoFromDatetimeLocal(
+        row.querySelector(".product-variant-marketplace-start")?.value || "",
+      ),
+      marketplaceEndsAt: isoFromDatetimeLocal(
+        row.querySelector(".product-variant-marketplace-end")?.value || "",
+      ),
+      salePrice: optionalNumberFromElement(row.querySelector(".product-variant-sale-price")),
+      wholesalePrice: optionalNumberFromElement(row.querySelector(".product-variant-wholesale-price")),
+      wholesaleMinQuantity: optionalNumberFromElement(
+        row.querySelector(".product-variant-wholesale-min-quantity"),
+      ) || 1,
+      saleStartsAt: isoFromDatetimeLocal(row.querySelector(".product-variant-sale-start")?.value || ""),
+      saleEndsAt: isoFromDatetimeLocal(row.querySelector(".product-variant-sale-end")?.value || ""),
       stock: optionalNumberFromElement(row.querySelector(".product-variant-stock")) ?? 0,
       status: row.dataset.pendingStatus ||
         row.querySelector(".product-variant-status")?.value || "draft",
@@ -2848,6 +2924,19 @@ function productRelationPayload() {
   syncSelectedProductVariantRows();
   populateGeneratedProductSku();
   const variants = parseProductVariants(document.getElementById("contentProductVariants")?.value);
+  variants.forEach((variant) => {
+    const label = variant.name || variant.variantId || "Product variant";
+    if (["scheduled", "coming-soon"].includes(variant.marketplaceMode) && !variant.marketplaceStartsAt) {
+      throw new Error(`Choose a marketplace start date for ${label}.`);
+    }
+    if (variant.marketplaceStartsAt && variant.marketplaceEndsAt &&
+        variant.marketplaceEndsAt <= variant.marketplaceStartsAt) {
+      throw new Error(`The marketplace end date for ${label} must be after its start date.`);
+    }
+    if (variant.saleStartsAt && variant.saleEndsAt && variant.saleEndsAt <= variant.saleStartsAt) {
+      throw new Error(`The sale end date for ${label} must be after its start date.`);
+    }
+  });
   const variantInstructors = [...new Set(variants.map((variant) => variant.instructor).filter(Boolean))];
   const instructor = variantInstructors.length === 1 ? variantInstructors[0] : "";
   const fulfilmentEnabled = document.getElementById("contentProductHasPhysicalFulfilment")?.checked === true;
@@ -2867,6 +2956,20 @@ function productRelationPayload() {
   setInputValue("contentProductStock", inventoryTracked ? totalVariantStock : "");
   const linkRole = document.getElementById("contentProductLinkRole")?.value || "Represents";
   const manufacturingLink = currentRecordType() === "blueprint" && linkRole === "ManufacturedFrom";
+  const marketplaceMode = document.getElementById("contentProductMarketplaceMode")?.value || "hidden";
+  const marketplaceStartsAt = document.getElementById("contentProductMarketplaceStartsAt")?.value || "";
+  const marketplaceEndsAt = document.getElementById("contentProductMarketplaceEndsAt")?.value || "";
+  const saleStartsAt = document.getElementById("contentProductSaleStartsAt")?.value || "";
+  const saleEndsAt = document.getElementById("contentProductSaleEndsAt")?.value || "";
+  if (["scheduled", "coming-soon"].includes(marketplaceMode) && !marketplaceStartsAt) {
+    throw new Error("Choose a marketplace start date for a scheduled or Coming soon Product.");
+  }
+  if (marketplaceStartsAt && marketplaceEndsAt && marketplaceEndsAt <= marketplaceStartsAt) {
+    throw new Error("The marketplace end date must be after its start date.");
+  }
+  if (saleStartsAt && saleEndsAt && saleEndsAt <= saleStartsAt) {
+    throw new Error("The sale end date must be after its start date.");
+  }
   return {
     existingProductId: document.getElementById("contentExistingProductId")?.value || "",
     productId: document.getElementById("contentProductId")?.value || "",
@@ -2875,10 +2978,19 @@ function productRelationPayload() {
     productCategoryId: document.getElementById("contentProductCategoryId")?.value || "",
     productType: document.getElementById("contentProductDeliveryType")?.value || "Physical",
     physicalFulfilment,
-    shopStatus: document.getElementById("contentProductShopStatus")?.value || "draft",
+    shopStatus: marketplaceMode === "hidden" ? "draft" : "active",
     effectiveShopPrice: optionalNumberFromInput("contentProductPrice"),
     stock: inventoryTracked ? totalVariantStock : null,
-    visible: document.getElementById("contentProductVisible")?.checked === true,
+    visible: ["active", "coming-soon"].includes(marketplaceMode),
+    marketplaceMode,
+    marketplaceStartsAt: isoFromDatetimeLocal(marketplaceStartsAt),
+    marketplaceEndsAt: isoFromDatetimeLocal(marketplaceEndsAt),
+    retailPrice: optionalNumberFromInput("contentProductPrice"),
+    salePrice: optionalNumberFromInput("contentProductSalePrice"),
+    wholesalePrice: optionalNumberFromInput("contentProductWholesalePrice"),
+    wholesaleMinQuantity: optionalNumberFromInput("contentProductWholesaleMinQuantity") || 1,
+    saleStartsAt: isoFromDatetimeLocal(saleStartsAt),
+    saleEndsAt: isoFromDatetimeLocal(saleEndsAt),
     featured: document.getElementById("contentProductFeatured")?.checked === true,
     archived: document.getElementById("contentProductArchived")?.checked === true,
     requiresShipping,
@@ -3001,6 +3113,18 @@ function chooseExistingProduct(productId) {
   }
   setInputValue("contentProductStock", product.stock ?? 0);
   setCheckboxValue("contentProductVisible", product.visible);
+  setSelectValue(
+    "contentProductMarketplaceMode",
+    product.marketplaceMode || (product.visible ? "active" : "hidden"),
+  );
+  setInputValue("contentProductMarketplaceStartsAt", datetimeLocalValue(product.marketplaceStartsAt));
+  setInputValue("contentProductMarketplaceEndsAt", datetimeLocalValue(product.marketplaceEndsAt));
+  setInputValue("contentProductPrice", product.retailPrice ?? product.price ?? "");
+  setInputValue("contentProductSalePrice", product.salePrice ?? "");
+  setInputValue("contentProductWholesalePrice", product.wholesalePrice ?? "");
+  setInputValue("contentProductWholesaleMinQuantity", product.wholesaleMinQuantity ?? 1);
+  setInputValue("contentProductSaleStartsAt", datetimeLocalValue(product.saleStartsAt));
+  setInputValue("contentProductSaleEndsAt", datetimeLocalValue(product.saleEndsAt));
   setCheckboxValue("contentProductFeatured", product.featured);
   setCheckboxValue("contentProductArchived", product.archived);
   state.retainedProductVariantContentLinks = (product.variantContentLinks || [])
@@ -3032,6 +3156,12 @@ function chooseNewProduct() {
     "contentProductRequiresSessionTime", "contentProductTracksSeats", "contentProductRequiresLocation",
     "contentProductRequiresInstructor"].forEach((id) => setCheckboxValue(id, false));
   setSelectValue("contentProductShopStatus", "draft");
+  setSelectValue("contentProductMarketplaceMode", "hidden");
+  ["contentProductMarketplaceStartsAt", "contentProductMarketplaceEndsAt", "contentProductPrice",
+    "contentProductSalePrice", "contentProductWholesalePrice", "contentProductWholesaleMinQuantity",
+    "contentProductSaleStartsAt", "contentProductSaleEndsAt"]
+    .forEach((id) => setInputValue(id, ""));
+  setInputValue("contentProductWholesaleMinQuantity", 1);
   setInputValue(
     "contentProductStock",
     currentRecordType() === "item" ? state.editingRecord?.itemStock ?? "" : "",
@@ -3074,7 +3204,8 @@ export async function openProductDrawerFromAdmin({ productId, entityType, entity
   const record = findRecord(entityType, entityId);
   if (!record) throw new Error("The Product's connected content record could not be loaded.");
   populateBuilderFromRecord(record);
-  chooseExistingProduct(productId);
+  if (productId) chooseExistingProduct(productId);
+  else chooseNewProduct();
   state.isDirty = false;
   openContentProductDrawer();
 }
@@ -5211,6 +5342,46 @@ async function saveProductDetailsFromDrawer() {
   }
 }
 
+async function saveConnectionsFromPage() {
+  const button = document.getElementById("saveContentConnectionsBtn");
+  if (!state.editingRecord?.id) {
+    showToast("Review and save this content before adding connections.", "error");
+    showBuilderStep(3);
+    return;
+  }
+  if (button?.dataset.saving === "true") return;
+  if (button) {
+    button.dataset.saving = "true";
+    button.disabled = true;
+    button.textContent = "Saving connections...";
+  }
+  try {
+    const payload = await formPayload(false);
+    payload.status = state.editingRecord.status || payload.status || "draft";
+    payload.approvalStatus = state.editingRecord.approvalStatus || payload.approvalStatus || "draft";
+    await updateContentControlRecord({
+      recordType: state.editingRecord.recordType,
+      recordId: state.editingRecord.id,
+      updates: payload,
+    });
+    state.isDirty = false;
+    await loadData();
+    showBuilderStep(4);
+    renderBuilderSummaries(state.editingRecord);
+    showToast("Connections saved.", "success");
+    window.dispatchEvent(new CustomEvent("admin-product-saved"));
+  } catch (error) {
+    console.error("Failed to save content connections:", error);
+    showToast(error.message || "Failed to save connections.", "error");
+  } finally {
+    if (button) {
+      button.dataset.saving = "false";
+      button.disabled = false;
+      button.textContent = "Save connections";
+    }
+  }
+}
+
 async function saveTemplate() {
   const saveButton = document.querySelector("#contentTemplateForm button[type='submit']");
   if (saveButton?.dataset.saving === "true") return;
@@ -5461,6 +5632,10 @@ export async function setupContentBuilder() {
     state.isDirty = true;
     showToast("Library variants selected. They will be saved with this entity.", "success");
   });
+  document.getElementById("saveContentConnectionsBtn")?.addEventListener(
+    "click",
+    saveConnectionsFromPage,
+  );
   document.getElementById("contentRelationshipSummary")?.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-connection-edit]");
     if (!button) return;

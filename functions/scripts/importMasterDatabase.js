@@ -41,6 +41,7 @@ const COLLECTIONS = [
   "productComponents",
   "productAccessGrants",
   "productPrices",
+  "promotions",
   "itemVariants",
   "assets",
   "entityAssets",
@@ -60,6 +61,10 @@ const COLLECTIONS = [
   "stripeEvents",
   "userAccess",
 ];
+
+const TRANSACTIONAL_COLLECTIONS = new Set([
+  "users", "orders", "orderItems", "customerAddresses", "shipments", "stripeEvents", "userAccess",
+]);
 
 const COLLECTION_SHEETS = {
   categories: "Category",
@@ -94,6 +99,7 @@ const COLLECTION_SHEETS = {
   productComponents: "ProductComponents",
   productAccessGrants: "ProductConnections",
   productPrices: "ProductPrice",
+  promotions: "Promotions",
   itemVariants: "ItemVariants",
   assets: "Asset",
   entityAssets: "EntityAssets",
@@ -420,6 +426,27 @@ function canonicalWorkbookData(row, schema) {
   return cleanObject(data);
 }
 
+function exportedCellValue(value) {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed || !["{", "["].includes(trimmed[0])) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function exportedCollectionSheets(workbook) {
+  const mapRows = parseSheet(workbook, "CollectionMap");
+  return mapRows
+    .map((row) => ({
+      sheetName: asString(value(row, "SheetName")),
+      collection: asString(value(row, "Collection")),
+    }))
+    .filter(({ sheetName, collection }) => sheetName && collection && workbook.Sheets[sheetName]);
+}
+
 function buildDocs(workbook, workbookPath) {
   const warnings = [];
   const docs = [];
@@ -462,6 +489,8 @@ function buildDocs(workbook, workbookPath) {
     productComponents: parseSheet(workbook, "ProductComponents"),
     productAccessGrants: parseSheet(workbook, "ProductAccessGrants"),
     prices: parseSheet(workbook, "ProductPrice"),
+    promotions: parseSheet(workbook, "Promotions"),
+    promotionLinks: parseSheet(workbook, "PromotionLinks"),
     variants: parseSheet(workbook, "ItemVariants"),
     assets: parseSheet(workbook, "Asset"),
     canonicalAssets: parseSheet(workbook, "Assets"),
@@ -1386,6 +1415,8 @@ function buildDocs(workbook, workbookPath) {
       grossProfit: asNumber(value(row, "GrossProfit")),
       grossMarginPercent: asNumber(value(row, "GrossMarginPercent")),
       affiliatePrice: asNumber(value(row, "AffiliatePrice")),
+      wholesalePrice: asNumber(value(row, "WholesalePrice", "AffiliatePrice")),
+      wholesaleMinQuantity: Math.max(asNumber(value(row, "WholesaleMinQuantity")) ?? 1, 1),
       affiliateCommission: asNumber(value(row, "AffiliateCommission")),
       affiliateProfit: asNumber(value(row, "AffiliateProfit")),
       donationAmount: asNumber(value(row, "DonationAmount")),
@@ -1515,10 +1546,56 @@ function buildDocs(workbook, workbookPath) {
       slug: asString(value(row, "slug")),
       price: asNumber(value(basePrice ?? {}, "EffectiveShopPrice")) ?? lowestPrice,
       priceFrom: lowestPrice,
+      wholesalePrice: asNumber(value(basePrice ?? {}, "WholesalePrice", "AffiliatePrice")),
+      wholesaleMinQuantity: Math.max(
+        asNumber(value(basePrice ?? {}, "WholesaleMinQuantity")) ?? 1,
+        1,
+      ),
       hasVariants: itemVariants.length > 0,
       stock,
       images,
       media: productAssets,
+      notes: asString(value(row, "Notes")),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+
+  const promotionLinksByPromotion = new Map();
+  for (const row of rows.promotionLinks) {
+    const promotionId = asString(value(row, "PromotionID"));
+    if (!promotionId || asStatus(value(row, "Status")) === "archived") continue;
+    const links = promotionLinksByPromotion.get(promotionId) || { productIds: [], variantIds: [] };
+    const productId = asString(value(row, "ProductID"));
+    const variantId = asString(value(row, "ProductVariantID", "VariantID"));
+    if (productId) links.productIds.push(productId);
+    if (variantId) links.variantIds.push(variantId);
+    promotionLinksByPromotion.set(promotionId, links);
+  }
+  for (const row of rows.promotions) {
+    const promotionId = asString(value(row, "PromotionID"));
+    const code = asString(value(row, "Code")).toUpperCase();
+    if (!promotionId || !code) continue;
+    const links = promotionLinksByPromotion.get(promotionId) || { productIds: [], variantIds: [] };
+    const promotionStatus = asStatus(value(row, "Status")) || "active";
+    const activeCell = value(row, "Active");
+    pushDoc(docs, "promotions", promotionId, {
+      promotionId,
+      code,
+      name: asString(value(row, "Name", "PromotionName")),
+      discountType: asStatus(value(row, "DiscountType")) || "percentage",
+      discountValue: asNumber(value(row, "DiscountValue")) ?? 0,
+      startsAt: asDate(value(row, "StartsAt")),
+      endsAt: asDate(value(row, "EndsAt")),
+      minimumOrder: asNumber(value(row, "MinimumOrder")) ?? 0,
+      maxUses: asNumber(value(row, "MaxUses")) ?? 0,
+      usesPerCustomer: Math.max(asNumber(value(row, "UsesPerCustomer")) ?? 1, 1),
+      audience: asStatus(value(row, "Audience")) || "all",
+      productIds: unique(links.productIds),
+      variantIds: unique(links.variantIds),
+      active: (activeCell === null || activeCell === undefined ? promotionStatus === "active" : asBool(activeCell)) &&
+        promotionStatus !== "archived",
+      stackable: asBool(value(row, "Stackable")),
+      status: promotionStatus,
       notes: asString(value(row, "Notes")),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -1977,6 +2054,27 @@ function buildDocs(workbook, workbookPath) {
       }
       data.updatedAt = FieldValue.serverTimestamp();
       pushDoc(docs, collection, id, data);
+    }
+  }
+
+  const existingDocKeys = new Set(docs.map((doc) => `${doc.collection}/${doc.id}`));
+  const seedableCollections = new Set(COLLECTIONS.filter((collection) => !TRANSACTIONAL_COLLECTIONS.has(collection)));
+  for (const { sheetName, collection } of exportedCollectionSheets(workbook)) {
+    if (!seedableCollections.has(collection)) {
+      warnings.push(`CollectionMap skipped non-seedable collection ${collection}.`);
+      continue;
+    }
+    for (const row of parseSheet(workbook, sheetName)) {
+      const id = asString(value(row, "DocumentID"));
+      if (!id || existingDocKeys.has(`${collection}/${id}`)) continue;
+      const data = {};
+      for (const [key, entry] of Object.entries(row)) {
+        if (key === "DocumentID" || entry === null || entry === undefined || entry === "") continue;
+        data[key] = exportedCellValue(entry);
+      }
+      data.updatedAt = FieldValue.serverTimestamp();
+      pushDoc(docs, collection, id, data);
+      existingDocKeys.add(`${collection}/${id}`);
     }
   }
 

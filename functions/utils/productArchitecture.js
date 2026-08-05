@@ -117,6 +117,13 @@ export function activePriceForProduct(productId, architecture) {
     .find((price) => status(price.status, "active") === "active" && !price.variantId) || null;
 }
 
+export function activePriceForVariant(productId, variantId, architecture) {
+  if (!variantId) return null;
+  return (architecture.pricesByProductId.get(productId) || [])
+    .find((price) => status(price.status, "active") === "active" &&
+      cleanString(price.variantId) === cleanString(variantId)) || null;
+}
+
 function normalizedVariant(variant, sourceCollection) {
   const numericPriceOverride = Number(variant.priceOverride);
   return {
@@ -130,6 +137,17 @@ function normalizedVariant(variant, sourceCollection) {
     priceOverride: Number.isFinite(numericPriceOverride) && numericPriceOverride > 0
       ? numericPriceOverride
       : null,
+    marketplaceMode: variant.marketplaceMode || "inherit",
+    marketplaceStartsAt: dateTimeValue(variant.marketplaceStartsAt),
+    marketplaceEndsAt: dateTimeValue(variant.marketplaceEndsAt),
+    salePrice: variant.salePrice === null || variant.salePrice === undefined || variant.salePrice === ""
+      ? null
+      : Number(variant.salePrice),
+    wholesalePrice: variant.wholesalePrice === null || variant.wholesalePrice === undefined ||
+      variant.wholesalePrice === "" ? null : Number(variant.wholesalePrice),
+    wholesaleMinQuantity: Math.max(Number(variant.wholesaleMinQuantity || 1), 1),
+    saleStartsAt: dateTimeValue(variant.saleStartsAt),
+    saleEndsAt: dateTimeValue(variant.saleEndsAt),
     stock: Number(variant.stockQuantity ?? variant.stock ?? 0),
     stockStatus: variant.stockStatus || "",
     isDefault: variant.isDefault === true,

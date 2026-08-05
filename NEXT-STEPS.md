@@ -32,6 +32,12 @@
 - [x] Library/Anato-me, Programs, and Affiliate registration are held for V2 and hidden/route-guarded without deleting their implementation.
 - [x] Dedicated Course and Workshop discovery pages are not public V1 navigation; unlocked customers retain Course and Workshop access through Profile.
 - [x] Stripe Connect controls are hidden for V1 while the implementation remains available for the V2 affiliate launch.
+- [x] Products and Product variants now support approved-affiliate wholesale prices and minimum quantities. Eligibility and price selection are verified on the server rather than trusted from the browser.
+- [x] Products & Inventory now includes a central Promotions tool for percentage, fixed-amount, and free-shipping codes with date, audience, usage-limit, minimum-order, and Product/Product-variant eligibility controls.
+- [x] Checkout validates promotion codes server-side, records the applied promotion on the Stripe session and Order, and counts successful redemptions only once when an Order is first created.
+- [x] Full backups automatically include Promotions and promotion-redemption records with the other root Firestore collections.
+- [x] Workbook imports now support ProductPrice wholesale price/minimum quantity, Promotions, PromotionLinks, and Product/Product-variant promotion eligibility.
+- [x] Admin Content now offers two distinct downloads: the sensitive full JSON recovery backup and an editable `.xlsx` master-content export that can be merged back with `seed:all` without customer/order or redemption data.
 
 ### Implemented - rebuild and confirmation required
 
@@ -50,6 +56,8 @@
 5. **Finish approval and publication workflows.** Complete Content, Course/Workshop, and Therapist submission, review, approve/reject, notification, activation, pause, and archive tests.
 6. **Run the remaining V1 production integration.** Perform the deployed Contact form test. Stripe Connect and the final Affiliate Agreement move to V2 with Affiliate registration.
 7. **Run the final V1 regression.** Create content and Products, publish, purchase physical/digital/hybrid variants, verify access and replay safety, fulfil or resolve the order, then pause/archive and confirm every public and admin state.
+8. **Test launch promotion codes if they will be used in V1.** In the emulator, test percentage, fixed-amount, and free-shipping codes; start/end dates; minimum order; Product and Product-variant eligibility; retail/affiliate audiences; per-customer and total-use limits; and webhook replay safety. Checkout currently accepts one promotion code per Order.
+9. **Confirm the workbook round trip.** Download the editable workbook from Admin, change a disposable master-content record, run `npm run seed:all -- --workbook <downloaded-file>`, and confirm the changed ID merges without deleting app-only content. Keep the full JSON backup separately for customer/order disaster recovery; do not use it as a seed workbook.
 
 ### V1 launch position
 
@@ -69,6 +77,8 @@ Do not add optional financial reporting, advanced inventory, or larger CRM enhan
 
 - Course video audio investigation.
 - Re-enable Affiliate registration after adding the final Affiliate Agreement and completing Stripe Connect production onboarding/payout testing.
+- Verify approved-affiliate wholesale pricing end to end before the V2 Affiliate launch: ordinary customers must never receive wholesale prices, approved affiliates must see the correct Product/variant price, minimum quantities must be enforced, and the Stripe Order must retain the affiliate pricing tier.
+- Add multi-code promotion stacking only if a future sales policy requires more than one code on an Order; the current checkout deliberately accepts one code.
 - Re-enable Library/Anato-me and Programs after their V2 content, navigation, and publication checks pass.
 - Financial cost-factor and margin reporting upgrades.
 - Advanced inventory warnings, audit views, and purchasing workflows.

@@ -357,6 +357,9 @@ export async function writeCheckoutCompleted({ stripe, session, event }) {
     accessStatus: accessItems.length ? "granted" : "none",
     referredBy: session.metadata?.referrer_uid || null,
     referralEvent: session.metadata?.ref_event || null,
+    promotionCode: session.metadata?.promotionCode || "",
+    promotionId: session.metadata?.promotionId || "",
+    discountAmount: Number(session.metadata?.discountAmount || 0),
     metadata: session.metadata || {},
     products: items.map(orderItemSnapshot),
     orderLines,
@@ -387,6 +390,23 @@ export async function writeCheckoutCompleted({ stripe, session, event }) {
     if (stripeCustomerId) {
       batch.set(db.collection("users").doc(userId), { stripeCustomerId }, { merge: true });
     }
+  }
+
+  const promotionId = session.metadata?.promotionId || "";
+  if (created && promotionId && userId) {
+    batch.set(db.collection("promotions").doc(promotionId), {
+      usageCount: admin.firestore.FieldValue.increment(1),
+      lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    batch.set(db.collection("promotionRedemptions").doc(`${promotionId}_${userId}`), {
+      promotionId,
+      promotionCode: session.metadata?.promotionCode || "",
+      userId,
+      usageCount: admin.firestore.FieldValue.increment(1),
+      lastOrderId: orderId,
+      lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
   }
 
   orderLines.forEach((item) => {

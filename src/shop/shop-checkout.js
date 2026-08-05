@@ -2,7 +2,7 @@
 
 import { auth, db, functions } from "../utils/firebase-config.js";
 import { httpsCallable } from "firebase/functions";
-import { getCurrentCart } from "./shop-cart.js";
+import { getCurrentCart, refreshCurrentCartPricing } from "./shop-cart.js";
 import { showToast, formatCurrency } from "../utils/utils.js";
 import { confirmOrderFromStripeRedirect } from "./shop-orders.js";
 import { doc, getDoc } from "firebase/firestore";
@@ -234,7 +234,13 @@ export async function setupCheckoutPage() {
 
   if (!confirmBtn) return;
 
-  const cart = getCurrentCart();
+  let cart;
+  try {
+    cart = await refreshCurrentCartPricing();
+  } catch (error) {
+    console.error("Unable to refresh checkout pricing:", error);
+    cart = getCurrentCart();
+  }
   const hasShippingItems = cart.some(itemRequiresShipping);
   const pickupItems = cart.filter((item) => item.physicalFulfilment === "pickup");
   if (!cart.length) {
@@ -642,6 +648,14 @@ export async function setupCheckoutPage() {
   totalRow.classList.add("text-lg", "font-bold", "text-white");
   cartSummary.appendChild(totalRow);
 
+  const promotionWrap = document.createElement("label");
+  promotionWrap.className = "mt-4 block text-sm";
+  promotionWrap.innerHTML = `Discount code
+    <input id="checkoutPromotionCode" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 uppercase text-white"
+      placeholder="Enter code">
+    <span class="mt-1 block text-xs text-gray-400">The eligible discount is verified and shown in Stripe checkout.</span>`;
+  cartSummary.appendChild(promotionWrap);
+
 
   summaryContainer.appendChild(cartSummary);
   confirmBtn.addEventListener("click", async (e) => {
@@ -694,6 +708,7 @@ export async function setupCheckoutPage() {
         collectShipping: hasShippingItems,
         customerInfo,
         saveAsDefaultShipping,
+        promotionCode: document.getElementById("checkoutPromotionCode")?.value || "",
         token,
       });
 
@@ -706,7 +721,7 @@ export async function setupCheckoutPage() {
       }
     } catch (error) {
       console.error("Unable to start checkout:", error);
-      showToast("Unable to start checkout.", "error");
+      showToast(error.message || "Unable to start checkout.", "error");
       confirmBtn.disabled = false;
       confirmBtn.textContent = "Checkout";
     }
