@@ -38,6 +38,7 @@ export function initAdminNavigation(role) {
     "/admin/affiliates": "adminAffiliateStats",
     "/admin/anato-me": "anatoMeForm",
     "/admin/emails": "adminEmailSection",
+    "/admin/communications": "adminEmailSection",
     "/admin/reviews": "adminReviewsFeedbackSection",
     "/admin/business": "adminBusinessSettingsSection",
     "/admin/crm": "userRoleManager",

@@ -1,6 +1,6 @@
 # Recovery Tools - Next Steps
 
-## Production Readiness - August 3, 2026
+## Production Readiness - August 11, 2026
 
 ### Confirmed working
 
@@ -38,9 +38,16 @@
 - [x] Full backups automatically include Promotions and promotion-redemption records with the other root Firestore collections.
 - [x] Workbook imports now support ProductPrice wholesale price/minimum quantity, Promotions, PromotionLinks, and Product/Product-variant promotion eligibility.
 - [x] Admin Content now offers two distinct downloads: the sensitive full JSON recovery backup and an editable `.xlsx` master-content export that can be merged back with `seed:all` without customer/order or redemption data.
+- [x] Contact submissions are now persisted as unread Communication threads before the admin notification email is attempted, so a SendGrid failure cannot remove the enquiry from the admin inbox.
+- [x] Admin Emails is now Communications, with Inbox, All communications, Assigned to me, New broadcast, and All emails views plus full message threads, replies, internal notes, status, assignment, user links, and optional Order links.
+- [x] CRM user profiles now include linked contact threads, admin replies, internal communication notes, and other email activity alongside Orders and access records.
+- [x] Unread Communications now appear on the top-right admin profile avatar and refresh on page focus or every minute; Communication Order and User links use validated selectors, and signed-in Contact submissions link directly to the authenticated User.
+- [x] Communication replies now respect `SENDGRID_SANDBOX_MODE`; the local emulator sends real test replies when sandbox mode is explicitly off instead of always suppressing delivery.
 
 ### Implemented - rebuild and confirmation required
 
+- [ ] Rebuild/restart the Functions emulator, submit a Contact message, and confirm the Communication badge, dashboard count, full message, admin notification log, reply sandbox, internal note, status, user match, optional Order link, and CRM history.
+- [ ] Test a forced SendGrid notification failure and confirm the Contact form still succeeds while the Communication remains unread with a visible failed-notification state and email log.
 - [ ] Rebuild/restart the Functions emulator and confirm editing an existing Product updates its complete Product and ProductVariant records instead of taking the previous link-only path.
 - [ ] From Connections, reactivate the first Workshop Product variant, save Product details, and confirm the drawer closes while the Builder remains on Connections.
 - [ ] Confirm the Connections Shop preview immediately reloads every saved Product variant and its current status.
@@ -54,7 +61,7 @@
 3. **Finish Content Builder regression.** Test the four-stage flow for at least one representative V1 Item, Blueprint, and Plan: create, add multiple variants, review without auto-saving, save, add Connections, reopen, edit, and verify lifecycle/connection persistence.
 4. **Finish CRM workflows.** Confirm user edit/merge/archive, orders, notes, manual grants/removals, carts, roles, and Course/Workshop/Program lists against production-shaped data.
 5. **Finish approval and publication workflows.** Complete Content, Course/Workshop, and Therapist submission, review, approve/reject, notification, activation, pause, and archive tests.
-6. **Run the remaining V1 production integration.** Perform the deployed Contact form test. Stripe Connect and the final Affiliate Agreement move to V2 with Affiliate registration.
+6. **Run the remaining V1 production integration.** Perform the deployed Contact-to-Communications workflow test, including admin notification, acknowledgement, reply, notes, CRM history, and an optional Order link. Stripe Connect and the final Affiliate Agreement move to V2 with Affiliate registration.
 7. **Run the final V1 regression.** Create content and Products, publish, purchase physical/digital/hybrid variants, verify access and replay safety, fulfil or resolve the order, then pause/archive and confirm every public and admin state.
 8. **Test launch promotion codes if they will be used in V1.** In the emulator, test percentage, fixed-amount, and free-shipping codes; start/end dates; minimum order; Product and Product-variant eligibility; retail/affiliate audiences; per-customer and total-use limits; and webhook replay safety. Checkout currently accepts one promotion code per Order.
 9. **Confirm the workbook round trip.** Download the editable workbook from Admin, change a disposable master-content record, run `npm run seed:all -- --workbook <downloaded-file>`, and confirm the changed ID merges without deleting app-only content. Keep the full JSON backup separately for customer/order disaster recovery; do not use it as a seed workbook.
@@ -87,12 +94,11 @@ Do not add optional financial reporting, advanced inventory, or larger CRM enhan
 
 ## Current Handoff
 
-Last updated August 3 after the Content Builder was reorganized into Details, Build,
-Review & Save, and Connections; the Review page became an operator-readable content
-proof; save confirmation became a modal; and existing Product editing was corrected
-to persist ProductVariant changes. The immediate V1 gate is rebuilding and confirming
-Workshop Product-variant persistence, followed by the remaining focused CRM,
-approval, integration, and final regression checks.
+Last updated August 11 after Contact messages were moved into a durable Communications
+inbox with unread alerts, full threads, replies, internal notes, staff assignment,
+optional User and Order links, email delivery history, and CRM communication history.
+The immediate validation task is rebuilding the Functions emulator and completing the
+Contact-to-Communications checklist above, including the forced notification-failure case.
 
 The approved safety-first Product/Asset refactor is documented in `PRODUCT-ASSET-REFACTOR-MIGRATION-PLAN.md`. Products and Assets remain independent first-class entities; Product and Asset are not Item types. Implementation must remain additive and dual-read until the repeatable emulator migration, checkout/access/inventory parity tests, order-history checks, and rollback gates pass.
 

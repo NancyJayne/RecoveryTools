@@ -1,149 +1,180 @@
-// 📧 sendContactMessage.js – Firebase Callable Function using Firebase Secret Manager
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import admin from "firebase-admin";
 import sgMail from "@sendgrid/mail";
 import fetch from "node-fetch";
 import { getBusinessProfile } from "../utils/businessProfile.js";
+import { logEmailEvent } from "../utils/emailLog.js";
 
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 const RECAPTCHA_SECRET_KEY = defineSecret("RECAPTCHA_SECRET_KEY");
 
-if (!Array.isArray(admin.apps) || admin.apps.length === 0) {
-  admin.initializeApp();
-}
-
+if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 
-function useLocalEmailSandbox() {
+const clean = (value, max) => String(value || "").trim().slice(0, max);
+const escapeHTML = (value) => clean(value, 20000).replace(/[&<>"']/g, (character) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;",
+}[character]));
+
+function localSandbox() {
   return process.env.FUNCTIONS_EMULATOR === "true";
 }
 
-// Simple HTML escape to prevent injection
-function escapeHTML(str) {
-  return str?.replace(/[&<>"']/g, (match) => {
-    const escapeMap = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      "\"": "&quot;",
-      "'": "&#039;",
-    };
-    return escapeMap[match];
+async function matchingUserId(email) {
+  const normalized = email.toLowerCase();
+  for (const field of ["emailNormalized", "email"]) {
+    const snapshot = await db.collection("users").where(field, "==", normalized).limit(2).get();
+    if (snapshot.size === 1) return snapshot.docs[0].id;
+  }
+  return "";
+}
+
+async function saveCommunication({ name, email, message, recaptchaScore, verified, authenticatedUserId }) {
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  const communicationRef = db.collection("communications").doc();
+  const legacyRef = db.collection("contactMessages").doc(communicationRef.id);
+  const messageRef = communicationRef.collection("messages").doc();
+  let userId = clean(authenticatedUserId, 200);
+  if (userId && !(await db.collection("users").doc(userId).get()).exists) userId = "";
+  if (!userId) userId = await matchingUserId(email);
+  const batch = db.batch();
+  batch.set(communicationRef, {
+    type: "contact",
+    channel: "email",
+    subject: `Website contact from ${name}`,
+    contactName: name,
+    contactNameSearch: name.toLowerCase(),
+    contactEmail: email,
+    contactEmailNormalized: email.toLowerCase(),
+    userId,
+    orderIds: [],
+    status: "new",
+    assignedToUid: "",
+    assignedToName: "",
+    unreadByAdmin: true,
+    priority: "normal",
+    source: "contact_form",
+    recaptchaScore: recaptchaScore ?? null,
+    verified,
+    adminNotificationStatus: "pending",
+    createdAt: now,
+    updatedAt: now,
+    lastMessageAt: now,
   });
+  batch.set(messageRef, {
+    direction: "inbound",
+    source: "contact_form",
+    fromName: name,
+    fromEmail: email,
+    subject: `Website contact from ${name}`,
+    bodyText: message,
+    internal: false,
+    deliveryStatus: "received",
+    createdAt: now,
+  });
+  // Retain the legacy record during the additive rollout.
+  batch.set(legacyRef, {
+    communicationId: communicationRef.id,
+    name,
+    email,
+    message,
+    recaptchaScore: recaptchaScore ?? null,
+    verified,
+    createdAt: now,
+  });
+  await batch.commit();
+  return { communicationRef, messageRef, userId };
 }
 
 const sendContactMessageHandler = async (request) => {
-  const { name, email, message, token } = request.data || {};
-
-  if (!name || !email || !message || (!token && !useLocalEmailSandbox())) {
+  const name = clean(request.data?.name, 200);
+  const email = clean(request.data?.email, 320).toLowerCase();
+  const message = clean(request.data?.message, 20000);
+  const token = clean(request.data?.token, 5000);
+  if (!name || !email || !message || (!token && !localSandbox())) {
     throw new HttpsError("invalid-argument", "Missing required fields.");
   }
 
-  if (useLocalEmailSandbox()) {
-    await db.collection("contactMessages").add({
-      name,
-      email,
-      message,
-      verified: false,
-      emailSent: false,
-      sandboxed: true,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  let recaptchaScore = null;
+  if (!localSandbox()) {
+    const recaptchaKey = RECAPTCHA_SECRET_KEY.value();
+    if (!recaptchaKey) throw new HttpsError("internal", "Server configuration error.");
+    const verifyResponse = await fetch("https://www.google.com/recaptcha/api/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ secret: recaptchaKey, response: token }).toString(),
     });
-    return { success: true, sandboxed: true, message: "Contact message sandboxed locally." };
+    const verification = await verifyResponse.json();
+    recaptchaScore = verification.score ?? null;
+    if (!verification.success || Number(recaptchaScore || 0) < 0.5) {
+      await db.collection("contactMessages").add({
+        name, email, message, recaptchaScore, verified: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      throw new HttpsError("permission-denied", "Failed CAPTCHA verification.");
+    }
   }
 
-  const recaptchaKey = RECAPTCHA_SECRET_KEY.value();
-  const sendgridKey = SENDGRID_API_KEY.value();
-
-  if (!recaptchaKey || !sendgridKey) {
-    console.error("Missing reCAPTCHA or SendGrid key.");
-    throw new HttpsError("internal", "Server configuration error.");
-  }
-
-  // ✅ Verify reCAPTCHA
-  const verifyRes = await fetch("https://www.google.com/recaptcha/api/siteverify", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `secret=${recaptchaKey}&response=${token}`,
+  // Persist the inbox record before attempting the notification email.
+  const { communicationRef, messageRef, userId } = await saveCommunication({
+    name,
+    email,
+    message,
+    recaptchaScore,
+    verified: !localSandbox(),
+    authenticatedUserId: request.auth?.uid,
   });
-
-  const verifyData = await verifyRes.json();
-
-  if (!verifyData.success || verifyData.score < 0.5) {
-    console.warn("⚠️ reCAPTCHA failed or suspicious score:", verifyData);
-
-    await db.collection("contactMessages").add({
-      name,
-      email,
-      message,
-      recaptchaScore: verifyData.score || null,
-      verified: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    throw new HttpsError("permission-denied", "Failed CAPTCHA verification.");
-  }
-
-  sgMail.setApiKey(sendgridKey);
-
-  const safeName = escapeHTML(name);
-  const safeEmail = escapeHTML(email);
-  const safeMessage = escapeHTML(message).replace(/\n/g, "<br>");
   const business = await getBusinessProfile();
-
-  const msg = {
-    to: business.email,
-    from: business.email,
-    replyTo: safeEmail,
-    subject: `📬 Contact Message from ${safeName || "Unknown Sender"}`,
-    text: `Name: ${name}\nEmail: ${email}\nMessage:\n${message}`,
-    html: [
-      `<p><strong>Name:</strong> ${safeName}</p>`,
-      `<p><strong>Email:</strong> ${safeEmail}</p>`,
-      `<p><strong>Message:</strong></p>`,
-      `<p>${safeMessage}</p>`,
-    ].join(""),
-  };
-
+  const subject = `Contact message from ${name}`;
+  let notificationStatus = localSandbox() ? "sandboxed" : "sent";
+  let notificationError = "";
   try {
-    await sgMail.send(msg);
-
-    await db.collection("contactMessages").add({
-      name,
-      email,
-      message,
-      recaptchaScore: verifyData.score,
-      verified: true,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    return {
-      success: true,
-      message: "Message sent successfully.",
-    };
-  } catch (err) {
-    console.error("❌ SendGrid error:", err.response?.body || err);
-
-    await db.collection("contactMessages").add({
-      name,
-      email,
-      message,
-      recaptchaScore: verifyData.score,
-      verified: true,
-      emailSent: false,
-      error: err.message || "SendGrid error",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    throw new HttpsError("internal", "Failed to send message.");
+    if (!localSandbox()) {
+      const sendgridKey = SENDGRID_API_KEY.value();
+      if (!sendgridKey) throw new Error("Missing SendGrid API key.");
+      sgMail.setApiKey(sendgridKey);
+      await sgMail.send({
+        to: business.email,
+        from: business.email,
+        replyTo: email,
+        subject,
+        text: `Name: ${name}\nEmail: ${email}\n\n${message}`,
+        html: `<p><strong>Name:</strong> ${escapeHTML(name)}</p>` +
+          `<p><strong>Email:</strong> ${escapeHTML(email)}</p>` +
+          `<p><strong>Message:</strong></p><p>${escapeHTML(message).replace(/\n/g, "<br>")}</p>`,
+      });
+    }
+  } catch (error) {
+    notificationStatus = "failed";
+    notificationError = error.message || "SendGrid error";
+    console.error("Contact notification failed; communication remains in admin inbox:", error);
   }
+  const emailLogId = await logEmailEvent({
+    type: "contact_admin_notification",
+    status: notificationStatus,
+    to: business.email,
+    subject,
+    userId,
+    providerMode: localSandbox() ? "local-sandbox" : "live",
+    errorMessage: notificationError,
+    metadata: { communicationId: communicationRef.id, communicationMessageId: messageRef.id },
+  });
+  await communicationRef.update({
+    adminNotificationStatus: notificationStatus,
+    adminNotificationError: notificationError,
+    adminNotificationEmailLogId: emailLogId,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return {
+    success: true,
+    communicationId: communicationRef.id,
+    sandboxed: localSandbox(),
+    adminNotified: notificationStatus !== "failed",
+  };
 };
 
-export const sendContactMessage = onCall(
-  {
-    region: "australia-southeast1",
-    secrets: [SENDGRID_API_KEY, RECAPTCHA_SECRET_KEY],
-  },
-  sendContactMessageHandler,
-);
+export const sendContactMessage = onCall({
+  region: "australia-southeast1",
+  secrets: [SENDGRID_API_KEY, RECAPTCHA_SECRET_KEY],
+}, sendContactMessageHandler);

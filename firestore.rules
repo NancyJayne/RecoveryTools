@@ -288,6 +288,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Communication records are written and read through admin-only Cloud Functions.
+    match /communications/{communicationId} {
+      allow read, write: if false;
+      match /messages/{messageId} {
+        allow read, write: if false;
+      }
+    }
+
     // Settings
     match /settings/{docId} {
       allow read: if true;

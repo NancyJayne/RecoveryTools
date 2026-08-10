@@ -124,6 +124,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   const role = await getUserRole();
 
   if (auth?.currentUser) setupRoleUI(auth.currentUser);
+  if (role?.admin === true || role === "admin") {
+    import("./admin/admin-emails.js")
+      .then(({ setupAdminCommunicationBadge }) => setupAdminCommunicationBadge())
+      .catch((error) => console.warn("Could not initialise the communication badge.", error));
+  }
 
   await handleSectionFromURL();
   setupAuthModal();

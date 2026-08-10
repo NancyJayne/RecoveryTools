@@ -24,6 +24,13 @@ export { sendContactMessage } from "./emails/sendContactMessage.js";
 export { sendPasswordReset } from "./emails/sendPasswordReset.js";
 export { sendWelcomeEmail } from "./emails/sendWelcomeEmail.js";
 export { getEmailLogs } from "./emails/getEmailLogs.js";
+export {
+  getCommunications,
+  getCommunicationSummary,
+  getCommunicationLinkOptions,
+  updateCommunication,
+  replyToCommunication,
+} from "./communications/manageCommunications.js";
 
 
 // Orders

@@ -49,6 +49,13 @@ function statTile({ label, value, href = "", attention = false, note = "" }) {
 function renderDashboard(container, stats = {}) {
   const actionTiles = [
     statTile({
+      label: "Unread communications",
+      value: Number(stats.unreadCommunications || 0),
+      href: "/admin/communications",
+      attention: Number(stats.unreadCommunications || 0) > 0,
+      note: "Contact messages needing review",
+    }),
+    statTile({
       label: "New / unassigned",
       value: Number(stats.newUnassignedOrders || 0),
       href: "/admin/orders",
@@ -115,7 +122,7 @@ function renderDashboard(container, stats = {}) {
         <h2 id="dashboardAttentionHeading" class="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-400">
           Needs attention
         </h2>
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           ${actionTiles}
         </div>
       </section>

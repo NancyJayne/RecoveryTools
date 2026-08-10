@@ -111,9 +111,16 @@
         <a
           id="adminOrderAlertBadge"
           href="/admin/orders"
-          class="router-link hidden absolute -top-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-purple-600 text-white text-xs font-bold leading-5 text-center shadow"
+          class="router-link hidden absolute -bottom-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-blue-600 text-white text-xs font-bold leading-5 text-center shadow"
           title="Unassigned orders"
           aria-label="Unassigned admin orders"
+        >0</a>
+        <a
+          id="adminCommunicationAlertBadge"
+          href="/admin/communications"
+          class="router-link hidden absolute -top-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-purple-600 text-white text-xs font-bold leading-5 text-center shadow ring-2 ring-black"
+          title="Unread communications"
+          aria-label="Unread admin communications"
         >0</a>
       </div>
 
@@ -920,7 +927,10 @@
       <a href="/admin/crm" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">CRM</a>
       <a href="/admin/content" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Content</a>
       <a href="/admin/products" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Products &amp; Inventory</a>
-      <a href="/admin/emails" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Emails</a>
+      <a href="/admin/communications" class="admin-link flex items-center justify-between px-4 py-2 rounded hover:bg-purple-800">
+        <span>Communications</span>
+        <span id="adminCommunicationsMenuBadge" class="hidden min-w-5 rounded-full bg-purple-600 px-1 text-center text-xs font-bold text-white">0</span>
+      </a>
       <a href="/admin/reviews" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Reviews & Feedback</a>
       <a href="/admin/business" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Business Settings</a>
       <a href="/profile" class="text-sm mt-6 text-blue-400 hover:underline">← Back to Profile</a>
@@ -1343,8 +1353,35 @@
         </div>
 
         <div id="adminEmailSection" class="admin-tab hidden">
-          <h2 class="text-2xl font-semibold mb-4">Broadcast Email</h2>
-          <form id="adminEmailForm" class="space-y-4 max-w-2xl">
+          <div class="mb-4">
+            <h2 class="text-2xl font-semibold">Communications</h2>
+            <p class="text-sm text-gray-400">Contact enquiries, replies, internal notes, broadcasts, and email delivery history.</p>
+          </div>
+          <div id="communicationViewButtons" class="mb-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-5" role="tablist">
+            <button type="button" data-communication-view="inbox" class="rounded bg-[#407471] px-3 py-2 text-sm text-white">Inbox</button>
+            <button type="button" data-communication-view="all" class="rounded bg-gray-700 px-3 py-2 text-sm text-white">All communications</button>
+            <button type="button" data-communication-view="mine" class="rounded bg-gray-700 px-3 py-2 text-sm text-white">Assigned to me</button>
+            <button type="button" data-communication-view="broadcast" class="rounded bg-gray-700 px-3 py-2 text-sm text-white">New broadcast</button>
+            <button type="button" data-communication-view="emails" class="rounded bg-gray-700 px-3 py-2 text-sm text-white">All emails</button>
+          </div>
+
+          <section id="communicationInboxPanel">
+            <div class="mb-4 grid gap-3 md:grid-cols-4">
+              <input id="communicationSearch" class="input md:col-span-2" placeholder="Search name, email, message, or order number">
+              <select id="communicationStatusFilter" class="input">
+                <option value="active">New and open</option><option value="all">All statuses</option>
+                <option value="new">New</option><option value="open">Open</option><option value="waiting">Waiting</option>
+                <option value="resolved">Resolved</option><option value="archived">Archived</option>
+              </select>
+              <button id="refreshCommunicationsBtn" type="button" class="rounded bg-gray-700 px-3 py-2 text-white hover:bg-gray-600">Refresh</button>
+            </div>
+            <div id="communicationResultCount" class="mb-3 text-sm text-gray-400"></div>
+            <div id="communicationList" class="space-y-3">Loading communications...</div>
+          </section>
+
+          <section id="communicationBroadcastPanel" class="hidden">
+          <form id="adminEmailForm" class="space-y-4 max-w-2xl rounded border border-gray-700 bg-gray-900/50 p-4">
+            <h3 class="text-lg font-semibold">New broadcast</h3>
             <div>
               <label for="emailAudience" class="block text-sm mb-1">Audience</label>
               <select id="emailAudience" class="w-full p-2 rounded bg-gray-800 text-white">
@@ -1362,6 +1399,8 @@
             </div>
             <button type="submit" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">Send Broadcast</button>
           </form>
+          </section>
+          <section id="communicationEmailLogPanel" class="hidden"></section>
         </div>
 
         <div id="adminReviewsFeedbackSection" class="admin-tab hidden">
@@ -2653,6 +2692,7 @@
 
               <div class="mt-6 grid gap-4 lg:grid-cols-3">
                 <section class="min-w-0 lg:col-span-3"><h4 class="mb-2 font-semibold">Orders</h4><div id="userOrdersGrid"></div></section>
+                <section class="min-w-0 lg:col-span-3"><h4 class="mb-2 font-semibold">Communications</h4><div id="userCommunicationsList"></div></section>
                 <section><h4 class="mb-2 font-semibold">Workshops</h4><div id="userWorkshopList"></div></section>
                 <section><h4 class="mb-2 font-semibold">Courses</h4><div id="userCourseList"></div></section>
                 <section><h4 class="mb-2 font-semibold">Programs</h4><div id="userProgramList"></div></section>

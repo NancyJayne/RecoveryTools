@@ -110,6 +110,7 @@ export const getUserDashboardStats = onCall(
         blueprintsSnap,
         plansSnap,
         pickupLocationsSnap,
+        unreadCommunicationsSnap,
       ] = await Promise.all([
         admin.firestore().collection("users").get(),
         admin.firestore().collection("orders").get(),
@@ -123,6 +124,7 @@ export const getUserDashboardStats = onCall(
         admin.firestore().collection("blueprints").get(),
         admin.firestore().collection("plans").get(),
         admin.firestore().collection("pickupLocations").get(),
+        admin.firestore().collection("communications").where("unreadByAdmin", "==", true).get(),
       ]);
 
       const orders = ordersSnap.docs.map((doc) => doc.data());
@@ -180,6 +182,7 @@ export const getUserDashboardStats = onCall(
         pendingReviewApprovals,
         pendingFeedbackApprovals,
         pendingContentApprovals,
+        unreadCommunications: unreadCommunicationsSnap.size,
       };
     } catch (err) {
       console.error("Dashboard stats error:", err);

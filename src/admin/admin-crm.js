@@ -25,6 +25,12 @@ let creatingCrmUser = false;
 const accessCatalog = { Course: [], Workshop: [], Program: [] };
 let accessProducts = [];
 let allProducts = [];
+
+function formatDateValue(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
+}
 const crmRelationships = {
   purchasers: new Set(),
   products: new Map(),
@@ -861,6 +867,7 @@ async function selectUser(uid) {
   if (select && [...select.options].some((option) => option.value === resolvedUid)) select.value = resolvedUid;
 
   renderUserOrders(resolvedUid);
+  renderUserCommunications(resolvedUid, user.email || "");
   renderUserWorkshops(resolvedUid);
   renderUserCourses(resolvedUid);
   renderUserPrograms(resolvedUid);
@@ -896,6 +903,49 @@ async function renderUserOrders(uid) {
 
 async function renderUserWorkshops(uid) {
   return renderUserAccess(uid, "Workshop");
+}
+
+async function renderUserCommunications(uid, email) {
+  const container = document.getElementById("userCommunicationsList");
+  if (!container) return;
+  container.innerHTML = "<p class='text-sm text-gray-400'>Loading communication history...</p>";
+  try {
+    const [communicationResult, emailResult] = await Promise.all([
+      httpsCallable(functions, "getCommunications")({ userId: uid, limit: 100 }),
+      httpsCallable(functions, "getEmailLogs")({ userId: uid, email, limit: 100 }),
+    ]);
+    const records = communicationResult.data?.communications || [];
+    const emailLogs = emailResult.data?.logs || [];
+    const communicationMarkup = records.map((communication) => `
+      <article class="rounded border border-gray-700 bg-gray-800 p-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <strong>${escapeHTML(communication.subject || "Communication")}</strong>
+          <span class="text-xs text-gray-400">${escapeHTML(communication.status || "open")}</span>
+        </div>
+        <div class="mt-1 text-xs text-gray-400">${escapeHTML(communication.contactEmail || email)} | ${escapeHTML(formatDateValue(communication.lastMessageAt))}</div>
+        <div class="mt-2 space-y-2">${(communication.messages || []).map((message) => `
+          <div class="rounded ${message.internal ? "bg-yellow-950/30" : "bg-gray-700"} p-2 text-sm">
+            <div class="text-xs text-gray-400">${message.internal ? "Internal note" : message.direction === "outbound" ? "Admin reply" : "Customer message"}</div>
+            <div class="mt-1 whitespace-pre-wrap break-words">${escapeHTML(message.bodyText || "")}</div>
+          </div>`).join("")}</div>
+        ${(communication.orderIds || []).length ? `<div class="mt-2 text-xs text-gray-400">Orders: ${escapeHTML(communication.orderIds.join(", "))}</div>` : ""}
+        <a href="/admin/communications" class="admin-link mt-2 inline-block text-xs text-purple-300 hover:underline">Open in Communications</a>
+      </article>`).join("");
+    const communicationLogIds = new Set(records.flatMap((communication) =>
+      (communication.messages || []).map((message) => message.emailLogId).filter(Boolean)));
+    const standaloneEmails = emailLogs.filter((log) => !communicationLogIds.has(log.id));
+    const emailMarkup = standaloneEmails.map((log) => `
+      <div class="rounded border border-gray-700 bg-gray-900/60 p-2 text-sm">
+        <div class="flex flex-wrap justify-between gap-2"><span>${escapeHTML(log.subject || log.type || "Email")}</span><span class="text-xs text-gray-400">${escapeHTML(log.status || "unknown")}</span></div>
+        <div class="mt-1 text-xs text-gray-500">${escapeHTML(formatDateValue(log.createdAt))}${log.orderId ? ` | Order ${escapeHTML(log.orderId)}` : ""}</div>
+      </div>`).join("");
+    container.innerHTML = communicationMarkup || emailMarkup
+      ? `<div class="space-y-3">${communicationMarkup}${emailMarkup ? `<div class="pt-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Other email activity</div>${emailMarkup}` : ""}</div>`
+      : "<p class='text-sm text-gray-400'>No communication history found.</p>";
+  } catch (error) {
+    console.error("Failed to load user communications:", error);
+    container.innerHTML = "<p class='text-sm text-red-300'>Unable to load communication history.</p>";
+  }
 }
 
 async function renderUserCourses(uid) {
