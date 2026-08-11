@@ -1862,11 +1862,8 @@
                     Price and sale
                   </summary>
                   <div class="grid gap-3 border-t border-gray-700 p-4 md:grid-cols-2">
-                    <label class="block">Regular shop price
+                    <label class="block md:col-span-2">Regular shop price
                       <input id="contentProductPrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-                    </label>
-                    <label class="block">Sale price
-                      <input id="contentProductSalePrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                     </label>
                     <label class="block">Affiliate wholesale price
                       <input id="contentProductWholesalePrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
@@ -1874,6 +1871,9 @@
                     </label>
                     <label class="block">Minimum wholesale quantity
                       <input id="contentProductWholesaleMinQuantity" type="number" min="1" step="1" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="1">
+                    </label>
+                    <label class="block md:col-span-2">Sale price
+                      <input id="contentProductSalePrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                     </label>
                     <label class="block">Sale starts
                       <input id="contentProductSaleStartsAt" type="datetime-local" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">

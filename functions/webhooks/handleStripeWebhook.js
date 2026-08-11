@@ -14,6 +14,7 @@ import {
 } from "../utils/productArchitecture.js";
 import { canonicalOrderLines, orderDueDate } from "../utils/orderLineSnapshots.js";
 import { accessExpiry } from "../utils/accessGrantTiming.js";
+import { instructorDetails } from "../utils/instructorName.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -220,6 +221,10 @@ async function productSnapshotFromLineItem(lineItem, commissionRates = {}, archi
     variantId,
     architecture,
   );
+  const instructor = await instructorDetails(
+    admin.firestore(),
+    variant?.instructorId || variant?.instructor,
+  );
 
   return {
     productId: productId || stripeId(stripeProduct) || lineItem.id,
@@ -233,7 +238,7 @@ async function productSnapshotFromLineItem(lineItem, commissionRates = {}, archi
     eventStartAt: variant?.eventStartAt || "",
     eventEndAt: variant?.eventEndAt || "",
     eventLocation: variant?.eventLocation || "",
-    instructor: variant?.instructor || "",
+    ...instructor,
     sku: product.sku || metadata.sku || "",
     quantity,
     unitPrice,

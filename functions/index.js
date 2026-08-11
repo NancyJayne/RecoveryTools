@@ -48,6 +48,9 @@ export { updateOrderArchive } from "./orders/updateOrderArchive.js";
 export { submitOrderIssue } from "./orders/submitOrderIssue.js";
 export { getOrderIssuesForAdmin } from "./orders/getOrderIssuesForAdmin.js";
 export { updateOrderIssueStatus } from "./orders/updateOrderIssueStatus.js";
+export { refundWorkshopOrder } from "./orders/refundWorkshopOrder.js";
+export { refundOrderItems } from "./orders/refundOrderItems.js";
+export { flagCancelledWorkshopOrders } from "./orders/flagCancelledWorkshopOrders.js";
 
 // Referrals
 export { logReferralEvent } from "./referrals/logReferralEvent.js";

@@ -24,7 +24,9 @@ function cleanCustomerFollowUpStatus(order) {
 
 function hasOpenCustomerIssue(order) {
   const status = cleanCustomerFollowUpStatus(order);
-  if (["return_requested", "exchange_requested", "complaint_open"].includes(status)) return true;
+  if ([
+    "return_requested", "exchange_requested", "complaint_open", "workshop_cancellation",
+  ].includes(status)) return true;
   if (["none", "resolved"].includes(status)) return false;
   return order.customerFollowUpOpen === true;
 }
@@ -61,6 +63,16 @@ function isDueSoon(order, now = new Date()) {
   if (!dueDate) return false;
   const threeDaysFromNow = new Date(now.getTime() + (3 * 24 * 60 * 60 * 1000));
   return dueDate <= threeDaysFromNow;
+}
+
+function orderRevenue(order = {}) {
+  const total = Math.max(Number(order.total || order.totalPaid || order.amountPaid || 0), 0);
+  const storedRefund = Number(order.refundedAmount);
+  const fullyRefunded = String(order.refundStatus || order.paymentStatus || "")
+    .toLowerCase().trim() === "refunded";
+  const refundedAmount = Number.isFinite(storedRefund) && storedRefund > 0 ? storedRefund
+    : fullyRefunded ? total : 0;
+  return Math.max(total - Math.min(refundedAmount, total), 0);
 }
 
 function isDraftContent(data = {}) {
@@ -154,7 +166,7 @@ export const getUserDashboardStats = onCall(
         pendingFeedbackApprovals;
       const totalUsers = usersSnap.size;
       const totalOrders = ordersSnap.size;
-      const totalRevenue = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+      const totalRevenue = orders.reduce((sum, order) => sum + orderRevenue(order), 0);
       const openOrders = orders.filter(isOpenOrder).length;
       const newUnassignedOrders = orders.filter(isNewUnassignedOrder).length;
       const openCustomerIssues = orders.filter(isOpenCustomerIssue).length;

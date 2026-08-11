@@ -147,7 +147,13 @@ function ticketSalesFromOrders(snapshot) {
   return sales;
 }
 
-function normalizeProduct(doc, architecture, ticketSales = new Map(), approvedAffiliate = false) {
+function normalizeProduct(
+  doc,
+  architecture,
+  ticketSales = new Map(),
+  approvedAffiliate = false,
+  instructorsById = new Map(),
+) {
   const data = doc.data() || {};
   const variants = variantsForProduct(doc.id, data.itemId || data.legacyItemId || "", architecture);
   const activePrice = activePriceForProduct(doc.id, architecture);
@@ -244,8 +250,11 @@ function normalizeProduct(doc, architecture, ticketSales = new Map(), approvedAf
     const variantWholesalePrice = approvedAffiliate && Number(variantWholesaleValue) > 0
       ? Number(variantWholesaleValue)
       : wholesalePrice;
+    const instructorId = variant.instructorId || variant.instructor || "";
     return {
       ...variant,
+      instructorId,
+      instructor: instructorsById.get(instructorId) || variant.instructor || "",
       visible: variantVisible,
       purchasable: variantVisible && !variantComingSoon,
       comingSoon: variantComingSoon,
@@ -276,6 +285,7 @@ function normalizeProduct(doc, architecture, ticketSales = new Map(), approvedAf
   const isCourse = normalizeStatus(displayType).includes("course") ||
     normalizeStatus(data.type).includes("course") ||
     normalizeStatus(linkedContent?.type).includes("course");
+  const instructorId = data.instructorId || data.instructor || "";
 
   return {
     id: doc.id,
@@ -301,6 +311,8 @@ function normalizeProduct(doc, architecture, ticketSales = new Map(), approvedAf
     inventoryTracked,
     type: normalizeStatus(data.type || productDisplayType(data, "tool")),
     productType: displayType,
+    instructorId,
+    instructor: instructorsById.get(instructorId) || data.instructor || "",
     shopStatus: normalizeStatus(data.shopStatus || (visible ? "active" : "draft")),
     visible,
     purchasable,
@@ -353,15 +365,26 @@ export const getFirestoreProducts = onCall(
         query = query.where("type", "==", normalizeStatus(type));
       }
 
-      const [snapshot, architecture, ordersSnapshot] = await Promise.all([
+      const [snapshot, architecture, ordersSnapshot, instructorsSnapshot] = await Promise.all([
         query.get(),
         loadProductArchitecture(admin.firestore()),
         admin.firestore().collection("orders").get(),
+        admin.firestore().collection("instructors").get(),
       ]);
       const ticketSales = ticketSalesFromOrders(ordersSnapshot);
+      const instructorsById = new Map(instructorsSnapshot.docs.map((doc) => [
+        doc.id,
+        doc.data()?.name || doc.data()?.instructorName || doc.data()?.displayName || doc.id,
+      ]));
 
       const products = snapshot.docs
-        .map((doc) => normalizeProduct(doc, architecture, ticketSales, approvedAffiliate))
+        .map((doc) => normalizeProduct(
+          doc,
+          architecture,
+          ticketSales,
+          approvedAffiliate,
+          instructorsById,
+        ))
         .filter((product) => includeHidden && isAdmin ? true : product.visible !== false)
         .filter((product) => tag ? product.searchTags.includes(tag) : true)
         .sort((a, b) => (a.name || a.title || "").localeCompare(b.name || b.title || ""));

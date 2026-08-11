@@ -19,6 +19,7 @@ import {
 import { canonicalOrderLines, orderDueDate } from "../utils/orderLineSnapshots.js";
 import { accessExpiry } from "../utils/accessGrantTiming.js";
 import { accessEmailDetails } from "../utils/orderAccessEmail.js";
+import { instructorDetails } from "../utils/instructorName.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -280,6 +281,7 @@ const confirmStripePurchaseHandler = async (request) => {
         architecture,
       );
 
+      const instructor = await instructorDetails(admin.firestore(), variant?.instructorId || variant?.instructor);
       return {
         productId,
         name: productDisplayName(product, item.description),
@@ -297,7 +299,7 @@ const confirmStripePurchaseHandler = async (request) => {
         eventStartAt: variant?.eventStartAt || "",
         eventEndAt: variant?.eventEndAt || "",
         eventLocation: variant?.eventLocation || "",
-        instructor: variant?.instructor || "",
+        ...instructor,
         sku: variant?.sku || metadata.sku || product.sku || "",
         physicalFulfilment: metadata.physicalFulfilment ||
           variant?.physicalFulfilment || product.physicalFulfilment || "none",

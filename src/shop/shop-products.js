@@ -346,6 +346,9 @@ function maybeOpenProductFromRoute(products) {
 
   if (new URLSearchParams(window.location.search).get("review") === "1") {
     setTimeout(() => {
+      document.getElementById("reviewFormPanel")?.classList.remove("hidden");
+      document.getElementById("toggleReviewFormBtn")?.setAttribute("aria-expanded", "true");
+      document.getElementById("toggleReviewFormBtn")?.classList.add("hidden");
       document.getElementById("reviewForm")?.scrollIntoView({ behavior: "smooth", block: "center" });
       document.getElementById("reviewRating")?.focus();
     }, 250);
@@ -791,8 +794,24 @@ export function showProductDetail(product, options = {}) {
   reviewsSection.innerHTML = `
   <div id="reviews"></div>
 
-  <form id="reviewForm" class="mt-6 space-y-3">
-    <h4 class="text-lg font-semibold">Leave a Review</h4>
+  <button
+    id="toggleReviewFormBtn"
+    type="button"
+    class="mt-6 rounded bg-[#407471] px-4 py-2 font-semibold text-white hover:bg-[#305a56]"
+    aria-expanded="false"
+    aria-controls="reviewFormPanel"
+  >
+    Leave a review
+  </button>
+
+  <div id="reviewFormPanel" class="mt-4 hidden rounded border border-gray-700 bg-gray-900/60 p-4">
+  <form id="reviewForm" class="space-y-3">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h4 class="text-lg font-semibold">Leave a review</h4>
+      <button id="closeReviewFormBtn" type="button" class="text-sm text-gray-300 hover:text-white hover:underline">
+        Cancel
+      </button>
+    </div>
 
     <input
       id="reviewName"
@@ -826,6 +845,7 @@ export function showProductDetail(product, options = {}) {
       Submit Review
     </button>
   </form>
+  </div>
 `;
 
   detail.appendChild(wrapper);

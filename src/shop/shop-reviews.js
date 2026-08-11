@@ -69,6 +69,19 @@ export async function renderProductReviews(productId) {
 export function setupReviewForm(productId) {
   const form = document.getElementById("reviewForm");
   if (!form) return;
+  const panel = document.getElementById("reviewFormPanel");
+  const toggleButton = document.getElementById("toggleReviewFormBtn");
+  const closeButton = document.getElementById("closeReviewFormBtn");
+
+  const setFormOpen = (open) => {
+    panel?.classList.toggle("hidden", !open);
+    toggleButton?.setAttribute("aria-expanded", String(open));
+    toggleButton?.classList.toggle("hidden", open);
+    if (open) document.getElementById("reviewRating")?.focus();
+  };
+
+  toggleButton?.addEventListener("click", () => setFormOpen(true));
+  closeButton?.addEventListener("click", () => setFormOpen(false));
 
   form.onsubmit = async (e) => {
     e.preventDefault();
@@ -111,6 +124,7 @@ export function setupReviewForm(productId) {
 
       showToast("✅ Review submitted for approval.", "success");
       form.reset();
+      setFormOpen(false);
       // Optionally reload reviews:
       // await renderProductReviews(productId);
     } catch (err) {

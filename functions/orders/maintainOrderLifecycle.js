@@ -9,6 +9,7 @@ const OPEN_CUSTOMER_FOLLOW_UP_STATUSES = new Set([
   "return_requested",
   "exchange_requested",
   "complaint_open",
+  "workshop_cancellation",
 ]);
 
 function cleanString(value) {

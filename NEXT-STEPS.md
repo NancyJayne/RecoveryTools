@@ -43,26 +43,38 @@
 - [x] CRM user profiles now include linked contact threads, admin replies, internal communication notes, and other email activity alongside Orders and access records.
 - [x] Unread Communications now appear on the top-right admin profile avatar and refresh on page focus or every minute; Communication Order and User links use validated selectors, and signed-in Contact submissions link directly to the authenticated User.
 - [x] Communication replies now respect `SENDGRID_SANDBOX_MODE`; the local emulator sends real test replies when sandbox mode is explicitly off instead of always suppressing delivery.
+- [x] A production-shaped physical-commerce regression was completed: Product/variant display, price, stock, shipping address and charge, Stripe payment, Order and invoice creation, single inventory decrement, confirmation email and PDF invoice, packing, shipping, tracking, delivery, completion, archive, customer Profile history, and returns/help links were all user-verified.
+- [x] Workshop order snapshots and booking emails now resolve the stored Instructor ID to the Instructor name, including resends for existing Orders.
+- [x] Workshop-only Admin Orders now include Workshop cancellation in the Return / swap / complaint workflow; selecting it reveals a purple confirmed full-refund action that calls Stripe with idempotency protection, records the refund in the Order timeline, resolves the follow-up, revokes workshop access, removes the refunded booking from active attendance, mirrors the customer Order, and logs/sends the refund email.
+- [x] Pausing, hiding, cancelling, drafting, or archiving a future Workshop Product variant automatically flags every unrefunded session Order as an open Workshop cancellation, mirrors it to the customer Order, records a System timeline entry, and raises it in the dashboard customer-issue count without issuing refunds automatically.
+- [x] Reactivating that same future Workshop Product variant automatically returns only its system-flagged, unrefunded Orders to No customer issue and records the reinstatement in each Order timeline; manual complaints and refunded Orders remain unchanged.
+- [x] When a Product has no active Product variants, its parent Marketplace mode automatically changes to Hidden with a recorded system reason. Adding or reactivating a variant does not republish the parent Product automatically.
 
 ### Implemented - rebuild and confirmation required
 
-- [ ] Rebuild/restart the Functions emulator, submit a Contact message, and confirm the Communication badge, dashboard count, full message, admin notification log, reply sandbox, internal note, status, user match, optional Order link, and CRM history.
-- [ ] Test a forced SendGrid notification failure and confirm the Contact form still succeeds while the Communication remains unread with a visible failed-notification state and email log.
-- [ ] Rebuild/restart the Functions emulator and confirm editing an existing Product updates its complete Product and ProductVariant records instead of taking the previous link-only path.
-- [ ] From Connections, reactivate the first Workshop Product variant, save Product details, and confirm the drawer closes while the Builder remains on Connections.
-- [ ] Confirm the Connections Shop preview immediately reloads every saved Product variant and its current status.
-- [ ] Reopen the Product drawer and confirm the first variant remains active with its session fields intact.
-- [ ] Confirm both active Workshop variants appear in Marketplace; then pause one variant and confirm only that session disappears after save/reload.
+- [x] Rebuild/restart the Functions emulator, submit logged-in and logged-out Contact messages, and confirm the Communication badge, dashboard count, full message, real reply delivery and email log, internal note, status, user match, optional Order link, and CRM history.
+- [x] Test a forced SendGrid notification failure and confirm the Contact form still succeeds while the Communication remains unread with a visible failed-notification state and email log.
+- [x] Rebuild/restart the Functions emulator and confirm editing an existing Product updates its complete Product and ProductVariant records instead of taking the previous link-only path.
+- [x] From Connections, reactivate the first Workshop Product variant, save Product details, and confirm the drawer closes while the Builder remains on Connections.
+- [x] Confirm the Connections Shop preview immediately reloads every saved Product variant and its current status.
+- [x] Reopen the Product drawer and confirm the first variant remains active with its session fields intact.
+- [x] Confirm both active Workshop variants appear in Marketplace; then pause one variant and confirm only that session disappears after save/reload.
+- [x] Confirm a linked Product and all ProductVariants remain visible on Connections after a full page reload without reopening or reselecting the Product.
+- [x] In Stripe test mode, refund one workshop-only Order from Admin Orders and confirm the Stripe refund, disabled Refunded button, customer Profile status, removed access/attendee count, refund email/log, duplicate-click protection, Dashboard net-revenue adjustment, retained Removed attendee history, and correct CRM/Profile access state.
+- [x] With a paid future Workshop session, pause or hide its Product variant and confirm matching unrefunded Orders change to Workshop cancellation; reactivate it and confirm the system-flagged Orders return to No customer issue without altering manual complaints or refunds.
+- [x] Complete the itemised-refund regression: partial physical-line and shipping refunds use the correct Stripe amounts; Product variants are clearly identified; multiple quantities, repeated partial refunds, final full refunds, and over-refund protection work; badges and Refunded X of Y display correctly; email/Communications, CRM, customer Profile, timeline, and Dashboard net revenue update; selected Digital/Course content access is revoked while other purchased access remains active; and physical inventory is unchanged for manual return processing.
+- [x] Review the V1 customer and admin experience using mobile device emulation, including Marketplace, Product details, Cart, Contact, Profile, access views, Admin Orders/refunds, and Workshop session tables; no blocking responsive-layout issues were found.
+- [x] Complete the final production-shaped V1 purchase sweep for Physical, Digital, Course, and Workshop Products, confirming payment, Order/invoice creation, transactional email, CRM/Profile visibility, inventory or access behaviour, and the applicable admin workflow without regressions.
 
 ### To do before V1 launch
 
-1. **Finish the Workshop Product-variant persistence retest.** Complete the rebuild-and-confirmation checklist above, then verify both sessions, timing, venue or approved affiliate pickup, instructor, ticket capacity, checkout, Workshop plus Course multi-unlock, access email, customer access, Admin Order, cancellation/expiry, and ticket behaviour.
+1. **Verify itemised refunds.** Complete the physical, shipping, Digital, Course, multi-quantity, repeated-partial, and final-full refund cases listed above before using the new action on production Orders.
 2. **Finish access-control regression.** Test manual removal and restoration in CRM, dated expiry, Product variants with multiple unlocks, paused/archived content, and payment replay protection.
 3. **Finish Content Builder regression.** Test the four-stage flow for at least one representative V1 Item, Blueprint, and Plan: create, add multiple variants, review without auto-saving, save, add Connections, reopen, edit, and verify lifecycle/connection persistence.
 4. **Finish CRM workflows.** Confirm user edit/merge/archive, orders, notes, manual grants/removals, carts, roles, and Course/Workshop/Program lists against production-shaped data.
 5. **Finish approval and publication workflows.** Complete Content, Course/Workshop, and Therapist submission, review, approve/reject, notification, activation, pause, and archive tests.
 6. **Run the remaining V1 production integration.** Perform the deployed Contact-to-Communications workflow test, including admin notification, acknowledgement, reply, notes, CRM history, and an optional Order link. Stripe Connect and the final Affiliate Agreement move to V2 with Affiliate registration.
-7. **Run the final V1 regression.** Create content and Products, publish, purchase physical/digital/hybrid variants, verify access and replay safety, fulfil or resolve the order, then pause/archive and confirm every public and admin state.
+7. **Package and deploy the verified V1 release.** Review the complete working-tree scope, run the production build and focused checks, commit the verified bundle, deploy Functions and Hosting, then complete a short production smoke check without creating unnecessary live transactions.
 8. **Test launch promotion codes if they will be used in V1.** In the emulator, test percentage, fixed-amount, and free-shipping codes; start/end dates; minimum order; Product and Product-variant eligibility; retail/affiliate audiences; per-customer and total-use limits; and webhook replay safety. Checkout currently accepts one promotion code per Order.
 9. **Confirm the workbook round trip.** Download the editable workbook from Admin, change a disposable master-content record, run `npm run seed:all -- --workbook <downloaded-file>`, and confirm the changed ID merges without deleting app-only content. Keep the full JSON backup separately for customer/order disaster recovery; do not use it as a seed workbook.
 
@@ -72,11 +84,10 @@ The main V1 architecture and customer purchase paths are now substantially built
 
 The shortest safe route to launch is:
 
-1. Confirm the existing-Product/ProductVariant persistence fix.
-2. Complete one final Workshop session purchase, access, email, ticket, pause, and expiry regression.
-3. Run representative Content Builder, CRM, and approval tests.
-4. Complete the remaining deployed integration and public-navigation decisions.
-5. Run one clean production-shaped regression from content creation through purchase, fulfilment/access, and archive.
+1. Complete one final Workshop session purchase, access, email, ticket, pause, and expiry regression.
+2. Run representative Content Builder, CRM, and approval tests.
+3. Complete the remaining deployed integration and public-navigation decisions.
+4. Run one clean production-shaped regression from content creation through purchase, fulfilment/access, and archive.
 
 Do not add optional financial reporting, advanced inventory, or larger CRM enhancements to the V1 gate unless a test identifies them as necessary for safe operation.
 
@@ -94,11 +105,11 @@ Do not add optional financial reporting, advanced inventory, or larger CRM enhan
 
 ## Current Handoff
 
-Last updated August 11 after Contact messages were moved into a durable Communications
-inbox with unread alerts, full threads, replies, internal notes, staff assignment,
-optional User and Order links, email delivery history, and CRM communication history.
-The immediate validation task is rebuilding the Functions emulator and completing the
-Contact-to-Communications checklist above, including the forced notification-failure case.
+Last updated August 11 after the complete local Contact-to-Communications workflow was
+validated and committed in `fca9e6a1`, including logged-in and guest submissions, unread
+alerts, full threads, real replies, internal notes, User and Order links, CRM history,
+and retention after a forced admin-notification failure. The next launch-critical task
+is the October Workshop ProductVariant persistence and end-to-end purchase test.
 
 The approved safety-first Product/Asset refactor is documented in `PRODUCT-ASSET-REFACTOR-MIGRATION-PLAN.md`. Products and Assets remain independent first-class entities; Product and Asset are not Item types. Implementation must remain additive and dual-read until the repeatable emulator migration, checkout/access/inventory parity tests, order-history checks, and rollback gates pass.
 

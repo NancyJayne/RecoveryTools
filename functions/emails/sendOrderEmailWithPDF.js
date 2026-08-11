@@ -7,6 +7,7 @@ import { generateOrderPDF } from "../utils/generateOrderPDFServer.js";
 import { logEmailEvent } from "../utils/emailLog.js";
 import { getBusinessProfile } from "../utils/businessProfile.js";
 import { accessEmailDetails } from "../utils/orderAccessEmail.js";
+import { instructorDetails } from "../utils/instructorName.js";
 
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 
@@ -38,17 +39,21 @@ async function orderWithCurrentVariantDetails(order = {}) {
   const products = Array.isArray(order.products) ? order.products : [];
   const enriched = await Promise.all(products.map(async (product) => {
     const variantId = product.variantId || product.productVariantId || "";
-    if (!variantId || product.eventStartAt && product.eventLocation) return product;
-    const snapshot = await admin.firestore().collection("productVariants").doc(variantId).get();
-    if (!snapshot.exists) return product;
-    const variant = snapshot.data() || {};
+    const snapshot = variantId
+      ? await admin.firestore().collection("productVariants").doc(variantId).get()
+      : null;
+    const variant = snapshot?.exists ? snapshot.data() || {} : {};
+    const instructor = await instructorDetails(
+      admin.firestore(),
+      product.instructorId || product.instructor || variant.instructorId || variant.instructor,
+    );
     return {
       ...product,
       variantName: product.variantName || variant.variantName || variant.name || "",
       eventStartAt: product.eventStartAt || variant.eventStartAt || "",
       eventEndAt: product.eventEndAt || variant.eventEndAt || "",
       eventLocation: product.eventLocation || variant.eventLocation || "",
-      instructor: product.instructor || variant.instructor || "",
+      ...instructor,
     };
   }));
   return { ...order, products: enriched };

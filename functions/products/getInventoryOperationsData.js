@@ -72,6 +72,7 @@ export const getInventoryOperationsData = onCall(
       accessGrantsSnap,
       userAccessSnap,
       usersSnap,
+      instructorsSnap,
     ] = await Promise.all([
       db.collection("inventory").get(),
       db.collection("items").get(),
@@ -86,6 +87,7 @@ export const getInventoryOperationsData = onCall(
       db.collection("productAccessGrants").get(),
       db.collection("userAccess").get(),
       db.collection("users").get(),
+      db.collection("instructors").get(),
     ]);
 
     const attendanceByBooking = new Map(attendanceSnap.docs.map((doc) => {
@@ -93,6 +95,10 @@ export const getInventoryOperationsData = onCall(
       return [[clean(row.productId), clean(row.productVariantId), clean(row.orderId), clean(row.userId)].join(":"), row];
     }));
     const usersById = new Map(usersSnap.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }]));
+    const instructorsById = new Map(instructorsSnap.docs.map((doc) => [
+      doc.id,
+      clean(doc.data()?.name) || doc.id,
+    ]));
     const accessGrantsByProduct = new Map();
     accessGrantsSnap.docs.forEach((doc) => {
       const grant = { id: doc.id, ...doc.data() };
@@ -221,7 +227,8 @@ export const getInventoryOperationsData = onCall(
       const row = doc.data() || {};
       return [`${clean(row.orderId)}:${Number(row.lineNumber || 0)}`, row];
     }));
-    const countedOrders = ordersSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    const allOrders = ordersSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const countedOrders = allOrders
       .filter((order) => {
         const state = [order.status, order.orderStatus, order.paymentStatus, order.fulfilmentStatus]
           .map(status).join(" ");
@@ -231,6 +238,19 @@ export const getInventoryOperationsData = onCall(
         return status(order.paymentStatus) === "paid" ||
           status(order.orderStatus) === "paid" || status(order.status) === "paid";
       });
+    const attendeeHistoryOrders = allOrders.filter((order) => {
+      const state = [
+        order.status,
+        order.orderStatus,
+        order.paymentStatus,
+        order.fulfilmentStatus,
+        order.refundStatus,
+      ].map(status).join(" ");
+      if (["failed", "void"].some((value) => state.includes(value))) return false;
+      return ["paid", "refund", "cancel"].some((value) => state.includes(value)) ||
+        Number(order.amountPaid || order.totalPaid || 0) > 0 ||
+        Boolean(order.stripePaymentIntentId || order.paymentIntentId);
+    });
     productsSnap.docs.forEach((doc) => {
       const product = { id: doc.id, ...doc.data() };
       const productVariants = variantsByProduct.get(doc.id) || [];
@@ -283,7 +303,7 @@ export const getInventoryOperationsData = onCall(
         }];
         sessionVariants.forEach((variant) => {
           const attendees = [];
-          countedOrders.forEach((order) => {
+          attendeeHistoryOrders.forEach((order) => {
             const lines = Array.isArray(order.orderLines) && order.orderLines.length
               ? order.orderLines
               : Array.isArray(order.products) ? order.products : [];
@@ -293,7 +313,11 @@ export const getInventoryOperationsData = onCall(
               const storedLine = orderItemsByLine.get(
                 `${order.id}:${Number(line.lineNumber || index + 1)}`,
               );
-              if (["refunded", "cancelled", "canceled"].includes(status(storedLine?.refundStatus))) return;
+              const removalState = status(
+                storedLine?.refundStatus || line.refundStatus || order.refundStatus || order.paymentStatus,
+              );
+              const removed = ["refunded", "cancelled", "canceled"].includes(removalState) ||
+                ["cancelled", "canceled"].includes(status(order.fulfilmentStatus));
               attendees.push({
                 orderId: order.id,
                 userId: clean(order.userId || order.buyerUid),
@@ -301,6 +325,17 @@ export const getInventoryOperationsData = onCall(
                 email: clean(order.customerEmail || order.userEmail),
                 phone: clean(order.customerPhone),
                 quantity: Math.max(Number(line.quantity || 1), 1),
+                status: removed ? "removed" : "active",
+                removed,
+                removalReason: removed
+                  ? clean(
+                    order.refundReason ||
+                    storedLine?.refundReason ||
+                    order.customerFollowUpResolution ||
+                    order.customerFollowUpNotes,
+                  ) || "Workshop booking cancelled"
+                  : "",
+                removedAt: order.refundedAt || order.refundRequestedAt || order.updatedAt || null,
                 purchasedAt: order.purchasedAt || order.createdAt || order.orderDate || null,
                 checkedIn: attendanceByBooking.get([
                   doc.id,
@@ -312,7 +347,9 @@ export const getInventoryOperationsData = onCall(
             });
           });
           const capacity = Number(variant.seatCapacity ?? product.seatCapacity ?? 0);
-          const sold = attendees.reduce((sum, attendee) => sum + attendee.quantity, 0);
+          const sold = attendees
+            .filter((attendee) => !attendee.removed)
+            .reduce((sum, attendee) => sum + attendee.quantity, 0);
           workshopSessions.push({
             productId: doc.id,
             productName: product.productName || product.name || doc.id,
@@ -326,7 +363,9 @@ export const getInventoryOperationsData = onCall(
             eventStartAt: variant.eventStartAt || product.eventStartAt || "",
             eventEndAt: variant.eventEndAt || product.eventEndAt || "",
             eventLocation: variant.eventLocation || product.eventLocation || "",
-            instructor: variant.instructor || product.instructor || "",
+            instructor: instructorsById.get(clean(
+              variant.instructorId || variant.instructor || product.instructorId || product.instructor,
+            )) || variant.instructor || product.instructor || "",
             attendees,
           });
         });

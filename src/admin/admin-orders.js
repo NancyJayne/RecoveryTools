@@ -118,11 +118,78 @@ function orderFulfilmentType(order) {
   return "physical";
 }
 
+function isWorkshopItem(item = {}) {
+  const type = String(item.productType || item.type || "").toLowerCase();
+  const accessTargets = item.accessTargets || item.accessGrants || [];
+  return type.includes("workshop") ||
+    Boolean(item.relatedWorkshopId || item.eventStartAt) ||
+    accessTargets.some((target) =>
+      String(target.accessEntityType || target.accessType || "").toLowerCase() === "workshop");
+}
+
+function isWorkshopOnlyOrder(order) {
+  const items = Array.isArray(order.products) && order.products.length
+    ? order.products
+    : orderItems(order);
+  return items.length > 0 && !orderHasPhysicalItems(order) && items.every(isWorkshopItem);
+}
+
+function isRefunded(order) {
+  return String(order.refundStatus || order.paymentStatus || "").toLowerCase() === "refunded";
+}
+
+function refundStatusLabel(order) {
+  const status = String(order.refundStatus || order.paymentStatus || "").toLowerCase();
+  if (status === "refunded") return "refunded";
+  if (status === "partially_refunded" || Number(order.refundedAmount || 0) > 0) {
+    return "partially refunded";
+  }
+  if (["pending", "refund_pending"].includes(status)) return "refund pending";
+  return "";
+}
+
+function hasPendingRefund(order) {
+  return ["pending", "refund_pending"].includes(
+    String(order.refundStatus || order.paymentStatus || "").toLowerCase(),
+  );
+}
+
+function refundWorkflowComplete(order) {
+  return isRefunded(order) && customerFollowUpStatus(order) === "resolved";
+}
+
+function refundButtonLabel(order) {
+  const amount = Number(order.refundedAmount || order.total || 0).toFixed(2);
+  if (hasPendingRefund(order)) return `Refund pending ($${amount})`;
+  if (isRefunded(order)) return "Finish refund record";
+  return `Refund full order ($${amount})`;
+}
+
 function accessEmailStatus(order) {
   if (order.confirmationEmailSentAt) return "Sent";
   if (order.confirmationEmailSandboxedAt) return "Sandboxed locally";
   if (order.confirmationEmailError) return `Failed: ${order.confirmationEmailError}`;
   return "Not sent";
+}
+
+function digitalAccessDescription(revoked) {
+  return revoked
+    ? "The customer can no longer open this Workshop from their profile."
+    : "The customer can open unlocked courses, workshops, and programs from their profile.";
+}
+
+function digitalAccessStatusLabel(revoked, partiallyRevoked) {
+  if (revoked) return "Access revoked after refund";
+  if (partiallyRevoked) return "Some access revoked after refund";
+  return "Access granted";
+}
+
+function currentDigitalAccessDescription(revoked, partiallyRevoked) {
+  if (partiallyRevoked) {
+    return "Access for fully refunded digital, Course, or Workshop items has been removed. " +
+      "Other purchased access remains active.";
+  }
+  return digitalAccessDescription(revoked);
 }
 
 function trackingValue(order) {
@@ -243,7 +310,14 @@ function customerFollowUpStatus(order) {
 
 function renderCustomerFollowUpOptions(order) {
   const current = customerFollowUpStatus(order);
-  return CUSTOMER_FOLLOW_UP_OPTIONS.map((option) => `
+  const options = isWorkshopOnlyOrder(order)
+    ? [
+      ...CUSTOMER_FOLLOW_UP_OPTIONS.slice(0, -1),
+      { value: "workshop_cancellation", label: "Workshop cancellation" },
+      CUSTOMER_FOLLOW_UP_OPTIONS.at(-1),
+    ]
+    : CUSTOMER_FOLLOW_UP_OPTIONS;
+  return options.map((option) => `
     <option value="${option.value}" ${current === option.value ? "selected" : ""}>
       ${option.label}
     </option>
@@ -321,6 +395,92 @@ function itemLineTotal(item) {
   return Number.isFinite(total) ? total : 0;
 }
 
+function itemRefundedQuantity(item) {
+  return Math.max(Number(item.refundedQuantity || 0), 0);
+}
+
+function itemRefundableQuantity(item) {
+  return Math.max(itemQuantity(item) - itemRefundedQuantity(item), 0);
+}
+
+function orderShippingAmount(order) {
+  const value = Number(order.shipping?.amount_total ?? order.shippingAmount ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function renderRefundableItem(order, item, index) {
+  const number = Number(item.lineNumber || index + 1);
+  const available = itemRefundableQuantity(item);
+  const options = Array.from(
+    { length: available },
+    (_, option) => `<option value="${option + 1}">${option + 1}</option>`,
+  ).join("");
+  const remainingAmount = Math.max(itemLineTotal(item) - Number(item.refundedAmount || 0), 0);
+  const estimatedUnitRefund = remainingAmount / available;
+  return `
+    <div class="rounded border border-gray-700 bg-gray-900/70 p-2">
+      <label class="flex items-start gap-2">
+        <input type="checkbox" class="itemRefundCheckbox mt-1" data-id="${order.id}"
+          data-line="${number}" data-unit-price="${estimatedUnitRefund}"
+          data-available="${available}" data-remaining-amount="${remainingAmount}" />
+        <span class="min-w-0 flex-1">
+          <span class="block font-medium text-white">${escapeHTML(itemName(item))}</span>
+          ${itemVariantName(item) || itemVariantId(item) ? `
+            <span class="block text-xs font-medium text-purple-200">
+              Variant: ${escapeHTML(itemVariantName(item) || itemVariantId(item))}
+            </span>` : ""}
+          ${item.sku ? `<span class="block text-xs text-gray-400">SKU: ${escapeHTML(item.sku)}</span>` : ""}
+          <span class="block text-xs text-gray-400">
+            $${estimatedUnitRefund.toFixed(2)} each &middot; ${available} refundable
+          </span>
+        </span>
+        <select class="itemRefundQuantity rounded border border-gray-700 bg-gray-900 px-2 py-1 text-white"
+          data-id="${order.id}" data-line="${number}" disabled>${options}</select>
+      </label>
+    </div>`;
+}
+
+function renderItemRefundPanel(order) {
+  const items = orderItems(order);
+  const refundableItems = items.map((item, index) => ({ item, index }))
+    .filter(({ item }) => itemRefundableQuantity(item) > 0);
+  const shippingRemaining = Math.max(
+    orderShippingAmount(order) - Number(order.refundedShippingAmount || 0),
+    0,
+  );
+  const remaining = Math.max(Number(order.total || 0) - Number(order.refundedAmount || 0), 0);
+  if ((!refundableItems.length && shippingRemaining <= 0) || remaining <= 0) return "";
+
+  return `
+    <details class="itemRefundPanel rounded border border-purple-500/60 bg-purple-950/20 p-3 text-sm" data-id="${order.id}">
+      <summary class="cursor-pointer font-semibold text-purple-200">Refund selected items</summary>
+      <p class="mt-2 text-xs text-gray-300">
+        Select products and quantities. Digital, Course, and Workshop access is revoked when its complete order line is refunded. Physical stock is not automatically returned to inventory.
+      </p>
+      <div class="mt-3 space-y-2">
+        ${refundableItems.map(({ item, index }) => renderRefundableItem(order, item, index)).join("")}
+        ${shippingRemaining > 0 ? `
+          <label class="flex items-center gap-2 rounded border border-gray-700 bg-gray-900/70 p-2">
+            <input type="checkbox" class="shippingRefundCheckbox" data-id="${order.id}" data-amount="${shippingRemaining}" />
+            <span class="flex-1 text-white">Refund shipping</span>
+            <span class="text-gray-300">$${shippingRemaining.toFixed(2)}</span>
+          </label>` : ""}
+      </div>
+      <div class="mt-3 flex items-center justify-between rounded bg-gray-900 px-3 py-2">
+        <span class="text-gray-300">Calculated refund</span>
+        <strong class="itemRefundTotal text-purple-200" data-id="${order.id}">$0.00</strong>
+      </div>
+      <label class="mt-3 block text-xs text-gray-300">
+        Refund reason
+        <input type="text" class="itemRefundReason mt-1 w-full rounded border border-purple-500/60 bg-gray-900 px-2 py-2 text-white" data-id="${order.id}" placeholder="Reason shown in the timeline and refund email" />
+      </label>
+      <button type="button" class="refund-selected-items-btn mt-3 w-full rounded bg-purple-700 px-3 py-2 font-semibold text-white hover:bg-purple-600 disabled:bg-gray-700" data-id="${order.id}" disabled>
+        Refund selected items
+      </button>
+      <p class="itemRefundStatus mt-2 hidden text-xs" data-id="${order.id}" role="status"></p>
+    </details>`;
+}
+
 function orderItems(order) {
   if (Array.isArray(order.orderLines) && order.orderLines.length) return order.orderLines;
   if (Array.isArray(order.products) && order.products.length) return order.products;
@@ -351,6 +511,7 @@ function renderOrderItems(order) {
               <span class="text-gray-400">x${itemQuantity(item)}</span>
             </span>
             <span class="block text-gray-300">${escapeHTML(itemPackingReference(item))}</span>
+            ${itemRefundedQuantity(item) > 0 ? `<span class="mt-1 inline-block rounded bg-purple-900/70 px-2 py-0.5 text-purple-200">Refunded ${itemRefundedQuantity(item)} of ${itemQuantity(item)}</span>` : ""}
           </span>
           <span class="text-gray-300">$${itemLineTotal(item).toFixed(2)}</span>
         </li>
@@ -733,6 +894,10 @@ export function renderOrderGrid(orders) {
     const fulfilmentType = orderFulfilmentType(data);
     const hasPhysicalFulfilment = fulfilmentType !== "digital";
     const hasDigitalAccess = fulfilmentType !== "physical";
+    const accessRevoked = ["revoked", "removed", "cancelled", "canceled"].includes(
+      String(data.accessStatus || "").toLowerCase(),
+    ) || isRefunded(data);
+    const accessPartiallyRevoked = String(data.accessStatus || "").toLowerCase() === "partially_revoked";
     const orderStatusLabel = data.archived === true
       ? "archived"
       : fulfilmentType === "digital" ? "digital access" : fulfilmentStatus;
@@ -770,9 +935,15 @@ export function renderOrderGrid(orders) {
             </a>
             <div class="text-xs text-gray-400">${escapeHTML(orderEmail(data))}</div>
           </div>
-          <span class="text-xs uppercase tracking-wide bg-gray-700 px-2 py-1 rounded">
-            ${escapeHTML(orderStatusLabel)}
-          </span>
+          <div class="flex flex-col items-end gap-1">
+            ${refundStatusLabel(data) ? `
+              <span class="rounded bg-purple-900/80 px-2 py-1 text-xs uppercase tracking-wide text-purple-100">
+                ${escapeHTML(refundStatusLabel(data))}
+              </span>` : ""}
+            <span class="rounded bg-gray-700 px-2 py-1 text-xs uppercase tracking-wide">
+              ${escapeHTML(orderStatusLabel)}
+            </span>
+          </div>
         </div>
 
         <div class="grid grid-cols-2 gap-2 text-sm">
@@ -801,21 +972,30 @@ export function renderOrderGrid(orders) {
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div class="text-xs uppercase tracking-wide text-purple-200">Digital access</div>
-                <div class="mt-1 font-semibold text-white">Access granted</div>
+                <div class="mt-1 font-semibold ${accessRevoked ? "text-purple-200" : "text-white"}">
+                  ${digitalAccessStatusLabel(accessRevoked, accessPartiallyRevoked)}
+                </div>
                 <div class="mt-1 text-xs text-gray-300">
-                  Access email: ${escapeHTML(accessEmailStatus(data))}
+                  ${accessRevoked ? "Original access email" : "Access email"}:
+                  ${escapeHTML(accessEmailStatus(data))}
                 </div>
               </div>
-              <button
-                type="button"
-                class="send-access-email-btn rounded bg-purple-700 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-600"
-                data-id="${data.id}"
-              >
-                ${accessEmailButtonLabel}
-              </button>
+              ${accessRevoked ? `
+                <span class="rounded bg-gray-700 px-3 py-2 text-xs font-semibold text-gray-200">
+                  Revoked
+                </span>
+              ` : `
+                <button
+                  type="button"
+                  class="send-access-email-btn rounded bg-purple-700 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-600"
+                  data-id="${data.id}"
+                >
+                  ${accessEmailButtonLabel}
+                </button>
+              `}
             </div>
             <p class="mt-2 text-xs text-gray-400">
-              The customer can open unlocked courses, workshops, and programs from their profile.
+              ${currentDigitalAccessDescription(accessRevoked, accessPartiallyRevoked)}
             </p>
           </section>
         ` : ""}
@@ -920,6 +1100,57 @@ export function renderOrderGrid(orders) {
           Save order notes
         </button>`}
 
+        ${isWorkshopOnlyOrder(data) && Number(data.refundedAmount || 0) === 0 ? `
+          <section
+            class="workshopCancellationPanel rounded border border-purple-500/60 bg-purple-950/20 p-3 text-sm ${customerFollowUpStatus(data) === "workshop_cancellation" ? "" : "hidden"}"
+            data-id="${data.id}"
+          >
+            <div class="text-xs uppercase tracking-wide text-purple-200">Workshop cancellation</div>
+            <p class="mt-1 text-xs text-gray-300">
+              Refunds the full order through Stripe, removes workshop access, and removes this booking from the active attendee count.
+            </p>
+            <label class="mt-3 block text-xs text-gray-300">
+              Refund reason
+              <input
+                type="text"
+                class="workshopRefundReasonInput mt-1 w-full rounded border border-purple-500/60 bg-gray-900 px-2 py-2 text-white"
+                data-id="${data.id}"
+                value="${escapeHTML(data.refundReason || "Workshop cancelled")}"
+                ${hasPendingRefund(data) ? "disabled" : ""}
+              />
+            </label>
+            <button
+              type="button"
+              class="refund-workshop-order-btn mt-3 w-full rounded px-3 py-2 font-semibold text-white ${hasPendingRefund(data) ? "bg-gray-700" : "bg-purple-700 hover:bg-purple-600"}"
+              data-id="${data.id}"
+              ${hasPendingRefund(data) ? "disabled" : ""}
+            >
+              ${refundButtonLabel(data)}
+            </button>
+            <p class="workshopRefundStatus mt-2 hidden text-xs" data-id="${data.id}" role="status"></p>
+          </section>
+        ` : ""}
+
+        ${isWorkshopOnlyOrder(data) && isRefunded(data) ? `
+          <section class="rounded border border-purple-500/60 bg-purple-950/20 p-3 text-sm">
+            <div class="font-semibold text-purple-200">
+              Refunded $${Number(data.refundedAmount || data.total || 0).toFixed(2)}
+            </div>
+            <p class="mt-1 text-xs text-gray-300">
+              ${escapeHTML(data.refundReason || "Workshop booking cancelled")}
+            </p>
+            <button
+              type="button"
+              class="resend-refund-email-btn mt-3 w-full rounded bg-purple-700 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-600"
+              data-id="${data.id}"
+            >
+              Resend refund email
+            </button>
+          </section>
+        ` : ""}
+
+        ${renderItemRefundPanel(data)}
+
         <button
           class="archive-order-btn w-full bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded"
           data-id="${data.id}"
@@ -943,6 +1174,9 @@ export function renderOrderGrid(orders) {
       const details = document.querySelector(`.customerIssueDetails[data-id='${orderId}']`);
       const submission = document.querySelector(`.customerIssueSubmission[data-id='${orderId}']`);
       const heading = submission?.querySelector(".customerIssueSubmissionHeading");
+      const cancellationPanel = document.querySelector(
+        `.workshopCancellationPanel[data-id='${orderId}']`,
+      );
       const hidden = select.value === "none";
       details?.classList.toggle("hidden", hidden);
       const resolved = select.value === "resolved";
@@ -952,6 +1186,7 @@ export function renderOrderGrid(orders) {
       submission?.classList.toggle("bg-amber-950/20", !resolved);
       heading?.classList.toggle("text-green-200", resolved);
       heading?.classList.toggle("text-amber-200", !resolved);
+      cancellationPanel?.classList.toggle("hidden", select.value !== "workshop_cancellation");
     });
   });
 
@@ -986,6 +1221,177 @@ export function renderOrderGrid(orders) {
       } finally {
         button.disabled = false;
         button.textContent = "Resend access email";
+      }
+    });
+  });
+
+  function updateItemRefundTotal(orderId) {
+    let total = 0;
+    document.querySelectorAll(`.itemRefundCheckbox[data-id='${orderId}']:checked`).forEach((checkbox) => {
+      const quantityInput = document.querySelector(
+        `.itemRefundQuantity[data-id='${orderId}'][data-line='${checkbox.dataset.line}']`,
+      );
+      const selectedQuantity = Number(quantityInput?.value || 0);
+      total += selectedQuantity === Number(checkbox.dataset.available || 0)
+        ? Number(checkbox.dataset.remainingAmount || 0)
+        : Number(checkbox.dataset.unitPrice || 0) * selectedQuantity;
+    });
+    const shipping = document.querySelector(`.shippingRefundCheckbox[data-id='${orderId}']:checked`);
+    total += Number(shipping?.dataset.amount || 0);
+    const totalNode = document.querySelector(`.itemRefundTotal[data-id='${orderId}']`);
+    const button = document.querySelector(`.refund-selected-items-btn[data-id='${orderId}']`);
+    if (totalNode) totalNode.textContent = `$${total.toFixed(2)}`;
+    if (button) {
+      button.disabled = total <= 0;
+      button.dataset.amount = total.toFixed(2);
+    }
+  }
+
+  document.querySelectorAll(".itemRefundCheckbox").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const quantityInput = document.querySelector(
+        `.itemRefundQuantity[data-id='${checkbox.dataset.id}'][data-line='${checkbox.dataset.line}']`,
+      );
+      if (quantityInput) quantityInput.disabled = !checkbox.checked;
+      updateItemRefundTotal(checkbox.dataset.id);
+    });
+  });
+  document.querySelectorAll(".itemRefundQuantity, .shippingRefundCheckbox").forEach((input) => {
+    input.addEventListener("change", () => updateItemRefundTotal(input.dataset.id));
+  });
+  document.querySelectorAll(".refund-selected-items-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const order = orders.find((entry) => entry.id === button.dataset.id);
+      if (!order) return;
+      const reasonInput = document.querySelector(`.itemRefundReason[data-id='${order.id}']`);
+      const status = document.querySelector(`.itemRefundStatus[data-id='${order.id}']`);
+      const reason = String(reasonInput?.value || "").trim();
+      const selectedLines = [...document.querySelectorAll(
+        `.itemRefundCheckbox[data-id='${order.id}']:checked`,
+      )].map((checkbox) => ({
+        lineNumber: Number(checkbox.dataset.line),
+        quantity: Number(document.querySelector(
+          `.itemRefundQuantity[data-id='${order.id}'][data-line='${checkbox.dataset.line}']`,
+        )?.value || 0),
+      }));
+      const refundShipping = Boolean(document.querySelector(
+        `.shippingRefundCheckbox[data-id='${order.id}']:checked`,
+      ));
+      const amount = Number(button.dataset.amount || 0);
+      if (!reason) {
+        status?.classList.remove("hidden", "text-green-300");
+        status?.classList.add("text-red-300");
+        if (status) status.textContent = "Enter a refund reason first.";
+        reasonInput?.focus();
+        return;
+      }
+      if (!amount || (!selectedLines.length && !refundShipping)) return;
+      if (!window.confirm(`Refund the selected parts of order ${orderInvoiceId(order)}?\n\nCalculated refund: $${amount.toFixed(2)}\n\nStripe will be charged immediately. This cannot be undone here.`)) return;
+      try {
+        button.disabled = true;
+        button.textContent = "Submitting refund...";
+        status?.classList.remove("hidden", "text-red-300", "text-green-300");
+        status?.classList.add("text-purple-200");
+        if (status) status.textContent = "Validating the selection with Stripe...";
+        const refundItems = httpsCallable(functions, "refundOrderItems");
+        const result = await refundItems({ orderId: order.id, reason, lines: selectedLines,
+          refundShipping, confirmation: "REFUND" });
+        showToast(result.data?.emailWarning || `Refunded $${Number(result.data?.amount || amount).toFixed(2)}`,
+          result.data?.emailWarning ? "warning" : "success");
+        await loadAllOrdersForAdmin();
+      } catch (err) {
+        console.error("Failed to refund selected order items:", err);
+        const message = err.message || "Could not refund the selected items";
+        showToast(message, "error");
+        status?.classList.remove("hidden", "text-purple-200", "text-green-300");
+        status?.classList.add("text-red-300");
+        if (status) status.textContent = message;
+        button.disabled = false;
+        button.textContent = "Refund selected items";
+      }
+    });
+  });
+
+  document.querySelectorAll(".refund-workshop-order-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const order = orders.find((entry) => entry.id === button.dataset.id);
+      if (!order || hasPendingRefund(order) || refundWorkflowComplete(order)) return;
+      const amount = Number(order.total || 0).toFixed(2);
+      const repairingRefund = isRefunded(order);
+      const reasonInput = document.querySelector(
+        `.workshopRefundReasonInput[data-id='${order.id}']`,
+      );
+      const statusMessage = document.querySelector(
+        `.workshopRefundStatus[data-id='${order.id}']`,
+      );
+      const reason = String(reasonInput?.value || order.refundReason || "").trim();
+      if (!reason) {
+        statusMessage?.classList.remove("hidden", "text-green-300");
+        statusMessage?.classList.add("text-red-300");
+        if (statusMessage) statusMessage.textContent = "Enter a refund reason first.";
+        reasonInput?.focus();
+        return;
+      }
+      const confirmed = window.confirm(repairingRefund
+        ? `Finish the refund record for order ${orderInvoiceId(order)}?\n\nNo second Stripe refund will be issued.`
+        : `Refund $${amount} for order ${orderInvoiceId(order)}?\n\nThis will send the refund to Stripe and remove the customer's workshop access. This cannot be undone here.`);
+      if (!confirmed) return;
+      try {
+        button.disabled = true;
+        if (reasonInput) reasonInput.disabled = true;
+        button.textContent = "Submitting refund...";
+        statusMessage?.classList.remove("hidden", "text-red-300", "text-green-300");
+        statusMessage?.classList.add("text-purple-200");
+        if (statusMessage) statusMessage.textContent = "Contacting Stripe...";
+        const refundOrder = httpsCallable(functions, "refundWorkshopOrder");
+        const result = await refundOrder({
+          orderId: order.id,
+          reason,
+          confirmation: "REFUND",
+        });
+        const warning = result.data?.emailWarning;
+        showToast(
+          warning || `Refunded $${Number(result.data?.amount || amount).toFixed(2)}`,
+          warning ? "warning" : "success",
+        );
+        await loadAllOrdersForAdmin();
+      } catch (err) {
+        console.error("Failed to refund workshop order:", err);
+        const errorMessage = err.message || "Could not refund this workshop order";
+        showToast(errorMessage, "error");
+        statusMessage?.classList.remove("hidden", "text-purple-200", "text-green-300");
+        statusMessage?.classList.add("text-red-300");
+        if (statusMessage) statusMessage.textContent = errorMessage;
+        button.disabled = false;
+        if (reasonInput) reasonInput.disabled = false;
+        button.textContent = `Refund full order ($${amount})`;
+      }
+    });
+  });
+
+  document.querySelectorAll(".resend-refund-email-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const order = orders.find((entry) => entry.id === button.dataset.id);
+      if (!order || !isRefunded(order)) return;
+      try {
+        button.disabled = true;
+        button.textContent = "Sending...";
+        const refundOrder = httpsCallable(functions, "refundWorkshopOrder");
+        const result = await refundOrder({
+          orderId: order.id,
+          reason: order.refundReason || "Workshop cancelled",
+          confirmation: "REFUND",
+        });
+        showToast(
+          result.data?.emailWarning || "Refund email sent",
+          result.data?.emailWarning ? "warning" : "success",
+        );
+      } catch (err) {
+        console.error("Failed to resend refund email:", err);
+        showToast(err.message || "Could not resend the refund email", "error");
+      } finally {
+        button.disabled = false;
+        button.textContent = "Resend refund email";
       }
     });
   });
@@ -1095,11 +1501,26 @@ export function renderOrderGrid(orders) {
 export async function saveOrderNote(orderId) {
   const note = document.querySelector(`.orderNoteInput[data-id='${orderId}']`)?.value.trim();
   const dueDate = document.querySelector(`.orderDueDateInput[data-id='${orderId}']`)?.value;
+  const customerFollowUpStatus =
+    document.querySelector(`.customerFollowUpInput[data-id='${orderId}']`)?.value || "none";
+  const customerFollowUpNotes =
+    document.querySelector(`.customerFollowUpNotesInput[data-id='${orderId}']`)?.value.trim() || "";
+  const customerFollowUpResolution =
+    document.querySelector(`.customerFollowUpResolutionInput[data-id='${orderId}']`)?.value.trim() || "";
 
   try {
     await updateDoc(doc(db, "orders", orderId), {
       note,
       dueDate: dueDate || null,
+      customerFollowUpStatus,
+      customerFollowUpOpen: [
+        "return_requested",
+        "exchange_requested",
+        "complaint_open",
+        "workshop_cancellation",
+      ].includes(customerFollowUpStatus),
+      customerFollowUpNotes,
+      customerFollowUpResolution,
       updatedAt: serverTimestamp(),
     });
     showToast("Note saved", "success");

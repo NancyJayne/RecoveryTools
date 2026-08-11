@@ -21,6 +21,15 @@ function trackingUrl(order) {
   return `https://auspost.com.au/mypost/track/#/details/${encodeURIComponent(trackingNumber)}`;
 }
 
+function escapeHTML(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function orderIssueUrl(invoiceId, type = "return_requested") {
   const params = new URLSearchParams({ order: invoiceId, type });
   return `/order-issue?${params.toString()}`;
@@ -49,6 +58,18 @@ function productReviewUrl(item) {
   const productId = itemProductId(item);
   if (!productId) return "";
   return `/shop/${encodeURIComponent(productId)}?review=1`;
+}
+
+function formattedOrderDate(value) {
+  if (!value) return "";
+  const date = value?.toDate ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("en-AU");
+}
+
+function orderIsRefunded(order = {}) {
+  return ["refunded", "partially_refunded"].includes(
+    String(order.refundStatus || order.paymentStatus || "").toLowerCase(),
+  ) || Number(order.refundedAmount || 0) > 0;
 }
 
 function renderOrderItems(order) {
@@ -137,13 +158,23 @@ export async function loadOrderReceipts() {
         ? order.purchasedAt.toDate().toLocaleDateString()
         : "";
       const invoiceId = order.invoiceId || order.id;
-      const total = order.total?.toFixed(2) || "0.00";
+      const total = Number(order.total || 0).toFixed(2);
+      const refunded = orderIsRefunded(order);
+      const refundedAmount = Number(order.refundedAmount || (refunded ? order.total : 0) || 0).toFixed(2);
+      const refundedDate = formattedOrderDate(order.refundedAt || order.refundRequestedAt);
 
       const left = document.createElement("div");
       left.innerHTML = `
         <p class="text-white font-semibold">Invoice #${invoiceId}</p>
         <p class="text-sm text-gray-400">Date: ${date}</p>
         <p class="text-sm text-gray-400">Total: $${total}</p>
+        ${refunded ? `
+          <div class="mt-2 rounded border border-purple-500/60 bg-purple-950/30 p-2 text-sm">
+            <p class="font-semibold text-purple-200">${Number(refundedAmount) < Number(total) ? "Partially refunded" : "Refunded"} $${refundedAmount}</p>
+            ${refundedDate ? `<p class="text-xs text-gray-300">Refunded: ${refundedDate}</p>` : ""}
+            ${order.refundReason ? `<p class="text-xs text-gray-300">Reason: ${escapeHTML(order.refundReason)}</p>` : ""}
+          </div>
+        ` : ""}
       `;
 
       const downloadBtn = document.createElement("button");

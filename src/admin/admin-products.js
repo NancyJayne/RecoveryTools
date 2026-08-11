@@ -318,16 +318,24 @@ function renderWorkshopSessions() {
     const remaining = session.remaining === null ? "Not limited" : session.remaining;
     const attendeeRows = session.attendees.length
       ? session.attendees.map((attendee) => `
-          <tr class="border-t border-gray-800">
+          <tr class="border-t border-gray-800 ${attendee.removed ? "opacity-70" : ""}">
             <td class="px-2 py-2">${escapeHTML(attendee.name)}</td>
             <td class="px-2 py-2">${escapeHTML(attendee.email || "No email")}</td>
             <td class="px-2 py-2">${attendee.quantity}</td>
+            <td class="px-2 py-2">
+              <span class="rounded px-2 py-1 text-xs ${attendee.removed ? "bg-purple-900/70 text-purple-200" : "bg-green-900/60 text-green-200"}">
+                ${attendee.removed ? "Removed" : "Active"}
+              </span>
+            </td>
+            <td class="px-2 py-2 text-xs text-gray-300">
+              ${escapeHTML(attendee.removalReason || "-")}
+            </td>
             <td class="px-2 py-2">
               <a class="text-purple-300 hover:underline"
                 href="/admin/orders?filter=${encodeURIComponent(attendee.orderId)}">Open order</a>
             </td>
           </tr>`).join("")
-      : `<tr><td colspan="4" class="px-2 py-3 text-gray-400">No paid attendees yet.</td></tr>`;
+      : `<tr><td colspan="6" class="px-2 py-3 text-gray-400">No attendee history yet.</td></tr>`;
     return `
       <details class="mb-3 overflow-hidden rounded border border-gray-700 bg-gray-950/40">
         <summary class="cursor-pointer p-4 hover:bg-gray-900/70">
@@ -352,11 +360,12 @@ function renderWorkshopSessions() {
             ${escapeHTML(session.productVariantId || session.productId)}
             ${session.instructor ? ` · Instructor: ${escapeHTML(session.instructor)}` : ""}
           </p>
-          <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
+          <div class="max-w-full overflow-x-auto">
+            <table class="w-full min-w-[760px] text-sm">
               <thead><tr class="text-left text-xs uppercase text-gray-400">
                 <th class="px-2 py-2">Attendee</th><th class="px-2 py-2">Email</th>
-                <th class="px-2 py-2">Tickets</th><th class="px-2 py-2">Order</th>
+                <th class="px-2 py-2">Tickets</th><th class="px-2 py-2">Status</th>
+                <th class="px-2 py-2">Reason</th><th class="px-2 py-2">Order</th>
               </tr></thead>
               <tbody>${attendeeRows}</tbody>
             </table>
@@ -372,7 +381,7 @@ function createWorkshopSessionsPanel(product) {
     .filter((session) => session.productId === productId);
   if (!sessions.length) return null;
   const panel = document.createElement("section");
-  panel.className = "mt-4 rounded border border-gray-700 bg-gray-900/70 p-3";
+  panel.className = "mt-4 min-w-0 max-w-full overflow-hidden rounded border border-gray-700 bg-gray-900/70 p-3";
   panel.innerHTML = `
     <h4 class="text-sm font-semibold text-white">Workshop sessions</h4>
     <p class="mb-3 text-xs text-gray-400">Ticket totals and on-the-day attendee check-in for each Product variant.</p>
@@ -381,7 +390,7 @@ function createWorkshopSessionsPanel(product) {
     const remaining = session.remaining === null ? "Not limited" : session.remaining;
     const attendeeRows = session.attendees.length
       ? session.attendees.map((attendee) => `
-          <tr class="border-t border-gray-800">
+          <tr class="border-t border-gray-800 ${attendee.removed ? "opacity-70" : ""}">
             <td class="px-2 py-2"><input type="checkbox"
               class="workshop-attendance-checkbox accent-[#407471]"
               data-product-id="${escapeHTML(session.productId)}"
@@ -389,14 +398,23 @@ function createWorkshopSessionsPanel(product) {
               data-order-id="${escapeHTML(attendee.orderId)}"
               data-user-id="${escapeHTML(attendee.userId || "")}"
               ${attendee.checkedIn ? "checked" : ""}
+              ${attendee.removed ? "disabled" : ""}
               aria-label="Check in ${escapeHTML(attendee.name)}"></td>
             <td class="px-2 py-2">${escapeHTML(attendee.name)}</td>
             <td class="px-2 py-2">${escapeHTML(attendee.email || "No email")}</td>
             <td class="px-2 py-2">${attendee.quantity}</td>
+            <td class="px-2 py-2">
+              <span class="rounded px-2 py-1 text-xs ${attendee.removed ? "bg-purple-900/70 text-purple-200" : "bg-green-900/60 text-green-200"}">
+                ${attendee.removed ? "Removed" : "Active"}
+              </span>
+            </td>
+            <td class="px-2 py-2 text-xs text-gray-300">
+              ${escapeHTML(attendee.removalReason || "-")}
+            </td>
             <td class="px-2 py-2"><a class="text-purple-300 hover:underline"
               href="/admin/orders?filter=${encodeURIComponent(attendee.orderId)}">Open order</a></td>
           </tr>`).join("")
-      : `<tr><td colspan="5" class="px-2 py-3 text-gray-400">No paid attendees yet.</td></tr>`;
+      : `<tr><td colspan="7" class="px-2 py-3 text-gray-400">No attendee history yet.</td></tr>`;
     return `
       <details class="mb-3 overflow-hidden rounded border border-gray-700 bg-gray-950/40">
         <summary class="cursor-pointer p-4 hover:bg-gray-900/70">
@@ -414,10 +432,11 @@ function createWorkshopSessionsPanel(product) {
           </div>
         </summary>
         <div class="border-t border-gray-700 p-4">
-          <div class="overflow-x-auto"><table class="min-w-full text-sm">
+          <div class="max-w-full overflow-x-auto"><table class="w-full min-w-[860px] text-sm">
             <thead><tr class="text-left text-xs uppercase text-gray-400">
               <th class="px-2 py-2">Arrived</th><th class="px-2 py-2">Attendee</th>
               <th class="px-2 py-2">Email</th><th class="px-2 py-2">Tickets</th>
+              <th class="px-2 py-2">Status</th><th class="px-2 py-2">Reason</th>
               <th class="px-2 py-2">Order</th>
             </tr></thead><tbody>${attendeeRows}</tbody>
           </table></div>
@@ -811,10 +830,10 @@ function renderProductManagerList(products) {
 
   products.forEach((p) => {
     const div = document.createElement("div");
-    div.className = "rounded border border-gray-700 bg-gray-800 p-4 shadow";
+    div.className = "min-w-0 max-w-full overflow-hidden rounded border border-gray-700 bg-gray-800 p-4 shadow";
 
     const row = document.createElement("div");
-    row.className = "flex flex-col gap-4 md:flex-row md:items-start";
+    row.className = "min-w-0 max-w-full overflow-hidden flex flex-col gap-4 md:flex-row md:items-start";
 
     const imageUrl = getProductImage(p);
     if (imageUrl) {
@@ -826,7 +845,7 @@ function renderProductManagerList(products) {
     }
 
     const body = document.createElement("div");
-    body.className = "flex-1";
+    body.className = "min-w-0 max-w-full flex-1 overflow-hidden";
 
     const title = document.createElement("h3");
     title.className = "text-lg font-bold mb-1";

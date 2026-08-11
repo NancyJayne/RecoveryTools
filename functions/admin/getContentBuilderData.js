@@ -294,6 +294,10 @@ function addLinkedProducts(records, entityType, productsById, links, architectur
     return {
       ...record,
       createsProduct: true,
+      // A canonical ProductLink is authoritative even when the Product belongs
+      // to a different legacy itemId. Keep the Item's Shop controls hydrated
+      // after a full reload instead of requiring the Product to be reselected.
+      isShopProduct: entityType === "Item" ? true : record.isShopProduct,
       linkedProductIds: recordLinks.map((link) => link.productId),
       productId: product.id,
       productLinkRole: primaryLink.linkRole || "Represents",

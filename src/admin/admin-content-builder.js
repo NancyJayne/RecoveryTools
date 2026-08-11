@@ -1290,13 +1290,16 @@ function renderSelectedProductVariantRows(
   }
   const instructorOptions = (selectedInstructor = "") => {
     const options = [...(state.options.instructorOptions || [])];
-    if (selectedInstructor && !options.some((option) => option.name === selectedInstructor)) {
+    if (selectedInstructor && !options.some((option) =>
+      option.id === selectedInstructor || option.name === selectedInstructor)) {
       options.push({ id: selectedInstructor, name: selectedInstructor, email: "" });
     }
     return options.map((option) => {
-      const selected = option.name === selectedInstructor ? " selected" : "";
+      const selected = option.id === selectedInstructor || option.name === selectedInstructor
+        ? " selected"
+        : "";
       const label = option.email ? `${option.name} (${option.email})` : option.name;
-      return `<option value="${escapeHTML(option.name)}"${selected}>${escapeHTML(label)}</option>`;
+      return `<option value="${escapeHTML(option.id || option.name)}"${selected}>${escapeHTML(label)}</option>`;
     }).join("");
   };
   container.innerHTML = productVariants.map((productVariant, index) => {
@@ -1425,14 +1428,10 @@ function renderSelectedProductVariantRows(
           </div>
           <div class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Price and sale</h5>
-            <div class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <label class="block text-sm">Regular price override
+            <div class="mt-3 grid gap-3 md:grid-cols-2">
+              <label class="block text-sm md:col-span-2">Regular price override
                 <input class="product-variant-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
                   type="number" min="0" step="0.01" value="${escapeHTML(productVariant.priceOverride ?? "")}">
-              </label>
-              <label class="block text-sm">Sale price
-                <input class="product-variant-sale-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
-                  type="number" min="0" step="0.01" value="${escapeHTML(productVariant.salePrice ?? "")}">
               </label>
               <label class="block text-sm">Affiliate wholesale price
                 <input class="product-variant-wholesale-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
@@ -1441,6 +1440,10 @@ function renderSelectedProductVariantRows(
               <label class="block text-sm">Wholesale minimum quantity
                 <input class="product-variant-wholesale-min-quantity mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
                   type="number" min="1" step="1" value="${escapeHTML(productVariant.wholesaleMinQuantity ?? "")}">
+              </label>
+              <label class="block text-sm md:col-span-2">Sale price
+                <input class="product-variant-sale-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                  type="number" min="0" step="0.01" value="${escapeHTML(productVariant.salePrice ?? "")}">
               </label>
               <label class="block text-sm">Sale starts
                 <input class="product-variant-sale-start mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
@@ -3909,7 +3912,10 @@ function populateBuilderFromRecord(record) {
 
   if (recordType === "item") {
     setCheckboxValue("contentWebsiteVisible", record.websiteVisible || record.requestedWebsiteVisible);
-    setCheckboxValue("contentIsShopProduct", record.isShopProduct);
+    setCheckboxValue(
+      "contentIsShopProduct",
+      record.isShopProduct === true || record.createsProduct === true || Boolean(record.productId),
+    );
     setCheckboxValue("contentSoldByRecoveryTools", record.soldByRecoveryTools !== false);
     setCheckboxValue("contentRequiresShipping", record.requiresShipping);
     setCheckboxValue("contentInventoryTracked", record.inventoryTracked);
@@ -4025,6 +4031,11 @@ function populateBuilderFromRecord(record) {
     updateProductRelationStatus(record);
   }
 
+  // Rebuild the visible ProductVariant controls from the hydrated canonical
+  // variants before any summary calls syncSelectedProductVariantRows().
+  // Without this, a full page reload has no variant rows yet and the sync
+  // step replaces the correctly loaded hidden value with an empty array.
+  populateProductVariantsFromEntity();
   updateProductPhysicalFields();
 
   renderRelationshipPickers();

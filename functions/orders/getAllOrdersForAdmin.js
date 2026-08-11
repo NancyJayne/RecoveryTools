@@ -35,7 +35,9 @@ function customerFollowUpStatus(order) {
 
 function hasOpenCustomerIssue(order) {
   const status = customerFollowUpStatus(order);
-  if (["return_requested", "exchange_requested", "complaint_open"].includes(status)) return true;
+  if ([
+    "return_requested", "exchange_requested", "complaint_open", "workshop_cancellation",
+  ].includes(status)) return true;
   if (["none", "resolved"].includes(status)) return false;
   return order.customerFollowUpOpen === true;
 }
