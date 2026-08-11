@@ -280,7 +280,8 @@ service cloud.firestore {
 
     // Contact Form
     match /contactSubmissions/{submissionId} {
-      allow create: if true;
+      // Contact submissions are created by sendContactMessage after reCAPTCHA validation.
+      allow create: if false;
       allow read, update, delete: if isAdmin();
     }
 

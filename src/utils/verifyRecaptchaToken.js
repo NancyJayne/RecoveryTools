@@ -12,7 +12,7 @@ const RECAPTCHA_ERROR_MSG = "reCAPTCHA verification failed or site key is missin
 /**
  * Runs reCAPTCHA v3, verifies token with Cloud Function, and returns the token if valid.
  */
-export async function executeRecaptcha(action = "submit_review") {
+export async function executeRecaptcha(action = "submit_review", { verify = true } = {}) {
   try {
     if (usesFirebaseEmulators()) {
       return "firebase-emulator";
@@ -38,6 +38,10 @@ export async function executeRecaptcha(action = "submit_review") {
       showToast("Something went wrong with reCAPTCHA.", "error");
       throw new Error(RECAPTCHA_ERROR_MSG);
     }
+
+    // Some workflows verify the token in their own authoritative backend call.
+    // reCAPTCHA tokens are single-use, so those callers must not verify it here first.
+    if (!verify) return token;
 
     // Call Firebase Cloud Function to verify via standard v3
     const verifyRecaptchaToken = httpsCallable(functions, "verifyRecaptchaToken");

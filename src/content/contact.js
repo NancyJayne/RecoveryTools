@@ -34,7 +34,9 @@ export function initContactPage() {
     submitBtn.textContent = "Sending...";
 
     try {
-      const token = await executeRecaptcha("contact_form");
+      // sendContactMessage performs the authoritative CAPTCHA check. Avoid
+      // consuming this single-use token in verifyRecaptchaToken first.
+      const token = await executeRecaptcha("contact_form", { verify: false });
 
       // ✅ Log to Firestore
       // ✅ Trigger backend email

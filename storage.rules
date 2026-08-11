@@ -6,12 +6,13 @@ service firebase.storage {
     // ✅ Allow public read access to video and image files in specific folders
     match /videos/{file} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.admin == true;
     }
 
     // ✅ Publicly readable fallback images
     match /videos/Images/{allPaths=**} {
       allow read: if true;
+      allow write: if request.auth != null && request.auth.token.admin == true;
     }
 
     // ❌ Deny all other access

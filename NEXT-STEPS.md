@@ -65,29 +65,32 @@
 - [x] Complete the itemised-refund regression: partial physical-line and shipping refunds use the correct Stripe amounts; Product variants are clearly identified; multiple quantities, repeated partial refunds, final full refunds, and over-refund protection work; badges and Refunded X of Y display correctly; email/Communications, CRM, customer Profile, timeline, and Dashboard net revenue update; selected Digital/Course content access is revoked while other purchased access remains active; and physical inventory is unchanged for manual return processing.
 - [x] Review the V1 customer and admin experience using mobile device emulation, including Marketplace, Product details, Cart, Contact, Profile, access views, Admin Orders/refunds, and Workshop session tables; no blocking responsive-layout issues were found.
 - [x] Complete the final production-shaped V1 purchase sweep for Physical, Digital, Course, and Workshop Products, confirming payment, Order/invoice creation, transactional email, CRM/Profile visibility, inventory or access behaviour, and the applicable admin workflow without regressions.
+- [x] Harden and deploy production rules so public media remains readable but only admins can write `/videos`, while direct client creation of `contactSubmissions` is denied in favour of the reCAPTCHA-protected Contact Function.
 
 ### To do before V1 launch
 
-1. **Verify itemised refunds.** Complete the physical, shipping, Digital, Course, multi-quantity, repeated-partial, and final-full refund cases listed above before using the new action on production Orders.
-2. **Finish access-control regression.** Test manual removal and restoration in CRM, dated expiry, Product variants with multiple unlocks, paused/archived content, and payment replay protection.
-3. **Finish Content Builder regression.** Test the four-stage flow for at least one representative V1 Item, Blueprint, and Plan: create, add multiple variants, review without auto-saving, save, add Connections, reopen, edit, and verify lifecycle/connection persistence.
-4. **Finish CRM workflows.** Confirm user edit/merge/archive, orders, notes, manual grants/removals, carts, roles, and Course/Workshop/Program lists against production-shaped data.
-5. **Finish approval and publication workflows.** Complete Content, Course/Workshop, and Therapist submission, review, approve/reject, notification, activation, pause, and archive tests.
-6. **Run the remaining V1 production integration.** Perform the deployed Contact-to-Communications workflow test, including admin notification, acknowledgement, reply, notes, CRM history, and an optional Order link. Stripe Connect and the final Affiliate Agreement move to V2 with Affiliate registration.
-7. **Package and deploy the verified V1 release.** Review the complete working-tree scope, run the production build and focused checks, commit the verified bundle, deploy Functions and Hosting, then complete a short production smoke check without creating unnecessary live transactions.
-8. **Test launch promotion codes if they will be used in V1.** In the emulator, test percentage, fixed-amount, and free-shipping codes; start/end dates; minimum order; Product and Product-variant eligibility; retail/affiliate audiences; per-customer and total-use limits; and webhook replay safety. Checkout currently accepts one promotion code per Order.
-9. **Confirm the workbook round trip.** Download the editable workbook from Admin, change a disposable master-content record, run `npm run seed:all -- --workbook <downloaded-file>`, and confirm the changed ID merges without deleting app-only content. Keep the full JSON backup separately for customer/order disaster recovery; do not use it as a seed workbook.
+1. **Deployed rules and logged-out Contact verification complete.** A fresh incognito submission now passes the single authoritative reCAPTCHA check, creates the Communication, raises the admin avatar/dashboard notification, and can be resolved normally. If production video upload is used, still confirm an admin can upload while an ordinary signed-in user cannot replace `/videos` files.
+2. **Add representative production data.** Create the V1 Items, Products, Product variants, Assets, Course, and October Workshop content; verify Connections, publication status, pricing, stock/capacity, Instructor names, files, and Marketplace presentation after reload.
+3. **Run a fresh production test-user regression while Stripe remains in test mode.** Use a non-admin account to test registration/login, Profile, Contact, Physical/Digital/Course/Workshop purchases, access, emails, fulfilment, cancellation, itemised refunds, CRM history, and permission boundaries. Confirm the CRM Communications index is Enabled before relying on per-user history.
+4. **Finish the remaining admin production checks.** Confirm user edit/merge/archive, notes, manual access grant/removal/restoration, dated expiry, carts, roles, approvals, pause/archive behaviour, backups, and payment/webhook replay protection using the new production-shaped data.
+5. **Monitor then enforce App Check.** Review valid/invalid App Check metrics for the deployed web app and callable Functions. Once the real domain is registered and verified, enable enforcement incrementally for sensitive callable endpoints, beginning with checkout, refunds, admin writes, and Communications.
+6. **Switch Stripe from test to live only after the production test-user regression passes.** Confirm live restricted keys/secrets, live webhook endpoint and signing secret, live product/payment settings, refund permissions, statement details, tax/shipping, and one low-value live purchase plus refund. Do not assume an unset `STRIPE_MODE` means test mode.
+7. **Attach and validate the real domain.** Add it to Firebase Hosting, Firebase Authentication authorised domains, App Check/reCAPTCHA allowed domains, application base URLs, email links, Stripe redirects/webhook settings, canonical metadata, and policy/contact links. Verify HTTPS and redirects before advertising it.
+8. **Publish and submit the sitemap.** Generate a root `sitemap.xml` using final absolute canonical-domain URLs, add a matching `robots.txt` reference, verify public routes and metadata, register the domain property in Google Search Console, and submit the sitemap only after the real domain is live.
+9. **Test launch promotion codes only if they enter V1 scope.** Promotions remain optional for launch; if enabled, test dates, amounts, eligibility, audiences, limits, and webhook replay safety before advertising a code.
+10. **Confirm the workbook and backup recovery path.** Download the editable workbook and sensitive JSON backup, test a disposable workbook merge, and store the production recovery backup securely outside public Hosting.
 
 ### V1 launch position
 
-The main V1 architecture and customer purchase paths are now substantially built. The project is in stabilization and release-gate testing rather than core feature construction.
+V1 is partially deployed to Firebase Hosting and Functions using the Firebase test environment. Admin access, Firestore rules, callable Cloud Run access, Communications, Reviews/Feedback, CRM, Orders, refunds, and responsive navigation have received a production smoke pass. No representative production content has been loaded yet, Stripe has not intentionally been switched to live processing, and the custom domain/SEO submission is not complete.
 
 The shortest safe route to launch is:
 
-1. Complete one final Workshop session purchase, access, email, ticket, pause, and expiry regression.
-2. Run representative Content Builder, CRM, and approval tests.
-3. Complete the remaining deployed integration and public-navigation decisions.
-4. Run one clean production-shaped regression from content creation through purchase, fulfilment/access, and archive.
+1. Add representative production data and verify it after reload.
+2. Run a complete non-admin test-user regression while Stripe remains in test mode.
+3. Complete the remaining admin, access-control, backup, and App Check checks.
+4. Attach the real domain, switch Stripe deliberately to live, and complete one low-value live transaction/refund.
+5. Publish the final-domain sitemap and submit it through Google Search Console.
 
 Do not add optional financial reporting, advanced inventory, or larger CRM enhancements to the V1 gate unless a test identifies them as necessary for safe operation.
 
@@ -105,11 +108,15 @@ Do not add optional financial reporting, advanced inventory, or larger CRM enhan
 
 ## Current Handoff
 
-Last updated August 11 after the complete local Contact-to-Communications workflow was
-validated and committed in `fca9e6a1`, including logged-in and guest submissions, unread
-alerts, full threads, real replies, internal notes, User and Order links, CRM history,
-and retention after a forced admin-notification failure. The next launch-critical task
-is the October Workshop ProductVariant persistence and end-to-end purchase test.
+Last updated August 11 after the deployed rules and logged-out Contact workflow were verified in production.
+The production admin account works; Hosting, Functions, Firestore rules/indexes, Cloud Run
+callable access, Communications, Reviews/Feedback, CRM, Orders, refunds, and mobile layouts
+received a no-content smoke pass. The Contact form's duplicate reCAPTCHA verification was
+fixed and deployed; an incognito message successfully appeared in Communications and both
+admin notification locations and was resolved normally. **Start the next session by adding
+representative production data**, then run the complete non-admin test-user regression while
+Stripe remains in test mode. Confirm the per-user Communications composite index is Enabled
+before relying on CRM communication history during that regression.
 
 The approved safety-first Product/Asset refactor is documented in `PRODUCT-ASSET-REFACTOR-MIGRATION-PLAN.md`. Products and Assets remain independent first-class entities; Product and Asset are not Item types. Implementation must remain additive and dual-read until the repeatable emulator migration, checkout/access/inventory parity tests, order-history checks, and rollback gates pass.
 
