@@ -14,6 +14,7 @@
     "import:master:dry-run": "node scripts/importMasterDatabase.js --dry-run",
     "import:master:emulator": "node scripts/importMasterDatabase.js --emulator",
     "import:master:reconcile:emulator": "node scripts/importMasterDatabase.js --emulator --reconcile",
+    "grant:production-admin": "node scripts/grantProductionAdmin.js",
     "export:backup:emulator": "node scripts/exportFirestoreBackup.js --emulator",
     "migrate:product-assets:dry-run": "node scripts/migrateProductAssetArchitecture.js --dry-run",
     "migrate:product-assets:emulator": "node scripts/migrateProductAssetArchitecture.js --emulator"
