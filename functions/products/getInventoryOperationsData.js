@@ -253,6 +253,7 @@ export const getInventoryOperationsData = onCall(
     });
     productsSnap.docs.forEach((doc) => {
       const product = { id: doc.id, ...doc.data() };
+      if (product.archived === true || status(product.shopStatus || product.status) === "archived") return;
       const productVariants = variantsByProduct.get(doc.id) || [];
       const purchased = countedOrders.reduce((total, order) => {
         const lines = Array.isArray(order.orderLines) && order.orderLines.length

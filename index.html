@@ -1189,7 +1189,14 @@
   </section>
 
   <section id="productRecordsToolPanel" class="product-manager-tool-panel hidden" data-product-manager-panel="products">
-  <div id="productList" class="mt-8 space-y-4"></div>
+    <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+      <p class="text-sm text-gray-400">Archived Products are hidden from this list by default.</p>
+      <label class="inline-flex items-center gap-2 text-sm text-gray-300">
+        <input id="showArchivedProductsToggle" type="checkbox" class="accent-[#407471]">
+        Show archived Products
+      </label>
+    </div>
+    <div id="productList" class="mt-4 space-y-4"></div>
   </section>
 
   <section id="assetLibraryToolPanel" class="product-manager-tool-panel hidden" data-product-manager-panel="assets">
@@ -1729,6 +1736,7 @@
                   <label class="block">
                     Product ID
                     <input id="contentProductId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Auto-created if blank">
+                    <span id="contentProductIdHelp" class="mt-1 block text-xs text-gray-400">Set once when creating a Product.</span>
                   </label>
                   <label class="block">
                     SKU

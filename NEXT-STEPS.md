@@ -81,6 +81,15 @@
 9. **Test launch promotion codes only if they enter V1 scope.** Promotions remain optional for launch; if enabled, test dates, amounts, eligibility, audiences, limits, and webhook replay safety before advertising a code.
 10. **Confirm the workbook and backup recovery path.** Download the editable workbook and sensitive JSON backup, test a disposable workbook merge, and store the production recovery backup securely outside public Hosting.
 
+### V1 maintenance branch
+
+- `codex/v1-product-safety` is reserved for narrow Product safety work that can be tested and promoted independently of V2.
+- Existing Product IDs are immutable in the drawer and rejected server-side if a stale or modified client attempts to change one.
+- Archived Products are hidden from Products & Inventory > Products unless Show archived Products is selected.
+- Archived Products are excluded from normal Inventory Stocktake data.
+- Before permanently removing the accidental Heat Patch duplicate, run a reference audit using its exact Product ID. Delete it only if Orders, payments, reviews, access history, carts, refunds, and other immutable history are all absent.
+- Keep the Items-versus-Products Stocktake redesign on a separate V2 branch and staging Firebase project.
+
 ### V1 launch position
 
 V1 is partially deployed to Firebase Hosting and Functions using the Firebase test environment. Admin access, Firestore rules, callable Cloud Run access, Communications, Reviews/Feedback, CRM, Orders, refunds, and responsive navigation have received a production smoke pass. No representative production content has been loaded yet, Stripe has not intentionally been switched to live processing, and the custom domain/SEO submission is not complete.

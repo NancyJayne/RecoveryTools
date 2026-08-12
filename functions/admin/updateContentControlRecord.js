@@ -345,6 +345,15 @@ async function updateProductRelation({
   const itemRef = db.collection(collection).doc(recordId);
   const itemSnap = await transaction.get(itemRef);
   const itemData = itemSnap.exists ? itemSnap.data() || {} : {};
+  const existingProductId = cleanString(relation.existingProductId) ||
+    cleanString(itemData.productId || itemData.itemProductId);
+  const submittedProductId = cleanString(relation.productId) || cleanString(updates.productId);
+  if (existingProductId && submittedProductId && existingProductId !== submittedProductId) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Product IDs cannot be changed after creation. Edit the Product name instead.",
+    );
+  }
   const productId = cleanString(relation.productId) ||
     cleanString(updates.productId) ||
     `PROD-${slugify(recordId).replace(/^ITEM-/, "")}`;
