@@ -2351,8 +2351,14 @@
                   <input id="businessPhone" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                 </label>
                 <label class="block text-sm">
-                  Email
+                  Business email / sender address
                   <input id="businessEmail" type="email" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" required>
+                  <span class="mt-1 block text-xs text-gray-400">Emails send as the Business name using this verified address.</span>
+                </label>
+                <label class="block text-sm">
+                  Admin notification recipient
+                  <input id="businessAdminNotificationEmail" type="email" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" required>
+                  <span class="mt-1 block text-xs text-gray-400">Receives new contact and review alerts; may differ from the sender address.</span>
                 </label>
               </div>
               <label class="block text-sm">
@@ -2446,8 +2452,8 @@
                     </select>
                   </label>
                   <label class="block text-sm">
-                    Support Policy
-                    <select id="businessSupportAssetId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                    Partner Agreement
+                    <select id="businessPartnerAgreementAssetId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                       <option value="">No document selected</option>
                     </select>
                   </label>
@@ -3027,8 +3033,6 @@
     
     <section id="termsSection" class="tab-content hidden">Terms and Conditions content...</section>
     <section id="privacySection" class="tab-content hidden">Privacy Policy content...</section>
-    <section id="supportSection" class="tab-content hidden">Support content...</section>
-
     <!-- About Section -->
 <section id="aboutSection" class="tab-content hidden p-6">
   <div class="bg-black text-white max-w-4xl mx-auto font-sans">
@@ -3120,7 +3124,6 @@
     <div class="flex flex-wrap justify-center md:justify-end space-x-4">
   <a href="/terms" class="router-link hover:text-[#407471] transition" aria-label="View Terms">Terms</a>
   <a href="/privacy" class="router-link hover:text-[#407471] transition" aria-label="View Privacy Policy">Privacy</a>
-  <a href="/support" class="router-link hover:text-[#407471] transition" aria-label="View Support">Support</a>
   <a href="/contact" class="router-link hover:text-[#407471] transition" aria-label="View Contact Options">Contact</a>
   <a href="/commerce" class="router-link hover:text-[#407471] transition" aria-label="View Commerce Info">Commerce</a>
 </div>

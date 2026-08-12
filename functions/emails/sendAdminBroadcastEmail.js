@@ -62,7 +62,7 @@ const sendAdminBroadcastEmailHandler = async (request) => {
   const business = await getBusinessProfile();
   const messages = recipients.map((email) => ({
     to: email,
-    from: business.email,
+    from: business.sender,
     subject,
     html: htmlContent,
     mailSettings: {

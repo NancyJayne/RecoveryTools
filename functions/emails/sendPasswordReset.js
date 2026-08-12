@@ -117,7 +117,7 @@ async function sendResetEmail({ email, resetLink, request }) {
 
   const message = {
     to: email,
-    from: business.email,
+    from: business.sender,
     templateId: PASSWORD_RESET_TEMPLATE_ID,
     dynamic_template_data: {
       reset_url: resetUrl,

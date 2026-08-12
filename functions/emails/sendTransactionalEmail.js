@@ -21,7 +21,7 @@ export async function sendTransactionalEmail({
 
   const msg = {
     to,
-    from: business.email,
+    from: business.sender,
     templateId,
     dynamic_template_data: dynamicTemplateData,
   };

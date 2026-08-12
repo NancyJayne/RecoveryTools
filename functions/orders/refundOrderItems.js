@@ -92,7 +92,7 @@ async function sendEmail({ order, orderId, amount, refundId, selections, shippin
     sgMail.setApiKey(SENDGRID_API_KEY.value());
     const rows = selections.map((entry) => `<li>${escapeHtml(entry.name)} x${entry.quantity} - <strong>$${entry.amount.toFixed(2)}</strong></li>`).join("");
     await sgMail.send({
-      to, from: business.email, subject,
+      to, from: business.sender, subject,
       html: `<p>Hi ${escapeHtml(customerName(order))},</p><p>A refund of <strong>$${amount.toFixed(2)} AUD</strong> has been issued for:</p><ul>${rows}${shipping ? `<li>Shipping - <strong>$${shipping.toFixed(2)}</strong></li>` : ""}</ul><p>Your bank may take several business days to show the funds.</p><p>Order: ${escapeHtml(order.invoiceNumber || orderId)}</p><p>- ${escapeHtml(business.name)} Team</p>`,
       mailSettings: { sandboxMode: { enable: isSandbox } },
     });

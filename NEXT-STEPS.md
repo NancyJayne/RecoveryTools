@@ -66,6 +66,7 @@
 - [x] Review the V1 customer and admin experience using mobile device emulation, including Marketplace, Product details, Cart, Contact, Profile, access views, Admin Orders/refunds, and Workshop session tables; no blocking responsive-layout issues were found.
 - [x] Complete the final production-shaped V1 purchase sweep for Physical, Digital, Course, and Workshop Products, confirming payment, Order/invoice creation, transactional email, CRM/Profile visibility, inventory or access behaviour, and the applicable admin workflow without regressions.
 - [x] Harden and deploy production rules so public media remains readable but only admins can write `/videos`, while direct client creation of `contactSubmissions` is denied in favour of the reCAPTCHA-protected Contact Function.
+- [x] Remove the unused public Support page link, replace its Business Settings document slot with a reusable Partner Agreement asset, separate the admin-notification recipient from the public business email, and standardise outbound SendGrid mail as `Business name <Business email>`.
 
 ### To do before V1 launch
 
@@ -97,7 +98,7 @@ Do not add optional financial reporting, advanced inventory, or larger CRM enhan
 ### Future build
 
 - Course video audio investigation.
-- Re-enable Affiliate registration after adding the final Affiliate Agreement and completing Stripe Connect production onboarding/payout testing.
+- Re-enable Affiliate registration after linking the configured Partner Agreement through application acceptance and completing Stripe Connect production onboarding/payout testing; reuse the same agreement for Therapist onboarding and both role dashboards where appropriate.
 - Verify approved-affiliate wholesale pricing end to end before the V2 Affiliate launch: ordinary customers must never receive wholesale prices, approved affiliates must see the correct Product/variant price, minimum quantities must be enforced, and the Stripe Order must retain the affiliate pricing tier.
 - Add multi-code promotion stacking only if a future sales policy requires more than one code on an Order; the current checkout deliberately accepts one code.
 - Re-enable Library/Anato-me and Programs after their V2 content, navigation, and publication checks pass.

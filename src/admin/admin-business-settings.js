@@ -9,6 +9,7 @@ const FIELD_IDS = [
   "businessAddress",
   "businessPhone",
   "businessEmail",
+  "businessAdminNotificationEmail",
   "businessLogoItemId",
   "businessLogoUrl",
   "businessFaviconItemId",
@@ -20,7 +21,7 @@ const FIELD_IDS = [
   "businessAboutImageUrl",
   "businessTermsAssetId",
   "businessPrivacyAssetId",
-  "businessSupportAssetId",
+  "businessPartnerAgreementAssetId",
   "businessCommerceAssetId",
   "businessShippingRate",
   "businessFreeShippingMin",
@@ -43,6 +44,8 @@ function setFormValues(business) {
   document.getElementById("businessAddress").value = business.address || "";
   document.getElementById("businessPhone").value = business.phone || "";
   document.getElementById("businessEmail").value = business.email || "";
+  document.getElementById("businessAdminNotificationEmail").value =
+    business.adminNotificationEmail || business.email || "";
   document.getElementById("businessLogoItemId").value = business.logoItemId || "";
   document.getElementById("businessLogoUrl").value = business.logoUrl || "";
   document.getElementById("businessFaviconItemId").value = business.faviconItemId || "";
@@ -54,7 +57,8 @@ function setFormValues(business) {
   document.getElementById("businessAboutImageUrl").value = business.aboutImageUrl || "";
   document.getElementById("businessTermsAssetId").value = business.termsAssetId || "";
   document.getElementById("businessPrivacyAssetId").value = business.privacyAssetId || "";
-  document.getElementById("businessSupportAssetId").value = business.supportAssetId || "";
+  document.getElementById("businessPartnerAgreementAssetId").value =
+    business.partnerAgreementAssetId || business.supportAssetId || "";
   document.getElementById("businessCommerceAssetId").value = business.commerceAssetId || "";
 }
 
@@ -62,7 +66,7 @@ function populateDocumentAssetOptions(assets = []) {
   const selectors = [
     "businessTermsAssetId",
     "businessPrivacyAssetId",
-    "businessSupportAssetId",
+    "businessPartnerAgreementAssetId",
     "businessCommerceAssetId",
   ];
   selectors.forEach((id) => {
@@ -124,6 +128,7 @@ function formData() {
     address: document.getElementById("businessAddress")?.value.trim(),
     phone: document.getElementById("businessPhone")?.value.trim(),
     email: document.getElementById("businessEmail")?.value.trim(),
+    adminNotificationEmail: document.getElementById("businessAdminNotificationEmail")?.value.trim(),
     logoItemId: document.getElementById("businessLogoItemId")?.value.trim(),
     logoUrl: document.getElementById("businessLogoUrl")?.value.trim(),
     faviconItemId: document.getElementById("businessFaviconItemId")?.value.trim(),
@@ -135,7 +140,8 @@ function formData() {
     aboutImageUrl: document.getElementById("businessAboutImageUrl")?.value.trim(),
     termsAssetId: document.getElementById("businessTermsAssetId")?.value.trim(),
     privacyAssetId: document.getElementById("businessPrivacyAssetId")?.value.trim(),
-    supportAssetId: document.getElementById("businessSupportAssetId")?.value.trim(),
+    partnerAgreementAssetId:
+      document.getElementById("businessPartnerAgreementAssetId")?.value.trim(),
     commerceAssetId: document.getElementById("businessCommerceAssetId")?.value.trim(),
   };
 }

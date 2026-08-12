@@ -10,6 +10,7 @@ export const DEFAULT_BUSINESS_PROFILE = {
   address: "31 Cessna Dr\nCaboolture QLD 4511\nAustralia",
   phone: "",
   email: "hello@recoverytools.au",
+  adminNotificationEmail: "hello@recoverytools.au",
   logoUrl:
     "https://firebasestorage.googleapis.com/v0/b/recovery-tools.firebasestorage.app/o/videos%2FImages%2FRecoveryToolsLogo.png?alt=media&token=ef83d768-30db-4889-a550-188f49b1ba2d",
   faviconUrl: "/favicon.svg",
@@ -22,6 +23,7 @@ export const DEFAULT_BUSINESS_PROFILE = {
   termsAssetId: "",
   privacyAssetId: "",
   supportAssetId: "",
+  partnerAgreementAssetId: "",
   commerceAssetId: "",
   seoTitle: "Recovery Tools",
   seoDescription: "Recovery Tools - Real Recovery, Real Results",
@@ -35,6 +37,7 @@ export const DEFAULT_BUSINESS_PROFILE = {
   termsPdfUrl: "",
   privacyPdfUrl: "",
   supportPdfUrl: "",
+  partnerAgreementPdfUrl: "",
   commercePdfUrl: "",
 };
 
@@ -49,6 +52,8 @@ export function normalizeBusinessProfile(data = {}) {
     address: cleanString(data.address) || DEFAULT_BUSINESS_PROFILE.address,
     phone: cleanString(data.phone) || DEFAULT_BUSINESS_PROFILE.phone,
     email: cleanString(data.email) || DEFAULT_BUSINESS_PROFILE.email,
+    adminNotificationEmail: cleanString(data.adminNotificationEmail) ||
+      cleanString(data.email) || DEFAULT_BUSINESS_PROFILE.adminNotificationEmail,
     logoUrl: cleanString(data.logoUrl) || DEFAULT_BUSINESS_PROFILE.logoUrl,
     faviconUrl: cleanString(data.faviconUrl) || DEFAULT_BUSINESS_PROFILE.faviconUrl,
     logoItemId: cleanString(data.logoItemId) || DEFAULT_BUSINESS_PROFILE.logoItemId,
@@ -60,6 +65,8 @@ export function normalizeBusinessProfile(data = {}) {
     termsAssetId: cleanString(data.termsAssetId) || DEFAULT_BUSINESS_PROFILE.termsAssetId,
     privacyAssetId: cleanString(data.privacyAssetId) || DEFAULT_BUSINESS_PROFILE.privacyAssetId,
     supportAssetId: cleanString(data.supportAssetId) || DEFAULT_BUSINESS_PROFILE.supportAssetId,
+    partnerAgreementAssetId: cleanString(data.partnerAgreementAssetId) ||
+      cleanString(data.supportAssetId) || DEFAULT_BUSINESS_PROFILE.partnerAgreementAssetId,
     commerceAssetId: cleanString(data.commerceAssetId) || DEFAULT_BUSINESS_PROFILE.commerceAssetId,
     seoTitle: cleanString(data.seoTitle) || DEFAULT_BUSINESS_PROFILE.seoTitle,
     seoDescription: cleanString(data.seoDescription) || DEFAULT_BUSINESS_PROFILE.seoDescription,
@@ -69,6 +76,8 @@ export function normalizeBusinessProfile(data = {}) {
     termsPdfUrl: cleanString(data.termsPdfUrl) || DEFAULT_BUSINESS_PROFILE.termsPdfUrl,
     privacyPdfUrl: cleanString(data.privacyPdfUrl) || DEFAULT_BUSINESS_PROFILE.privacyPdfUrl,
     supportPdfUrl: cleanString(data.supportPdfUrl) || DEFAULT_BUSINESS_PROFILE.supportPdfUrl,
+    partnerAgreementPdfUrl: cleanString(data.partnerAgreementPdfUrl) ||
+      cleanString(data.supportPdfUrl) || DEFAULT_BUSINESS_PROFILE.partnerAgreementPdfUrl,
     commercePdfUrl: cleanString(data.commercePdfUrl) || DEFAULT_BUSINESS_PROFILE.commercePdfUrl,
   };
 }
@@ -84,6 +93,7 @@ function normalizedPurpose(value) {
   if (purpose.includes("privacy")) return "privacy";
   if (purpose.includes("commerce")) return "commerce";
   if (purpose.includes("support")) return "support";
+  if (purpose.includes("partner") || purpose.includes("agreement")) return "partner_agreement";
   if (purpose.includes("favicon") || purpose.includes("icon")) return "favicon";
   if (purpose.includes("logo")) return "logo";
   return purpose;
@@ -169,6 +179,7 @@ async function resolveBusinessAssets(profile) {
     privacyDirect,
     supportDirect,
     commerceDirect,
+    partnerAgreementDirect,
   ] = await Promise.all([
     resolveItemAsset(db, profile.logoItemId, ["image", "logo"], "logo"),
     resolveItemAsset(db, profile.faviconItemId, ["image", "icon", "favicon"], "favicon"),
@@ -180,6 +191,7 @@ async function resolveBusinessAssets(profile) {
     resolveAsset(db, profile.privacyAssetId, ["pdf", "document"]),
     resolveAsset(db, profile.supportAssetId, ["pdf", "document"]),
     resolveAsset(db, profile.commerceAssetId, ["pdf", "document"]),
+    resolveAsset(db, profile.partnerAgreementAssetId, ["pdf", "document"]),
   ]);
 
   return {
@@ -194,6 +206,8 @@ async function resolveBusinessAssets(profile) {
     privacyAssetId: privacyDirect?.assetId || privacy?.assetId || profile.privacyAssetId,
     supportPdfUrl: supportDirect?.url || support?.url || profile.supportPdfUrl,
     supportAssetId: supportDirect?.assetId || support?.assetId || profile.supportAssetId,
+    partnerAgreementPdfUrl: partnerAgreementDirect?.url || profile.partnerAgreementPdfUrl,
+    partnerAgreementAssetId: partnerAgreementDirect?.assetId || profile.partnerAgreementAssetId,
     commercePdfUrl: commerceDirect?.url || commerce?.url || profile.commercePdfUrl,
     commerceAssetId: commerceDirect?.assetId || commerce?.assetId || profile.commerceAssetId,
   };
@@ -201,7 +215,13 @@ async function resolveBusinessAssets(profile) {
 
 export async function getBusinessProfile() {
   const snap = await admin.firestore().collection("settings").doc("business").get();
-  return resolveBusinessAssets(normalizeBusinessProfile(snap.exists ? snap.data() : {}));
+  const profile = await resolveBusinessAssets(
+    normalizeBusinessProfile(snap.exists ? snap.data() : {}),
+  );
+  return {
+    ...profile,
+    sender: { name: profile.name, email: profile.email },
+  };
 }
 
 export function businessAddressLines(profile) {

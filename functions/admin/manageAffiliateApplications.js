@@ -39,7 +39,7 @@ async function sendDecisionEmail({ email, name, status, notes }) {
   const safeNotes = escapeHtml(notes);
   await sgMail.send({
     to: email,
-    from: business.email,
+    from: business.sender,
     subject: approved
       ? `Your ${business.name} affiliate application is approved`
       : `Update on your ${business.name} affiliate application`,

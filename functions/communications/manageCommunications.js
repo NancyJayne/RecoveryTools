@@ -226,7 +226,7 @@ export const replyToCommunication = onCall(
         sgMail.setApiKey(SENDGRID_API_KEY.value());
         await sgMail.send({
           to,
-          from: business.email,
+          from: business.sender,
           replyTo: business.email,
           subject,
           text: bodyText,

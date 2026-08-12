@@ -234,7 +234,7 @@ async function sendTrackingEmail({ orderId, order, trackingNumber, shippingCarri
     : "";
   const message = {
     to,
-    from: business.email,
+    from: business.sender,
     subject: `Your ${business.name} order ${orderId} has shipped`,
     html: `
       <p>Hi ${recipientName(order)},</p>
@@ -277,7 +277,7 @@ async function sendReviewRequestEmail({ orderId, order }) {
 
   const message = {
     to,
-    from: business.email,
+    from: business.sender,
     subject: `How did your ${business.name} order ${orderId} go?`,
     html: `
       <p>Hi ${escapeHtml(recipientName(order))},</p>

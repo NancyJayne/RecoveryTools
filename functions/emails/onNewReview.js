@@ -33,8 +33,8 @@ export const onNewReview = onDocumentCreated(
       const approvalLink = `https://recoverytools.au/admin/reviews?product=${productId}&review=${reviewId}`;
 
       await sgMail.send({
-        to: business.email,
-        from: business.email,
+        to: business.adminNotificationEmail,
+        from: business.sender,
         subject: "🔔 New Product Review Awaiting Approval",
         html: `
           <p>A new review was submitted for <strong>${product.name}</strong>.</p>

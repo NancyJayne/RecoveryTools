@@ -110,7 +110,7 @@ const sendOrderEmailWithPDFHandler = async (request) => {
     const pdfUrl = await generateOrderPDF(invoiceId, order);
     const msg = {
       to,
-      from: business.email,
+      from: business.sender,
       subject,
       html: `
         <p>Hi ${userName},</p>

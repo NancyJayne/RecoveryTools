@@ -283,12 +283,6 @@ export async function loadModuleByPath(path, role) {
       "Commerce Page",
     );
     break;
-  case path.startsWith("/support"):
-    await safeImport(
-      () => import("./content/support.js"),
-      "Support Page",
-    );
-    break;
   case path.startsWith("/affiliateSignup"):
     await safeImport(
       () => import("./affiliate/affiliate-signup.js"),
