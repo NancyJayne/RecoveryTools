@@ -32,7 +32,7 @@ export const sendWelcomeEmail = onCall(
 
     const msg = {
       to,
-      from: business.email,
+      from: business.sender,
       templateId,
       dynamic_template_data: {
         first_name: firstName,

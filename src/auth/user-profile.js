@@ -12,7 +12,11 @@ import {
 import { db, auth, functions } from "../utils/firebase-config.js";
 import { httpsCallable } from "firebase/functions";
 import { showToast } from "../utils/utils.js";
-import { updatePassword } from "firebase/auth";
+import {
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword,
+} from "firebase/auth";
 
 function trackingUrl(order) {
   const trackingNumber = order.trackingNumber || order.tracking || order.trackingId;
@@ -128,9 +132,12 @@ export async function updateUserProfile({
   });
 }
 
-export async function changeUserPassword(newPassword) {
-  if (!auth?.currentUser) throw new Error("User not authenticated");
-  return await updatePassword(auth.currentUser, newPassword);
+export async function changeUserPassword(currentPassword, newPassword) {
+  const user = auth?.currentUser;
+  if (!user?.email) throw new Error("User not authenticated");
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+  return updatePassword(user, newPassword);
 }
 
 export async function loadOrderReceipts() {

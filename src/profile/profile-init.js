@@ -1,8 +1,9 @@
 // profile-init.js – handles tab switching, role-based visibility, and profile form handlers
 
-import { auth, functions } from "../utils/firebase-config.js";
+import { auth, db, functions } from "../utils/firebase-config.js";
 import { httpsCallable } from "firebase/functions";
 import { onAuthStateChanged } from "firebase/auth";
+import { doc, updateDoc } from "firebase/firestore";
 import { showToast } from "../utils/utils.js";
 import { handleSignOut } from "../auth/user-auth.js";
 import { applyRoleUI, getUserRole } from "../auth/user-roles.js";
@@ -203,16 +204,7 @@ export async function setupProfilePage() {
             const avatarRef = ref(storage, `avatars/${user.uid}.jpg`);
             await deleteObject(avatarRef).catch(() => {}); // ignore if doesn't exist
 
-            const { doc, updateDoc } = await import("firebase/firestore");
-            const userRef = doc(
-              (
-                await import(
-                  new URL("../utils/firebase-config.js", import.meta.url)
-                )
-              ).db,
-              "users",
-              user.uid,
-            );
+            const userRef = doc(db, "users", user.uid);
             await updateDoc(userRef, { photoURL: "" });
 
             document.getElementById("profileAvatar").src = fallbackURL;
@@ -392,22 +384,50 @@ function setupProfileFormHandlers() {
 
   const passwordForm = document.getElementById("changePasswordForm");
   if (passwordForm) {
+    passwordForm.querySelectorAll(".password-visibility-toggle").forEach((button) => {
+      button.addEventListener("click", () => {
+        const input = document.getElementById(button.dataset.passwordTarget);
+        if (!input) return;
+        const showPassword = input.type === "password";
+        input.type = showPassword ? "text" : "password";
+        button.setAttribute("aria-pressed", String(showPassword));
+        button.setAttribute("aria-label", `${showPassword ? "Hide" : "Show"} ${input.placeholder.toLowerCase()}`);
+      });
+    });
+
     passwordForm.addEventListener("submit", async (e) => {
       e.preventDefault();
+      const currentPassword = document.getElementById("currentPassword").value;
       const newPassword = document.getElementById("newPassword").value.trim();
+      const confirmNewPassword = document.getElementById("confirmNewPassword").value.trim();
+
+      if (!currentPassword) {
+        showToast("Enter your current password.", "error");
+        return;
+      }
 
       if (newPassword.length < 6) {
         showToast("Password must be at least 6 characters.", "error");
         return;
       }
 
+      if (newPassword !== confirmNewPassword) {
+        showToast("New passwords do not match.", "error");
+        return;
+      }
+
       try {
-        await changeUserPassword(newPassword);
+        await changeUserPassword(currentPassword, newPassword);
         showToast("✅ Password updated.", "success");
         passwordForm.reset();
       } catch (err) {
         console.error("Password change error:", err);
-        showToast("Failed to change password.", "error");
+        const message = ["auth/invalid-credential", "auth/wrong-password"].includes(err.code)
+          ? "Your current password is incorrect."
+          : err.code === "auth/too-many-requests"
+            ? "Too many attempts. Wait a moment and try again."
+            : "Failed to change password.";
+        showToast(message, "error");
       }
     });
   }
@@ -430,14 +450,7 @@ function setupProfileFormHandlers() {
         await uploadBytes(avatarRef, file);
         const url = await getDownloadURL(avatarRef);
 
-        const { doc, updateDoc } = await import("firebase/firestore");
-        const userRef = doc(
-          (
-            await import(new URL("../utils/firebase-config.js", import.meta.url))
-          ).db,
-          "users",
-          auth?.currentUser?.uid,
-        );
+        const userRef = doc(db, "users", auth?.currentUser?.uid);
         await updateDoc(userRef, { photoURL: url });
 
         document.getElementById("profileAvatar").src = url;
@@ -474,16 +487,7 @@ function setupProfileFormHandlers() {
           });
 
           // Clear photoURL in Firestore
-          const { doc, updateDoc } = await import("firebase/firestore");
-          const userRef = doc(
-            (
-              await import(
-                new URL("../utils/firebase-config.js", import.meta.url)
-              )
-            ).db,
-            "users",
-            auth?.currentUser?.uid,
-          );
+          const userRef = doc(db, "users", auth?.currentUser?.uid);
           await updateDoc(userRef, { photoURL: "" });
 
           // Update UI with fallback image

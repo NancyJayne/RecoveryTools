@@ -135,8 +135,8 @@ const sendContactMessageHandler = async (request) => {
       if (!sendgridKey) throw new Error("Missing SendGrid API key.");
       sgMail.setApiKey(sendgridKey);
       await sgMail.send({
-        to: business.email,
-        from: business.email,
+        to: business.adminNotificationEmail,
+        from: business.sender,
         replyTo: email,
         subject,
         text: `Name: ${name}\nEmail: ${email}\n\n${message}`,
@@ -153,7 +153,7 @@ const sendContactMessageHandler = async (request) => {
   const emailLogId = await logEmailEvent({
     type: "contact_admin_notification",
     status: notificationStatus,
-    to: business.email,
+    to: business.adminNotificationEmail,
     subject,
     userId,
     providerMode: localSandbox() ? "local-sandbox" : "live",

@@ -41,7 +41,7 @@ async function sendReadyForPickupEmail({ orderId, order, affiliate }) {
     : "";
   const message = {
     to,
-    from: business.email,
+    from: business.sender,
     subject,
     html: `
       <p>Hi ${escapeHtml(customerName(order))},</p>

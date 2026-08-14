@@ -67,6 +67,8 @@ export function setupProductManager() {
 
   if (list) {
     loadProducts();
+    document.getElementById("showArchivedProductsToggle")
+      ?.addEventListener("change", () => renderProductManagerList(cachedProducts));
   }
 
   setupAssetManager();
@@ -828,7 +830,15 @@ function renderProductManagerList(products) {
   if (!container) return;
   container.textContent = "";
 
-  products.forEach((p) => {
+  const showArchived = document.getElementById("showArchivedProductsToggle")?.checked === true;
+  const shownProducts = products.filter((product) =>
+    showArchived || productVisibility(product) !== "archived");
+  if (!shownProducts.length) {
+    container.textContent = showArchived ? "No Products found." : "No active or hidden Products found.";
+    return;
+  }
+
+  shownProducts.forEach((p) => {
     const div = document.createElement("div");
     div.className = "min-w-0 max-w-full overflow-hidden rounded border border-gray-700 bg-gray-800 p-4 shadow";
 

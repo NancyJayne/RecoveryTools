@@ -26,7 +26,7 @@ const sendAffiliateWelcomeEmailHandler = async (request) => {
 
   const msg = {
     to: email,
-    from: business.email,
+    from: business.sender,
     subject: `Welcome to the ${business.name} Affiliate Program!`,
     html: `
       <h2>Welcome, ${name}!</h2>

@@ -1,6 +1,20 @@
 # Recovery Tools - Next Steps
 
-## Production Readiness - August 11, 2026
+## Production Readiness - August 14, 2026
+
+### V1 physical-shop launch checkpoint - August 14
+
+- [x] `recoverytools.au` and `www.recoverytools.au` are connected to Firebase Hosting and load securely.
+- [x] Firebase Authentication authorised domains and reCAPTCHA domains include both production domains.
+- [x] New-account authentication, email verification, current-password reauthentication, password change, password confirmation, password visibility controls, and the complete forgotten-password email/reset/login flow work on the production domain.
+- [x] A live incognito physical-product checkout completed with the correct delivery charge, success redirect, customer/Admin Order records, receipt, invoice, packing slip, notifications, fulfilment updates, tracking email, completion, archive, and refund.
+- [x] Known opening stock was entered; checkout deducted the purchased quantity exactly once and the one-unit Product changed to Out of stock in Marketplace.
+- [x] Refunds deliberately do not return physical stock automatically; returned stock is inspected and manually restored only when resellable.
+- [x] Logged-out visitors cannot access admin content. The login modal may display over an otherwise blank Profile shell, which is a post-launch presentation improvement rather than a permission failure.
+- [x] Mobile pages, About, Contact, Terms, Privacy, Returns, invoices, email branding, logo display, footer year, and transactional-email buttons were manually checked.
+- [x] A current Firestore backup was taken before launch.
+
+**V1 decision:** the physical-product shop transaction and fulfilment path is cleared for launch. Manufacturing Blueprints are not a blocker for finished goods purchased for resale. Continue to monitor the first real payments, emails, stock movements, fulfilment updates, and refunds manually.
 
 ### Confirmed working
 
@@ -66,6 +80,7 @@
 - [x] Review the V1 customer and admin experience using mobile device emulation, including Marketplace, Product details, Cart, Contact, Profile, access views, Admin Orders/refunds, and Workshop session tables; no blocking responsive-layout issues were found.
 - [x] Complete the final production-shaped V1 purchase sweep for Physical, Digital, Course, and Workshop Products, confirming payment, Order/invoice creation, transactional email, CRM/Profile visibility, inventory or access behaviour, and the applicable admin workflow without regressions.
 - [x] Harden and deploy production rules so public media remains readable but only admins can write `/videos`, while direct client creation of `contactSubmissions` is denied in favour of the reCAPTCHA-protected Contact Function.
+- [x] Remove the unused public Support page link, replace its Business Settings document slot with a reusable Partner Agreement asset, separate the admin-notification recipient from the public business email, and standardise outbound SendGrid mail as `Business name <Business email>`.
 
 ### To do before V1 launch
 
@@ -79,6 +94,15 @@
 8. **Publish and submit the sitemap.** Generate a root `sitemap.xml` using final absolute canonical-domain URLs, add a matching `robots.txt` reference, verify public routes and metadata, register the domain property in Google Search Console, and submit the sitemap only after the real domain is live.
 9. **Test launch promotion codes only if they enter V1 scope.** Promotions remain optional for launch; if enabled, test dates, amounts, eligibility, audiences, limits, and webhook replay safety before advertising a code.
 10. **Confirm the workbook and backup recovery path.** Download the editable workbook and sensitive JSON backup, test a disposable workbook merge, and store the production recovery backup securely outside public Hosting.
+
+### V1 maintenance branch
+
+- `codex/v1-product-safety` is reserved for narrow Product safety work that can be tested and promoted independently of V2.
+- Existing Product IDs are immutable in the drawer and rejected server-side if a stale or modified client attempts to change one.
+- Archived Products are hidden from Products & Inventory > Products unless Show archived Products is selected.
+- Archived Products are excluded from normal Inventory Stocktake data.
+- Before permanently removing the accidental Heat Patch duplicate, run a reference audit using its exact Product ID. Delete it only if Orders, payments, reviews, access history, carts, refunds, and other immutable history are all absent.
+- Keep the Items-versus-Products Stocktake redesign on a separate V2 branch and staging Firebase project.
 
 ### V1 launch position
 
@@ -97,7 +121,7 @@ Do not add optional financial reporting, advanced inventory, or larger CRM enhan
 ### Future build
 
 - Course video audio investigation.
-- Re-enable Affiliate registration after adding the final Affiliate Agreement and completing Stripe Connect production onboarding/payout testing.
+- Re-enable Affiliate registration after linking the configured Partner Agreement through application acceptance and completing Stripe Connect production onboarding/payout testing; reuse the same agreement for Therapist onboarding and both role dashboards where appropriate.
 - Verify approved-affiliate wholesale pricing end to end before the V2 Affiliate launch: ordinary customers must never receive wholesale prices, approved affiliates must see the correct Product/variant price, minimum quantities must be enforced, and the Stripe Order must retain the affiliate pricing tier.
 - Add multi-code promotion stacking only if a future sales policy requires more than one code on an Order; the current checkout deliberately accepts one code.
 - Re-enable Library/Anato-me and Programs after their V2 content, navigation, and publication checks pass.
@@ -105,6 +129,60 @@ Do not add optional financial reporting, advanced inventory, or larger CRM enhan
 - Advanced inventory warnings, audit views, and purchasing workflows.
 - Larger-scale CRM follow-up, staff assignment, and pagination.
 - Unified public Course, Workshop, Program, session, and Marketplace discovery after each area is launch-ready.
+
+### V2 staging and release plan
+
+#### Production boundary
+
+- `main` represents the production release line.
+- Do not develop unfinished V2 features directly on `main`.
+- Narrow V1 fixes use a short-lived `codex/v1-*` branch and are merged only after focused verification.
+- V2 work uses a separate `codex/v2-*` branch and a separate Firebase project.
+
+#### Staging project
+
+Create a second Firebase project before deploying V2 code. It must have its own:
+
+- Hosting site and web-app configuration
+- Authentication users and authorised domains
+- Firestore database, rules, and indexes
+- Storage bucket and rules
+- Functions and Secret Manager values
+- App Check/reCAPTCHA registration
+- SendGrid test or sandbox configuration
+- Stripe test keys and test webhook endpoint
+
+Never copy production Stripe secrets, customer records, Orders, or Authentication users into staging.
+
+After creating the staging project, add it as a Firebase alias without changing production:
+
+```powershell
+npx firebase-tools use --add
+```
+
+Keep `recovery-tools` as the production project and choose `staging` as the new alias. Every staging deployment must explicitly include `--project staging`; every production deployment must explicitly include `--project recovery-tools`.
+
+Do not use a Hosting preview channel as the only V2 environment because Functions, Firestore, Authentication, Storage, App Check, and Stripe also need isolation.
+
+#### V2 Inventory Stocktake scope
+
+Build the redesign on `codex/v2-inventory-stocktake` after the staging project exists:
+
+- Default to active inventory only.
+- Provide separate Items/components and Products/finished-goods views.
+- Keep Product variants grouped beneath their Product.
+- Keep Item variants grouped beneath their Item.
+- Make the entity kind visually prominent so component stock cannot be confused with packaged stock.
+- Provide an explicit Archived view rather than mixing archived records into daily Stocktake.
+- Save only rows currently displayed and reviewed by the admin.
+
+#### Promotion to production
+
+1. Test V2 in the staging Firebase project with disposable users and Stripe test payments.
+2. Review the branch diff against `main`.
+3. Merge only after the acceptance checklist passes.
+4. Build and deploy using the production GitHub environment or an explicit production command.
+5. Complete a short production smoke test without creating unnecessary live transactions.
 
 ## Current Handoff
 

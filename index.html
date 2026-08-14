@@ -429,8 +429,18 @@
       <div id="changePassword" class="profile-tab-content hidden">
         <h3 class="text-xl font-semibold mb-4">Change Password</h3>
         <form id="changePasswordForm" class="space-y-4">
-          <input id="currentPassword" type="password" placeholder="Current Password" class="input">
-          <input id="newPassword" type="password" placeholder="New Password" class="input">
+          <div class="relative">
+            <input id="currentPassword" type="password" autocomplete="current-password" placeholder="Current Password" class="input w-full pr-12" required>
+            <button type="button" class="password-visibility-toggle absolute inset-y-0 right-0 flex items-center px-4 text-gray-400 hover:text-white" data-password-target="currentPassword" aria-label="Show current password" aria-pressed="false"><span aria-hidden="true">👁</span></button>
+          </div>
+          <div class="relative">
+            <input id="newPassword" type="password" autocomplete="new-password" placeholder="New Password" class="input w-full pr-12" required>
+            <button type="button" class="password-visibility-toggle absolute inset-y-0 right-0 flex items-center px-4 text-gray-400 hover:text-white" data-password-target="newPassword" aria-label="Show new password" aria-pressed="false"><span aria-hidden="true">👁</span></button>
+          </div>
+          <div class="relative">
+            <input id="confirmNewPassword" type="password" autocomplete="new-password" placeholder="Confirm New Password" class="input w-full pr-12" required>
+            <button type="button" class="password-visibility-toggle absolute inset-y-0 right-0 flex items-center px-4 text-gray-400 hover:text-white" data-password-target="confirmNewPassword" aria-label="Show confirmed password" aria-pressed="false"><span aria-hidden="true">👁</span></button>
+          </div>
           <button class="bg-[#407471] px-4 py-2 rounded text-white font-semibold">Update Password</button>
         </form>
       </div>
@@ -1189,7 +1199,14 @@
   </section>
 
   <section id="productRecordsToolPanel" class="product-manager-tool-panel hidden" data-product-manager-panel="products">
-  <div id="productList" class="mt-8 space-y-4"></div>
+    <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+      <p class="text-sm text-gray-400">Archived Products are hidden from this list by default.</p>
+      <label class="inline-flex items-center gap-2 text-sm text-gray-300">
+        <input id="showArchivedProductsToggle" type="checkbox" class="accent-[#407471]">
+        Show archived Products
+      </label>
+    </div>
+    <div id="productList" class="mt-4 space-y-4"></div>
   </section>
 
   <section id="assetLibraryToolPanel" class="product-manager-tool-panel hidden" data-product-manager-panel="assets">
@@ -1729,6 +1746,7 @@
                   <label class="block">
                     Product ID
                     <input id="contentProductId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Auto-created if blank">
+                    <span id="contentProductIdHelp" class="mt-1 block text-xs text-gray-400">Set once when creating a Product.</span>
                   </label>
                   <label class="block">
                     SKU
@@ -2351,8 +2369,14 @@
                   <input id="businessPhone" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                 </label>
                 <label class="block text-sm">
-                  Email
+                  Business email / sender address
                   <input id="businessEmail" type="email" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" required>
+                  <span class="mt-1 block text-xs text-gray-400">Emails send as the Business name using this verified address.</span>
+                </label>
+                <label class="block text-sm">
+                  Admin notification recipient
+                  <input id="businessAdminNotificationEmail" type="email" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" required>
+                  <span class="mt-1 block text-xs text-gray-400">Receives new contact and review alerts; may differ from the sender address.</span>
                 </label>
               </div>
               <label class="block text-sm">
@@ -2446,8 +2470,8 @@
                     </select>
                   </label>
                   <label class="block text-sm">
-                    Support Policy
-                    <select id="businessSupportAssetId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                    Partner Agreement
+                    <select id="businessPartnerAgreementAssetId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                       <option value="">No document selected</option>
                     </select>
                   </label>
@@ -3027,8 +3051,6 @@
     
     <section id="termsSection" class="tab-content hidden">Terms and Conditions content...</section>
     <section id="privacySection" class="tab-content hidden">Privacy Policy content...</section>
-    <section id="supportSection" class="tab-content hidden">Support content...</section>
-
     <!-- About Section -->
 <section id="aboutSection" class="tab-content hidden p-6">
   <div class="bg-black text-white max-w-4xl mx-auto font-sans">
@@ -3120,7 +3142,6 @@
     <div class="flex flex-wrap justify-center md:justify-end space-x-4">
   <a href="/terms" class="router-link hover:text-[#407471] transition" aria-label="View Terms">Terms</a>
   <a href="/privacy" class="router-link hover:text-[#407471] transition" aria-label="View Privacy Policy">Privacy</a>
-  <a href="/support" class="router-link hover:text-[#407471] transition" aria-label="View Support">Support</a>
   <a href="/contact" class="router-link hover:text-[#407471] transition" aria-label="View Contact Options">Contact</a>
   <a href="/commerce" class="router-link hover:text-[#407471] transition" aria-label="View Commerce Info">Commerce</a>
 </div>
@@ -3145,7 +3166,10 @@
       <input id="loginEmail" type="email" placeholder="Email" class="w-full px-3 py-2 rounded bg-gray-800 text-white" required />
 
       <label for="loginPassword" class="block text-sm font-medium">Password</label>
-      <input id="loginPassword" type="password" placeholder="Password" class="w-full px-3 py-2 rounded bg-gray-800 text-white" required />
+      <div class="relative">
+        <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password" class="w-full px-3 py-2 pr-12 rounded bg-gray-800 text-white" required />
+        <button type="button" class="auth-password-visibility-toggle absolute inset-y-0 right-0 flex items-center px-4 text-gray-400 hover:text-white" data-password-target="loginPassword" aria-label="Show password" aria-pressed="false"><span aria-hidden="true">👁</span></button>
+      </div>
 
       <p id="loginErrorMsg" class="text-red-500 text-sm hidden"></p>
 
@@ -3170,10 +3194,16 @@
       <input id="signupEmail" type="email" placeholder="Email" class="w-full px-3 py-2 rounded bg-gray-800 text-white" required />
 
       <label for="signupPassword" class="block text-sm font-medium">Password</label>
-      <input id="signupPassword" type="password" placeholder="Password" class="w-full px-3 py-2 rounded bg-gray-800 text-white" required />
+      <div class="relative">
+        <input id="signupPassword" type="password" autocomplete="new-password" placeholder="Password" class="w-full px-3 py-2 pr-12 rounded bg-gray-800 text-white" required />
+        <button type="button" class="auth-password-visibility-toggle absolute inset-y-0 right-0 flex items-center px-4 text-gray-400 hover:text-white" data-password-target="signupPassword" aria-label="Show password" aria-pressed="false"><span aria-hidden="true">👁</span></button>
+      </div>
 
       <label for="signupConfirmPassword" class="block text-sm font-medium">Confirm Password</label>
-      <input id="signupConfirmPassword" type="password" placeholder="Confirm Password" class="w-full px-3 py-2 rounded bg-gray-800 text-white" required />
+      <div class="relative">
+        <input id="signupConfirmPassword" type="password" autocomplete="new-password" placeholder="Confirm Password" class="w-full px-3 py-2 pr-12 rounded bg-gray-800 text-white" required />
+        <button type="button" class="auth-password-visibility-toggle absolute inset-y-0 right-0 flex items-center px-4 text-gray-400 hover:text-white" data-password-target="signupConfirmPassword" aria-label="Show confirm password" aria-pressed="false"><span aria-hidden="true">👁</span></button>
+      </div>
 
       <label class="flex items-center space-x-2 text-sm">
         <input type="checkbox" id="agreeTerms" required />

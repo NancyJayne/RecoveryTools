@@ -19,7 +19,7 @@ export async function sendWorkshopTicketEmail({
 
   const msg = {
     to,
-    from: business.email,
+    from: business.sender,
     subject: `Your Ticket for ${workshopName}`,
     html: `
       <p>Hi there,</p>

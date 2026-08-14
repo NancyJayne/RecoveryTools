@@ -4,6 +4,7 @@ import { auth, db, functions } from "../utils/firebase-config.js";
 
 import {
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   updateProfile,
 } from "firebase/auth";
@@ -51,6 +52,17 @@ export async function handleSignup(email, password, name) {
       displayName: name,
     });
 
+    let verificationEmailSent = true;
+    try {
+      await sendEmailVerification(user, {
+        url: `${window.location.origin}/profile`,
+        handleCodeInApp: false,
+      });
+    } catch (verificationErr) {
+      verificationEmailSent = false;
+      console.warn("Verification email failed, but signup completed:", verificationErr);
+    }
+
     await setDoc(
       doc(db, "users", user.uid),
       {
@@ -83,7 +95,12 @@ export async function handleSignup(email, password, name) {
       console.warn("Welcome email failed, but signup completed:", emailErr);
     }
 
-    showToast("Signup successful!", "success");
+    showToast(
+      verificationEmailSent
+        ? "Signup successful! Check your email to verify your address."
+        : "Signup successful, but the verification email could not be sent.",
+      verificationEmailSent ? "success" : "error",
+    );
     window.location.href = safeAuthRedirectPath();
     return user;
   } catch (err) {

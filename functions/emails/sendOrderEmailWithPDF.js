@@ -110,7 +110,7 @@ const sendOrderEmailWithPDFHandler = async (request) => {
     const pdfUrl = await generateOrderPDF(invoiceId, order);
     const msg = {
       to,
-      from: business.email,
+      from: business.sender,
       subject,
       html: `
         <p>Hi ${userName},</p>
@@ -124,6 +124,12 @@ const sendOrderEmailWithPDFHandler = async (request) => {
       mailSettings: {
         sandboxMode: {
           enable: useSendGridSandboxMode(),
+        },
+      },
+      trackingSettings: {
+        clickTracking: {
+          enable: false,
+          enableText: false,
         },
       },
     };

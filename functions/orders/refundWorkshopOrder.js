@@ -97,7 +97,7 @@ async function sendRefundEmail({ order, orderId, amount, refundId, request }) {
     sgMail.setApiKey(SENDGRID_API_KEY.value());
     await sgMail.send({
       to,
-      from: business.email,
+      from: business.sender,
       subject,
       html: `
         <p>Hi ${escapeHtml(customerName(order))},</p>

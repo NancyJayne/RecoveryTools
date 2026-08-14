@@ -700,7 +700,9 @@ export async function setupCheckoutPage() {
     }
 
     try {
-      const token = await executeRecaptcha("checkout");
+      // createCheckoutSession performs the authoritative CAPTCHA check. Avoid
+      // consuming this single-use token in verifyRecaptchaToken first.
+      const token = await executeRecaptcha("checkout", { verify: false });
       const createCheckout = httpsCallable(functions, "createCheckoutSession");
       const response = await createCheckout({
         cart,

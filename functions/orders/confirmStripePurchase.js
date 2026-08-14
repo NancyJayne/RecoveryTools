@@ -132,7 +132,7 @@ async function sendOrderConfirmationEmail({ orderId, orderData, to, userName, us
   const pdfUrl = await generateOrderPDF(orderId, orderData);
   const msg = {
     to,
-    from: business.email,
+    from: business.sender,
     subject,
     html: `
       <p>Hi ${userName || "Customer"},</p>
@@ -146,6 +146,12 @@ async function sendOrderConfirmationEmail({ orderId, orderData, to, userName, us
     mailSettings: {
       sandboxMode: {
         enable: useSendGridSandboxMode(),
+      },
+    },
+    trackingSettings: {
+      clickTracking: {
+        enable: false,
+        enableText: false,
       },
     },
   };

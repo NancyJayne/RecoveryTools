@@ -3082,6 +3082,13 @@ function chooseExistingProduct(productId) {
   if (!product) return;
   setSelectValue("contentExistingProductId", product.id);
   setInputValue("contentProductId", product.id);
+  const productIdInput = document.getElementById("contentProductId");
+  if (productIdInput) {
+    productIdInput.readOnly = true;
+    productIdInput.classList.add("cursor-not-allowed", "opacity-70");
+  }
+  const productIdHelp = document.getElementById("contentProductIdHelp");
+  if (productIdHelp) productIdHelp.textContent = "Product IDs cannot be changed after creation.";
   setInputValue("contentProductSku", product.sku);
   setSelectValue("contentProductCategoryId", product.productCategoryId);
   setSelectValue("contentProductDeliveryType", productDeliveryControlValue(
@@ -3149,6 +3156,13 @@ function chooseNewProduct() {
   if (linkedProductId) setInputValue("contentUnlinkProductId", linkedProductId);
   setSelectValue("contentExistingProductId", "");
   setInputValue("contentProductId", "");
+  const productIdInput = document.getElementById("contentProductId");
+  if (productIdInput) {
+    productIdInput.readOnly = false;
+    productIdInput.classList.remove("cursor-not-allowed", "opacity-70");
+  }
+  const productIdHelp = document.getElementById("contentProductIdHelp");
+  if (productIdHelp) productIdHelp.textContent = "Set once when creating a Product.";
   setInputValue("contentProductSku", "");
   setSelectValue("contentProductCategoryId", "");
   setSelectValue("contentProductDeliveryType", "Physical");

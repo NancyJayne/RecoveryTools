@@ -34,6 +34,13 @@ export const updateProduct = onCall(
     if (!id || typeof updates !== "object") {
       throw new HttpsError("invalid-argument", "Missing product ID or updates object.");
     }
+    const submittedProductId = String(updates.productId || "").trim();
+    if (submittedProductId && submittedProductId !== id) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Product IDs cannot be changed after creation. Edit the Product name instead.",
+      );
+    }
 
     try {
       const db = admin.firestore();
