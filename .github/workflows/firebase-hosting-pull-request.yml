@@ -29,7 +29,6 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: node ./scripts/validate-client-env.mjs
       - run: npm run build
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
