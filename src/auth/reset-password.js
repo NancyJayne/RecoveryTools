@@ -37,7 +37,9 @@ export async function requestPasswordReset(email, buttonEl) {
       buttonEl.textContent = "Sending...";
     }
 
-    const token = await executeRecaptcha("reset_password");
+    // sendPasswordReset performs the authoritative verification. reCAPTCHA tokens
+    // are single-use, so do not consume this token in verifyRecaptchaToken first.
+    const token = await executeRecaptcha("reset_password", { verify: false });
     const sendReset = httpsCallable(functions, "sendPasswordReset");
     const result = await sendReset({ email, token });
 

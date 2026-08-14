@@ -148,6 +148,12 @@ async function sendOrderConfirmationEmail({ orderId, orderData, to, userName, us
         enable: useSendGridSandboxMode(),
       },
     },
+    trackingSettings: {
+      clickTracking: {
+        enable: false,
+        enableText: false,
+      },
+    },
   };
 
   sgMail.setApiKey(SENDGRID_API_KEY.value());

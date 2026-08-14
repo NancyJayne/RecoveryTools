@@ -126,6 +126,12 @@ const sendOrderEmailWithPDFHandler = async (request) => {
           enable: useSendGridSandboxMode(),
         },
       },
+      trackingSettings: {
+        clickTracking: {
+          enable: false,
+          enableText: false,
+        },
+      },
     };
 
     sgMail.setApiKey(SENDGRID_API_KEY.value());

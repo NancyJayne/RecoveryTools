@@ -12,6 +12,21 @@ export function setupAuthModal() {
   const resetError = document.getElementById("resetErrorMsg");
   const modalTitle = document.getElementById("authModalTitle");
 
+  modal?.querySelectorAll(".auth-password-visibility-toggle").forEach((button) => {
+    button.addEventListener("click", () => {
+      const input = document.getElementById(button.dataset.passwordTarget);
+      if (!input) return;
+
+      const showPassword = input.type === "password";
+      input.type = showPassword ? "text" : "password";
+      button.setAttribute("aria-pressed", String(showPassword));
+      button.setAttribute(
+        "aria-label",
+        `${showPassword ? "Hide" : "Show"} ${input.placeholder.toLowerCase()}`,
+      );
+    });
+  });
+
   const showAuthModal = (mode = "login") => {
     modal.classList.remove("hidden");
     loginForm.classList.add("hidden");
