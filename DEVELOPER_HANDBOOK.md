@@ -49,12 +49,17 @@ gcloud auth application-default login
 
 ## Start Local Development
 
-```bash
-npm run build
+Use separate terminals so the emulators and Vite remain available:
+
+```powershell
+# Terminal 1
 npm run emulators
-npm run seed:all
+
+# Terminal 2
 npm run dev
 ```
+
+Run `npm run seed:all` only when the active task explicitly requires the emulator seed data. Never seed production as part of routine development.
 
 ## Tailwind Watch Mode
 
@@ -91,19 +96,32 @@ Ctrl + Shift + R
 
 # 3. Git Workflow
 
-## Check Status
+## Start A Feature Or Fix
 
-```bash
-git status
+Begin from an up-to-date, clean `main`, then create a focused branch:
+
+```powershell
+git switch main
+git pull --ff-only
+git switch -c codex/v2-short-feature-name
 ```
 
-## Commit Changes
+Use a short-lived `codex/v1-*` branch only for a narrow production maintenance fix.
 
-```bash
-git add .
-git commit -m "🛠 Description"
-git push origin main
+## Check And Commit Intentionally
+
+```powershell
+git status --short
+git diff --check
+git diff -- path/to/file
+git add -- path/to/file another/intended-file
+git diff --cached --check
+git commit -m "Describe the focused change"
 ```
+
+Do not use `git add .` at the end of a long session. Existing unrelated changes belong to the active workspace and must not be swept into a feature commit.
+
+Push the feature branch and merge through a pull request after verification. Do not push unfinished work directly to `main`.
 
 ## Common Warning
 
@@ -117,43 +135,53 @@ Safe to ignore on Windows.
 
 # 4. Deployment Workflow
 
-## Build
+## Production Release Rule
 
-```bash
-npm install
-npm update
-npm run build
+Routine development does not deploy Firebase resources. Pull requests run verification only, and merging to `main` does not automatically release Hosting.
+
+Before any local production release check:
+
+```powershell
+$env:RECOVERY_TOOLS_PRODUCTION_RELEASE='DEPLOY RECOVERY TOOLS'
+npm run release:check
 ```
 
-## Deploy Firestore Indexes
+This guard requires `main`, a clean working tree, the expected Firebase project link, import verification, and a successful production build. It does not deploy anything.
 
-```bash
-firebase deploy --only firestore:indexes
+## Hosting
+
+Start **Manually deploy Firebase Hosting to production** from GitHub Actions. Enter a release note and approve the `production` environment. Do not deploy Hosting from an unfinished feature branch.
+
+## Selective Backend Deployment
+
+Deploy only reviewed resources and always name the production project:
+
+### Firestore Indexes
+
+```powershell
+npx firebase-tools deploy --only firestore:indexes --project recovery-tools
 ```
 
-## Deploy Firestore Rules
+### Firestore Rules
 
-```bash
-firebase deploy --only firestore:rules
+```powershell
+npx firebase-tools deploy --only firestore:rules --project recovery-tools
 ```
 
-## Deploy Functions
+### One Function
 
-```bash
-firebase deploy --only functions
+```powershell
+$env:FUNCTIONS_DISCOVERY_TIMEOUT='30000'
+npx firebase-tools deploy --only functions:functionName --project recovery-tools
 ```
 
-## Deploy Hosting
+### Storage Rules
 
-```bash
-firebase deploy --only hosting
+```powershell
+npx firebase-tools deploy --only storage --project recovery-tools
 ```
 
-## Full Deploy
-
-```bash
-firebase deploy
-```
+Do not use an unqualified or broad `firebase deploy` for routine releases. Only actual exported Functions belong in `--only`; do not include internal helper names.
 
 ---
 
@@ -162,37 +190,48 @@ firebase deploy
 ## Before Deploy
 
 ```text
-□ Build passes
-□ No console errors
-□ Firestore rules tested
-□ Functions tested
-□ Checkout tested
-□ Admin tested
-□ Profile tested
-□ Git committed
-□ Backup exported (major changes only)
+□ Feature branch diff reviewed against main
+□ Acceptance checklist completed in the Firebase Emulator Suite
+□ Disposable test users and records used
+□ Import verification passes
+□ Focused regression scripts pass
+□ Production build passes
+□ git diff --check passes
+□ NEXT-STEPS.md reflects changed priorities or handoff state
+□ Release is committed and the working tree is clean
+□ Firestore backup/export prepared for a material data migration
+□ Rollback path and previous known-working release identified
+□ Maintenance mode is ready if the release is not backward compatible
 ```
 
 ## Deploy
 
 ```text
-□ Functions
-□ Rules
-□ Indexes
-□ Hosting
+□ Production project is explicitly recovery-tools
+□ Maintenance mode enabled only when required
+□ Backward-compatible rules, indexes, and Functions deployed first
+□ Controlled data migration completed, if required
+□ Hosting deployed manually after backend compatibility is ready
+□ Firebase reports Deploy complete before deployment is claimed
 ```
 
 ## After Deploy
 
 ```text
 □ Shop loads
-□ Login works
-□ Checkout works
-□ Admin works
-□ Order flow works
-□ Stripe webhooks working
-□ Access unlocks working
+□ Login, logout, and Profile work
+□ Cart and checkout initiation work
+□ Changed customer workflow works
+□ Admin navigation and changed admin module work
+□ Browser console and failed network requests reviewed
+□ Relevant Function logs reviewed
+□ Stripe webhooks and email logs checked when affected
+□ Inventory and access grants checked when affected
+□ Maintenance mode disabled after successful smoke testing
+□ NEXT-STEPS.md and release notes updated
 ```
+
+See `RELEASE-PROCESS.md` for the authoritative release and rollback procedure.
 
 ---
 
@@ -451,16 +490,17 @@ settings
 Whenever building a new feature:
 
 ```text
-1. Update Firestore Schema
-2. Update Functions
-3. Update Firestore Rules
-4. Update Admin UI
-5. Update Frontend UI
-6. Test In Emulator
-7. Test Purchase Flow
-8. Deploy Functions
-9. Deploy Rules
-10. Deploy Hosting
+1. Confirm the acceptance criteria and affected customer/admin journeys.
+2. Create a focused feature branch from an up-to-date main.
+3. Update the schema, Functions, rules, admin UI, and frontend as required.
+4. Keep data changes backward compatible with the currently deployed client.
+5. Test with disposable data in the Firebase Emulator Suite.
+6. Run focused regression scripts, import checks, lint where applicable, and the production build.
+7. Review the complete diff and update NEXT-STEPS.md.
+8. Commit intentionally and open a pull request.
+9. Merge only after verification passes; merging does not deploy.
+10. Manually deploy only the reviewed resources when the module is release-ready.
+11. Complete the production smoke test and monitor affected logs.
 ```
 
 ---
@@ -552,8 +592,11 @@ npm install
 
 ## Functions Not Updating
 
-```bash
-firebase deploy --only functions
+Confirm that the intended Function is exported from `functions/index.js`, then deploy only that Function:
+
+```powershell
+$env:FUNCTIONS_DISCOVERY_TIMEOUT='30000'
+npx firebase-tools deploy --only functions:functionName --project recovery-tools
 ```
 
 ## Frontend Not Updating
@@ -570,41 +613,19 @@ npm run check:imports
 
 ## Emulator Problems
 
-```bash
-firebase emulators:start
+```powershell
+npm run emulators
 ```
 
 Or stop and restart all emulators.
 
 ---
 
-# 17. Current Priority TODO
+# 17. Current Priorities
 
-## Checkout
+`NEXT-STEPS.md` is the source of truth for current priorities, completed work, acceptance gaps, known issues, and the next safe development sequence. Do not maintain a second task list in this handbook.
 
-* Phone prefill
-* Order persistence
-* PDF receipts
-* Order history
-
-## Shop
-
-* Related products
-* Filters
-* Sorting
-* Sale pricing
-
-## Admin
-
-* CRM improvements
-* Analytics dashboard
-* CSV exports
-* Approval workflows
-
-## Therapist
-
-* Therapist dashboard
-* Client management
+“V2” is a figure of speech for the next major set of modules built on the existing `recovery-tools` Firebase project. It does not mean replacing or deleting the current Firebase project. V2 modules remain on focused branches and use the emulators until individually ready for a controlled production release.
 
 ---
 
@@ -626,6 +647,16 @@ Or stop and restart all emulators.
 # 19. Important Project Rules
 
 ### Never deploy without testing in emulator first.
+
+### Never deploy from an unfinished feature branch.
+
+### Never rely on an implicit Firebase project; production commands must include `--project recovery-tools`.
+
+### Never use a broad production deploy when a targeted Function, rule, index, or Hosting release is sufficient.
+
+### Keep schema and Function changes backward compatible with the currently deployed browser client.
+
+### Use maintenance mode only for releases that cannot safely support both old and new clients.
 
 ### Never create duplicate unlock logic.
 
