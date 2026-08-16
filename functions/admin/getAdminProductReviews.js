@@ -19,22 +19,22 @@ export const getAdminProductReviews = onCall(
       throw new HttpsError("permission-denied", "Only admins can view product reviews.");
     }
 
-    const limit = Math.min(Number(request.data?.limit || 100), 200);
+    const requestedLimit = Number(request.data?.limit || 100);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 200)
+      : 100;
     const includeHidden = request.data?.includeHidden === true;
     const db = admin.firestore();
-    const snapshot = await db
-      .collectionGroup("reviews")
-      .orderBy("createdAt", "desc")
-      .limit(limit)
-      .get();
+    // Avoid requiring a collection-group index for createdAt. Some legacy
+    // reviews also use timestamp, so sorting after serialization keeps both
+    // record shapes visible in the admin portal.
+    const snapshot = await db.collectionGroup("reviews").get();
 
-    const productIds = new Set();
     const reviews = snapshot.docs
       .map((doc) => {
         const data = doc.data();
         const productRef = doc.ref.parent.parent;
         const productId = productRef?.id || data.productId || "";
-        if (productId) productIds.add(productId);
         return {
           id: doc.id,
           reviewId: data.reviewId || doc.id,
@@ -50,8 +50,15 @@ export const getAdminProductReviews = onCall(
           updatedAt: serializeDate(data.updatedAt),
         };
       })
-      .filter((review) => includeHidden || !["hidden", "archived"].includes(review.status));
+      .filter((review) => includeHidden || !["hidden", "archived"].includes(review.status))
+      .sort((left, right) => {
+        const leftTime = left.createdAt ? Date.parse(left.createdAt) : 0;
+        const rightTime = right.createdAt ? Date.parse(right.createdAt) : 0;
+        return rightTime - leftTime;
+      })
+      .slice(0, limit);
 
+    const productIds = new Set(reviews.map((review) => review.productId).filter(Boolean));
     const productDocs = await Promise.all(
       [...productIds].map(async (productId) => {
         const snap = await db.collection("products").doc(productId).get();

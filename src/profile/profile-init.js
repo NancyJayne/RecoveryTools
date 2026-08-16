@@ -255,7 +255,7 @@ export async function setupProfilePage() {
     affiliateSignupBtn.addEventListener("click", async () => {
       history.pushState({}, "", "/affiliateSignup");
       const { initAffiliateSignup } = await import(
-        new URL("../affiliate/affiliate-signup.js", import.meta.url)
+        "../affiliate/affiliate-signup.js"
       );
       initAffiliateSignup?.();
     });
@@ -297,7 +297,7 @@ function setupProfileFormHandlers() {
   if (auth?.currentUser?.uid && nameInput && phoneInput && addressInput) {
     const uid = auth.currentUser.uid;
 
-    import(new URL("../auth/user-profile.js", import.meta.url)).then(async (mod) => {
+    import("../auth/user-profile.js").then(async (mod) => {
       const profile = await mod.getUserProfile(uid);
 
       if (profile) {

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 
 const discoveryTimeout = process.env.FUNCTIONS_DISCOVERY_TIMEOUT || "60";
 const command = process.platform === "win32" ? "firebase.cmd" : "firebase";
-const child = spawn(command, ["emulators:start"], {
+const child = spawn(command, ["emulators:start", "--project", "recovery-tools"], {
   env: {
     ...process.env,
     FUNCTIONS_DISCOVERY_TIMEOUT: discoveryTimeout,

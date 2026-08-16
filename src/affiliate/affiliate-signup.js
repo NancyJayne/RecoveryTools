@@ -19,7 +19,7 @@ export function initAffiliateSignup() {
     whySection.classList.remove("active");
 
     const { initAffiliateRegisterForm } = await import(
-      new URL("./affiliate-registration.js", import.meta.url)
+      "./affiliate-registration.js"
     );
     initAffiliateRegisterForm?.();
   };

@@ -18,6 +18,8 @@ RecoveryToolsApp
 - `DEVELOPER-HANDBOOK.md` — internal Recovery Tools architecture, Firestore schemas, daily workflow, unlock rules, and development checklists.
 - `NEXT-STEPS.md` — current active development tasks.
 
+> Production safety: `.firebaserc` intentionally has no `default` project. Do not use the older unqualified deployment examples below for a production release; follow `DEVELOPER_HANDBOOK.md` and always specify `--project recovery-tools`.
+
 
 ## Environment setup
 

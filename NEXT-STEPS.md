@@ -18,6 +18,7 @@
 
 ### Confirmed working
 
+- [x] **1. Create a safe way to keep developing the app without disturbing the current deployment, with a safe way to update production.** Feature work now stays on focused branches and uses the Firebase Emulator Suite; pull requests verify without deploying; pushes to `main` do not automatically deploy Hosting; production Hosting releases are manually started; local release checks require `main`, a clean working tree, successful verification/build, and an explicit confirmation; Firebase commands have no implicit production default and must name `--project recovery-tools`; selective deployment, smoke testing, maintenance windows, and rollback are documented in `DEVELOPER_HANDBOOK.md`.
 - [x] Every public policy PDF link opens the selected document correctly.
 - [x] Content Builder works for Item types `content`, `part`, and `tool`, including Assets.
 - [x] Physical Products and Course Products work through Marketplace and checkout.
@@ -102,7 +103,7 @@
 - Archived Products are hidden from Products & Inventory > Products unless Show archived Products is selected.
 - Archived Products are excluded from normal Inventory Stocktake data.
 - Before permanently removing the accidental Heat Patch duplicate, run a reference audit using its exact Product ID. Delete it only if Orders, payments, reviews, access history, carts, refunds, and other immutable history are all absent.
-- Keep the Items-versus-Products Stocktake redesign on a separate V2 branch and staging Firebase project.
+- Keep the Items-versus-Products Stocktake redesign on a separate V2 branch and test it in the Firebase Emulator Suite until release-ready.
 
 ### V1 launch position
 
@@ -118,55 +119,122 @@ The shortest safe route to launch is:
 
 Do not add optional financial reporting, advanced inventory, or larger CRM enhancements to the V1 gate unless a test identifies them as necessary for safe operation.
 
-### Future build
+### Post-launch implementation roadmap
 
-- Course video audio investigation.
-- Re-enable Affiliate registration after linking the configured Partner Agreement through application acceptance and completing Stripe Connect production onboarding/payout testing; reuse the same agreement for Therapist onboarding and both role dashboards where appropriate.
-- Verify approved-affiliate wholesale pricing end to end before the V2 Affiliate launch: ordinary customers must never receive wholesale prices, approved affiliates must see the correct Product/variant price, minimum quantities must be enforced, and the Stripe Order must retain the affiliate pricing tier.
-- Add multi-code promotion stacking only if a future sales policy requires more than one code on an Order; the current checkout deliberately accepts one code.
-- Re-enable Library/Anato-me and Programs after their V2 content, navigation, and publication checks pass.
-- Financial cost-factor and margin reporting upgrades.
-- Advanced inventory warnings, audit views, and purchasing workflows.
-- Larger-scale CRM follow-up, staff assignment, and pagination.
-- Unified public Course, Workshop, Program, session, and Marketplace discovery after each area is launch-ready.
+This is the agreed order for the next major modules. Each area uses a focused `codex/v2-*` branch, remains hidden while incomplete, passes its emulator acceptance checklist, and is released independently through the guarded production process.
 
-### V2 staging and release plan
+#### 1. Workshops - ticket-sales release
+
+Sell and safely operate Workshop tickets before waiting for the complete automated instructor-payment system.
+
+- [ ] Release public Workshop discovery, session details, capacity/remaining places, Product-variant selection, Stripe purchase, booking confirmation, attendee records, customer Profile access, cancellation/refund handling, and mobile presentation.
+- [ ] Add instructor/session operating information, equipment checklists, and an attached viewable/downloadable “what to bring/wear” PDF.
+- [ ] Add Workshop promotion videos and verify Asset/visibility behaviour.
+- [ ] Create an initial approved Workshop marketing pack with reusable images/video, suggested captions, event links, and trackable affiliate-ready share links; the full Marketing Centre follows in roadmap area 5.
+- [ ] Complete instructor submission, approval, publication, session-management, attendee, cancellation, notification, and reporting tools.
+- [ ] Record instructor amounts payable manually until the financial allocation engine can calculate and reconcile automated payment cycles.
+
+#### 2. Stock and inventory operations
+
+- [x] Low-stock warnings are implemented.
+- [x] Optional out-of-stock Marketplace hiding is implemented.
+- [ ] Add stock-movement and manufacturing audit views.
+- [ ] Separate Items/components from Products/finished goods in Inventory Stocktake.
+- [ ] Group Item variants under their Item and Product variants under their Product.
+- [ ] Default to active tracked inventory and provide a separate Archived view.
+- [ ] Make entity types visually prominent so component and packaged stock cannot be confused.
+- [ ] Save only the rows currently displayed and reviewed by the admin.
+- [ ] Preserve stable workbook and Firebase identities throughout Stocktake, manufacturing, imports, and audits.
+
+#### 3. Financial and allocation engine
+
+- [ ] Add configurable per-Order-line allocations for Product cost, gross revenue, Stripe fees, tax, affiliate commission, instructor payment, partner share, applicable super, business savings, owner share, Pain Australia donation, refunds, and net payable amounts.
+- [ ] Snapshot the allocation rules and calculated amounts on the Order so later policy changes do not rewrite history.
+- [ ] Calculate totals by payment cycle and support payable, confirmed-paid, adjusted, and refunded states with an audit history.
+- [ ] Add affiliate/instructor/partner earnings views and exportable reconciliation reports.
+- [ ] Confirm tax, super, commission, partner-share, and donation treatment with the appropriate accountant/adviser before production automation.
+
+#### 4. Unified Marketplace and Library/Anato-Me
+
+- [ ] Create a shared Marketplace framework for Products, Workshops, Courses, and Programs with consistent cards, detail pages, filters, visibility, free/purchasable labels, and Product-to-content connections.
+- [ ] Release Library/Anato-Me discovery and free resources with consistent Asset, PDF, video, access, and publication behaviour.
+- [ ] Keep each unfinished content type hidden and route-guarded until its own release gate passes.
+
+#### 5. Admin and Affiliate Marketing Centre
+
+- [ ] Add an Admin Marketing section for campaigns linked to Products, Workshops, Courses, Programs, Library resources, and selected Product variants/sessions.
+- [ ] Let admin create approved share packs containing reusable images/video, platform-sized Assets, captions, calls to action, hashtags, destination links, campaign dates, audience, status, and brand/compliance notes.
+- [ ] Support draft, review, active, paused, expired, and archived campaign states without deleting historical material.
+- [ ] Generate trackable campaign/referral links and report clicks, referrals, conversions, Orders, revenue, refunds, and commission outcomes without trusting browser-supplied attribution.
+- [ ] Add an Affiliate Marketing section where approved affiliates can filter available campaigns, copy approved captions and their own referral link, download approved Assets, and share Products, Courses, Workshops, Programs, or free resources.
+- [ ] Allow affiliates/instructors to advertise only their own approved Course or Workshop plus campaigns explicitly made available by admin.
+- [ ] Preserve campaign, affiliate, content, Product, session, and pricing identity on resulting Orders and financial reports.
+- [ ] Start with copy/download/share-link tools; treat direct posting to external social networks as a later optional integration requiring separate platform permissions.
+
+#### 6. Complete the Affiliate system
+
+- [ ] Complete submission, approval, rejection, resubmission, refreshed-claim, notification, Agreement-acceptance, dashboard, and access-denial workflows.
+- [ ] Activate Stripe Connect and test Express onboarding, refresh/return handling, dashboard login, and payout-account persistence.
+- [ ] Prove wholesale prices never reach ordinary customers; show crossed-out RRP beside the eligible affiliate price; enforce minimum quantities; and retain the pricing tier in Stripe Orders, invoices, refunds, and financial allocations.
+- [ ] Decide and enforce affiliate pickup/warehouse and fulfilment rules server-side.
+- [ ] Add affiliate earnings, payment-cycle, payment-confirmation, and refund-adjustment views using the financial engine.
+- [ ] Replace legacy affiliate Course/Workshop proposal forms with the shared Content Builder submission workflow while preserving affiliate ownership and admin approval.
+
+#### 7. Programs and recommendation system
+
+- [ ] Build a reusable general recommendation quiz and shared question/quiz builder.
+- [ ] Build Program templates and a buildable/customisable Program system using reusable Items, Blueprints, Plans, Library resources, and Assets.
+- [ ] Support free and purchasable Programs, progression, access/expiry/publication controls, and printable/downloadable output.
+
+#### 8. Courses
+
+- [ ] Release Course discovery, purchase, module progression, completion records, certificates, and progress reporting.
+- [ ] Add reusable quizzes, assignments, marking criteria/rubrics, instructor feedback, and resubmission workflows.
+- [ ] Complete instructor submission, approval, publication, management, and learner-support tools.
+- [ ] Verify expiry, revocation, archived/paused Course behaviour, transactional emails, and the course-preview audio issue.
+
+#### 9. CRM expansion
+
+- [ ] Add improved assignment, ownership, follow-ups, reminders, and staff workload views after the underlying customer/content workflows are stable.
+- [ ] Add server-side CRM search, filtering, and pagination.
+- [ ] Add an auditable timeline across Communications, Orders, Workshops, Courses, Programs, access, roles, profile changes, merges, and archive/reactivation actions.
+
+#### 10. Therapist platform - final major area
+
+- [ ] Complete Therapist submission, approval, notification, Agreement, role, dashboard, and access workflows.
+- [ ] Build Therapist booking and session-management tools using the proven Workshop scheduling foundations where appropriate.
+- [ ] Add coded treatment progressions/regressions, abbreviation quick notes, assessment and differential-diagnosis support, and clinical audit history.
+- [ ] Reuse Program templates to produce buildable, printable, and downloadable customer Programs.
+- [ ] Apply appropriate privacy, clinical-safety, permission, and professional-review gates before release.
+
+Additional lower-priority backlog: multi-code promotion stacking only if sales policy requires it; template revision history; richer About/favicon/social-sharing management; shipping-zone pricing only if real costs require it; and storing Stripe Product/Price IDs in the workbook only if the workbook becomes the long-term Stripe source of truth.
+
+### V2 development and release plan
 
 #### Production boundary
 
 - `main` represents the production release line.
 - Do not develop unfinished V2 features directly on `main`.
 - Narrow V1 fixes use a short-lived `codex/v1-*` branch and are merged only after focused verification.
-- V2 work uses a separate `codex/v2-*` branch and a separate Firebase project.
+- V2 is the next major set of modules built on the existing `recovery-tools` Firebase project; it is not a replacement Firebase project.
+- V2 work uses focused `codex/v2-*` branches and the Firebase Emulator Suite until each module passes its acceptance checks.
+- Pull requests verify without deploying, pushes to `main` do not automatically deploy Hosting, and production Hosting releases are manually started through the guarded GitHub workflow.
+- Follow `DEVELOPER_HANDBOOK.md` for branch, verification, selective deployment, smoke-test, maintenance-window, and rollback requirements.
 
-#### Staging project
+#### Emulator-first development
 
-Create a second Firebase project before deploying V2 code. It must have its own:
+Keep the current production integrations and data untouched while V2 is under development:
 
-- Hosting site and web-app configuration
-- Authentication users and authorised domains
-- Firestore database, rules, and indexes
-- Storage bucket and rules
-- Functions and Secret Manager values
-- App Check/reCAPTCHA registration
-- SendGrid test or sandbox configuration
-- Stripe test keys and test webhook endpoint
-
-Never copy production Stripe secrets, customer records, Orders, or Authentication users into staging.
-
-After creating the staging project, add it as a Firebase alias without changing production:
-
-```powershell
-npx firebase-tools use --add
-```
-
-Keep `recovery-tools` as the production project and choose `staging` as the new alias. Every staging deployment must explicitly include `--project staging`; every production deployment must explicitly include `--project recovery-tools`.
-
-Do not use a Hosting preview channel as the only V2 environment because Functions, Firestore, Authentication, Storage, App Check, and Stripe also need isolation.
+- Develop the frontend, Functions, Firestore rules/indexes, Storage rules, inventory, access, and admin workflows against local emulators.
+- Use disposable emulator users, Orders, payments, inventory, reviews, and access records.
+- Do not retouch established production Stripe checkout/webhooks, SendGrid, App Check/reCAPTCHA, secrets, or IAM unless a reviewed V2 requirement genuinely changes that integration.
+- Keep new modules hidden and route-guarded until they are accepted for release.
+- Prefer backward-compatible data changes so the current and newly deployed browser bundles can coexist during release.
+- Deploy only reviewed resources and always include `--project recovery-tools` explicitly.
 
 #### V2 Inventory Stocktake scope
 
-Build the redesign on `codex/v2-inventory-stocktake` after the staging project exists:
+Build the redesign on `codex/v2-inventory-stocktake` against the emulators:
 
 - Default to active inventory only.
 - Provide separate Items/components and Products/finished-goods views.
@@ -175,14 +243,17 @@ Build the redesign on `codex/v2-inventory-stocktake` after the staging project e
 - Make the entity kind visually prominent so component stock cannot be confused with packaged stock.
 - Provide an explicit Archived view rather than mixing archived records into daily Stocktake.
 - Save only rows currently displayed and reviewed by the admin.
+- Preserve stable workbook IDs and Firebase document identities throughout the redesign.
 
 #### Promotion to production
 
-1. Test V2 in the staging Firebase project with disposable users and Stripe test payments.
+1. Test the V2 module in the Firebase Emulator Suite with disposable users and test records.
 2. Review the branch diff against `main`.
-3. Merge only after the acceptance checklist passes.
-4. Build and deploy using the production GitHub environment or an explicit production command.
-5. Complete a short production smoke test without creating unnecessary live transactions.
+3. Run the focused verification scripts, import checks, production build, and module acceptance checklist.
+4. Merge only after all checks pass; merging does not deploy automatically.
+5. For an ordinary backward-compatible release, manually deploy only the reviewed resources.
+6. For an incompatible migration or tightly coupled checkout/access release, enable the tested maintenance control before deployment and retain admin access for smoke testing.
+7. Complete a short production smoke test without creating unnecessary live transactions, then end maintenance if it was required.
 
 ## Current Handoff
 
@@ -196,7 +267,7 @@ representative production data**, then run the complete non-admin test-user regr
 Stripe remains in test mode. Confirm the per-user Communications composite index is Enabled
 before relying on CRM communication history during that regression.
 
-The approved safety-first Product/Asset refactor is documented in `PRODUCT-ASSET-REFACTOR-MIGRATION-PLAN.md`. Products and Assets remain independent first-class entities; Product and Asset are not Item types. Implementation must remain additive and dual-read until the repeatable emulator migration, checkout/access/inventory parity tests, order-history checks, and rollback gates pass.
+The approved safety-first Product/Asset refactor keeps Products and Assets as independent first-class entities; Product and Asset are not Item types. Implementation must remain additive and dual-read until the repeatable emulator migration, checkout/access/inventory parity tests, order-history checks, and rollback gates pass.
 
 Phase 1 additive groundwork is now implemented: shared runtime schemas, canonical workbook/import/export collection support, `CreatesProduct` workbook fields, and Firestore rules/indexes for the new Product and Asset relationship collections. Legacy sheets, collections, checkout reads, Stripe fields and order snapshots remain unchanged.
 
@@ -207,6 +278,19 @@ Phase 3 dual-read adapters are now implemented. Catalogue hydration, checkout cr
 Phase 4's canonical admin foundation is now implemented. Saving a sellable Item, Blueprint, or Plan writes canonical Product identity fields, ProductLinks, ProductVariants, ProductAccessGrants for Plans, and EntityAssets while retaining compatibility records needed by the current UI. `CreatesProduct` is available to Blueprints and Plans as well as Items. The editor can create a new Product or select an existing Product and choose its ProductLink role without rewriting the selected Product. Turning the toggle off does not alter existing ProductLinks; the explicit Unlink product action archives only the relationship and preserves both entities. The top-level Product manager uses canonical Product types, creates Products as Draft by default, writes canonical base prices, and no longer exposes a destructive delete button. The Asset Library creates independent Assets, edits and archives renditions, displays EntityAsset usage, and explicitly links or unlinks Items, Blueprints, Plans, Products, and ProductVariants without deleting either side. The focused emulator regression is `npm run verify:canonical-admin-writes:emulator`.
 
 Phase 5's checkout safety gate is now implemented. New orders retain the legacy `products` snapshot and also write immutable schema-version-2 `orderLines` plus canonical `orderItems`. Product, selected ProductVariant, and ProductComponent inventory deductions are validated and committed in the same transaction as the root order, so webhook replays cannot deduct stock twice. ProductAccessGrants create deterministic `userAccess` records with duration-based expiry and revocation metadata. Both the webhook and purchase-confirmation paths repair missing order-item and access side effects when an existing paid order is replayed. Order history, fulfilment, and invoice readers prefer canonical order lines with legacy fallback. Run `npm run verify:order-lines` and `npm run verify:phase5:emulator`; the emulator regression includes a simulated post-order crash and verifies recovery without a second inventory deduction. A deployed Stripe purchase and the associated admin order flow have since been confirmed; access/unlock and the remaining admin workflow checks are the next release gates.
+
+The remaining Product/Asset Phase 6 gate is deliberately non-destructive:
+
+- [ ] Add migration telemetry and confirm shop/admin canonical reads retain legacy fallback where required.
+- [ ] Resolve the ten missing legacy Plan/Course access targets before canonical access cutover.
+- [ ] Complete explicit regressions for legacy-only, canonical-only, and mixed catalogue data; blank workbook fields preserving Firestore values; unlinking without cascading deletion; and historical invoices/PDFs after current Product edits.
+- [ ] Confirm migration reports cover collection counts, stable Product/Stripe IDs, duplicates/skips, orphaned relationships, variant/inventory reconciliation, access parity, checkout totals, shipping decisions, historical-order checksums, and second-run idempotency.
+- [ ] Stop new `ItemProduct`, `itemVariants`, and `itemAssets` writes only after the canonical admin and purchase paths pass.
+- [ ] Remove Product-only Item controls only after the corresponding compatibility writes stop.
+- [ ] Retain compatibility reads until production telemetry shows zero unresolved legacy fallbacks for an agreed observation period.
+- [ ] Archive rather than delete legacy structures, and only after a rollback export has been restored and verified.
+
+Canonical workbook sheets remain `Products`, `ProductLinks`, `ProductOptions`, `ProductOptionValues`, `ProductVariants`, `ProductVariantValues`, `ProductComponents`, `ProductAccessGrants`, `Assets`, `EntityAssets`, and `AssetRenditions`. `Items`, `Blueprints`, and `Plan` retain `CreatesProduct`; legacy `ItemProduct`, `ItemVariants`, `ProductPrice`, `Asset`, and `ItemAsset` remain readable during compatibility. Imports stay merge/upsert and blank workbook values must not erase populated ownership, Stripe, access, inventory, or audit fields without an explicit clear operation.
 
 The July 19 deployed Stripe test confirmed Marketplace display, payment, customer order history, Admin Order receipt, and invoice generation. Its inventory result exposed a compatibility gap: some tracked records use a variant flag or a stable workbook InventoryID rather than the Product boolean and constructed `INV-*` ID. Checkout now recognises all three tracking sources and updates the matching Inventory document; the emulator regression uses a non-derived InventoryID to protect this case. Admin Orders also load the latest linked customer issue and display its type, affected items, requested outcome, customer, and full message. Rating has been removed from the Order Help and complaint UI because ratings belong to the separate product-review workflow; historical stored issue ratings remain intact. The tracked purchase, including variants and replay protection, has since been re-tested successfully; the access review is next.
 
@@ -287,19 +371,16 @@ Implemented or confirmed. Test-only gaps are kept in the launch checklist below 
 - [ ] Confirm public navigation visibility, admin route protection, policy links, invoice links, and the order-help link in deployed mode.
 - [ ] Polish the V1 product images and copy, shipping/returns wording, policies, and About page content.
 
-## Future Build
+## Additional Future Build
 
 - [ ] Investigate and resolve inaudible course-preview video audio. The uploaded MP4 exposes an audio track and the browser player reports that it is unmuted, but no sound is currently heard; verify the source track's audible levels and browser/device audio routing before changing the player again.
 - [ ] Add the dedicated Claim order action, operational order filter tabs, and one-click copy buttons.
-- [ ] Add configurable low-stock warnings, optional out-of-stock hiding, and a stock-movement audit log.
+- [x] Add configurable low-stock warnings and optional out-of-stock hiding.
+- [ ] Add the remaining stock-movement and manufacturing audit views under roadmap area 2.
 - [ ] Add template revision history and a fuller Template Manager if template administration outgrows the Builder drawer.
-- [ ] Expand the Marketplace into unified product, session, course, workshop, and program browsing when those areas are ready to be released.
 - [ ] Add richer About-page sections plus favicon and social-sharing image management.
 - [ ] Consider state or shipping-zone pricing only if real fulfilment costs make flat Australia-wide shipping unsuitable.
 - [ ] Consider storing Stripe product/price IDs in the workbook if the workbook becomes the long-term Stripe source of truth.
-- [ ] Add server-side CRM search, filtering, and pagination when the user list becomes too large for client-side loading.
-- [ ] Expand CRM follow-up, assignment, ownership, reminders, and staff workload tools after the V1 customer-support workflow is stable.
-- [ ] Replace the legacy affiliate course/workshop proposal forms with the shared Item/Blueprint/Plan Content Builder submission workflow, retaining affiliate ownership and the admin approval gate.
 
 ## Detailed Implementation Reference
 
@@ -526,9 +607,8 @@ Validated:
 
 Next:
 
-* Decide low-stock thresholds and add admin warnings.
-* Add out-of-stock hiding rules if wanted.
-* Add stock movement/audit log later if inventory accuracy becomes important.
+* Low-stock thresholds/admin warnings and optional out-of-stock hiding are complete.
+* Add stock-movement and manufacturing audit views under roadmap area 2.
 
 ### Public Navigation
 
@@ -728,7 +808,7 @@ Remaining workbook checks:
 * Business Settings policy fields still need readable Asset/Item selectors that store stable IDs.
 * Need to verify policy PDF preview/download in deployed mode after those selectors are wired.
 * Need to verify order help link after login in deployed mode.
-* Need low-stock and out-of-stock admin warnings.
+* Low-stock warnings and optional out-of-stock hiding are complete; stock-movement and manufacturing audit views remain under roadmap area 2.
 * Need product/session/course detail pages to feel unified under Marketplace.
 * Stripe Connect onboarding code is ready, but the Recovery Tools Stripe platform account must activate Connect before Stripe will allow Express account creation.
 
