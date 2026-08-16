@@ -18,6 +18,7 @@
 
 ### Confirmed working
 
+- [x] **1. Create a safe way to keep developing the app without disturbing the current deployment, with a safe way to update production.** Feature work now stays on focused branches and uses the Firebase Emulator Suite; pull requests verify without deploying; pushes to `main` do not automatically deploy Hosting; production Hosting releases are manually started; local release checks require `main`, a clean working tree, successful verification/build, and an explicit confirmation; Firebase commands have no implicit production default and must name `--project recovery-tools`; selective deployment, smoke testing, maintenance windows, and rollback are documented in `DEVELOPER_HANDBOOK.md`.
 - [x] Every public policy PDF link opens the selected document correctly.
 - [x] Content Builder works for Item types `content`, `part`, and `tool`, including Assets.
 - [x] Physical Products and Course Products work through Marketplace and checkout.
@@ -102,7 +103,7 @@
 - Archived Products are hidden from Products & Inventory > Products unless Show archived Products is selected.
 - Archived Products are excluded from normal Inventory Stocktake data.
 - Before permanently removing the accidental Heat Patch duplicate, run a reference audit using its exact Product ID. Delete it only if Orders, payments, reviews, access history, carts, refunds, and other immutable history are all absent.
-- Keep the Items-versus-Products Stocktake redesign on a separate V2 branch and staging Firebase project.
+- Keep the Items-versus-Products Stocktake redesign on a separate V2 branch and test it in the Firebase Emulator Suite until release-ready.
 
 ### V1 launch position
 
