@@ -20,6 +20,8 @@
     "verify:canonical-admin-writes:emulator": "node scripts/verify-canonical-admin-writes-emulator.js",
     "verify:order-lines": "node scripts/verify-order-line-snapshots.js",
     "verify:phase5:emulator": "node scripts/verify-phase5-order-parity-emulator.js",
+    "release:guard": "node scripts/verify-production-release.mjs",
+    "release:check": "npm run release:guard && npm run check:imports && npm run build",
     "emulators": "node scripts/start-emulators.js",
     "check:imports": "node scripts/verify-imports.js",
     "lint": "eslint .",

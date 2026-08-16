@@ -2,6 +2,8 @@
 
 ---
 
+> Production releases are manual and must follow `RELEASE-PROCESS.md`. The repository intentionally has no implicit default Firebase project; production commands must explicitly name `--project recovery-tools`.
+
 # 1. Project Overview
 
 ## Tech Stack

@@ -130,43 +130,32 @@ Do not add optional financial reporting, advanced inventory, or larger CRM enhan
 - Larger-scale CRM follow-up, staff assignment, and pagination.
 - Unified public Course, Workshop, Program, session, and Marketplace discovery after each area is launch-ready.
 
-### V2 staging and release plan
+### V2 development and release plan
 
 #### Production boundary
 
 - `main` represents the production release line.
 - Do not develop unfinished V2 features directly on `main`.
 - Narrow V1 fixes use a short-lived `codex/v1-*` branch and are merged only after focused verification.
-- V2 work uses a separate `codex/v2-*` branch and a separate Firebase project.
+- V2 is the next major set of modules built on the existing `recovery-tools` Firebase project; it is not a replacement Firebase project.
+- V2 work uses focused `codex/v2-*` branches and the Firebase Emulator Suite until each module passes its acceptance checks.
+- Pull requests verify without deploying, pushes to `main` do not automatically deploy Hosting, and production Hosting releases are manually started through the guarded GitHub workflow.
+- Follow `RELEASE-PROCESS.md` for branch, verification, selective deployment, smoke-test, maintenance-window, and rollback requirements.
 
-#### Staging project
+#### Emulator-first development
 
-Create a second Firebase project before deploying V2 code. It must have its own:
+Keep the current production integrations and data untouched while V2 is under development:
 
-- Hosting site and web-app configuration
-- Authentication users and authorised domains
-- Firestore database, rules, and indexes
-- Storage bucket and rules
-- Functions and Secret Manager values
-- App Check/reCAPTCHA registration
-- SendGrid test or sandbox configuration
-- Stripe test keys and test webhook endpoint
-
-Never copy production Stripe secrets, customer records, Orders, or Authentication users into staging.
-
-After creating the staging project, add it as a Firebase alias without changing production:
-
-```powershell
-npx firebase-tools use --add
-```
-
-Keep `recovery-tools` as the production project and choose `staging` as the new alias. Every staging deployment must explicitly include `--project staging`; every production deployment must explicitly include `--project recovery-tools`.
-
-Do not use a Hosting preview channel as the only V2 environment because Functions, Firestore, Authentication, Storage, App Check, and Stripe also need isolation.
+- Develop the frontend, Functions, Firestore rules/indexes, Storage rules, inventory, access, and admin workflows against local emulators.
+- Use disposable emulator users, Orders, payments, inventory, reviews, and access records.
+- Do not retouch established production Stripe checkout/webhooks, SendGrid, App Check/reCAPTCHA, secrets, or IAM unless a reviewed V2 requirement genuinely changes that integration.
+- Keep new modules hidden and route-guarded until they are accepted for release.
+- Prefer backward-compatible data changes so the current and newly deployed browser bundles can coexist during release.
+- Deploy only reviewed resources and always include `--project recovery-tools` explicitly.
 
 #### V2 Inventory Stocktake scope
 
-Build the redesign on `codex/v2-inventory-stocktake` after the staging project exists:
+Build the redesign on `codex/v2-inventory-stocktake` against the emulators:
 
 - Default to active inventory only.
 - Provide separate Items/components and Products/finished-goods views.
@@ -178,11 +167,13 @@ Build the redesign on `codex/v2-inventory-stocktake` after the staging project e
 
 #### Promotion to production
 
-1. Test V2 in the staging Firebase project with disposable users and Stripe test payments.
+1. Test the V2 module in the Firebase Emulator Suite with disposable users and test records.
 2. Review the branch diff against `main`.
-3. Merge only after the acceptance checklist passes.
-4. Build and deploy using the production GitHub environment or an explicit production command.
-5. Complete a short production smoke test without creating unnecessary live transactions.
+3. Run the focused verification scripts, import checks, production build, and module acceptance checklist.
+4. Merge only after all checks pass; merging does not deploy automatically.
+5. For an ordinary backward-compatible release, manually deploy only the reviewed resources.
+6. For an incompatible migration or tightly coupled checkout/access release, enable the tested maintenance control before deployment and retain admin access for smoke testing.
+7. Complete a short production smoke test without creating unnecessary live transactions, then end maintenance if it was required.
 
 ## Current Handoff
 

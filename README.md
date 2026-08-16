@@ -17,6 +17,9 @@ RecoveryToolsApp
 - `README.md` — setup, environment, installation, deployment, and repo-level instructions.
 - `DEVELOPER-HANDBOOK.md` — internal Recovery Tools architecture, Firestore schemas, daily workflow, unlock rules, and development checklists.
 - `NEXT-STEPS.md` — current active development tasks.
+- `RELEASE-PROCESS.md` — authoritative production verification, deployment, smoke-test, maintenance, and rollback process.
+
+> Production safety: `.firebaserc` intentionally has no `default` project. Do not use the older unqualified deployment examples below for a production release; follow `RELEASE-PROCESS.md` and always specify `--project recovery-tools`.
 
 
 ## Environment setup
