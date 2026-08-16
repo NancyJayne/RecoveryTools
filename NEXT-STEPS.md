@@ -140,7 +140,7 @@ Do not add optional financial reporting, advanced inventory, or larger CRM enhan
 - V2 is the next major set of modules built on the existing `recovery-tools` Firebase project; it is not a replacement Firebase project.
 - V2 work uses focused `codex/v2-*` branches and the Firebase Emulator Suite until each module passes its acceptance checks.
 - Pull requests verify without deploying, pushes to `main` do not automatically deploy Hosting, and production Hosting releases are manually started through the guarded GitHub workflow.
-- Follow `RELEASE-PROCESS.md` for branch, verification, selective deployment, smoke-test, maintenance-window, and rollback requirements.
+- Follow `DEVELOPER_HANDBOOK.md` for branch, verification, selective deployment, smoke-test, maintenance-window, and rollback requirements.
 
 #### Emulator-first development
 
@@ -187,7 +187,7 @@ representative production data**, then run the complete non-admin test-user regr
 Stripe remains in test mode. Confirm the per-user Communications composite index is Enabled
 before relying on CRM communication history during that regression.
 
-The approved safety-first Product/Asset refactor is documented in `PRODUCT-ASSET-REFACTOR-MIGRATION-PLAN.md`. Products and Assets remain independent first-class entities; Product and Asset are not Item types. Implementation must remain additive and dual-read until the repeatable emulator migration, checkout/access/inventory parity tests, order-history checks, and rollback gates pass.
+The approved safety-first Product/Asset refactor keeps Products and Assets as independent first-class entities; Product and Asset are not Item types. Implementation must remain additive and dual-read until the repeatable emulator migration, checkout/access/inventory parity tests, order-history checks, and rollback gates pass.
 
 Phase 1 additive groundwork is now implemented: shared runtime schemas, canonical workbook/import/export collection support, `CreatesProduct` workbook fields, and Firestore rules/indexes for the new Product and Asset relationship collections. Legacy sheets, collections, checkout reads, Stripe fields and order snapshots remain unchanged.
 
@@ -198,6 +198,19 @@ Phase 3 dual-read adapters are now implemented. Catalogue hydration, checkout cr
 Phase 4's canonical admin foundation is now implemented. Saving a sellable Item, Blueprint, or Plan writes canonical Product identity fields, ProductLinks, ProductVariants, ProductAccessGrants for Plans, and EntityAssets while retaining compatibility records needed by the current UI. `CreatesProduct` is available to Blueprints and Plans as well as Items. The editor can create a new Product or select an existing Product and choose its ProductLink role without rewriting the selected Product. Turning the toggle off does not alter existing ProductLinks; the explicit Unlink product action archives only the relationship and preserves both entities. The top-level Product manager uses canonical Product types, creates Products as Draft by default, writes canonical base prices, and no longer exposes a destructive delete button. The Asset Library creates independent Assets, edits and archives renditions, displays EntityAsset usage, and explicitly links or unlinks Items, Blueprints, Plans, Products, and ProductVariants without deleting either side. The focused emulator regression is `npm run verify:canonical-admin-writes:emulator`.
 
 Phase 5's checkout safety gate is now implemented. New orders retain the legacy `products` snapshot and also write immutable schema-version-2 `orderLines` plus canonical `orderItems`. Product, selected ProductVariant, and ProductComponent inventory deductions are validated and committed in the same transaction as the root order, so webhook replays cannot deduct stock twice. ProductAccessGrants create deterministic `userAccess` records with duration-based expiry and revocation metadata. Both the webhook and purchase-confirmation paths repair missing order-item and access side effects when an existing paid order is replayed. Order history, fulfilment, and invoice readers prefer canonical order lines with legacy fallback. Run `npm run verify:order-lines` and `npm run verify:phase5:emulator`; the emulator regression includes a simulated post-order crash and verifies recovery without a second inventory deduction. A deployed Stripe purchase and the associated admin order flow have since been confirmed; access/unlock and the remaining admin workflow checks are the next release gates.
+
+The remaining Product/Asset Phase 6 gate is deliberately non-destructive:
+
+- [ ] Add migration telemetry and confirm shop/admin canonical reads retain legacy fallback where required.
+- [ ] Resolve the ten missing legacy Plan/Course access targets before canonical access cutover.
+- [ ] Complete explicit regressions for legacy-only, canonical-only, and mixed catalogue data; blank workbook fields preserving Firestore values; unlinking without cascading deletion; and historical invoices/PDFs after current Product edits.
+- [ ] Confirm migration reports cover collection counts, stable Product/Stripe IDs, duplicates/skips, orphaned relationships, variant/inventory reconciliation, access parity, checkout totals, shipping decisions, historical-order checksums, and second-run idempotency.
+- [ ] Stop new `ItemProduct`, `itemVariants`, and `itemAssets` writes only after the canonical admin and purchase paths pass.
+- [ ] Remove Product-only Item controls only after the corresponding compatibility writes stop.
+- [ ] Retain compatibility reads until production telemetry shows zero unresolved legacy fallbacks for an agreed observation period.
+- [ ] Archive rather than delete legacy structures, and only after a rollback export has been restored and verified.
+
+Canonical workbook sheets remain `Products`, `ProductLinks`, `ProductOptions`, `ProductOptionValues`, `ProductVariants`, `ProductVariantValues`, `ProductComponents`, `ProductAccessGrants`, `Assets`, `EntityAssets`, and `AssetRenditions`. `Items`, `Blueprints`, and `Plan` retain `CreatesProduct`; legacy `ItemProduct`, `ItemVariants`, `ProductPrice`, `Asset`, and `ItemAsset` remain readable during compatibility. Imports stay merge/upsert and blank workbook values must not erase populated ownership, Stripe, access, inventory, or audit fields without an explicit clear operation.
 
 The July 19 deployed Stripe test confirmed Marketplace display, payment, customer order history, Admin Order receipt, and invoice generation. Its inventory result exposed a compatibility gap: some tracked records use a variant flag or a stable workbook InventoryID rather than the Product boolean and constructed `INV-*` ID. Checkout now recognises all three tracking sources and updates the matching Inventory document; the emulator regression uses a non-derived InventoryID to protect this case. Admin Orders also load the latest linked customer issue and display its type, affected items, requested outcome, customer, and full message. Rating has been removed from the Order Help and complaint UI because ratings belong to the separate product-review workflow; historical stored issue ratings remain intact. The tracked purchase, including variants and replay protection, has since been re-tested successfully; the access review is next.
 

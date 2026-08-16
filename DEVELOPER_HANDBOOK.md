@@ -2,7 +2,7 @@
 
 ---
 
-> Production releases are manual and must follow `RELEASE-PROCESS.md`. The repository intentionally has no implicit default Firebase project; production commands must explicitly name `--project recovery-tools`.
+> Production releases are manual and must follow this handbook. The repository intentionally has no implicit default Firebase project; production commands must explicitly name `--project recovery-tools`.
 
 # 1. Project Overview
 
@@ -231,7 +231,16 @@ Do not use an unqualified or broad `firebase deploy` for routine releases. Only 
 □ NEXT-STEPS.md and release notes updated
 ```
 
-See `RELEASE-PROCESS.md` for the authoritative release and rollback procedure.
+## Rollback
+
+If production smoke testing finds a serious regression:
+
+1. Keep maintenance mode enabled if customers cannot safely use the release.
+2. Roll Firebase Hosting back to the previous known-working release from Hosting release history.
+3. Redeploy the last known-working implementation of an affected Function when required.
+4. Prefer a forward-compatible data repair over a destructive database reversal.
+5. Confirm the known-working customer and admin journeys before ending maintenance mode.
+6. Record the failure and required corrective work in `NEXT-STEPS.md`.
 
 ---
 
