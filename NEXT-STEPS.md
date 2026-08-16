@@ -119,17 +119,83 @@ The shortest safe route to launch is:
 
 Do not add optional financial reporting, advanced inventory, or larger CRM enhancements to the V1 gate unless a test identifies them as necessary for safe operation.
 
-### Future build
+### Post-launch implementation roadmap
 
-- Course video audio investigation.
-- Re-enable Affiliate registration after linking the configured Partner Agreement through application acceptance and completing Stripe Connect production onboarding/payout testing; reuse the same agreement for Therapist onboarding and both role dashboards where appropriate.
-- Verify approved-affiliate wholesale pricing end to end before the V2 Affiliate launch: ordinary customers must never receive wholesale prices, approved affiliates must see the correct Product/variant price, minimum quantities must be enforced, and the Stripe Order must retain the affiliate pricing tier.
-- Add multi-code promotion stacking only if a future sales policy requires more than one code on an Order; the current checkout deliberately accepts one code.
-- Re-enable Library/Anato-me and Programs after their V2 content, navigation, and publication checks pass.
-- Financial cost-factor and margin reporting upgrades.
-- Advanced inventory warnings, audit views, and purchasing workflows.
-- Larger-scale CRM follow-up, staff assignment, and pagination.
-- Unified public Course, Workshop, Program, session, and Marketplace discovery after each area is launch-ready.
+This is the agreed order for the next major modules. Each area uses a focused `codex/v2-*` branch, remains hidden while incomplete, passes its emulator acceptance checklist, and is released independently through the guarded production process.
+
+#### 1. Workshops - ticket-sales release
+
+Sell and safely operate Workshop tickets before waiting for the complete automated instructor-payment system.
+
+- [ ] Release public Workshop discovery, session details, capacity/remaining places, Product-variant selection, Stripe purchase, booking confirmation, attendee records, customer Profile access, cancellation/refund handling, and mobile presentation.
+- [ ] Add instructor/session operating information, equipment checklists, and an attached viewable/downloadable “what to bring/wear” PDF.
+- [ ] Add Workshop promotion videos and verify Asset/visibility behaviour.
+- [ ] Complete instructor submission, approval, publication, session-management, attendee, cancellation, notification, and reporting tools.
+- [ ] Record instructor amounts payable manually until the financial allocation engine can calculate and reconcile automated payment cycles.
+
+#### 2. Stock and inventory operations
+
+- [x] Low-stock warnings are implemented.
+- [x] Optional out-of-stock Marketplace hiding is implemented.
+- [ ] Add stock-movement and manufacturing audit views.
+- [ ] Separate Items/components from Products/finished goods in Inventory Stocktake.
+- [ ] Group Item variants under their Item and Product variants under their Product.
+- [ ] Default to active tracked inventory and provide a separate Archived view.
+- [ ] Make entity types visually prominent so component and packaged stock cannot be confused.
+- [ ] Save only the rows currently displayed and reviewed by the admin.
+- [ ] Preserve stable workbook and Firebase identities throughout Stocktake, manufacturing, imports, and audits.
+
+#### 3. Financial and allocation engine
+
+- [ ] Add configurable per-Order-line allocations for Product cost, gross revenue, Stripe fees, tax, affiliate commission, instructor payment, partner share, applicable super, business savings, owner share, Pain Australia donation, refunds, and net payable amounts.
+- [ ] Snapshot the allocation rules and calculated amounts on the Order so later policy changes do not rewrite history.
+- [ ] Calculate totals by payment cycle and support payable, confirmed-paid, adjusted, and refunded states with an audit history.
+- [ ] Add affiliate/instructor/partner earnings views and exportable reconciliation reports.
+- [ ] Confirm tax, super, commission, partner-share, and donation treatment with the appropriate accountant/adviser before production automation.
+
+#### 4. Unified Marketplace and Library/Anato-Me
+
+- [ ] Create a shared Marketplace framework for Products, Workshops, Courses, and Programs with consistent cards, detail pages, filters, visibility, free/purchasable labels, and Product-to-content connections.
+- [ ] Release Library/Anato-Me discovery and free resources with consistent Asset, PDF, video, access, and publication behaviour.
+- [ ] Keep each unfinished content type hidden and route-guarded until its own release gate passes.
+
+#### 5. Complete the Affiliate system
+
+- [ ] Complete submission, approval, rejection, resubmission, refreshed-claim, notification, Agreement-acceptance, dashboard, and access-denial workflows.
+- [ ] Activate Stripe Connect and test Express onboarding, refresh/return handling, dashboard login, and payout-account persistence.
+- [ ] Prove wholesale prices never reach ordinary customers; show crossed-out RRP beside the eligible affiliate price; enforce minimum quantities; and retain the pricing tier in Stripe Orders, invoices, refunds, and financial allocations.
+- [ ] Decide and enforce affiliate pickup/warehouse and fulfilment rules server-side.
+- [ ] Add affiliate earnings, payment-cycle, payment-confirmation, and refund-adjustment views using the financial engine.
+- [ ] Replace legacy affiliate Course/Workshop proposal forms with the shared Content Builder submission workflow while preserving affiliate ownership and admin approval.
+
+#### 6. Programs and recommendation system
+
+- [ ] Build a reusable general recommendation quiz and shared question/quiz builder.
+- [ ] Build Program templates and a buildable/customisable Program system using reusable Items, Blueprints, Plans, Library resources, and Assets.
+- [ ] Support free and purchasable Programs, progression, access/expiry/publication controls, and printable/downloadable output.
+
+#### 7. Courses
+
+- [ ] Release Course discovery, purchase, module progression, completion records, certificates, and progress reporting.
+- [ ] Add reusable quizzes, assignments, marking criteria/rubrics, instructor feedback, and resubmission workflows.
+- [ ] Complete instructor submission, approval, publication, management, and learner-support tools.
+- [ ] Verify expiry, revocation, archived/paused Course behaviour, transactional emails, and the course-preview audio issue.
+
+#### 8. CRM expansion
+
+- [ ] Add improved assignment, ownership, follow-ups, reminders, and staff workload views after the underlying customer/content workflows are stable.
+- [ ] Add server-side CRM search, filtering, and pagination.
+- [ ] Add an auditable timeline across Communications, Orders, Workshops, Courses, Programs, access, roles, profile changes, merges, and archive/reactivation actions.
+
+#### 9. Therapist platform - final major area
+
+- [ ] Complete Therapist submission, approval, notification, Agreement, role, dashboard, and access workflows.
+- [ ] Build Therapist booking and session-management tools using the proven Workshop scheduling foundations where appropriate.
+- [ ] Add coded treatment progressions/regressions, abbreviation quick notes, assessment and differential-diagnosis support, and clinical audit history.
+- [ ] Reuse Program templates to produce buildable, printable, and downloadable customer Programs.
+- [ ] Apply appropriate privacy, clinical-safety, permission, and professional-review gates before release.
+
+Additional lower-priority backlog: multi-code promotion stacking only if sales policy requires it; template revision history; richer About/favicon/social-sharing management; shipping-zone pricing only if real costs require it; and storing Stripe Product/Price IDs in the workbook only if the workbook becomes the long-term Stripe source of truth.
 
 ### V2 development and release plan
 
@@ -165,6 +231,7 @@ Build the redesign on `codex/v2-inventory-stocktake` against the emulators:
 - Make the entity kind visually prominent so component stock cannot be confused with packaged stock.
 - Provide an explicit Archived view rather than mixing archived records into daily Stocktake.
 - Save only rows currently displayed and reviewed by the admin.
+- Preserve stable workbook IDs and Firebase document identities throughout the redesign.
 
 #### Promotion to production
 
@@ -292,19 +359,16 @@ Implemented or confirmed. Test-only gaps are kept in the launch checklist below 
 - [ ] Confirm public navigation visibility, admin route protection, policy links, invoice links, and the order-help link in deployed mode.
 - [ ] Polish the V1 product images and copy, shipping/returns wording, policies, and About page content.
 
-## Future Build
+## Additional Future Build
 
 - [ ] Investigate and resolve inaudible course-preview video audio. The uploaded MP4 exposes an audio track and the browser player reports that it is unmuted, but no sound is currently heard; verify the source track's audible levels and browser/device audio routing before changing the player again.
 - [ ] Add the dedicated Claim order action, operational order filter tabs, and one-click copy buttons.
-- [ ] Add configurable low-stock warnings, optional out-of-stock hiding, and a stock-movement audit log.
+- [x] Add configurable low-stock warnings and optional out-of-stock hiding.
+- [ ] Add the remaining stock-movement and manufacturing audit views under roadmap area 2.
 - [ ] Add template revision history and a fuller Template Manager if template administration outgrows the Builder drawer.
-- [ ] Expand the Marketplace into unified product, session, course, workshop, and program browsing when those areas are ready to be released.
 - [ ] Add richer About-page sections plus favicon and social-sharing image management.
 - [ ] Consider state or shipping-zone pricing only if real fulfilment costs make flat Australia-wide shipping unsuitable.
 - [ ] Consider storing Stripe product/price IDs in the workbook if the workbook becomes the long-term Stripe source of truth.
-- [ ] Add server-side CRM search, filtering, and pagination when the user list becomes too large for client-side loading.
-- [ ] Expand CRM follow-up, assignment, ownership, reminders, and staff workload tools after the V1 customer-support workflow is stable.
-- [ ] Replace the legacy affiliate course/workshop proposal forms with the shared Item/Blueprint/Plan Content Builder submission workflow, retaining affiliate ownership and the admin approval gate.
 
 ## Detailed Implementation Reference
 
@@ -531,9 +595,8 @@ Validated:
 
 Next:
 
-* Decide low-stock thresholds and add admin warnings.
-* Add out-of-stock hiding rules if wanted.
-* Add stock movement/audit log later if inventory accuracy becomes important.
+* Low-stock thresholds/admin warnings and optional out-of-stock hiding are complete.
+* Add stock-movement and manufacturing audit views under roadmap area 2.
 
 ### Public Navigation
 
@@ -733,7 +796,7 @@ Remaining workbook checks:
 * Business Settings policy fields still need readable Asset/Item selectors that store stable IDs.
 * Need to verify policy PDF preview/download in deployed mode after those selectors are wired.
 * Need to verify order help link after login in deployed mode.
-* Need low-stock and out-of-stock admin warnings.
+* Low-stock warnings and optional out-of-stock hiding are complete; stock-movement and manufacturing audit views remain under roadmap area 2.
 * Need product/session/course detail pages to feel unified under Marketplace.
 * Stripe Connect onboarding code is ready, but the Recovery Tools Stripe platform account must activate Connect before Stripe will allow Express account creation.
 
