@@ -130,6 +130,7 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
 - [ ] Release public Workshop discovery, session details, capacity/remaining places, Product-variant selection, Stripe purchase, booking confirmation, attendee records, customer Profile access, cancellation/refund handling, and mobile presentation.
 - [ ] Add instructor/session operating information, equipment checklists, and an attached viewable/downloadable “what to bring/wear” PDF.
 - [ ] Add Workshop promotion videos and verify Asset/visibility behaviour.
+- [ ] Create an initial approved Workshop marketing pack with reusable images/video, suggested captions, event links, and trackable affiliate-ready share links; the full Marketing Centre follows in roadmap area 5.
 - [ ] Complete instructor submission, approval, publication, session-management, attendee, cancellation, notification, and reporting tools.
 - [ ] Record instructor amounts payable manually until the financial allocation engine can calculate and reconcile automated payment cycles.
 
@@ -159,7 +160,18 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
 - [ ] Release Library/Anato-Me discovery and free resources with consistent Asset, PDF, video, access, and publication behaviour.
 - [ ] Keep each unfinished content type hidden and route-guarded until its own release gate passes.
 
-#### 5. Complete the Affiliate system
+#### 5. Admin and Affiliate Marketing Centre
+
+- [ ] Add an Admin Marketing section for campaigns linked to Products, Workshops, Courses, Programs, Library resources, and selected Product variants/sessions.
+- [ ] Let admin create approved share packs containing reusable images/video, platform-sized Assets, captions, calls to action, hashtags, destination links, campaign dates, audience, status, and brand/compliance notes.
+- [ ] Support draft, review, active, paused, expired, and archived campaign states without deleting historical material.
+- [ ] Generate trackable campaign/referral links and report clicks, referrals, conversions, Orders, revenue, refunds, and commission outcomes without trusting browser-supplied attribution.
+- [ ] Add an Affiliate Marketing section where approved affiliates can filter available campaigns, copy approved captions and their own referral link, download approved Assets, and share Products, Courses, Workshops, Programs, or free resources.
+- [ ] Allow affiliates/instructors to advertise only their own approved Course or Workshop plus campaigns explicitly made available by admin.
+- [ ] Preserve campaign, affiliate, content, Product, session, and pricing identity on resulting Orders and financial reports.
+- [ ] Start with copy/download/share-link tools; treat direct posting to external social networks as a later optional integration requiring separate platform permissions.
+
+#### 6. Complete the Affiliate system
 
 - [ ] Complete submission, approval, rejection, resubmission, refreshed-claim, notification, Agreement-acceptance, dashboard, and access-denial workflows.
 - [ ] Activate Stripe Connect and test Express onboarding, refresh/return handling, dashboard login, and payout-account persistence.
@@ -168,26 +180,26 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
 - [ ] Add affiliate earnings, payment-cycle, payment-confirmation, and refund-adjustment views using the financial engine.
 - [ ] Replace legacy affiliate Course/Workshop proposal forms with the shared Content Builder submission workflow while preserving affiliate ownership and admin approval.
 
-#### 6. Programs and recommendation system
+#### 7. Programs and recommendation system
 
 - [ ] Build a reusable general recommendation quiz and shared question/quiz builder.
 - [ ] Build Program templates and a buildable/customisable Program system using reusable Items, Blueprints, Plans, Library resources, and Assets.
 - [ ] Support free and purchasable Programs, progression, access/expiry/publication controls, and printable/downloadable output.
 
-#### 7. Courses
+#### 8. Courses
 
 - [ ] Release Course discovery, purchase, module progression, completion records, certificates, and progress reporting.
 - [ ] Add reusable quizzes, assignments, marking criteria/rubrics, instructor feedback, and resubmission workflows.
 - [ ] Complete instructor submission, approval, publication, management, and learner-support tools.
 - [ ] Verify expiry, revocation, archived/paused Course behaviour, transactional emails, and the course-preview audio issue.
 
-#### 8. CRM expansion
+#### 9. CRM expansion
 
 - [ ] Add improved assignment, ownership, follow-ups, reminders, and staff workload views after the underlying customer/content workflows are stable.
 - [ ] Add server-side CRM search, filtering, and pagination.
 - [ ] Add an auditable timeline across Communications, Orders, Workshops, Courses, Programs, access, roles, profile changes, merges, and archive/reactivation actions.
 
-#### 9. Therapist platform - final major area
+#### 10. Therapist platform - final major area
 
 - [ ] Complete Therapist submission, approval, notification, Agreement, role, dashboard, and access workflows.
 - [ ] Build Therapist booking and session-management tools using the proven Workshop scheduling foundations where appropriate.
