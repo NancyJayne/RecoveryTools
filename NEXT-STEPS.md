@@ -140,7 +140,12 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
   - [ ] Confirm cancellation/refund removes Workshop access and attendee capacity is recalculated correctly.
   - [ ] Confirm the purchased Workshop page, booking information, direct downloads, and checkout flow on mobile.
   - [ ] Complete end-to-end emulator and mobile acceptance testing for discovery through confirmation/Profile, including sold-out, cancellation, and refund cases.
-- [ ] Add instructor/session operating information and equipment checklists; direct Workshop PDF/download display is implemented, but the final “what to bring/wear” document still needs to be created, attached, and acceptance-tested.
+- [ ] Add instructor/session operating information and equipment/material checklists; direct Workshop PDF/download display is implemented, but the final “what to bring/wear” document still needs to be created, attached, and acceptance-tested.
+  - [ ] Allow Products, ProductVariants, Items, and ItemVariants to be allocated to a specific Workshop session as either a fixed quantity or a quantity per attendee.
+  - [ ] Give each allocation an inventory treatment: `bring and return` for reusable equipment with no stock deduction, or `consumable/take-home` with an optional inventory deduction.
+  - [ ] Calculate the required quantity from the selected basis (session capacity, confirmed attendees, or actual attendees), show shortages before the Workshop, and produce a printable/mobile packing checklist.
+  - [ ] Require an explicit admin confirmation such as `Packed/issued - deduct inventory` before deducting consumable/take-home stock; do not deduct merely because a ticket was sold.
+  - [ ] Record the source stock identity, quantity, Workshop session, administrator, timestamp, and reversal/adjustment history in the stock-movement audit so reusable equipment and consumed stock cannot be confused.
 - [ ] Add Workshop promotion videos and verify Asset/visibility behaviour.
 - [ ] Create an initial approved Workshop marketing pack with reusable images/video, suggested captions, event links, and trackable affiliate-ready share links; the full Marketing Centre follows in roadmap area 5.
 - [ ] Complete instructor submission, approval, publication, session-management, attendee, cancellation, notification, and reporting tools.
