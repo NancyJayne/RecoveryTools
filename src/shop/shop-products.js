@@ -751,9 +751,15 @@ export function showProductDetail(product, options = {}) {
     return selectedVariant ? Number(selectedVariant.stock ?? 0) : Number(product.stock ?? 0);
   }
 
+  function tracksCurrentInventory() {
+    if (selectedVariant) {
+      return selectedVariant.inventoryTracked === true || product.inventoryTracked !== false;
+    }
+    return product.inventoryTracked !== false;
+  }
+
   function updateAddButtonState() {
-    const tracksInventory = product.inventoryTracked !== false;
-    const isOutOfStock = tracksInventory && currentStock() === 0;
+    const isOutOfStock = tracksCurrentInventory() && currentStock() <= 0;
     const isWorkshopSoldOut = productCategory(product) === "workshops" &&
       selectedVariant?.ticketsRemaining !== null && Number(selectedVariant?.ticketsRemaining) === 0;
     const isComingSoon = selectedVariant
