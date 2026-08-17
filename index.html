@@ -1200,11 +1200,14 @@
 
   <section id="productRecordsToolPanel" class="product-manager-tool-panel hidden" data-product-manager-panel="products">
     <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
-      <p class="text-sm text-gray-400">Archived Products are hidden from this list by default.</p>
-      <label class="inline-flex items-center gap-2 text-sm text-gray-300">
-        <input id="showArchivedProductsToggle" type="checkbox" class="accent-[#407471]">
-        Show archived Products
-      </label>
+      <p class="text-sm text-gray-400">Archived Products are hidden by default. Refresh to update live Workshop reservations.</p>
+      <div class="flex flex-wrap items-center gap-3">
+        <button id="refreshProductOperationsBtn" type="button" class="rounded border border-gray-600 px-3 py-2 text-sm text-white">Refresh Products</button>
+        <label class="inline-flex items-center gap-2 text-sm text-gray-300">
+          <input id="showArchivedProductsToggle" type="checkbox" class="accent-[#407471]">
+          Show archived Products
+        </label>
+      </div>
     </div>
     <div id="productList" class="mt-4 space-y-4"></div>
   </section>

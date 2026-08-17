@@ -131,6 +131,7 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
   - [x] Show available Workshop-session counts, remaining-place warnings, sold-out states, and prevent the customer from selecting more places than remain.
   - [x] Revalidate Workshop seat capacity server-side before creating the Stripe Checkout session so stale or altered carts cannot knowingly exceed current paid-ticket availability.
   - [x] Reserve Workshop seats atomically during Stripe Checkout and consume or release the reservation through the existing confirmation/webhook lifecycle.
+  - [x] Show Capacity, Sold, temporarily Reserved, and actually Available seats for each Workshop Product variant in Products & Inventory.
   - [x] Isolate saved carts by Firebase user UID, keep guest carts separate, and refresh the visible cart when authentication changes.
   - [ ] Complete end-to-end emulator and mobile acceptance testing for discovery through confirmation/Profile, including sold-out, cancellation, and refund cases.
 - [ ] Add instructor/session operating information, equipment checklists, and an attached viewable/downloadable “what to bring/wear” PDF.

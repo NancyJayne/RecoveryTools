@@ -250,6 +250,7 @@ function setupInventoryOperations() {
   const list = document.getElementById("inventoryStocktakeList");
   if (!list) return;
   const refresh = document.getElementById("refreshInventoryOperationsBtn");
+  const productRefresh = document.getElementById("refreshProductOperationsBtn");
   const search = document.getElementById("inventoryStocktakeSearch");
   const save = document.getElementById("saveInventoryStocktakeBtn");
   const productSelect = document.getElementById("manufacturingProductSelect");
@@ -265,6 +266,10 @@ function setupInventoryOperations() {
     document.getElementById("manufacturingQuantityProduced")
       ?.addEventListener("input", renderManufacturingPreview);
     record?.addEventListener("click", submitManufacturingRun);
+  }
+  if (productRefresh?.dataset.bound !== "true") {
+    productRefresh.dataset.bound = "true";
+    productRefresh.addEventListener("click", loadInventoryOperations);
   }
   loadInventoryOperations();
 }
@@ -351,10 +356,11 @@ function renderWorkshopSessions() {
                 ${session.eventLocation ? ` · ${escapeHTML(session.eventLocation)}` : ""}
               </p>
             </div>
-            <div class="grid grid-cols-3 gap-4 text-center text-sm">
+            <div class="grid grid-cols-2 gap-4 text-center text-sm sm:grid-cols-4">
               <span><strong class="block text-white">${capacity || "—"}</strong>Capacity</span>
               <span><strong class="block text-white">${session.sold}</strong>Sold</span>
-              <span><strong class="block text-white">${remaining}</strong>Remaining</span>
+              <span><strong class="block text-amber-300">${Number(session.reserved || 0)}</strong>Reserved</span>
+              <span><strong class="block text-white">${remaining}</strong>Available</span>
             </div>
           </div>
         </summary>
@@ -427,10 +433,11 @@ function createWorkshopSessionsPanel(product) {
               <p class="text-xs text-gray-400">${escapeHTML(workshopDate(session.eventStartAt))}${session.eventLocation ? ` · ${escapeHTML(session.eventLocation)}` : ""}</p>
               ${session.instructor ? `<p class="text-xs text-gray-400">Instructor: ${escapeHTML(session.instructor)}</p>` : ""}
             </div>
-            <div class="grid grid-cols-3 gap-4 text-center text-sm">
+            <div class="grid grid-cols-2 gap-4 text-center text-sm sm:grid-cols-4">
               <span><strong class="block text-white">${capacity || "—"}</strong>Capacity</span>
               <span><strong class="block text-white">${session.sold}</strong>Sold</span>
-              <span><strong class="block text-white">${remaining}</strong>Remaining</span>
+              <span><strong class="block text-amber-300">${Number(session.reserved || 0)}</strong>Reserved</span>
+              <span><strong class="block text-white">${remaining}</strong>Available</span>
             </div>
           </div>
         </summary>

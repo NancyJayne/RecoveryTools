@@ -73,6 +73,7 @@ export const getInventoryOperationsData = onCall(
       userAccessSnap,
       usersSnap,
       instructorsSnap,
+      reservationsSnap,
     ] = await Promise.all([
       db.collection("inventory").get(),
       db.collection("items").get(),
@@ -88,7 +89,23 @@ export const getInventoryOperationsData = onCall(
       db.collection("userAccess").get(),
       db.collection("users").get(),
       db.collection("instructors").get(),
+      db.collection("inventoryReservations").where("status", "==", "active").get(),
     ]);
+
+    const activeReservationsBySession = new Map();
+    const nowMillis = Date.now();
+    reservationsSnap.docs.forEach((doc) => {
+      const reservation = doc.data() || {};
+      if (Number(reservation.reservationExpiresAt || 0) <= nowMillis) return;
+      (Array.isArray(reservation.items) ? reservation.items : []).forEach((item) => {
+        if (item.isWorkshop !== true) return;
+        const key = `${clean(item.productId)}:${clean(item.variantId)}`;
+        activeReservationsBySession.set(
+          key,
+          (activeReservationsBySession.get(key) || 0) + Math.max(Number(item.quantity || 1), 1),
+        );
+      });
+    });
 
     const attendanceByBooking = new Map(attendanceSnap.docs.map((doc) => {
       const row = doc.data() || {};
@@ -351,6 +368,9 @@ export const getInventoryOperationsData = onCall(
           const sold = attendees
             .filter((attendee) => !attendee.removed)
             .reduce((sum, attendee) => sum + attendee.quantity, 0);
+          const reserved = activeReservationsBySession.get(
+            `${doc.id}:${clean(variant.id)}`,
+          ) || 0;
           workshopSessions.push({
             productId: doc.id,
             productName: product.productName || product.name || doc.id,
@@ -360,7 +380,8 @@ export const getInventoryOperationsData = onCall(
             capacity,
             nearCapacityWarning: Number(variant.nearCapacityWarning || 0) || null,
             sold,
-            remaining: capacity > 0 ? Math.max(capacity - sold, 0) : null,
+            reserved,
+            remaining: capacity > 0 ? Math.max(capacity - sold - reserved, 0) : null,
             eventStartAt: variant.eventStartAt || product.eventStartAt || "",
             eventEndAt: variant.eventEndAt || product.eventEndAt || "",
             eventLocation: variant.eventLocation || product.eventLocation || "",
