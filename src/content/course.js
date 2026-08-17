@@ -66,7 +66,8 @@ function renderMedia(media = []) {
     if (asset.url) {
       const link = element(
         "a",
-        "inline-flex w-fit items-center rounded border border-[#407471] px-3 py-2 text-sm text-[#7fc2bd] hover:bg-[#407471]/20",
+        "inline-flex w-fit items-center rounded border border-[#407471] px-3 py-2 " +
+          "text-sm text-[#7fc2bd] hover:bg-[#407471]/20",
         `Open ${asset.title || "resource"}`,
       );
       link.href = asset.url;
@@ -76,6 +77,23 @@ function renderMedia(media = []) {
     }
   });
   return wrapper;
+}
+
+function mediaType(asset) {
+  return String(asset?.type || "").toLowerCase();
+}
+
+function isVisualMedia(asset) {
+  return ["image", "video"].includes(mediaType(asset));
+}
+
+function renderWorkshopResources(media = []) {
+  const resources = media.filter((asset) => !isVisualMedia(asset) && asset.url);
+  if (!resources.length) return null;
+  const section = element("section", "mt-5 rounded border border-gray-700 bg-gray-950/40 p-4");
+  section.appendChild(element("h2", "text-lg font-semibold text-white", "Workshop resources and downloads"));
+  section.appendChild(renderMedia(resources));
+  return section;
 }
 
 function renderTemplateValues(values = {}) {
@@ -253,19 +271,27 @@ function renderCoursePlayer(payload, completedModuleIds = new Set(), options = {
   if (course.longDescription && course.longDescription !== course.shortDescription) {
     header.appendChild(element("p", "mt-3 whitespace-pre-wrap text-gray-400", course.longDescription));
   }
-  if (course.media?.length) header.appendChild(renderMedia(course.media));
+  const courseMedia = Array.isArray(course.media) ? course.media : [];
+  const headerMedia = contentLabelLower === "workshop"
+    ? courseMedia.filter(isVisualMedia)
+    : courseMedia;
+  if (headerMedia.length) header.appendChild(renderMedia(headerMedia));
   container.appendChild(header);
   if (contentLabelLower === "workshop") {
     const booking = renderWorkshopBooking(payload.booking);
     if (booking) container.appendChild(booking);
+    const resources = renderWorkshopResources(courseMedia);
+    if (resources) container.appendChild(resources);
   }
 
   if (!modules.length) {
-    container.appendChild(element(
-      "p",
-      "mt-6 text-gray-400",
-      `No ${contentLabelLower} modules have been added yet.`,
-    ));
+    if (contentLabelLower !== "workshop") {
+      container.appendChild(element(
+        "p",
+        "mt-6 text-gray-400",
+        `No ${contentLabelLower} modules have been added yet.`,
+      ));
+    }
     showTabContent(options.sectionId || "courseDetailSection");
     return;
   }

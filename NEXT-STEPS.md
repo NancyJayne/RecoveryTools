@@ -133,8 +133,14 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
   - [x] Reserve Workshop seats atomically during Stripe Checkout and consume or release the reservation through the existing confirmation/webhook lifecycle.
   - [x] Show Capacity, Sold, temporarily Reserved, and actually Available seats for each Workshop Product variant in Products & Inventory.
   - [x] Isolate saved carts by Firebase user UID, keep guest carts separate, and refresh the visible cart when authentication changes.
+  - [x] Confirm two signed-in customers can hold seats in separate carts and that successful payment moves a seat from Reserved to Sold.
+  - [x] Hide the empty-module notice for purchased Workshops that do not use Blueprint modules.
+  - [x] Show active PDF/document/download Assets linked directly to the Workshop Plan, independently of Blueprint modules.
+  - [ ] Confirm an abandoned Stripe Checkout expires and releases its reserved Workshop seat.
+  - [ ] Confirm cancellation/refund removes Workshop access and attendee capacity is recalculated correctly.
+  - [ ] Confirm the purchased Workshop page, booking information, direct downloads, and checkout flow on mobile.
   - [ ] Complete end-to-end emulator and mobile acceptance testing for discovery through confirmation/Profile, including sold-out, cancellation, and refund cases.
-- [ ] Add instructor/session operating information, equipment checklists, and an attached viewable/downloadable “what to bring/wear” PDF.
+- [ ] Add instructor/session operating information and equipment checklists; direct Workshop PDF/download display is implemented, but the final “what to bring/wear” document still needs to be created, attached, and acceptance-tested.
 - [ ] Add Workshop promotion videos and verify Asset/visibility behaviour.
 - [ ] Create an initial approved Workshop marketing pack with reusable images/video, suggested captions, event links, and trackable affiliate-ready share links; the full Marketing Centre follows in roadmap area 5.
 - [ ] Complete instructor submission, approval, publication, session-management, attendee, cancellation, notification, and reporting tools.

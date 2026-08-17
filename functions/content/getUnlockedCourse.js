@@ -59,17 +59,30 @@ function publicAsset(asset, id) {
   };
 }
 
-async function assetsForRecord(db, record) {
+async function assetsForRecord(db, record, recordId) {
+  const linkedAssetsSnapshot = recordId
+    ? await db.collection("entityAssets").where("entityId", "==", recordId).get()
+    : null;
+  const linkedAssetIds = linkedAssetsSnapshot?.docs
+    .filter((snapshot) => {
+      const link = snapshot.data() || {};
+      return !["archived", "inactive"].includes(normalizedStatus(link.status));
+    })
+    .map((snapshot) => cleanString(snapshot.data()?.assetId)) || [];
   const assetIds = unique([
     ...collectIds(record.templateFieldValues, "ASSET-"),
     ...collectIds(record.entityVariants, "ASSET-"),
+    ...linkedAssetIds,
   ]);
   const snapshots = await Promise.all(assetIds.map((assetId) =>
     db.collection("assets").doc(assetId).get()));
   return snapshots
-    .map((snapshot, index) => snapshot.exists
-      ? publicAsset(snapshot.data(), assetIds[index])
-      : null)
+    .map((snapshot, index) => {
+      if (!snapshot.exists) return null;
+      const asset = snapshot.data() || {};
+      if (["archived", "inactive"].includes(normalizedStatus(asset.status))) return null;
+      return publicAsset(asset, assetIds[index]);
+    })
     .filter((asset) => asset?.url || asset?.embedUrl);
 }
 
@@ -167,13 +180,13 @@ export const getUnlockedCourse = onCall({
       if (item.archived === true || ["archived", "paused"].includes(itemStatus)) return null;
       return {
         ...publicContent(item, itemIds[itemIndex]),
-        media: await assetsForRecord(db, item),
+        media: await assetsForRecord(db, item, itemIds[itemIndex]),
       };
     }));
     return {
       ...publicContent(blueprint, blueprintIds[moduleIndex]),
       sortOrder: moduleIndex + 1,
-      media: await assetsForRecord(db, blueprint),
+      media: await assetsForRecord(db, blueprint, blueprintIds[moduleIndex]),
       items: items.filter(Boolean),
     };
   }));
@@ -191,7 +204,7 @@ export const getUnlockedCourse = onCall({
   return {
     course: {
       ...publicContent(course, courseId),
-      media: await assetsForRecord(db, course),
+      media: await assetsForRecord(db, course, courseId),
     },
     modules: modules.filter(Boolean),
     booking,
