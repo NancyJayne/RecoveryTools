@@ -60,6 +60,37 @@ function cleanString(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function normalizeStatus(value) {
+  return cleanString(value).toLowerCase();
+}
+
+function isWorkshopProduct(data = {}) {
+  const type = normalizeStatus(data.type || productDisplayType(data, ""));
+  return type.includes("workshop") || type.includes("webinar") || type.includes("session");
+}
+
+function paidOrder(order = {}) {
+  const states = [order.paymentStatus, order.orderStatus, order.status].map(normalizeStatus);
+  return states.includes("paid") &&
+    !states.some((value) => ["cancelled", "canceled", "refunded", "failed", "void"].includes(value));
+}
+
+function soldWorkshopTickets(ordersSnapshot, productId, variantId) {
+  return ordersSnapshot.docs.reduce((total, orderDoc) => {
+    const order = orderDoc.data() || {};
+    if (!paidOrder(order)) return total;
+    const lines = Array.isArray(order.orderLines) && order.orderLines.length
+      ? order.orderLines
+      : Array.isArray(order.products) ? order.products : [];
+    return total + lines.reduce((lineTotal, line) => {
+      const lineProductId = cleanString(line.productId);
+      const lineVariantId = cleanString(line.productVariantId || line.variantId);
+      if (lineProductId !== productId || lineVariantId !== variantId) return lineTotal;
+      return lineTotal + Math.max(Number(line.quantity || 1), 1);
+    }, 0);
+  }, 0);
+}
+
 async function applyPromotionCode(db, { code, items, uid, approvedAffiliate }) {
   const normalizedCode = cleanString(code).toUpperCase();
   if (!normalizedCode) return { code: "", discountAmount: 0, freeShipping: false };
@@ -278,6 +309,13 @@ const createCheckoutSessionHandler = async (request) => {
       userData.roles?.affiliate === true &&
       !["pending", "rejected", "inactive", "archived"].includes(affiliateStatus);
 
+    const workshopOrdersSnapshot = productDocs.some((doc) => {
+      const data = doc.data() || {};
+      return isWorkshopProduct(data);
+    })
+      ? await db.collection("orders").get()
+      : null;
+
     const validatedItems = await Promise.all(productDocs.map(async (doc, i) => {
       if (!doc.exists) throw new HttpsError("not-found", `Product not found: ${productIds[i]}`);
 
@@ -298,7 +336,10 @@ const createCheckoutSessionHandler = async (request) => {
           ["scheduled", "coming-soon"].includes(marketplaceMode) && !marketplaceStarted) {
         throw new HttpsError("failed-precondition", `${data.name || doc.id} is not available for purchase yet.`);
       }
-      const quantity = cart[i].quantity || 1;
+      const quantity = Number(cart[i].quantity || 1);
+      if (!Number.isInteger(quantity) || quantity < 1) {
+        throw new HttpsError("invalid-argument", "Product quantities must be whole numbers of at least one.");
+      }
       const variantId = cleanString(cart[i].variantId);
       const variant = variantForProduct(doc.id, data.itemId || data.legacyItemId || "", variantId, architecture);
       const activePrice = activePriceForProduct(doc.id, architecture);
@@ -314,6 +355,19 @@ const createCheckoutSessionHandler = async (request) => {
             ["scheduled", "coming-soon"].includes(variantMode) &&
               variantStartsMs && variantStartsMs > nowMs) {
           throw new HttpsError("failed-precondition", `${variant.name || doc.id} is not available for purchase yet.`);
+        }
+      }
+      const isWorkshop = isWorkshopProduct(data);
+      const seatCapacity = Number(variant?.seatCapacity || data.seatCapacity || 0);
+      if (isWorkshop && seatCapacity > 0 && workshopOrdersSnapshot) {
+        const ticketsSold = soldWorkshopTickets(workshopOrdersSnapshot, doc.id, variantId);
+        const ticketsRemaining = Math.max(seatCapacity - ticketsSold, 0);
+        if (quantity > ticketsRemaining) {
+          const label = variant?.name || data.name || doc.id;
+          const availability = ticketsRemaining === 0
+            ? `${label} is sold out.`
+            : `Only ${ticketsRemaining} place${ticketsRemaining === 1 ? " is" : "s are"} left for ${label}.`;
+          throw new HttpsError("failed-precondition", availability);
         }
       }
       const saleStartsMs = data.saleStartsAt ? Date.parse(data.saleStartsAt) : null;

@@ -486,6 +486,20 @@ export function createProductTile(product) {
   wrapper.appendChild(shortDesc);
   wrapper.appendChild(price);
 
+  if (productCategory(product) === "workshops") {
+    const availableSessions = Array.isArray(product.variants)
+      ? product.variants.filter((variant) => variant.purchasable !== false && Number(variant.ticketsRemaining) !== 0)
+      : [];
+    const sessionSummary = document.createElement("p");
+    sessionSummary.className = "mt-2 text-sm font-medium text-[#9edbd7]";
+    sessionSummary.textContent = product.variants?.length
+      ? availableSessions.length > 0
+        ? `${availableSessions.length} session${availableSessions.length === 1 ? "" : "s"} available`
+        : "Sold out"
+      : "View Workshop details";
+    wrapper.appendChild(sessionSummary);
+  }
+
   const tracksInventory = product.inventoryTracked !== false;
   const variantStock = Array.isArray(product.variants)
     ? product.variants.reduce((sum, variant) => sum + Number(variant.stock ?? 0), 0)
@@ -714,6 +728,15 @@ export function showProductDetail(product, options = {}) {
     }
   };
   plusBtn.onclick = () => {
+    const remaining = Number(selectedVariant?.ticketsRemaining);
+    const maximum = productCategory(product) === "workshops" &&
+      selectedVariant?.ticketsRemaining !== null && Number.isFinite(remaining)
+      ? remaining
+      : Number.POSITIVE_INFINITY;
+    if (quantity >= maximum) {
+      showToast(`Only ${maximum} place${maximum === 1 ? " is" : "s are"} currently available.`, "error");
+      return;
+    }
     quantity++;
     qtyDisplay.textContent = quantity;
   };
@@ -731,11 +754,15 @@ export function showProductDetail(product, options = {}) {
   function updateAddButtonState() {
     const tracksInventory = product.inventoryTracked !== false;
     const isOutOfStock = tracksInventory && currentStock() === 0;
+    const isWorkshopSoldOut = productCategory(product) === "workshops" &&
+      selectedVariant?.ticketsRemaining !== null && Number(selectedVariant?.ticketsRemaining) === 0;
     const isComingSoon = selectedVariant
       ? selectedVariant.purchasable === false || selectedVariant.comingSoon === true
       : product.purchasable === false || product.comingSoon === true;
-    btn.textContent = isComingSoon ? "Coming soon" : isOutOfStock ? "Out of Stock" : "Add to Cart";
-    btn.disabled = isOutOfStock || isComingSoon;
+    btn.textContent = isComingSoon
+      ? "Coming soon"
+      : isWorkshopSoldOut ? "Sold out" : isOutOfStock ? "Out of Stock" : "Add to Cart";
+    btn.disabled = isOutOfStock || isWorkshopSoldOut || isComingSoon;
     btn.classList.toggle("opacity-50", btn.disabled);
     btn.classList.toggle("cursor-not-allowed", btn.disabled);
   }
