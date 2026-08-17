@@ -145,6 +145,7 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
 - [x] Low-stock warnings are implemented.
 - [x] Optional out-of-stock Marketplace hiding is implemented.
 - [x] Shared short-lived Checkout reservations protect inventory-tracked Product/variant stock as well as Workshop seats; expired Stripe sessions release their reservations.
+- [x] Keep stock identities separate: a ProductVariant reads and deducts only its matching ProductVariant inventory, a Product without variants reads and deducts only Product inventory, and Item/ItemVariant stock remains available only to Inventory and component/manufacturing workflows.
 - [ ] Run the shared reservation emulator acceptance test with competing carts, successful completion, abandoned/expired Checkout, and Product plus Product-variant stock.
 - [ ] Add stock-movement and manufacturing audit views.
 - [ ] Separate Items/components from Products/finished goods in Inventory Stocktake.

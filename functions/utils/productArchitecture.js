@@ -200,14 +200,20 @@ export function variantForProduct(productId, itemId, variantId, architecture) {
     .find((variant) => variant.variantId === variantId || variant.id === variantId) || null;
 }
 
-export function inventoryForProduct(productId, itemId, variantId, architecture) {
+export function inventoryForProduct(productId, variantId, architecture) {
   const variantInventory = variantId
     ? architecture.inventoryByVariantId?.get(variantId) || []
     : [];
   const productInventory = architecture.inventoryByProductId?.get(productId) || [];
-  const itemInventory = itemId ? architecture.inventoryByItemId?.get(itemId) || [] : [];
-  return variantInventory[0] || productInventory.find((entry) => !entry.variantId) ||
-    itemInventory.find((entry) => !entry.variantId) || productInventory[0] || itemInventory[0] || null;
+  // Product stock and Item/component stock are separate identities. Never
+  // satisfy a Product checkout or Product display from connected Item stock.
+  if (variantId) {
+    return variantInventory.find((entry) =>
+      cleanString(entry.productId) === productId &&
+      cleanString(entry.variantId) === variantId) || null;
+  }
+  return productInventory.find((entry) =>
+    cleanString(entry.productId) === productId && !cleanString(entry.variantId)) || null;
 }
 
 function assetUrl(asset, rendition) {

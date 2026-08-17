@@ -84,10 +84,12 @@ export async function createInventoryReservation(db, {
       });
     });
 
-    const productRefs = [...new Map(reservationItems.filter((item) => item.inventoryTracked).map((item) => [
-      item.productId,
-      db.collection("products").doc(item.productId),
-    ])).values()];
+    const productRefs = [...new Map(reservationItems
+      .filter((item) => item.inventoryTracked && !item.variantId)
+      .map((item) => [
+        item.productId,
+        db.collection("products").doc(item.productId),
+      ])).values()];
     const variantRefs = [...new Map(reservationItems
       .filter((item) => item.inventoryTracked && item.variantId)
       .map((item) => [
@@ -105,7 +107,7 @@ export async function createInventoryReservation(db, {
 
     const requestedProducts = new Map();
     const requestedItems = new Map();
-    reservationItems.filter((item) => item.inventoryTracked).forEach((item) => {
+    reservationItems.filter((item) => item.inventoryTracked && !item.variantId).forEach((item) => {
       addQuantity(requestedProducts, item.productId, item.quantity);
     });
     reservationItems.forEach((item) => {
@@ -123,16 +125,19 @@ export async function createInventoryReservation(db, {
         }
       }
       if (!item.inventoryTracked) continue;
-      const productReserved = [...reserved.entries()].reduce((total, [reservedKey, quantity]) =>
-        reservedKey.startsWith(`${item.productId}:`) ? total + quantity : total, 0);
-      if ((productStock.get(item.productId) ?? 0) <
-          productReserved + (requestedProducts.get(item.productId) || 0)) {
-        throw new HttpsError("failed-precondition", `${item.name || "This Product"} no longer has enough stock.`);
-      }
       if (item.variantId) {
         const path = `${item.variantCollection}/${item.variantId}`;
         if ((variantStock.get(path) ?? 0) < alreadyReserved + requestedQuantity) {
           throw new HttpsError("failed-precondition", `${item.name || "This option"} no longer has enough stock.`);
+        }
+      } else {
+        const productReserved = reserved.get(itemKey(item.productId)) || 0;
+        if ((productStock.get(item.productId) ?? 0) <
+            productReserved + (requestedProducts.get(item.productId) || 0)) {
+          throw new HttpsError(
+            "failed-precondition",
+            `${item.name || "This Product"} no longer has enough stock.`,
+          );
         }
       }
     }

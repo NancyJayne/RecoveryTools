@@ -3,6 +3,7 @@ import admin from "firebase-admin";
 import {
   activePriceForProduct,
   activePriceForVariant,
+  inventoryForProduct,
   loadProductArchitecture,
   mediaForProduct,
   mediaForProductVariant,
@@ -173,7 +174,9 @@ function normalizeProduct(
   reservations = new Map(),
 ) {
   const data = doc.data() || {};
-  const variants = variantsForProduct(doc.id, data.itemId || data.legacyItemId || "", architecture);
+  const itemId = data.itemId || data.legacyItemId || "";
+  const variants = variantsForProduct(doc.id, itemId, architecture);
+  const productInventory = inventoryForProduct(doc.id, "", architecture);
   const activePrice = activePriceForProduct(doc.id, architecture);
   const media = mediaForProduct(doc.id, data, architecture);
   const linkedContent = primaryContentForProduct(doc.id, data, architecture);
@@ -239,6 +242,8 @@ function normalizeProduct(
   const purchasable = visible && !comingSoon;
 
   const normalizedVariants = variants.map((variant) => {
+    const variantId = variant.variantId || variant.id;
+    const variantInventory = inventoryForProduct(doc.id, variantId, architecture);
     const variantPrice = activePriceForVariant(doc.id, variant.variantId || variant.id, architecture);
     const variantMedia = mediaForProductVariant(doc.id, data, variant, architecture, media);
     const sold = ticketSales.get(`${doc.id}:${variant.variantId || variant.id || ""}`) || 0;
@@ -289,7 +294,7 @@ function normalizeProduct(
       ticketsSold: sold,
       ticketsReserved: reserved,
       ticketsRemaining: capacity > 0 ? Math.max(capacity - sold - reserved, 0) : null,
-      stock: Math.max(Number(variant.stock ?? 0) - reserved, 0),
+      stock: Math.max(Number(variantInventory?.stockQty ?? variant.stock ?? 0) - reserved, 0),
       media: variantMedia,
       images: variantMedia
         .filter((asset) => normalizeStatus(asset.type) === "image")
@@ -326,10 +331,13 @@ function normalizeProduct(
       data.wholesaleMinQuantity || activePrice?.wholesaleMinQuantity || 1,
     ), 1),
     pricingTier: wholesalePrice ? "affiliate-wholesale" : "retail",
-    stock: Math.max(Number(data.stock ?? 0) - [...reservations.entries()].reduce(
-      (total, [key, quantity]) => key.startsWith(`${doc.id}:`) ? total + quantity : total,
-      0,
-    ), 0),
+    stock: normalizedVariants.length
+      ? normalizedVariants.reduce((total, variant) => total + Number(variant.stock || 0), 0)
+      : Math.max(
+        Number(productInventory?.stockQty ?? data.stock ?? 0) -
+          Number(reservations.get(`${doc.id}:`) || 0),
+        0,
+      ),
     requiresShipping,
     physicalFulfilment,
     inventoryTracked,

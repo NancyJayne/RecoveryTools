@@ -107,7 +107,7 @@ async function reserveInventoryAndCreateOrder(db, orderRef, orderData, items) {
     const existing = await transaction.get(orderRef);
     if (existing.exists) return false;
 
-    const productRefs = [...new Map(tracked.map((item) => [
+    const productRefs = [...new Map(tracked.filter((item) => !item.variantId).map((item) => [
       item.productId,
       db.collection("products").doc(item.productId),
     ])).values()];
@@ -132,10 +132,11 @@ async function reserveInventoryAndCreateOrder(db, orderRef, orderData, items) {
     const variantRequired = new Map();
     tracked.forEach((item) => {
       const quantity = Number(item.quantity || 1);
-      productRequired.set(item.productId, (productRequired.get(item.productId) || 0) + quantity);
       if (item.variantId) {
         const path = `${item.variantSourceCollection || "itemVariants"}/${item.variantId}`;
         variantRequired.set(path, (variantRequired.get(path) || 0) + quantity);
+      } else {
+        productRequired.set(item.productId, (productRequired.get(item.productId) || 0) + quantity);
       }
     });
     productRequired.forEach((quantity, productId) => {
@@ -169,10 +170,12 @@ async function reserveInventoryAndCreateOrder(db, orderRef, orderData, items) {
     transaction.create(orderRef, orderData);
     tracked.forEach((item) => {
       const quantity = Number(item.quantity || 1);
-      transaction.update(db.collection("products").doc(item.productId), {
-        stock: admin.firestore.FieldValue.increment(-quantity),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      if (!item.variantId) {
+        transaction.update(db.collection("products").doc(item.productId), {
+          stock: admin.firestore.FieldValue.increment(-quantity),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
       if (item.variantId) {
         const collection = item.variantSourceCollection || "itemVariants";
         transaction.update(db.collection(collection).doc(item.variantId), {
@@ -221,7 +224,6 @@ async function productSnapshotFromLineItem(lineItem, commissionRates = {}, archi
   const variant = variantForProduct(productId, product.itemId || product.legacyItemId || "", variantId, architecture);
   const inventory = inventoryForProduct(
     productId,
-    product.itemId || product.legacyItemId || "",
     variantId,
     architecture,
   );
