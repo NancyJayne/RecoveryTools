@@ -15,6 +15,10 @@ import {
 import { canonicalOrderLines, orderDueDate } from "../utils/orderLineSnapshots.js";
 import { accessExpiry } from "../utils/accessGrantTiming.js";
 import { instructorDetails } from "../utils/instructorName.js";
+import {
+  consumeInventoryReservation,
+  releaseInventoryReservation,
+} from "../orders/inventoryReservations.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -377,6 +381,11 @@ export async function writeCheckoutCompleted({ stripe, session, event }) {
 
   const orderRef = db.collection("orders").doc(orderId);
   const created = await reserveInventoryAndCreateOrder(db, orderRef, orderData, items);
+  await consumeInventoryReservation(
+    db,
+    session.metadata?.inventoryReservationId || "",
+    orderId,
+  );
   const batch = db.batch();
   if (!created) {
     batch.set(orderRef, {
@@ -586,6 +595,17 @@ export const handleStripeWebhook = onRequest(
     try {
       if (event.type === "checkout.session.completed") {
         await writeCheckoutCompleted({ stripe, session: event.data.object, event });
+      } else if (event.type === "checkout.session.expired") {
+        const session = event.data.object;
+        await releaseInventoryReservation(
+          admin.firestore(),
+          session.metadata?.inventoryReservationId || "",
+        );
+        await markStripeEvent({
+          event,
+          status: "processed",
+          extra: { stripeCheckoutSessionId: session.id },
+        });
       } else if (event.type === "payout.paid") {
         const payout = event.data.object;
         await admin.firestore().collection("affiliatePayouts").doc(payout.id).set({

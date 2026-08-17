@@ -19,6 +19,11 @@ import {
   pickupLocationMetadata,
   resolveSelectedPickupLocation,
 } from "./pickupLocations.js";
+import {
+  attachStripeSessionToReservation,
+  createInventoryReservation,
+  releaseInventoryReservation,
+} from "./inventoryReservations.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -268,6 +273,7 @@ const createCheckoutSessionHandler = async (request) => {
   }));
 
   const db = admin.firestore();
+  let reservationId = "";
 
   try {
     // 🛒 Securely fetch product data from Firestore
@@ -443,6 +449,7 @@ const createCheckoutSessionHandler = async (request) => {
         itemId: data.itemId || null,
         variantId: variantId || null,
         variantName: variantName || null,
+        variantSourceCollection: variant?.sourceCollection || "productVariants",
         sku: variant?.sku || data.sku || null,
         accessType: accessGrants[0]?.accessEntityType || data.accessType || null,
         relatedPlanId: accessGrants.find((grant) => grant.accessEntityType === "Plan")?.accessEntityId ||
@@ -452,6 +459,10 @@ const createCheckoutSessionHandler = async (request) => {
         physicalFulfilment,
         pickupLocation,
         requiresShipping: physicalFulfilment === "shipping",
+        inventoryTracked: variant?.inventoryTracked === true ||
+          (data.inventoryTracked ?? physicalFulfilment !== "none"),
+        isWorkshop,
+        seatCapacity,
         unlocksAccess: accessGrants.length > 0 || data.unlocksAccess === true,
         type: data.type || "item",
         productType: productDisplayType(data, "item"),
@@ -582,6 +593,15 @@ const createCheckoutSessionHandler = async (request) => {
     };
 
     const baseUrl = appBaseUrl();
+    const stripeExpiresAt = Math.floor(Date.now() / 1000) + 31 * 60;
+    const reservationExpiresAt = (stripeExpiresAt + 5 * 60) * 1000;
+    reservationId = await createInventoryReservation(db, {
+      uid,
+      items: validatedItems,
+      stripeExpiresAt,
+      reservationExpiresAt,
+    });
+    if (reservationId) metadata.inventoryReservationId = reservationId;
     const sessionConfig = {
       mode: "payment",
       payment_method_types: ["card"],
@@ -589,6 +609,7 @@ const createCheckoutSessionHandler = async (request) => {
       success_url: `${baseUrl}/checkout?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/cart`,
       metadata,
+      expires_at: stripeExpiresAt,
 
       customer: stripeCustomerId,
 
@@ -661,9 +682,17 @@ const createCheckoutSessionHandler = async (request) => {
       JSON.stringify(sessionConfig, null, 2),
     );
     const session = await stripe.checkout.sessions.create(sessionConfig);
+    try {
+      await attachStripeSessionToReservation(db, reservationId, session.id);
+    } catch (error) {
+      // Stripe metadata still carries the reservation ID, so completion and
+      // expiry can finish it even if this convenience back-reference fails.
+      console.error("Could not attach Stripe session to inventory reservation:", error);
+    }
     return { id: session.id, url: session.url };
 
   } catch (err) {
+    await releaseInventoryReservation(db, reservationId);
     if (err instanceof HttpsError) {
       throw err;
     }

@@ -20,6 +20,7 @@ import { canonicalOrderLines, orderDueDate } from "../utils/orderLineSnapshots.j
 import { accessExpiry } from "../utils/accessGrantTiming.js";
 import { accessEmailDetails } from "../utils/orderAccessEmail.js";
 import { instructorDetails } from "../utils/instructorName.js";
+import { consumeInventoryReservation } from "./inventoryReservations.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -572,6 +573,11 @@ const confirmStripePurchaseHandler = async (request) => {
   });
 
   const persistedOrderData = transactionResult.created ? orderData : transactionResult.orderData;
+  await consumeInventoryReservation(
+    db,
+    session.metadata?.inventoryReservationId || "",
+    invoiceNumber,
+  );
   const recoveryBatch = db.batch();
   recoveryBatch.set(orderRef, {
     orderLineSchemaVersion: 2,

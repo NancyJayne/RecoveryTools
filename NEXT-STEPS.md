@@ -130,7 +130,7 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
 - [ ] Release public Workshop discovery, session details, capacity/remaining places, Product-variant selection, Stripe purchase, booking confirmation, attendee records, customer Profile access, cancellation/refund handling, and mobile presentation.
   - [x] Show available Workshop-session counts, remaining-place warnings, sold-out states, and prevent the customer from selecting more places than remain.
   - [x] Revalidate Workshop seat capacity server-side before creating the Stripe Checkout session so stale or altered carts cannot knowingly exceed current paid-ticket availability.
-  - [ ] Add a short-lived seat reservation or equivalent atomic capacity mechanism so two customers completing Checkout at the same time cannot oversell the final places.
+  - [x] Reserve Workshop seats atomically during Stripe Checkout and consume or release the reservation through the existing confirmation/webhook lifecycle.
   - [ ] Complete end-to-end emulator and mobile acceptance testing for discovery through confirmation/Profile, including sold-out, cancellation, and refund cases.
 - [ ] Add instructor/session operating information, equipment checklists, and an attached viewable/downloadable “what to bring/wear” PDF.
 - [ ] Add Workshop promotion videos and verify Asset/visibility behaviour.
@@ -142,6 +142,8 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
 
 - [x] Low-stock warnings are implemented.
 - [x] Optional out-of-stock Marketplace hiding is implemented.
+- [x] Shared short-lived Checkout reservations protect inventory-tracked Product/variant stock as well as Workshop seats; expired Stripe sessions release their reservations.
+- [ ] Run the shared reservation emulator acceptance test with competing carts, successful completion, abandoned/expired Checkout, and Product plus Product-variant stock.
 - [ ] Add stock-movement and manufacturing audit views.
 - [ ] Separate Items/components from Products/finished goods in Inventory Stocktake.
 - [ ] Group Item variants under their Item and Product variants under their Product.

@@ -147,12 +147,30 @@ function ticketSalesFromOrders(snapshot) {
   return sales;
 }
 
+function activeReservationQuantities(snapshot) {
+  const reservations = new Map();
+  const now = Date.now();
+  snapshot.docs.forEach((doc) => {
+    const data = doc.data() || {};
+    if (normalizeStatus(data.status) !== "active" || Number(data.reservationExpiresAt || 0) <= now) return;
+    (Array.isArray(data.items) ? data.items : []).forEach((item) => {
+      const productId = String(item.productId || "").trim();
+      const variantId = String(item.variantId || "").trim();
+      if (!productId) return;
+      const key = `${productId}:${variantId}`;
+      reservations.set(key, (reservations.get(key) || 0) + Math.max(Number(item.quantity || 1), 1));
+    });
+  });
+  return reservations;
+}
+
 function normalizeProduct(
   doc,
   architecture,
   ticketSales = new Map(),
   approvedAffiliate = false,
   instructorsById = new Map(),
+  reservations = new Map(),
 ) {
   const data = doc.data() || {};
   const variants = variantsForProduct(doc.id, data.itemId || data.legacyItemId || "", architecture);
@@ -224,6 +242,7 @@ function normalizeProduct(
     const variantPrice = activePriceForVariant(doc.id, variant.variantId || variant.id, architecture);
     const variantMedia = mediaForProductVariant(doc.id, data, variant, architecture, media);
     const sold = ticketSales.get(`${doc.id}:${variant.variantId || variant.id || ""}`) || 0;
+    const reserved = reservations.get(`${doc.id}:${variant.variantId || variant.id || ""}`) || 0;
     const capacity = Number(variant.seatCapacity || 0);
     const variantMode = normalizeStatus(variant.marketplaceMode || "inherit");
     const variantStartsMs = dateMillis(variant.marketplaceStartsAt);
@@ -268,7 +287,9 @@ function normalizeProduct(
           data.wholesaleMinQuantity || activePrice?.wholesaleMinQuantity || 1,
       ), 1),
       ticketsSold: sold,
-      ticketsRemaining: capacity > 0 ? Math.max(capacity - sold, 0) : null,
+      ticketsReserved: reserved,
+      ticketsRemaining: capacity > 0 ? Math.max(capacity - sold - reserved, 0) : null,
+      stock: Math.max(Number(variant.stock ?? 0) - reserved, 0),
       media: variantMedia,
       images: variantMedia
         .filter((asset) => normalizeStatus(asset.type) === "image")
@@ -305,7 +326,10 @@ function normalizeProduct(
       data.wholesaleMinQuantity || activePrice?.wholesaleMinQuantity || 1,
     ), 1),
     pricingTier: wholesalePrice ? "affiliate-wholesale" : "retail",
-    stock: Number(data.stock ?? 0),
+    stock: Math.max(Number(data.stock ?? 0) - [...reservations.entries()].reduce(
+      (total, [key, quantity]) => key.startsWith(`${doc.id}:`) ? total + quantity : total,
+      0,
+    ), 0),
     requiresShipping,
     physicalFulfilment,
     inventoryTracked,
@@ -365,13 +389,15 @@ export const getFirestoreProducts = onCall(
         query = query.where("type", "==", normalizeStatus(type));
       }
 
-      const [snapshot, architecture, ordersSnapshot, instructorsSnapshot] = await Promise.all([
+      const [snapshot, architecture, ordersSnapshot, instructorsSnapshot, reservationsSnapshot] = await Promise.all([
         query.get(),
         loadProductArchitecture(admin.firestore()),
         admin.firestore().collection("orders").get(),
         admin.firestore().collection("instructors").get(),
+        admin.firestore().collection("inventoryReservations").where("status", "==", "active").get(),
       ]);
       const ticketSales = ticketSalesFromOrders(ordersSnapshot);
+      const reservations = activeReservationQuantities(reservationsSnapshot);
       const instructorsById = new Map(instructorsSnapshot.docs.map((doc) => [
         doc.id,
         doc.data()?.name || doc.data()?.instructorName || doc.data()?.displayName || doc.id,
@@ -384,6 +410,7 @@ export const getFirestoreProducts = onCall(
           ticketSales,
           approvedAffiliate,
           instructorsById,
+          reservations,
         ))
         .filter((product) => includeHidden && isAdmin ? true : product.visible !== false)
         .filter((product) => tag ? product.searchTags.includes(tag) : true)
