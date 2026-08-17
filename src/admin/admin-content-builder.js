@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { assertAssetUploadSize } from "../utils/asset-upload.js";
 import { functions, storage } from "../utils/firebase-config.js";
 import { showToast } from "../utils/utils.js";
 
@@ -2338,6 +2339,7 @@ function assertAssetFileType(file, assetType) {
     Audio: file.type.startsWith("audio/"),
   }[assetType];
   if (valid === false) throw new Error(`Choose a valid ${assetType} file.`);
+  assertAssetUploadSize(file, assetType);
 }
 
 function selectNewTemplateAsset(asset) {

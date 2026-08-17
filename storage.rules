@@ -18,7 +18,11 @@ service firebase.storage {
     // ❌ Deny all other access
     match /assets/{allPaths=**} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.token.admin == true;
+      allow write: if request.auth != null &&
+                   request.auth.token.admin == true &&
+                   (request.resource.contentType == null ||
+                    !request.resource.contentType.matches('video/.*') ||
+                    request.resource.size <= 25 * 1024 * 1024);
     }
 
     match /affiliate-applications/{userId}/{fileName} {

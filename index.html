@@ -1246,7 +1246,7 @@
       <label class="block">Title<input id="assetManagerTitle" class="input mt-1 w-full"></label>
       <label class="block">Description<textarea id="assetManagerDescription" class="input mt-1 h-24 w-full"></textarea></label>
       <label class="block">Alt text<input id="assetManagerAltText" class="input mt-1 w-full"></label>
-      <label class="block">Upload or replace file<input id="assetManagerFile" type="file" class="input mt-1 w-full"></label>
+      <label class="block">Upload or replace file<input id="assetManagerFile" type="file" class="input mt-1 w-full"><span class="mt-1 block text-xs text-gray-400">Uploaded videos must be 25 MB or smaller. For larger videos, use a YouTube Asset link.</span></label>
       <label class="block">Current file URL<input id="assetManagerFileUrl" class="input mt-1 w-full" readonly></label>
       <label class="block">Renditions
         <textarea id="assetManagerRenditions" class="input mt-1 h-32 w-full" placeholder="One per line: Name | Purpose | File URL | Width | Height | Default yes/no | Status"></textarea>
@@ -2310,6 +2310,7 @@
                       File *
                       <input id="contentAssetFile" type="file" class="input mt-1 w-full">
                       <span id="contentAssetSelectedFile" class="mt-1 block text-xs text-gray-400">No file selected.</span>
+                      <span class="mt-1 block text-xs text-gray-400">Uploaded videos must be 25 MB or smaller. Larger videos should use the YouTube option.</span>
                     </label>
                     <div id="contentAssetExternalRow" class="hidden space-y-3">
                       <label class="block text-sm">External service<select id="contentAssetExternalProvider" class="input mt-1 w-full"><option value="youtube">YouTube</option><option value="canva">Canva</option><option value="other">Other website</option></select></label>

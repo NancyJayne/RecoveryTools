@@ -2,6 +2,7 @@ import { httpsCallable } from "firebase/functions";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { functions, storage } from "../utils/firebase-config.js";
 import { showToast } from "../utils/utils.js";
+import { assertAssetUploadSize } from "../utils/asset-upload.js";
 
 const updateProduct = httpsCallable(functions, "updateProduct");
 const updateInventory = httpsCallable(functions, "updateProductInventory");
@@ -1439,6 +1440,10 @@ function openAssetForm(asset = null) {
 async function uploadAssetManagerFile(assetId) {
   const file = document.getElementById("assetManagerFile")?.files?.[0];
   if (!file) return document.getElementById("assetManagerFileUrl")?.value || "";
+  assertAssetUploadSize(
+    file,
+    document.getElementById("assetManagerType")?.value || "Document",
+  );
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, "-");
   const storageRef = ref(storage, `assets/${assetId || Date.now()}/${Date.now()}-${safeName}`);
   await uploadBytes(storageRef, file, { contentType: file.type || undefined });
