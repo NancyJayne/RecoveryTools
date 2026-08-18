@@ -190,6 +190,7 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
 - [ ] Allow affiliates/instructors to advertise only their own approved Course or Workshop plus campaigns explicitly made available by admin.
 - [ ] Preserve campaign, affiliate, content, Product, session, and pricing identity on resulting Orders and financial reports.
 - [ ] Start with copy/download/share-link tools; treat direct posting to external social networks as a later optional integration requiring separate platform permissions.
+- [ ] Later, add a low-priority Google Merchant Center API integration for eligible physical Products: sync stable Product/variant IDs, titles, descriptions, images, prices, availability, condition, links, shipping, and required policy data; exclude hidden, archived, digital, Course, Program, and Workshop Products; surface item disapprovals/feed diagnostics in Admin; and keep Firebase as the source of truth with safe retry and audit logging.
 
 #### 6. Complete the Affiliate system
 
