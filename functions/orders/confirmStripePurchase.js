@@ -16,6 +16,10 @@ import {
   productDisplayType,
   variantForProduct,
 } from "../utils/productArchitecture.js";
+import {
+  inventoryTargetsForItems,
+  resolveBundleInventoryItems,
+} from "../utils/bundleInventory.js";
 import { canonicalOrderLines, orderDueDate } from "../utils/orderLineSnapshots.js";
 import { accessExpiry } from "../utils/accessGrantTiming.js";
 import { accessEmailDetails } from "../utils/orderAccessEmail.js";
@@ -327,6 +331,12 @@ const confirmStripePurchaseHandler = async (request) => {
         accessGrants: accessGrantsForProduct(productId, product, architecture)
           .filter((grant) => !grant.productVariantId || grant.productVariantId === variantId),
         components: componentsForProduct(productId, variantId, architecture),
+        bundleInventoryItems: await resolveBundleInventoryItems(admin.firestore(), {
+          productId,
+          variantId,
+          quantity: item.quantity,
+          architecture,
+        }),
         sellerUserId: product.sellerUserId || "",
       };
     }),
@@ -430,7 +440,8 @@ const confirmStripePurchaseHandler = async (request) => {
       return { created: false, orderData: existingOrderSnap.data() };
     }
 
-    const trackedItems = enrichedProducts.filter((item) => item.inventoryTracked);
+    const trackedItems = inventoryTargetsForItems(enrichedProducts)
+      .filter((item) => item.inventoryTracked);
     const productRefs = trackedItems
       .filter((item) => !item.variantId)
       .map((item) => db.collection("products").doc(item.productId));

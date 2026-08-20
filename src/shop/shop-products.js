@@ -500,7 +500,8 @@ export function createProductTile(product) {
     wrapper.appendChild(sessionSummary);
   }
 
-  const tracksInventory = product.inventoryTracked !== false;
+  const tracksInventory = product.inventoryTracked !== false ||
+    product.variants?.some((variant) => variant.inventoryTracked === true);
   const variantStock = Array.isArray(product.variants)
     ? product.variants.reduce((sum, variant) => sum + Number(variant.stock ?? 0), 0)
     : 0;
@@ -753,7 +754,8 @@ export function showProductDetail(product, options = {}) {
 
   function tracksCurrentInventory() {
     if (selectedVariant) {
-      return selectedVariant.inventoryTracked === true || product.inventoryTracked !== false;
+      return selectedVariant.bundleAvailable !== null && selectedVariant.bundleAvailable !== undefined ||
+        selectedVariant.inventoryTracked === true || product.inventoryTracked !== false;
     }
     return product.inventoryTracked !== false;
   }

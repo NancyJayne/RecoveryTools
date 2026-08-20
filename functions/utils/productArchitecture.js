@@ -112,6 +112,27 @@ export function componentsForProduct(productId, variantId, architecture) {
     .filter((component) => component.itemId);
 }
 
+export function bundleComponentsForProduct(productId, variantId, architecture) {
+  if (!variantId) return [];
+  const variant = (architecture.canonicalVariantsByProductId.get(productId) || [])
+    .find((candidate) => cleanString(candidate.productVariantId || candidate.variantId || candidate.id) === variantId);
+  const seen = new Set();
+  return (Array.isArray(variant?.bundleComponents) ? variant.bundleComponents : [])
+    .map((component, index) => ({
+      bundleComponentId: cleanString(component.bundleComponentId) ||
+        `BUNDLE-${variantId}-${index + 1}`,
+      componentProductId: cleanString(component.componentProductId),
+      componentProductVariantId: cleanString(component.componentProductVariantId),
+      quantity: Math.max(Number(component.quantity || 1), 1),
+    }))
+    .filter((component) => {
+      const key = `${component.componentProductId}:${component.componentProductVariantId}`;
+      if (!component.componentProductId || component.componentProductId === productId || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 export function activePriceForProduct(productId, architecture) {
   return (architecture.pricesByProductId.get(productId) || [])
     .find((price) => status(price.status, "active") === "active" && !price.variantId) || null;
@@ -168,6 +189,7 @@ function normalizedVariant(variant, sourceCollection) {
     shortDescription: variant.shortDescription || "",
     longDescription: variant.longDescription || "",
     inclusions: variant.inclusions || "",
+    bundleComponents: Array.isArray(variant.bundleComponents) ? variant.bundleComponents : [],
     primaryAssetId: variant.primaryAssetId || "",
     sourceCollection,
   };

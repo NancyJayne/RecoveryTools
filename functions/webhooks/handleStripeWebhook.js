@@ -12,6 +12,10 @@ import {
   productDisplayType,
   variantForProduct,
 } from "../utils/productArchitecture.js";
+import {
+  inventoryTargetsForItems,
+  resolveBundleInventoryItems,
+} from "../utils/bundleInventory.js";
 import { canonicalOrderLines, orderDueDate } from "../utils/orderLineSnapshots.js";
 import { accessExpiry } from "../utils/accessGrantTiming.js";
 import { instructorDetails } from "../utils/instructorName.js";
@@ -101,7 +105,7 @@ async function componentInventoryByItem(db, items) {
 }
 
 async function reserveInventoryAndCreateOrder(db, orderRef, orderData, items) {
-  const tracked = items.filter((item) => item.inventoryTracked === true);
+  const tracked = inventoryTargetsForItems(items).filter((item) => item.inventoryTracked === true);
   const componentInventory = await componentInventoryByItem(db, items);
   return db.runTransaction(async (transaction) => {
     const existing = await transaction.get(orderRef);
@@ -277,6 +281,12 @@ async function productSnapshotFromLineItem(lineItem, commissionRates = {}, archi
     notes: "",
     accessGrants,
     components: componentsForProduct(productId, variantId, architecture),
+    bundleInventoryItems: await resolveBundleInventoryItems(admin.firestore(), {
+      productId,
+      variantId,
+      quantity,
+      architecture,
+    }),
     inventoryTracked: product.inventoryTracked === true || variant?.inventoryTracked === true || !!inventory,
     inventoryId: inventory?.inventoryId || inventory?.id || "",
     sellerUserId: product.sellerUserId || "",

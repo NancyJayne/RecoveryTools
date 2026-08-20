@@ -15,6 +15,7 @@ import {
   productDisplayType,
   variantForProduct,
 } from "../utils/productArchitecture.js";
+import { resolveBundleInventoryItems } from "../utils/bundleInventory.js";
 import {
   pickupLocationMetadata,
   resolveSelectedPickupLocation,
@@ -90,8 +91,23 @@ function soldWorkshopTickets(ordersSnapshot, productId, variantId) {
     return total + lines.reduce((lineTotal, line) => {
       const lineProductId = cleanString(line.productId);
       const lineVariantId = cleanString(line.productVariantId || line.variantId);
-      if (lineProductId !== productId || lineVariantId !== variantId) return lineTotal;
-      return lineTotal + Math.max(Number(line.quantity || 1), 1);
+      const remainingLineQuantity = Math.max(
+        Number(line.quantity || 1) - Number(line.refundedQuantity || 0),
+        0,
+      );
+      const direct = lineProductId === productId && lineVariantId === variantId
+        ? remainingLineQuantity
+        : 0;
+      const bundled = (line.bundleInventory || line.bundleInventoryItems || []).reduce((sum, component) =>
+        cleanString(component.productId) === productId &&
+        cleanString(component.productVariantId || component.variantId) === variantId
+          ? sum + Math.max(
+            Number(component.quantity || 1) -
+              Number(component.quantityPerBundle || 1) * Number(line.refundedQuantity || 0),
+            0,
+          )
+          : sum, 0);
+      return lineTotal + direct + bundled;
     }, 0);
   }, 0);
 }
@@ -411,6 +427,12 @@ const createCheckoutSessionHandler = async (request) => {
       const media = mediaForProduct(doc.id, data, architecture);
       const image = media.find((asset) => asset.type === "image")?.url || firstImage(data);
       const accessGrants = accessGrantsForProduct(doc.id, data, architecture);
+      const bundleInventoryItems = await resolveBundleInventoryItems(db, {
+        productId: doc.id,
+        variantId,
+        quantity,
+        architecture,
+      });
       const configuredFulfilment = variant?.physicalFulfilment || data.physicalFulfilment ||
         (data.requiresShipping === true ? "shipping" : "none");
       const requestedFulfilment = cleanString(cart[i].physicalFulfilment).toLowerCase();
@@ -467,6 +489,7 @@ const createCheckoutSessionHandler = async (request) => {
         type: data.type || "item",
         productType: productDisplayType(data, "item"),
         accessGrants,
+        bundleInventoryItems,
         price,
         pricingTier: Number(wholesalePrice) > 0 ? "affiliate-wholesale" : "retail",
         quantity,

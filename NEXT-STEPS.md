@@ -133,6 +133,7 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
   - [x] Revalidate Workshop seat capacity server-side before creating the Stripe Checkout session so stale or altered carts cannot knowingly exceed current paid-ticket availability.
   - [x] Reserve Workshop seats atomically during Stripe Checkout and consume or release the reservation through the existing confirmation/webhook lifecycle.
   - [x] Show Capacity, Sold, temporarily Reserved, and actually Available seats for each Workshop Product variant in Products & Inventory.
+  - [x] Allow a reduced-price bundle Product variant to reference exact underlying Product variants and Workshop sessions with a quantity per bundle. Bundle availability now comes from the scarcest underlying component; Checkout reserves the shared underlying identities, payment deducts physical component stock, Workshop sales count against the shared session capacity, and the bundle does not create an additional stock/seat pool. Run `npm run verify:bundles:emulator` while the emulators are running.
   - [x] Isolate saved carts by Firebase user UID, keep guest carts separate, and refresh the visible cart when authentication changes.
   - [x] Confirm two signed-in customers can hold seats in separate carts and that successful payment moves a seat from Reserved to Sold.
   - [x] Hide the empty-module notice for purchased Workshops that do not use Blueprint modules.
@@ -157,6 +158,7 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
 - [x] Low-stock warnings are implemented.
 - [x] Optional out-of-stock Marketplace hiding is implemented.
 - [x] Shared short-lived Checkout reservations protect inventory-tracked Product/variant stock as well as Workshop seats; expired Stripe sessions release their reservations.
+- [x] ProductAccessGrants support both the purchased source Product variant and an exact target Item, Blueprint, or Plan entity variant. The Product editor now provides the target-variant selector, order snapshots retain it, `userAccess` keeps separate deterministic variant grants, Profile preserves separate variants, and the purchased Plan/Workshop reader limits content to the selected target variant.
 - [x] Keep stock identities separate: a ProductVariant reads and deducts only its matching ProductVariant inventory, a Product without variants reads and deducts only Product inventory, and Item/ItemVariant stock remains available only to Inventory and component/manufacturing workflows.
 - [ ] Run the shared reservation emulator acceptance test with competing carts, successful completion, abandoned/expired Checkout, and Product plus Product-variant stock.
 - [ ] Add stock-movement and manufacturing audit views.
@@ -373,7 +375,7 @@ Implemented or confirmed. Test-only gaps are kept in the launch checklist below 
   - [x] Confirm exactly one active `userAccess` record is created.
   - [x] Confirm the course appears in the customer's unlocked content.
   - [x] Purchase or manually unlock the same course again and confirm access is deduplicated.
-  - [ ] Test a Product variant that grants multiple unlocks.
+  - [ ] Test a Product variant that grants multiple unlocks in the emulator UI. Variant-specific target selection and persistence are implemented and covered by adapter/order-snapshot checks; the remaining task is the authenticated browser acceptance pass.
   - [ ] Test access expiry and revocation.
   - [ ] Confirm archived or paused content cannot be newly accessed incorrectly.
   - [x] Confirm payment replay does not create duplicate access or repeat inventory deductions.

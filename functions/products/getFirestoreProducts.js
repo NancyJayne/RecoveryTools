@@ -3,6 +3,7 @@ import admin from "firebase-admin";
 import {
   activePriceForProduct,
   activePriceForVariant,
+  bundleComponentsForProduct,
   inventoryForProduct,
   loadProductArchitecture,
   mediaForProduct,
@@ -142,7 +143,23 @@ function ticketSalesFromOrders(snapshot) {
       const variantId = String(line.productVariantId || line.variantId || "").trim();
       if (!productId) return;
       const key = `${productId}:${variantId}`;
-      sales.set(key, (sales.get(key) || 0) + Math.max(Number(line.quantity || 1), 1));
+      sales.set(key, (sales.get(key) || 0) + Math.max(
+        Number(line.quantity || 1) - Number(line.refundedQuantity || 0),
+        0,
+      ));
+      (line.bundleInventory || line.bundleInventoryItems || []).forEach((component) => {
+        if (component.isWorkshop !== true) return;
+        const componentProductId = String(component.productId || "").trim();
+        const componentVariantId = String(component.productVariantId || component.variantId || "").trim();
+        if (!componentProductId) return;
+        const componentKey = `${componentProductId}:${componentVariantId}`;
+        const remaining = Math.max(
+          Number(component.quantity || 1) -
+            Number(component.quantityPerBundle || 1) * Number(line.refundedQuantity || 0),
+          0,
+        );
+        sales.set(componentKey, (sales.get(componentKey) || 0) + remaining);
+      });
     });
   });
   return sales;
@@ -275,8 +292,33 @@ function normalizeProduct(
       ? Number(variantWholesaleValue)
       : wholesalePrice;
     const instructorId = variant.instructorId || variant.instructor || "";
+    const bundleComponents = bundleComponentsForProduct(doc.id, variantId, architecture);
+    const bundleAvailable = bundleComponents.length
+      ? Math.min(...bundleComponents.map((component) => {
+        const componentVariant = (architecture.canonicalVariantsByProductId
+          .get(component.componentProductId) || []).find((candidate) =>
+          (candidate.productVariantId || candidate.variantId || candidate.id) ===
+            component.componentProductVariantId);
+        const componentInventory = inventoryForProduct(
+          component.componentProductId,
+          component.componentProductVariantId,
+          architecture,
+        );
+        const componentKey = `${component.componentProductId}:${component.componentProductVariantId}`;
+        const componentReserved = reservations.get(componentKey) || 0;
+        const componentCapacity = Number(componentVariant?.seatCapacity || 0);
+        const available = componentCapacity > 0
+          ? Math.max(componentCapacity - (ticketSales.get(componentKey) || 0) - componentReserved, 0)
+          : componentInventory || componentVariant
+            ? Math.max(Number(componentInventory?.stockQty ?? componentVariant?.stockQuantity ??
+              componentVariant?.stock ?? 0) - componentReserved, 0)
+            : Number.POSITIVE_INFINITY;
+        return Math.floor(available / component.quantity);
+      }))
+      : null;
     return {
       ...variant,
+      inventoryTracked: bundleComponents.length ? true : variant.inventoryTracked,
       instructorId,
       instructor: instructorsById.get(instructorId) || variant.instructor || "",
       visible: variantVisible,
@@ -294,7 +336,10 @@ function normalizeProduct(
       ticketsSold: sold,
       ticketsReserved: reserved,
       ticketsRemaining: capacity > 0 ? Math.max(capacity - sold - reserved, 0) : null,
-      stock: Math.max(Number(variantInventory?.stockQty ?? variant.stock ?? 0) - reserved, 0),
+      stock: bundleAvailable === null
+        ? Math.max(Number(variantInventory?.stockQty ?? variant.stock ?? 0) - reserved, 0)
+        : bundleAvailable,
+      bundleAvailable,
       media: variantMedia,
       images: variantMedia
         .filter((asset) => normalizeStatus(asset.type) === "image")

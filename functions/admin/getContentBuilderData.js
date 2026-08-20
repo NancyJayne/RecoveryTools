@@ -255,6 +255,7 @@ function normalizeItemRecord(doc, related = {}) {
       priceOverride: Number(variant.priceOverride) > 0 ? Number(variant.priceOverride) : null,
       stock: Number(variant.stock ?? 0),
       status: variant.status || "active",
+      bundleComponents: Array.isArray(variant.bundleComponents) ? variant.bundleComponents : [],
     })),
     shopStatus: product?.shopStatus || "",
     inventorySummary: {

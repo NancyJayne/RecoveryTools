@@ -393,7 +393,9 @@ export async function handleUnlockedPlanFromURL(options = {}) {
   const queryParam = options.queryParam || "course";
   const contentType = options.contentType || "course";
   const contentLabel = options.contentLabel || "Course";
-  const courseId = new URLSearchParams(window.location.search).get(queryParam);
+  const searchParams = new URLSearchParams(window.location.search);
+  const courseId = searchParams.get(queryParam);
+  const accessVariantId = searchParams.get("accessVariant") || "";
   if (!courseId) return false;
   const container = document.getElementById(options.containerId || "courseDetailContainer");
   if (container) {
@@ -403,7 +405,7 @@ export async function handleUnlockedPlanFromURL(options = {}) {
   showTabContent(options.sectionId || "courseDetailSection");
   try {
     const getUnlockedCourse = httpsCallable(functions, "getUnlockedCourse");
-    const response = await getUnlockedCourse({ courseId, contentType });
+    const response = await getUnlockedCourse({ courseId, contentType, accessVariantId });
     const payload = response.data || {};
     renderCoursePlayer(payload, new Set(), options);
     loadCourseProgress(payload.course?.id || courseId)

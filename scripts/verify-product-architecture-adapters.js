@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   accessGrantsForProduct,
   activePriceForProduct,
+  bundleComponentsForProduct,
   inventoryForProduct,
   mediaForProduct,
   variantsForProduct,
@@ -13,7 +14,9 @@ const architecture = {
     { id: "PRICE-1", status: "active", effectiveShopPrice: 20 },
   ]]]),
   canonicalVariantsByProductId: new Map([["PROD-1", [
-    { id: "PV-1", productVariantId: "PV-1", variantName: "Canonical", stockQuantity: 4, status: "active" },
+    { id: "PV-1", productVariantId: "PV-1", variantName: "Canonical", stockQuantity: 4, status: "active",
+      bundleComponents: [{ bundleComponentId: "BC-1", componentProductId: "PROD-2",
+        componentProductVariantId: "PV-2", quantity: 2 }] },
   ]]]),
   legacyVariantsByProductId: new Map([["PROD-1", [
     { id: "IV-IGNORED", variantId: "IV-IGNORED", name: "Legacy", stock: 9, status: "active" },
@@ -54,6 +57,12 @@ assert.equal(activePriceForProduct("PROD-1", architecture)?.id, "PRICE-1");
 const canonicalVariants = variantsForProduct("PROD-1", "ITEM-1", architecture);
 assert.deepEqual(canonicalVariants.map((variant) => variant.id), ["PV-1"]);
 assert.equal(canonicalVariants[0].stock, 4);
+assert.deepEqual(bundleComponentsForProduct("PROD-1", "PV-1", architecture), [{
+  bundleComponentId: "BC-1",
+  componentProductId: "PROD-2",
+  componentProductVariantId: "PV-2",
+  quantity: 2,
+}]);
 
 assert.equal(inventoryForProduct("PROD-1", "", architecture)?.id, "INV-PROD-1");
 assert.equal(inventoryForProduct("PROD-1", "PV-1", architecture)?.id, "INV-PV-1");

@@ -1,5 +1,6 @@
 import admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
+import { inventoryTargetsForItems } from "../utils/bundleInventory.js";
 
 const ACTIVE = "active";
 
@@ -28,7 +29,9 @@ function itemKey(productId, variantId = "") {
 }
 
 function addQuantity(map, key, quantity) {
-  map.set(key, (map.get(key) || 0) + Math.max(Number(quantity || 1), 1));
+  const amount = Number(quantity);
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  map.set(key, (map.get(key) || 0) + amount);
 }
 
 export async function createInventoryReservation(db, {
@@ -38,7 +41,7 @@ export async function createInventoryReservation(db, {
   reservationExpiresAt,
 }) {
   const reservationRef = db.collection("inventoryReservations").doc();
-  const reservationItems = items
+  const reservationItems = inventoryTargetsForItems(items)
     .filter((item) => item.inventoryTracked === true || item.isWorkshop === true)
     .map((item) => ({
       productId: clean(item.id || item.productId),
@@ -79,8 +82,20 @@ export async function createInventoryReservation(db, {
         addQuantity(
           paidWorkshopTickets,
           itemKey(clean(line.productId), clean(line.productVariantId || line.variantId)),
-          line.quantity,
+          Math.max(Number(line.quantity || 1) - Number(line.refundedQuantity || 0), 0),
         );
+        (line.bundleInventory || line.bundleInventoryItems || []).forEach((component) => {
+          if (component.isWorkshop !== true) return;
+          addQuantity(
+            paidWorkshopTickets,
+            itemKey(clean(component.productId), clean(component.productVariantId || component.variantId)),
+            Math.max(
+              Number(component.quantity || 1) -
+                Number(component.quantityPerBundle || 1) * Number(line.refundedQuantity || 0),
+              0,
+            ),
+          );
+        });
       });
     });
 

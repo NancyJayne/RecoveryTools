@@ -401,7 +401,25 @@ function normalizeVariant(value, index) {
     eventEndAt: cleanString(value.eventEndAt),
     eventLocation: cleanString(value.eventLocation),
     instructor: cleanString(value.instructor),
+    bundleComponents: cleanBundleComponents(value.bundleComponents, variantId),
   };
+}
+
+function cleanBundleComponents(value, sourceProductVariantId) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).slice(0, 100).map((component, index) => ({
+    bundleComponentId: cleanString(component?.bundleComponentId) ||
+      `BUNDLE-${slugify(sourceProductVariantId)}-${index + 1}`,
+    sourceProductVariantId,
+    componentProductId: cleanString(component?.componentProductId),
+    componentProductVariantId: cleanString(component?.componentProductVariantId),
+    quantity: Math.max(asNumber(component?.quantity) ?? 1, 1),
+  })).filter((component) => {
+    const key = `${component.componentProductId}:${component.componentProductVariantId}`;
+    if (!component.componentProductId || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function productTypeFromItem(doc) {
@@ -855,6 +873,19 @@ export const createContentBuilderRecord = onCall(
             .map(normalizeVariant)
             .filter(Boolean);
           const accessTargets = cleanAccessGrants(data.productRelation?.accessGrants);
+          if (linkRole === "Unlocks" && ["Item", "Blueprint", "Plan"].includes(linkedEntityType) &&
+              !accessTargets.some((grant) =>
+                grant.accessEntityType === linkedEntityType && grant.accessEntityId === id)) {
+            accessTargets.push({
+              accessEntityType: linkedEntityType,
+              accessEntityId: id,
+              accessEntityVariantId: "",
+              productVariantId: "",
+              durationType: "permanent",
+              durationValue: null,
+              endsAt: "",
+            });
+          }
           const variantContentLinks = cleanVariantContentLinks(data.productRelation?.variantContentLinks);
           variantContentLinks.filter((link) => link.linkRole === "Unlocks").forEach((link) => {
             accessTargets.push({
@@ -973,6 +1004,7 @@ export const createContentBuilderRecord = onCall(
                 eventEndAt: variant.eventEndAt,
                 eventLocation: variant.eventLocation,
                 instructor: variant.instructor,
+                bundleComponents: variant.bundleComponents,
                 sortOrder: index + 1,
                 createdAt: now,
                 updatedAt: now,
@@ -1201,6 +1233,7 @@ export const createContentBuilderRecord = onCall(
               eventEndAt: variant.eventEndAt,
               eventLocation: variant.eventLocation,
               instructor: variant.instructor,
+              bundleComponents: variant.bundleComponents,
               createdAt: now,
               updatedAt: now,
             });
@@ -1233,6 +1266,7 @@ export const createContentBuilderRecord = onCall(
               eventEndAt: variant.eventEndAt,
               eventLocation: variant.eventLocation,
               instructor: variant.instructor,
+              bundleComponents: variant.bundleComponents,
               sortOrder: index + 1,
               createdAt: now,
               updatedAt: now,

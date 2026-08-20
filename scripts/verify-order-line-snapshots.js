@@ -35,6 +35,7 @@ const source = [{
     productAccessGrantId: "PAG-1",
     accessEntityType: "Plan",
     accessEntityId: "PLAN-1",
+    accessEntityVariantId: "PLAN-VARIANT-1",
     durationType: "permanent",
   }],
   components: [{
@@ -43,6 +44,15 @@ const source = [{
     quantity: 2,
     unit: "each",
     inventoryAction: "deduct",
+  }],
+  bundleInventoryItems: [{
+    bundleComponentId: "BC-1",
+    productId: "PROD-WORKSHOP",
+    variantId: "PV-WORKSHOP-SESSION",
+    quantity: 4,
+    quantityPerBundle: 2,
+    isWorkshop: true,
+    seatCapacity: 10,
   }],
 }];
 
@@ -54,7 +64,11 @@ assert.equal(lines[0].unitPrice, 55);
 assert.equal(lines[0].lineTotal, 110);
 assert.equal(lines[0].taxAmount, 10);
 assert.equal(lines[0].accessTargets[0].accessEntityId, "PLAN-1");
+assert.equal(lines[0].accessTargets[0].accessEntityVariantId, "PLAN-VARIANT-1");
 assert.equal(lines[0].componentInventory[0].totalQuantity, 4);
+assert.equal(lines[0].bundleInventory[0].productVariantId, "PV-WORKSHOP-SESSION");
+assert.equal(lines[0].bundleInventory[0].quantity, 4);
+assert.equal(lines[0].bundleInventory[0].quantityPerBundle, 2);
 
 source[0].name = "Product renamed after purchase";
 source[0].unitPrice = 99;

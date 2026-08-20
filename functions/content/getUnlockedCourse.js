@@ -130,16 +130,30 @@ export const getUnlockedCourse = onCall({
   const contentType = normalizedStatus(request.data?.contentType) === "workshop" ? "workshop" : "course";
   const contentLabel = contentType === "workshop" ? "workshop" : "course";
   const courseId = cleanString(request.data?.courseId || request.data?.workshopId);
+  const requestedAccessVariantId = cleanString(request.data?.accessVariantId);
   if (!courseId) throw new HttpsError("invalid-argument", `${contentLabel} ID is required.`);
 
   const db = admin.firestore();
   const accessId = `${request.auth.uid}_Plan_${courseId}`;
-  const [accessSnapshot, courseSnapshot] = await Promise.all([
+  const [directAccessSnapshot, userAccessSnapshot, courseSnapshot] = await Promise.all([
     db.collection("userAccess").doc(accessId).get(),
+    db.collection("userAccess").where("userId", "==", request.auth.uid).get(),
     db.collection("plans").doc(courseId).get(),
   ]);
-  const access = accessSnapshot.data() || {};
-  if (!accessSnapshot.exists || !accessIsActive(access)) {
+  const variantAccessSnapshot = userAccessSnapshot.docs.find((snapshot) => {
+    const candidate = snapshot.data() || {};
+    return cleanString(candidate.accessType).toLowerCase() === "plan" &&
+      cleanString(candidate.accessId) === courseId && accessIsActive(candidate) &&
+      (requestedAccessVariantId
+        ? cleanString(candidate.accessVariantId || candidate.accessEntityVariantId) === requestedAccessVariantId
+        : true);
+  });
+  const accessSnapshot = !requestedAccessVariantId &&
+    directAccessSnapshot.exists && accessIsActive(directAccessSnapshot.data() || {})
+    ? directAccessSnapshot
+    : variantAccessSnapshot;
+  const access = accessSnapshot?.data() || {};
+  if (!accessSnapshot || !accessIsActive(access)) {
     throw new HttpsError("permission-denied", `This ${contentLabel} is not unlocked for your account.`);
   }
   if (!courseSnapshot.exists) throw new HttpsError("not-found", `${contentLabel} not found.`);
@@ -153,10 +167,20 @@ export const getUnlockedCourse = onCall({
     throw new HttpsError("failed-precondition", `This ${contentLabel} is not currently available.`);
   }
 
+  const accessVariantId = cleanString(access.accessVariantId || access.accessEntityVariantId);
+  const courseVariants = Array.isArray(course.entityVariants) ? course.entityVariants : [];
+  const selectedCourseVariant = accessVariantId
+    ? courseVariants.find((variant) =>
+      cleanString(variant.entityVariantId || variant.id) === accessVariantId) || null
+    : null;
+  if (accessVariantId && !selectedCourseVariant) {
+    throw new HttpsError("failed-precondition", `The unlocked ${contentLabel} option is no longer available.`);
+  }
+  const contentScope = selectedCourseVariant || course;
   const blueprintIds = unique([
-    ...collectIds(course.linkedBlueprintIds, "BLUEPRINT-"),
-    ...collectIds(course.templateFieldValues, "BLUEPRINT-"),
-    ...collectIds(course.entityVariants, "BLUEPRINT-"),
+    ...collectIds(contentScope.linkedBlueprintIds, "BLUEPRINT-"),
+    ...collectIds(contentScope.templateFieldValues, "BLUEPRINT-"),
+    ...collectIds(contentScope, "BLUEPRINT-"),
   ]);
   const blueprintSnapshots = await Promise.all(blueprintIds.map((blueprintId) =>
     db.collection("blueprints").doc(blueprintId).get()));
@@ -204,6 +228,7 @@ export const getUnlockedCourse = onCall({
   return {
     course: {
       ...publicContent(course, courseId),
+      selectedVariant: selectedCourseVariant ? publicContent(selectedCourseVariant, accessVariantId) : null,
       media: await assetsForRecord(db, course, courseId),
     },
     modules: modules.filter(Boolean),

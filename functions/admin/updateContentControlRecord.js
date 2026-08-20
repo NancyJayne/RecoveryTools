@@ -323,7 +323,26 @@ function normalizeVariant(value, index, itemId, productId) {
     eventEndAt: cleanString(value.eventEndAt),
     eventLocation: cleanString(value.eventLocation),
     instructor: cleanString(value.instructor),
+    bundleComponents: cleanBundleComponents(value.bundleComponents, variantId, productId),
   };
+}
+
+function cleanBundleComponents(value, sourceProductVariantId, sourceProductId) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).slice(0, 100).map((component, index) => ({
+    bundleComponentId: cleanString(component?.bundleComponentId) ||
+      `BUNDLE-${slugify(sourceProductVariantId)}-${index + 1}`,
+    sourceProductId,
+    sourceProductVariantId,
+    componentProductId: cleanString(component?.componentProductId),
+    componentProductVariantId: cleanString(component?.componentProductVariantId),
+    quantity: Math.max(asNumber(component?.quantity) ?? 1, 1),
+  })).filter((component) => {
+    const key = `${component.componentProductId}:${component.componentProductVariantId}`;
+    if (!component.componentProductId || component.componentProductId === sourceProductId || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 async function updateProductRelation({
@@ -368,6 +387,18 @@ async function updateProductRelation({
   const linkRole = cleanString(relation.linkRole) || "Represents";
   const isManufacturingLink = collection === "blueprints" && linkRole === "ManufacturedFrom";
   const accessTargets = cleanAccessGrants(relation.accessGrants);
+  if (linkRole === "Unlocks" && !accessTargets.some((grant) =>
+    grant.accessEntityType === linkedEntityType && grant.accessEntityId === recordId)) {
+    accessTargets.push({
+      accessEntityType: linkedEntityType,
+      accessEntityId: recordId,
+      accessEntityVariantId: "",
+      productVariantId: "",
+      durationType: "permanent",
+      durationValue: null,
+      endsAt: "",
+    });
+  }
   const variantContentLinks = cleanVariantContentLinks(relation.variantContentLinks);
   const desiredAccessGrantIds = new Set();
   const desiredVariantLinkIds = new Set();
@@ -784,6 +815,7 @@ async function updateProductRelation({
       eventEndAt: variant.eventEndAt,
       eventLocation: variant.eventLocation,
       instructor: variant.instructor,
+      bundleComponents: variant.bundleComponents,
       sortOrder: index + 1,
       contentOrigin: "app",
       managedByWorkbook: false,

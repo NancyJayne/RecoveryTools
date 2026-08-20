@@ -1456,6 +1456,16 @@ function renderSelectedProductVariantRows(
               </label>
             </div>
           </div>
+          <div class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h5 class="font-semibold text-white">Bundle inventory and tickets</h5>
+                <p class="mt-1 text-xs text-gray-400">Each bundle sale reserves and deducts these exact underlying Product variants or Workshop sessions. A bundle with components does not use its own stock.</p>
+              </div>
+              <button type="button" class="add-product-bundle-component rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add component</button>
+            </div>
+            <div class="product-bundle-component-rows mt-3 space-y-2">${bundleComponentsMarkup(productVariant.bundleComponents || [])}</div>
+          </div>
           <div class="md:col-span-2 xl:col-span-4">
             <div class="mb-3 flex flex-wrap gap-2">
               <button type="button" data-product-variant-action="active"
@@ -1529,6 +1539,18 @@ function syncSelectedProductVariantRows() {
       eventLocation: row.querySelector(".product-variant-event-location")?.value.trim() ||
         existing.eventLocation || "",
       instructor: row.querySelector(".product-variant-instructor")?.value || "",
+      bundleComponents: [...row.querySelectorAll(".product-bundle-component-row")]
+        .map((componentRow, componentIndex) => ({
+          bundleComponentId: componentRow.dataset.bundleComponentId ||
+            `BUNDLE-${existingId || index + 1}-${componentIndex + 1}`,
+          componentProductId:
+            componentRow.querySelector(".product-bundle-component-product")?.value || "",
+          componentProductVariantId:
+            componentRow.querySelector(".product-bundle-component-variant")?.value || "",
+          quantity: Math.max(Number(
+            componentRow.querySelector(".product-bundle-component-quantity")?.value || 1,
+          ), 1),
+        })).filter((component) => component.componentProductId),
     };
   });
   input.value = serializeProductVariants(variants);
@@ -3344,8 +3366,47 @@ function productUnlockOptions(entityType) {
   return state.records[key] || [];
 }
 
+function productUnlockTargetVariants(entityType, entityId) {
+  const target = productUnlockOptions(entityType).find((record) => record.id === entityId);
+  return Array.isArray(target?.entityVariants) ? target.entityVariants : [];
+}
+
 function currentProductVariants() {
   return parseProductVariants(document.getElementById("contentProductVariants")?.value);
+}
+
+function bundleProductOptions(selectedProductId = "") {
+  return (state.records.products || []).map((product) => {
+    const selected = product.id === selectedProductId ? " selected" : "";
+    return `<option value="${escapeHTML(product.id)}"${selected}>${escapeHTML(product.name || product.id)}</option>`;
+  }).join("");
+}
+
+function bundleVariantOptions(productId, selectedVariantId = "") {
+  const product = (state.records.products || []).find((candidate) => candidate.id === productId);
+  return (product?.variants || []).map((variant) => {
+    const variantId = variant.variantId || variant.id;
+    const selected = variantId === selectedVariantId ? " selected" : "";
+    return `<option value="${escapeHTML(variantId)}"${selected}>${escapeHTML(variant.name || variantId)}</option>`;
+  }).join("");
+}
+
+function bundleComponentsMarkup(components = []) {
+  return components.map((component, index) => `
+    <div class="product-bundle-component-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_1fr_7rem_auto]"
+      data-bundle-component-id="${escapeHTML(component.bundleComponentId || `BUNDLE-COMPONENT-${index + 1}`)}">
+      <select class="product-bundle-component-product rounded bg-gray-800 px-2 py-2 text-white">
+        <option value="">Choose underlying Product</option>
+        ${bundleProductOptions(component.componentProductId)}
+      </select>
+      <select class="product-bundle-component-variant rounded bg-gray-800 px-2 py-2 text-white">
+        <option value="">Use Product-level stock</option>
+        ${bundleVariantOptions(component.componentProductId, component.componentProductVariantId)}
+      </select>
+      <input class="product-bundle-component-quantity rounded bg-gray-800 px-2 py-2 text-white"
+        type="number" min="1" step="1" value="${escapeHTML(component.quantity ?? 1)}" aria-label="Quantity per bundle">
+      <button type="button" class="remove-product-bundle-component rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
+    </div>`).join("") || "<p class=\"product-bundle-empty text-xs text-gray-400\">No underlying Products. This variant uses its own stock or seat capacity.</p>";
 }
 
 function productVariantContentLinksFromRows(includeIncomplete = false) {
@@ -3417,6 +3478,8 @@ function productUnlocksFromRows() {
     productVariantId: row.querySelector(".content-product-unlock-variant")?.value || "",
     accessEntityType: row.querySelector(".content-product-unlock-type")?.value || "Plan",
     accessEntityId: row.querySelector(".content-product-unlock-target")?.value || "",
+    accessEntityVariantId:
+      row.querySelector(".content-product-unlock-target-variant")?.value || "",
     grantTiming: "on-payment-confirmed",
     durationType: row.querySelector(".content-product-unlock-duration-type")?.value || "permanent",
     durationValue: optionalNumberFromElement(
@@ -3450,9 +3513,16 @@ function renderProductUnlockRows(grants = []) {
       const selected = variant.variantId === grant.productVariantId ? " selected" : "";
       return `<option value="${escapeHTML(variant.variantId)}"${selected}>${escapeHTML(variant.name || variant.variantId)}</option>`;
     }).join("");
+    const targetVariantOptions = productUnlockTargetVariants(entityType, grant.accessEntityId)
+      .map((variant, variantIndex) => {
+        const variantId = variant.entityVariantId || variant.id || `VARIANT-${variantIndex + 1}`;
+        const selected = variantId === grant.accessEntityVariantId ? " selected" : "";
+        const label = variant.name || variant.variantName || variantId;
+        return `<option value="${escapeHTML(variantId)}"${selected}>${escapeHTML(label)}</option>`;
+      }).join("");
     return `
       <div class="content-product-unlock-row grid gap-2 rounded border border-gray-700 p-2
-        md:grid-cols-2 xl:grid-cols-[12rem_9rem_1fr_9rem_7rem_13rem_auto]">
+        md:grid-cols-2 xl:grid-cols-[12rem_9rem_1fr_1fr_9rem_7rem_13rem_auto]">
         <select class="content-product-unlock-variant rounded bg-gray-800 px-2 py-2 text-white">
           <option value="">All Product variants</option>
           ${variantOptions}
@@ -3464,6 +3534,11 @@ function renderProductUnlockRows(grants = []) {
         <select class="content-product-unlock-target min-w-0 rounded bg-gray-800 px-2 py-2 text-white">
           <option value="">Choose content to unlock</option>
           ${targetOptions}
+        </select>
+        <select class="content-product-unlock-target-variant min-w-0 rounded bg-gray-800 px-2 py-2 text-white"
+          ${targetVariantOptions ? "" : "disabled"}>
+          <option value="">${targetVariantOptions ? "All content variants" : "No content variants"}</option>
+          ${targetVariantOptions}
         </select>
         <select class="content-product-unlock-duration-type rounded bg-gray-800 px-2 py-2 text-white">
           ${compactSelectOptions(["permanent", "days", "weeks", "months", "years"], grant.durationType || "permanent")}
@@ -3491,6 +3566,7 @@ function addProductUnlockRow() {
       productVariantId: "",
       accessEntityType: "Plan",
       accessEntityId: "",
+      accessEntityVariantId: "",
       durationType: "permanent",
       durationValue: null,
       endsAt: "",
@@ -5736,6 +5812,31 @@ export async function setupContentBuilder() {
     addIndependentProductVariant,
   );
   document.getElementById("contentProductVariantRows")?.addEventListener("click", (event) => {
+    const addBundleComponent = event.target.closest(".add-product-bundle-component");
+    if (addBundleComponent) {
+      const rows = addBundleComponent.closest(".content-product-variant-row")
+        ?.querySelector(".product-bundle-component-rows");
+      rows?.querySelector(".product-bundle-empty")?.remove();
+      rows?.insertAdjacentHTML("beforeend", bundleComponentsMarkup([{
+        bundleComponentId: `BUNDLE-COMPONENT-${Date.now()}`,
+        componentProductId: "",
+        componentProductVariantId: "",
+        quantity: 1,
+      }]));
+      state.isDirty = true;
+      return;
+    }
+    const removeBundleComponent = event.target.closest(".remove-product-bundle-component");
+    if (removeBundleComponent) {
+      const rows = removeBundleComponent.closest(".product-bundle-component-rows");
+      removeBundleComponent.closest(".product-bundle-component-row")?.remove();
+      if (rows && !rows.querySelector(".product-bundle-component-row")) {
+        rows.innerHTML = bundleComponentsMarkup([]);
+      }
+      syncSelectedProductVariantRows();
+      state.isDirty = true;
+      return;
+    }
     const statusAction = event.target.closest(".product-variant-status-action");
     if (statusAction) {
       const row = statusAction.closest(".content-product-variant-row");
@@ -5775,7 +5876,14 @@ export async function setupContentBuilder() {
     syncSelectedProductVariantRows();
     state.isDirty = true;
   });
-  document.getElementById("contentProductVariantRows")?.addEventListener("change", () => {
+  document.getElementById("contentProductVariantRows")?.addEventListener("change", (event) => {
+    if (event.target.classList.contains("product-bundle-component-product")) {
+      const row = event.target.closest(".product-bundle-component-row");
+      const variant = row?.querySelector(".product-bundle-component-variant");
+      if (variant) {
+        variant.innerHTML = `<option value="">Use Product-level stock</option>${bundleVariantOptions(event.target.value)}`;
+      }
+    }
     syncSelectedProductVariantRows();
     renderProductVariantContentLinkRows(productVariantContentLinksFromRows(true));
     state.isDirty = true;
@@ -5921,16 +6029,16 @@ export async function setupContentBuilder() {
   });
   document.getElementById("addContentProductUnlockBtn")?.addEventListener("click", addProductUnlockRow);
   document.getElementById("contentProductUnlockRows")?.addEventListener("change", (event) => {
-    if (!event.target.classList.contains("content-product-unlock-type")) return;
+    if (!event.target.classList.contains("content-product-unlock-type") &&
+        !event.target.classList.contains("content-product-unlock-target")) return;
     const allRows = [...document.querySelectorAll(".content-product-unlock-row")];
     const index = allRows.indexOf(event.target.closest(".content-product-unlock-row"));
     const grants = productUnlocksFromRows();
-    grants[index] = {
-      productVariantId: event.target.closest(".content-product-unlock-row")
-        ?.querySelector(".content-product-unlock-variant")?.value || "",
-      accessEntityType: event.target.value,
-      accessEntityId: "",
-    };
+    if (event.target.classList.contains("content-product-unlock-type")) {
+      grants[index].accessEntityType = event.target.value;
+      grants[index].accessEntityId = "";
+    }
+    grants[index].accessEntityVariantId = "";
     renderProductUnlockRows(grants);
   });
   document.getElementById("contentProductUnlockRows")?.addEventListener("click", (event) => {
