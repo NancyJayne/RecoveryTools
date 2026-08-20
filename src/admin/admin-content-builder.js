@@ -773,17 +773,9 @@ function variantBehaviourMarkup(template) {
     </section>`;
 }
 
-function variantTemplateFieldsMarkup(template, recordType, variant = {}) {
+function variantTemplateFieldsMarkup(template) {
   if (!template) return "<p class=\"mt-3 text-xs text-gray-400\">Choose a template to display this variant's fields.</p>";
-  const defaults = template.defaults || {};
-  const common = recordType === "plan" ? `
-    <div class="mt-3 grid gap-3 md:grid-cols-2">
-      <label class="block text-xs text-gray-300">Size / variant label
-        <input class="content-entity-variant-size-label mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
-          value="${escapeHTML(variant.sizeLabel ?? defaults.sizeLabel ?? "")}">
-      </label>
-    </div>` : "";
-  return `${common}${renderTemplateCustomFields(template)}`;
+  return renderTemplateCustomFields(template);
 }
 
 function variantStockMarkup(variant, defaults) {
@@ -1068,6 +1060,7 @@ function renderEntityVariantRows(variants = []) {
     <details class="content-entity-variant-row overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80 shadow-md"
       ${expanded ? "open" : ""}
       data-entity-variant-id="${escapeHTML(variantId)}"
+      data-size-label="${escapeHTML(variant.sizeLabel || "")}"
       data-created-by-uid="${escapeHTML(variant.createdByUid || "")}"
       data-created-by-email="${escapeHTML(variant.createdByEmail || "")}"
       data-approved-by-uid="${escapeHTML(variant.approvedByUid || "")}"
@@ -1197,7 +1190,9 @@ function entityVariantsFromBuilder() {
       templateId: definition?.templateId || "",
       templateVariantId,
       durationMinutes: null,
-      sizeLabel: row.querySelector(".content-entity-variant-size-label")?.value.trim() || "",
+      // Retain legacy values without exposing a generic field. Element-specific
+      // size or label fields belong in the selected variant template.
+      sizeLabel: row.dataset.sizeLabel || "",
       reference: references[0] || "",
       references,
       owner: row.querySelector(".content-entity-variant-owner")?.value.trim() || "",
