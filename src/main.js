@@ -2,13 +2,12 @@
 
 import "./style.css";
 import {
-  auth,
   getRecaptchaSiteKey,
   usesFirebaseEmulators,
 } from "./utils/firebase-config.js";
 import { validateTokenFromURL } from "./auth/user-auth.js";
 import { setupAuthModal } from "./auth/auth-modal.js";
-import { setupRoleUI, getUserRole } from "./auth/user-roles.js";
+import { getUserRole } from "./auth/user-roles.js";
 import { handleReferralFromURL } from "./affiliate/affiliate-referrals.js";
 import { updateCartCount } from "./shop/shop-cart.js";
 import { logClientError } from "./utils/logClientError.js";
@@ -123,7 +122,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const role = await getUserRole();
 
-  if (auth?.currentUser) setupRoleUI(auth.currentUser);
   if (role?.admin === true || role === "admin") {
     import("./admin/admin-emails.js")
       .then(({ setupAdminCommunicationBadge }) => setupAdminCommunicationBadge())
