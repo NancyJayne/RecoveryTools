@@ -3927,7 +3927,13 @@ function populateBuilderFromRecord(record) {
 
   setSelectValue("contentRecordType", recordType);
   updateFormForRecordType();
-  setSelectValue("contentType", record.type || record.itemType);
+  const storedRecordType = record.type || record.itemType || "";
+  const typeSelect = document.getElementById("contentType");
+  if (recordType === "item" && normalizedText(storedRecordType) === "workshop" && typeSelect &&
+      ![...typeSelect.options].some((option) => option.value === storedRecordType)) {
+    typeSelect.add(new Option("workshop (legacy Item — move future Workshops to Plans)", storedRecordType));
+  }
+  setSelectValue("contentType", storedRecordType);
   updateTemplatesForType();
   setSelectValue("contentTemplate", record.templateId || record.template);
   renderTemplateGuidedFields();

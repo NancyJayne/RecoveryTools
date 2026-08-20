@@ -341,9 +341,10 @@ async function contentOptions(db) {
   return {
     ...CONTENT_BUILDER_OPTIONS,
     ...saved,
-    itemTypes: workbookTypes.item.length
+    itemTypes: (workbookTypes.item.length
       ? mergeUnique([], workbookTypes.item)
-      : CONTENT_BUILDER_OPTIONS.itemTypes,
+      : CONTENT_BUILDER_OPTIONS.itemTypes)
+      .filter((type) => cleanString(type).toLowerCase() !== "workshop"),
     itemKinds: mergeUnique(CONTENT_BUILDER_OPTIONS.itemKinds, saved.itemKinds),
     blueprintTypes: workbookTypes.blueprint.length
       ? mergeUnique([], workbookTypes.blueprint)
@@ -488,6 +489,12 @@ export const createContentBuilderRecord = onCall(
     const templateId = cleanString(data.template);
     if (!name) {
       throw new HttpsError("invalid-argument", "Name is required.");
+    }
+    if (recordType === "item" && typeValue.toLowerCase() === "workshop") {
+      throw new HttpsError(
+        "invalid-argument",
+        "Create Workshops as Plans, then connect their sellable Product and session variants.",
+      );
     }
     const db = admin.firestore();
     const options = await contentOptions(db);

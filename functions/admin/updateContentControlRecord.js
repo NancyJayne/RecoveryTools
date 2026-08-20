@@ -1011,6 +1011,14 @@ export const updateContentControlRecord = onCall(
     const db = admin.firestore();
     const existingSnapshot = await db.collection(collection).doc(recordId).get();
     const existing = existingSnapshot.data() || {};
+    const requestedType = cleanString(updates.type).toLowerCase();
+    const existingType = cleanString(existing.type || existing.itemType).toLowerCase();
+    if (collection === "items" && requestedType === "workshop" && existingType !== "workshop") {
+      throw new HttpsError(
+        "invalid-argument",
+        "Create Workshops as Plans, then connect their sellable Product and session variants.",
+      );
+    }
     const actor = actorOwnership(request);
     const now = admin.firestore.FieldValue.serverTimestamp();
     const update = {

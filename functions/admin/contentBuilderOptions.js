@@ -30,7 +30,6 @@ export const CONTENT_BUILDER_OPTIONS = {
     "exercise equipment",
     "course",
     "faq",
-    "workshop",
     "content",
     "part",
     "program",

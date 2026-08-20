@@ -128,6 +128,8 @@ This is the agreed order for the next major modules. Each area uses a focused `c
 
 Sell and safely operate Workshop tickets before waiting for the complete automated instructor-payment system.
 
+- [x] Remove Workshop from the Item type choices and keep it under Plans. New Workshop Items are rejected server-side even if a stale client submits one; active workbook/entity-type settings cannot reintroduce the choice, while existing legacy Workshop Items remain editable until deliberately migrated. Run `npm run verify:workshop-boundary:emulator`. Include this Functions change in the next normal V2 deployment rather than deploying it separately.
+
 - [ ] Release public Workshop discovery, session details, capacity/remaining places, Product-variant selection, Stripe purchase, booking confirmation, attendee records, customer Profile access, cancellation/refund handling, and mobile presentation.
   - [x] Show available Workshop-session counts, remaining-place warnings, sold-out states, and prevent the customer from selecting more places than remain.
   - [x] Revalidate Workshop seat capacity server-side before creating the Stripe Checkout session so stale or altered carts cannot knowingly exceed current paid-ticket availability.
