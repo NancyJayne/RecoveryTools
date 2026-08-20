@@ -29,6 +29,7 @@
 - [x] Product hide, activate, and archive actions produce the expected Marketplace visibility.
 - [x] Paused Course Plans are unavailable in the customer Course player.
 - [x] Admin CRM now supports removing and restoring individual Course, Workshop, or Program access without deleting its history.
+- [x] Admin role visibility now refreshes Firebase custom claims before rendering and ignores stale asynchronous role results, preventing a newly assigned administrator's Dashboard link from appearing and then disappearing.
 - [x] Marketplace now hides Products whose primary linked content is paused or archived.
 - [x] Inventory Stocktake now lists only Items and Products explicitly marked as inventory tracked.
 - [x] Reopening Inventory Stocktake or Record Manufacturing now refreshes current tracked records automatically.

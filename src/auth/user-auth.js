@@ -34,16 +34,19 @@ export async function setupAuthState() {
     return;
   }
 
-  // Update header immediately if auth state is already available
-  if (auth?.currentUser) updateHeaderUI(auth.currentUser);
+  // Refresh claims before the first role-dependent render. This picks up role
+  // changes made while the user previously had an older token cached.
+  updateHeaderUI(auth.currentUser);
+  await setupRoleUI(auth.currentUser, { forceRefresh: !!auth.currentUser });
 
   onAuthStateChanged(auth, async (user) => {
     updateHeaderUI(user);
 
     if (user) {
-      setupRoleUI(user);
+      await setupRoleUI(user, { forceRefresh: true });
       console.log("✅ User signed in:", user.email);
     } else {
+      await setupRoleUI(null);
       console.log("👋 No user signed in");
     }
   });

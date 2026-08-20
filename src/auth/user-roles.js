@@ -5,22 +5,29 @@ import {
   stopAdminAlertPolling,
 } from "../admin/admin-order-alerts.js";
 
+let roleUIRequestId = 0;
+
+function rolesFromClaims(claims = {}) {
+  return {
+    admin: claims.admin === true,
+    therapist: claims.therapist === true,
+    affiliate: claims.affiliate === true,
+  };
+}
+
 /**
  * Get the current user's roles from custom claims.
  */
-export async function getUserRole() {
+export async function getUserRole({ forceRefresh = false } = {}) {
   await auth?.authStateReady?.();
   const user = auth?.currentUser;
   if (!user) return {};
 
   try {
-    const token = await user.getIdTokenResult();
+    const token = await user.getIdTokenResult(forceRefresh);
+    const roles = rolesFromClaims(token.claims);
 
-    const roles = {
-      admin: token.claims?.admin === true,
-      therapist: token.claims?.therapist === true,
-      affiliate: token.claims?.affiliate === true,
-    };
+    if (auth?.currentUser?.uid !== user.uid) return {};
 
     console.log("User roles:", roles);
 
@@ -75,26 +82,29 @@ export function applyRoleUI(roles = {}) {
     ?.classList.add("hidden");
 }
 
-export async function setupRoleUI(user) {
+export async function setupRoleUI(user, { forceRefresh = false } = {}) {
+  const requestId = ++roleUIRequestId;
   if (!user) {
     applyRoleUI();
     return {};
   }
 
   try {
-    const { claims } = await user.getIdTokenResult();
-    const roles = {
-      admin: claims?.admin === true,
-      therapist: claims?.therapist === true,
-      affiliate: claims?.affiliate === true,
-    };
+    const { claims } = await user.getIdTokenResult(forceRefresh);
+    const roles = rolesFromClaims(claims);
+
+    if (requestId !== roleUIRequestId || auth?.currentUser?.uid !== user.uid) {
+      return roles;
+    }
 
     console.log("User roles:", roles);
     applyRoleUI(roles);
     return roles;
   } catch (err) {
     console.error("Error reading role claims:", err);
-    clearAdminOrderAlertBadge();
+    if (requestId === roleUIRequestId && auth?.currentUser?.uid === user.uid) {
+      applyRoleUI();
+    }
     return {};
   }
 }

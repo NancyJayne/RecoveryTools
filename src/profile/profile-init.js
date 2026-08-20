@@ -1,12 +1,11 @@
 // profile-init.js – handles tab switching, role-based visibility, and profile form handlers
 
-import { auth, db, functions } from "../utils/firebase-config.js";
-import { httpsCallable } from "firebase/functions";
+import { auth, db } from "../utils/firebase-config.js";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
 import { showToast } from "../utils/utils.js";
 import { handleSignOut } from "../auth/user-auth.js";
-import { applyRoleUI, getUserRole } from "../auth/user-roles.js";
+import { getUserRole, setupRoleUI } from "../auth/user-roles.js";
 
 import {
   loadOrderReceipts,
@@ -47,34 +46,11 @@ function formatAddress(address) {
     .join(", ");
 }
 
-function isRetryableRoleError(error) {
-  return [
-    "functions/unauthenticated",
-    "functions/permission-denied",
-    "unauthenticated",
-    "permission-denied",
-  ].includes(error?.code);
-}
-
 async function loadProfileRoles(user) {
-  const getUserRoleWithPermissions = httpsCallable(functions, "getUserRoleWithPermissions");
-
   try {
-    const result = await getUserRoleWithPermissions();
-    return result.data?.roles || {};
+    return await setupRoleUI(user, { forceRefresh: true });
   } catch (error) {
-    if (isRetryableRoleError(error)) {
-      try {
-        await user.getIdToken(true);
-        const result = await getUserRoleWithPermissions();
-        return result.data?.roles || {};
-      } catch (retryError) {
-        console.warn("Profile role refresh failed; using local role claims.", retryError);
-      }
-    } else {
-      console.warn("Profile role lookup failed; using local role claims.", error);
-    }
-
+    console.warn("Profile role refresh failed; using cached role claims.", error);
     return getUserRole();
   }
 }
@@ -109,7 +85,6 @@ export async function setupProfilePage() {
 
   loadProfileRoles(user)
     .then((roles) => {
-      applyRoleUI(roles);
       const roleNames = Object.entries(roles)
         .filter(([, enabled]) => enabled)
         .map(([role]) => role);
