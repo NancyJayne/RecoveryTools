@@ -23,6 +23,7 @@
     "verify:bundles:emulator": "node scripts/verify-bundle-reservations-emulator.js",
     "verify:workshop-boundary:emulator": "node scripts/verify-workshop-plan-boundary-emulator.js",
     "verify:workshop-operations:emulator": "node scripts/verify-workshop-operations-emulator.js",
+    "verify:affiliate-role-pricing:emulator": "node scripts/verify-affiliate-role-pricing-emulator.js",
     "release:guard": "node scripts/verify-production-release.mjs",
     "release:check": "npm run release:guard && npm run check:imports && npm run build",
     "emulators": "node scripts/start-emulators.js",

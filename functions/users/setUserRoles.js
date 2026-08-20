@@ -33,11 +33,13 @@ export const setUserRoles = onCall(
         affiliate: !!roles.affiliate,
         therapist: !!roles.therapist,
       };
+      const updatedAt = admin.firestore.FieldValue.serverTimestamp();
 
       await admin.auth().setCustomUserClaims(uid, normalizedRoles);
       await admin.firestore().collection("users").doc(uid).set({
         roles: normalizedRoles,
-        rolesUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        affiliateApplicationStatus: normalizedRoles.affiliate ? "active" : "inactive",
+        rolesUpdatedAt: updatedAt,
         rolesUpdatedBy: request.auth.uid,
       }, { merge: true });
       const affiliateCollection = admin.firestore().collection("affiliates");
@@ -58,7 +60,7 @@ export const setUserRoles = onCall(
           active: true,
           pickupEnabled: false,
           pickupApprovalStatus: "draft",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt,
         }, { merge: true });
       } else {
         const refs = new Map([
@@ -69,7 +71,7 @@ export const setUserRoles = onCall(
           status: "inactive",
           active: false,
           pickupEnabled: false,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt,
         }, { merge: true })));
       }
 
@@ -77,6 +79,8 @@ export const setUserRoles = onCall(
         success: true,
         uid,
         roles: normalizedRoles,
+        affiliateApplicationStatus: normalizedRoles.affiliate ? "active" : "inactive",
+        requiresTokenRefresh: true,
         message: `Roles updated for UID: ${uid}`,
       };
     } catch (error) {

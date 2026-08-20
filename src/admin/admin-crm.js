@@ -687,7 +687,12 @@ export function setupRoleManager() {
       await setUserRoles({ uid, roles });
       const selected = crmUsers.find((user) => user.id === uid);
       if (selected) selected.roles = roles;
-      showToast("Roles updated", "success");
+      showToast(
+        roles.affiliate
+          ? "Roles updated. Ask the affiliate to sign out and back in before checking wholesale pricing."
+          : "Roles updated. The user must sign out and back in to refresh access.",
+        "success",
+      );
     } catch (err) {
       console.error("Failed to update roles:", err);
       showToast("Error assigning roles", "error");

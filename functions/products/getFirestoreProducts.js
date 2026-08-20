@@ -433,7 +433,7 @@ export const getFirestoreProducts = onCall(
         const user = userSnap.exists ? userSnap.data() || {} : {};
         const affiliateStatus = normalizeStatus(user.affiliateApplicationStatus || user.status);
         approvedAffiliate = user.roles?.affiliate === true &&
-          !["pending", "rejected", "inactive", "archived"].includes(affiliateStatus);
+          !["rejected", "inactive", "archived"].includes(affiliateStatus);
       }
 
       let query = admin.firestore().collection("products");
