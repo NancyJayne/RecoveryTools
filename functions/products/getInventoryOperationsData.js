@@ -36,10 +36,15 @@ function itemComponents(blueprint, blueprintVariantId = "") {
       componentId: clean(component.componentId) || `COMPONENT-${index + 1}`,
       itemId: clean(component.itemId),
       itemVariantId: clean(component.itemVariantId),
+      productId: clean(component.productId),
+      productVariantId: clean(component.productVariantId),
       quantity: Number(component.quantity || 0),
       unit: clean(component.unit) || "each",
+      quantityBasis: clean(component.quantityBasis) || "fixed",
+      inventoryTreatment: clean(component.inventoryTreatment) || "bring-return",
+      deductOnIssue: component.deductOnIssue === true,
     }))
-    .filter((component) => component.itemId && component.quantity > 0);
+    .filter((component) => (component.itemId || component.productId) && component.quantity > 0);
 }
 
 function blueprintVariant(blueprint, blueprintVariantId = "") {
@@ -74,6 +79,7 @@ export const getInventoryOperationsData = onCall(
       usersSnap,
       instructorsSnap,
       reservationsSnap,
+      operationsIssuesSnap,
     ] = await Promise.all([
       db.collection("inventory").get(),
       db.collection("items").get(),
@@ -90,7 +96,12 @@ export const getInventoryOperationsData = onCall(
       db.collection("users").get(),
       db.collection("instructors").get(),
       db.collection("inventoryReservations").where("status", "==", "active").get(),
+      db.collection("workshopOperationsIssues").get(),
     ]);
+    const completedOperationsIssues = new Map(operationsIssuesSnap.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter((issue) => status(issue.status) === "completed")
+      .map((issue) => [clean(issue.productVariantId), issue]));
 
     const activeReservationsBySession = new Map();
     const nowMillis = Date.now();
@@ -139,6 +150,8 @@ export const getInventoryOperationsData = onCall(
     const inventoryByVariant = new Map(inventory.filter((row) => clean(row.variantId))
       .map((row) => [clean(row.variantId), row]));
     const items = new Map(itemsSnap.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }]));
+    const products = new Map(productsSnap.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }]));
+    const productVariantsById = new Map(variantsSnap.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }]));
     const blueprints = new Map(blueprintsSnap.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }]));
     const variantsByProduct = new Map();
     variantsSnap.docs.forEach((doc) => {
@@ -164,6 +177,18 @@ export const getInventoryOperationsData = onCall(
         blueprintId: clean(link.entityId),
         blueprintVariantId: clean(link.entityVariantId),
       });
+    });
+    const operationsByProduct = new Map();
+    const operationsByVariant = new Map();
+    variantLinksSnap.docs.forEach((doc) => {
+      const link = doc.data() || {};
+      if (status(link.status) !== "active" || status(link.linkRole) !== "operatedwith") return;
+      const value = {
+        blueprintId: clean(link.entityId),
+        blueprintVariantId: clean(link.entityVariantId),
+      };
+      if (clean(link.productVariantId)) operationsByVariant.set(clean(link.productVariantId), value);
+      else if (clean(link.productId)) operationsByProduct.set(clean(link.productId), value);
     });
 
     const stocktakeRows = [];
@@ -368,9 +393,56 @@ export const getInventoryOperationsData = onCall(
           const sold = attendees
             .filter((attendee) => !attendee.removed)
             .reduce((sum, attendee) => sum + attendee.quantity, 0);
+          const actualAttendees = attendees
+            .filter((attendee) => !attendee.removed && attendee.checkedIn)
+            .reduce((sum, attendee) => sum + attendee.quantity, 0);
           const reserved = activeReservationsBySession.get(
             `${doc.id}:${clean(variant.id)}`,
           ) || 0;
+          const operationsLink = operationsByVariant.get(clean(variant.id)) ||
+            operationsByProduct.get(doc.id) || null;
+          const operationsBlueprint = operationsLink ? blueprints.get(operationsLink.blueprintId) : null;
+          const operationsVariant = blueprintVariant(
+            operationsBlueprint,
+            operationsLink?.blueprintVariantId,
+          );
+          const operationsComponents = itemComponents(
+            operationsBlueprint,
+            operationsLink?.blueprintVariantId,
+          ).map((component) => {
+            const multiplier = {
+              capacity,
+              "confirmed-attendees": sold,
+              "actual-attendees": actualAttendees,
+              fixed: 1,
+            }[component.quantityBasis] ?? 1;
+            const requiredQuantity = Number((component.quantity * multiplier).toFixed(4));
+            const summary = component.itemId ? componentInventorySummary(component.itemId) : null;
+            const selectedProduct = products.get(component.productId);
+            const selectedProductVariant = productVariantsById.get(component.productVariantId);
+            const selectedStock = component.productVariantId
+              ? Number(inventoryByVariant.get(component.productVariantId)?.stockQty ??
+                selectedProductVariant?.stockQuantity ?? 0)
+              : component.productId
+                ? Number(inventoryByProduct.get(component.productId)?.stockQty ?? selectedProduct?.stock ?? 0)
+                : component.itemVariantId
+                  ? Number(summary?.variants.find((candidate) =>
+                    clean(candidate.itemVariantId) === component.itemVariantId)?.stock || 0)
+                  : Number(summary?.stock || 0);
+            return {
+              ...component,
+              entityType: component.productVariantId ? "ProductVariant" : component.productId
+                ? "Product" : component.itemVariantId ? "ItemVariant" : "Item",
+              name: selectedProductVariant?.variantName || selectedProductVariant?.name ||
+                selectedProduct?.productName || selectedProduct?.name ||
+                items.get(component.itemId)?.name || items.get(component.itemId)?.title ||
+                component.productVariantId || component.productId || component.itemId,
+              requiredQuantity,
+              stock: selectedStock,
+              variants: summary?.variants || [],
+              shortage: Math.max(requiredQuantity - selectedStock, 0),
+            };
+          });
           workshopSessions.push({
             productId: doc.id,
             productName: product.productName || product.name || doc.id,
@@ -389,6 +461,15 @@ export const getInventoryOperationsData = onCall(
               variant.instructorId || variant.instructor || product.instructorId || product.instructor,
             )) || variant.instructor || product.instructor || "",
             attendees,
+            actualAttendees,
+            operations: operationsBlueprint ? {
+              blueprintId: operationsBlueprint.id,
+              blueprintName: operationsBlueprint.name || operationsBlueprint.title || operationsBlueprint.id,
+              blueprintVariantId: clean(operationsVariant?.entityVariantId),
+              blueprintVariantName: operationsVariant?.name || "",
+              components: operationsComponents,
+              issued: completedOperationsIssues.get(clean(variant.id)) || null,
+            } : null,
           });
         });
       }

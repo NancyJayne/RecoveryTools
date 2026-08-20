@@ -955,6 +955,25 @@ function blueprintRecipeItemOptions(selectedId = "") {
   })].join("");
 }
 
+function workshopOperationsSourceOptions(sourceType, selectedId = "") {
+  const records = sourceType === "Product" ? state.records.products || [] : state.records.items || [];
+  return [`<option value="">Choose ${sourceType}</option>`, ...records.map((record) => {
+    const selected = record.id === selectedId ? " selected" : "";
+    return `<option value="${escapeHTML(record.id)}"${selected}>${escapeHTML(record.name || record.id)}</option>`;
+  })].join("");
+}
+
+function workshopOperationsVariantOptions(sourceType, sourceId, selectedId = "") {
+  const record = (sourceType === "Product" ? state.records.products || [] : state.records.items || [])
+    .find((candidate) => candidate.id === sourceId);
+  const variants = sourceType === "Product" ? record?.variants || [] : record?.entityVariants || [];
+  return [`<option value="">Default ${sourceType} stock</option>`, ...(variants || []).map((variant) => {
+    const id = sourceType === "Product"
+      ? variant.variantId || variant.id : variant.entityVariantId || variant.id;
+    return `<option value="${escapeHTML(id)}"${id === selectedId ? " selected" : ""}>${escapeHTML(variant.name || id)}</option>`;
+  })].join("");
+}
+
 function itemVariantsForRecipe(itemId) {
   const item = (state.records.items || []).find((record) => record.id === itemId);
   return Array.isArray(item?.entityVariants) ? item.entityVariants : [];
@@ -982,28 +1001,46 @@ function recipeComponentUnitCost(itemId, itemVariantId = "") {
 
 function blueprintVariantRecipeMarkup(variant) {
   if (currentRecordType() !== "blueprint") return "";
+  const workshopOperations = normalizedType(document.getElementById("contentType")?.value) ===
+    "workshop operations";
   const components = Array.isArray(variant.linkedItemComponents) ? variant.linkedItemComponents : [];
-  const rows = components.map((component, index) => `
-    <div class="blueprint-variant-recipe-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_1fr_7rem_auto]"
+  const rows = components.map((component, index) => {
+    const sourceType = component.productId ? "Product" : "Item";
+    const sourceId = component.productId || component.itemId || "";
+    const sourceVariantId = component.productVariantId || component.itemVariantId || "";
+    return `
+    <div class="blueprint-variant-recipe-row grid gap-2 rounded border border-gray-700 p-2 ${workshopOperations ? "md:grid-cols-2 xl:grid-cols-[8rem_1fr_1fr_8rem_11rem_10rem_auto]" : "md:grid-cols-[1fr_1fr_7rem_auto]"}"
       data-component-id="${escapeHTML(component.componentId || `COMPONENT-${index + 1}`)}">
+      ${workshopOperations ? `<select class="blueprint-variant-recipe-source-type rounded bg-gray-800 px-2 py-2 text-white" aria-label="Stock source type">
+        ${compactSelectOptions(["Item", "Product"], sourceType)}
+      </select>` : ""}
       <select class="blueprint-variant-recipe-item rounded bg-gray-800 px-2 py-2 text-white">
-        ${blueprintRecipeItemOptions(component.itemId)}
+        ${workshopOperations ? workshopOperationsSourceOptions(sourceType, sourceId) : blueprintRecipeItemOptions(component.itemId)}
       </select>
       <select class="blueprint-variant-recipe-item-variant rounded bg-gray-800 px-2 py-2 text-white"
-        aria-label="Item variant">
-        ${blueprintRecipeVariantOptions(component.itemId, component.itemVariantId)}
+        aria-label="${sourceType} variant">
+        ${workshopOperations ? workshopOperationsVariantOptions(sourceType, sourceId, sourceVariantId) : blueprintRecipeVariantOptions(component.itemId, component.itemVariantId)}
       </select>
       <input class="blueprint-variant-recipe-quantity rounded bg-gray-800 px-2 py-2 text-white"
         type="number" min="0" step="0.01" value="${escapeHTML(component.quantity ?? 1)}" aria-label="Quantity">
+      ${workshopOperations ? `
+      <select class="blueprint-variant-recipe-quantity-basis rounded bg-gray-800 px-2 py-2 text-white" aria-label="Quantity basis">
+        ${compactSelectOptions(["fixed", "capacity", "confirmed-attendees", "actual-attendees"], component.quantityBasis || "fixed")}
+      </select>
+      <select class="blueprint-variant-recipe-inventory-treatment rounded bg-gray-800 px-2 py-2 text-white" aria-label="Inventory treatment">
+        ${compactSelectOptions(["bring-return", "consumable", "take-home", "reference", "digital-instruction"], component.inventoryTreatment || "bring-return")}
+      </select>` : ""}
       <button type="button" class="remove-blueprint-variant-recipe-row rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
-    </div>`).join("");
+    </div>`;
+  }).join("");
   const total = components.reduce((sum, component) => sum + Number(component.estimatedCost ?? 0), 0);
   return `
     <details class="mt-3 rounded border border-gray-700 p-3">
-      <summary class="cursor-pointer font-semibold text-white">Variant-specific Item recipe</summary>
+      <summary class="cursor-pointer font-semibold text-white">${workshopOperations ? "Workshop equipment, consumables and giveaways" : "Variant-specific Item recipe"}</summary>
+      ${workshopOperations ? "<p class=\"mt-2 text-xs text-gray-400\">Allocate exact Items, Item variants, Products, or Product variants. Use fixed for a session total, or multiply by capacity, confirmed attendees, or actual attendance. Consumables and take-home stock are only deducted when explicitly issued.</p>" : ""}
       <div class="blueprint-variant-recipe-rows mt-3 space-y-2">${rows || "<p class=\"text-xs text-gray-400\">No variant-specific Items yet.</p>"}</div>
       <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <button type="button" class="add-blueprint-variant-recipe-row rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add Item</button>
+        <button type="button" class="add-blueprint-variant-recipe-row rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add ${workshopOperations ? "requirement" : "Item"}</button>
         <span class="blueprint-variant-recipe-total text-sm text-white">Estimated cost: $${total.toFixed(2)}</span>
       </div>
     </details>`;
@@ -1123,9 +1160,13 @@ function entityVariantsFromBuilder() {
     const definition = templateDefinitions(currentRecordType(), document.getElementById("contentType")?.value)
       .find((candidate) => candidate.id === templateVariantId);
     const recipeComponents = [...row.querySelectorAll(".blueprint-variant-recipe-row")].map((recipeRow) => {
-      const itemId = recipeRow.querySelector(".blueprint-variant-recipe-item")?.value || "";
-      const itemVariantId =
-        recipeRow.querySelector(".blueprint-variant-recipe-item-variant")?.value || "";
+      const sourceType = recipeRow.querySelector(".blueprint-variant-recipe-source-type")?.value || "Item";
+      const sourceId = recipeRow.querySelector(".blueprint-variant-recipe-item")?.value || "";
+      const sourceVariantId = recipeRow.querySelector(".blueprint-variant-recipe-item-variant")?.value || "";
+      const itemId = sourceType === "Item" ? sourceId : "";
+      const itemVariantId = sourceType === "Item" ? sourceVariantId : "";
+      const productId = sourceType === "Product" ? sourceId : "";
+      const productVariantId = sourceType === "Product" ? sourceVariantId : "";
       const quantity = optionalNumberFromElement(
         recipeRow.querySelector(".blueprint-variant-recipe-quantity"),
       ) ?? 0;
@@ -1134,12 +1175,20 @@ function entityVariantsFromBuilder() {
         componentId: recipeRow.dataset.componentId || `COMPONENT-${index + 1}`,
         itemId,
         itemVariantId,
+        productId,
+        productVariantId,
         quantity,
         unit: "each",
+        quantityBasis: recipeRow.querySelector(".blueprint-variant-recipe-quantity-basis")?.value || "fixed",
+        inventoryTreatment:
+          recipeRow.querySelector(".blueprint-variant-recipe-inventory-treatment")?.value || "bring-return",
+        deductOnIssue: ["consumable", "take-home"].includes(
+          recipeRow.querySelector(".blueprint-variant-recipe-inventory-treatment")?.value,
+        ),
         unitCost,
         estimatedCost: quantity * unitCost,
       };
-    }).filter((component) => component.itemId && component.quantity > 0);
+    }).filter((component) => (component.itemId || component.productId) && component.quantity > 0);
     const references = uniqueValues([...row.querySelectorAll(".content-entity-variant-reference")]
       .map((input) => input.value));
     return {
@@ -1203,13 +1252,14 @@ function updateBlueprintVariantRecipeTotals() {
   document.querySelectorAll(".content-entity-variant-row").forEach((variantRow) => {
     let total = 0;
     variantRow.querySelectorAll(".blueprint-variant-recipe-row").forEach((recipeRow) => {
+      const sourceType = recipeRow.querySelector(".blueprint-variant-recipe-source-type")?.value || "Item";
       const itemId = recipeRow.querySelector(".blueprint-variant-recipe-item")?.value || "";
       const itemVariantId =
         recipeRow.querySelector(".blueprint-variant-recipe-item-variant")?.value || "";
       const quantity = optionalNumberFromElement(
         recipeRow.querySelector(".blueprint-variant-recipe-quantity"),
       ) ?? 0;
-      total += quantity * recipeComponentUnitCost(itemId, itemVariantId);
+      total += sourceType === "Item" ? quantity * recipeComponentUnitCost(itemId, itemVariantId) : 0;
     });
     const output = variantRow.querySelector(".blueprint-variant-recipe-total");
     if (output) output.textContent = `Estimated cost: $${total.toFixed(2)}`;
@@ -3162,7 +3212,7 @@ function chooseExistingProduct(productId) {
   setCheckboxValue("contentProductFeatured", product.featured);
   setCheckboxValue("contentProductArchived", product.archived);
   state.retainedProductVariantContentLinks = (product.variantContentLinks || [])
-    .filter((link) => link.linkRole !== "ManufacturedFrom");
+    .filter((link) => !["ManufacturedFrom", "OperatedWith"].includes(link.linkRole));
   setInputValue("contentProductVariants", serializeProductVariants(product.variants || []));
   populateProductVariantsFromEntity();
   renderProductBlueprintOptions(product.manufacturingBlueprintId || "");
@@ -3411,26 +3461,36 @@ function bundleComponentsMarkup(components = []) {
 
 function productVariantContentLinksFromRows(includeIncomplete = false) {
   let defaultBlueprintId = "";
-  const manufacturingLinks = [...document.querySelectorAll(".product-variant-content-link-row")]
+  const blueprintLinks = [...document.querySelectorAll(".product-variant-content-link-row")]
     .map((row) => {
       const productVariantId = row.querySelector(".variant-content-product-variant")?.value || "";
       const entityId = row.querySelector(".variant-content-blueprint")?.value || "";
-      if (!productVariantId && entityId) defaultBlueprintId = entityId;
+      const entityVariantId = row.querySelector(".variant-content-blueprint-variant")?.value || "";
+      const linkRole = row.querySelector(".variant-content-link-role")?.value || "ManufacturedFrom";
+      if (linkRole === "ManufacturedFrom" && !productVariantId && entityId) defaultBlueprintId = entityId;
       return {
         productVariantId,
         entityType: "Blueprint",
         entityId,
-        entityVariantId: "",
-        linkRole: "ManufacturedFrom",
+        entityVariantId,
+        linkRole,
         status: "active",
       };
     })
-    .filter((link) => link.productVariantId && (includeIncomplete || link.entityId));
+    .filter((link) => includeIncomplete || link.entityId);
   setInputValue("contentProductBlueprintId", defaultBlueprintId);
   const retained = Array.isArray(state.retainedProductVariantContentLinks)
     ? state.retainedProductVariantContentLinks
     : [];
-  return [...retained, ...manufacturingLinks];
+  return [...retained, ...blueprintLinks];
+}
+
+function blueprintContentVariantOptions(blueprintId, selectedId = "") {
+  const blueprint = (state.records.blueprints || []).find((record) => record.id === blueprintId);
+  return (blueprint?.entityVariants || []).map((variant) => {
+    const variantId = variant.entityVariantId || variant.id || "";
+    return `<option value="${escapeHTML(variantId)}"${variantId === selectedId ? " selected" : ""}>${escapeHTML(variant.name || variantId)}</option>`;
+  }).join("");
 }
 
 function renderProductVariantContentLinkRows(links = []) {
@@ -3438,11 +3498,12 @@ function renderProductVariantContentLinkRows(links = []) {
   if (!container) return;
   const productVariants = currentProductVariants();
   const blueprints = state.records.blueprints || [];
-  const manufacturingLinks = links.filter((link) => link.linkRole === "ManufacturedFrom");
+  const blueprintLinks = links.filter((link) =>
+    ["ManufacturedFrom", "OperatedWith"].includes(link.linkRole));
   const defaultBlueprintId = document.getElementById("contentProductBlueprintId")?.value || "";
   const rows = [
     ...(defaultBlueprintId ? [{ productVariantId: "", entityId: defaultBlueprintId }] : []),
-    ...manufacturingLinks,
+    ...blueprintLinks,
   ];
   container.innerHTML = rows.map((link) => {
     const productVariantOptions = productVariants.map((variant) => {
@@ -3453,23 +3514,32 @@ function renderProductVariantContentLinkRows(links = []) {
       const selected = record.id === link.entityId ? " selected" : "";
       return `<option value="${escapeHTML(record.id)}"${selected}>${escapeHTML(record.name || record.id)}</option>`;
     }).join("");
+    const linkRole = link.linkRole || "ManufacturedFrom";
+    const blueprintVariantOptions = blueprintContentVariantOptions(link.entityId, link.entityVariantId);
     return `
-      <div class="product-variant-content-link-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_1.5fr_auto]">
+      <div class="product-variant-content-link-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-2 xl:grid-cols-[11rem_1fr_1.5fr_1fr_auto]">
+        <select class="variant-content-link-role rounded bg-gray-800 px-2 py-2 text-white">
+          <option value="ManufacturedFrom"${linkRole === "ManufacturedFrom" ? " selected" : ""}>Manufacturing recipe</option>
+          <option value="OperatedWith"${linkRole === "OperatedWith" ? " selected" : ""}>Workshop operations</option>
+        </select>
         <select class="variant-content-product-variant rounded bg-gray-800 px-2 py-2 text-white">
           <option value="">All Product variants</option>${productVariantOptions}
         </select>
         <select class="variant-content-blueprint rounded bg-gray-800 px-2 py-2 text-white">
-          <option value="">Choose manufacturing Blueprint</option>${blueprintOptions}
+          <option value="">Choose Blueprint</option>${blueprintOptions}
+        </select>
+        <select class="variant-content-blueprint-variant rounded bg-gray-800 px-2 py-2 text-white">
+          <option value="">Default Blueprint variant</option>${blueprintVariantOptions}
         </select>
         <button type="button" class="remove-product-variant-content-link rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
       </div>`;
-  }).join("") || "<p class=\"text-xs text-gray-400\">No manufacturing Blueprint selected.</p>";
+  }).join("") || "<p class=\"text-xs text-gray-400\">No manufacturing or Workshop Operations Blueprint selected.</p>";
 }
 
 function addProductVariantContentLinkRow() {
   renderProductVariantContentLinkRows([
     ...productVariantContentLinksFromRows(),
-    { productVariantId: "", entityType: "Blueprint", entityId: "", linkRole: "ManufacturedFrom" },
+    { productVariantId: "", entityType: "Blueprint", entityId: "", entityVariantId: "", linkRole: "ManufacturedFrom" },
   ]);
 }
 
@@ -4072,7 +4142,7 @@ function populateBuilderFromRecord(record) {
     setCheckboxValue("contentProductFeatured", record.productFeatured);
     setCheckboxValue("contentProductArchived", record.productArchived);
     state.retainedProductVariantContentLinks = (record.productVariantContentLinks || [])
-      .filter((link) => link.linkRole !== "ManufacturedFrom");
+      .filter((link) => !["ManufacturedFrom", "OperatedWith"].includes(link.linkRole));
     setInputValue("contentProductVariants", serializeProductVariants(record.variants || []));
     renderProductBlueprintOptions(record.manufacturingBlueprintId || "");
     renderProductVariantContentLinkRows(record.productVariantContentLinks || []);
@@ -4121,7 +4191,7 @@ function populateBuilderFromRecord(record) {
     setCheckboxValue("contentProductFeatured", record.productFeatured);
     setCheckboxValue("contentProductArchived", record.productArchived);
     state.retainedProductVariantContentLinks = (record.productVariantContentLinks || [])
-      .filter((link) => link.linkRole !== "ManufacturedFrom");
+      .filter((link) => !["ManufacturedFrom", "OperatedWith"].includes(link.linkRole));
     setInputValue("contentProductVariants", serializeProductVariants(record.variants || []));
     renderProductBlueprintOptions(record.manufacturingBlueprintId || "");
     renderProductVariantContentLinkRows(record.productVariantContentLinks || []);
@@ -5805,7 +5875,18 @@ export async function setupContentBuilder() {
     state.isDirty = true;
   });
   document.getElementById("productVariantContentLinkRows")?.addEventListener("change", (event) => {
-    if (!event.target.matches(".variant-content-product-variant, .variant-content-blueprint")) return;
+    if (!event.target.matches(
+      ".variant-content-product-variant, .variant-content-blueprint, " +
+      ".variant-content-blueprint-variant, .variant-content-link-role",
+    )) return;
+    if (event.target.classList.contains("variant-content-blueprint")) {
+      const row = event.target.closest(".product-variant-content-link-row");
+      const variantSelect = row?.querySelector(".variant-content-blueprint-variant");
+      if (variantSelect) {
+        variantSelect.innerHTML = `<option value="">Default Blueprint variant</option>` +
+          blueprintContentVariantOptions(event.target.value);
+      }
+    }
     productVariantContentLinksFromRows(true);
     renderProductBlueprintOptions(document.getElementById("contentProductBlueprintId")?.value || "");
     state.isDirty = true;
@@ -5938,6 +6019,8 @@ export async function setupContentBuilder() {
         componentId: `COMPONENT-${variants[index].linkedItemComponents.length + 1}`,
         itemId: "",
         itemVariantId: "",
+        productId: "",
+        productVariantId: "",
         quantity: 1,
         unit: "each",
       });
@@ -5982,13 +6065,25 @@ export async function setupContentBuilder() {
     if (chevron) chevron.textContent = row.open ? "−" : "+";
   }, true);
   document.getElementById("contentEntityVariantRows")?.addEventListener("change", (event) => {
+    if (event.target.classList.contains("blueprint-variant-recipe-source-type")) {
+      const recipeRow = event.target.closest(".blueprint-variant-recipe-row");
+      const sourceSelect = recipeRow?.querySelector(".blueprint-variant-recipe-item");
+      const variantSelect = recipeRow?.querySelector(".blueprint-variant-recipe-item-variant");
+      if (sourceSelect) sourceSelect.innerHTML = workshopOperationsSourceOptions(event.target.value);
+      if (variantSelect) variantSelect.innerHTML = workshopOperationsVariantOptions(event.target.value, "");
+    }
     if (event.target.classList.contains("blueprint-variant-recipe-item")) {
       const recipeRow = event.target.closest(".blueprint-variant-recipe-row");
       const variantSelect = recipeRow?.querySelector(".blueprint-variant-recipe-item-variant");
       if (variantSelect) {
-        variantSelect.innerHTML = blueprintRecipeVariantOptions(event.target.value);
-        const variants = itemVariantsForRecipe(event.target.value);
-        if (variants.length === 1) variantSelect.value = variants[0].entityVariantId || "";
+        const sourceType = recipeRow?.querySelector(".blueprint-variant-recipe-source-type")?.value;
+        if (sourceType) {
+          variantSelect.innerHTML = workshopOperationsVariantOptions(sourceType, event.target.value);
+        } else {
+          variantSelect.innerHTML = blueprintRecipeVariantOptions(event.target.value);
+          const variants = itemVariantsForRecipe(event.target.value);
+          if (variants.length === 1) variantSelect.value = variants[0].entityVariantId || "";
+        }
       }
     }
     if (event.target.classList.contains("content-entity-variant-template")) {

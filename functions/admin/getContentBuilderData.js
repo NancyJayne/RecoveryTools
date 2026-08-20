@@ -390,9 +390,10 @@ function mergeOptions(
       ];
       return allOptions.find((option) => option.id === id) || { id, name: id };
     }),
-    blueprintTypes: workbookTypes.blueprint?.length
-      ? mergeUnique([], workbookTypes.blueprint)
-      : CONTENT_BUILDER_OPTIONS.blueprintTypes,
+    blueprintTypes: mergeUnique(
+      workbookTypes.blueprint?.length ? workbookTypes.blueprint : CONTENT_BUILDER_OPTIONS.blueprintTypes,
+      ["workshop operations"],
+    ),
     planTypes: workbookTypes.plan?.length
       ? mergeUnique([], workbookTypes.plan)
       : CONTENT_BUILDER_OPTIONS.planTypes,

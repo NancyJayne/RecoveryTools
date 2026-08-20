@@ -70,6 +70,7 @@ export const CONTENT_BUILDER_OPTIONS = {
     "business workflow",
     "marketing content",
     "product manufacture",
+    "workshop operations",
   ],
   planTypes: [
     "course",

@@ -81,7 +81,7 @@ function cleanVariantContentLinks(value) {
       : "",
     entityId: cleanString(link?.entityId),
     entityVariantId: cleanString(link?.entityVariantId),
-    linkRole: ["Represents", "ManufacturedFrom", "Unlocks"].includes(cleanString(link?.linkRole))
+    linkRole: ["Represents", "ManufacturedFrom", "OperatedWith", "Unlocks"].includes(cleanString(link?.linkRole))
       ? cleanString(link.linkRole)
       : "Represents",
     status: "active",
@@ -225,12 +225,26 @@ function cleanItemComponents(value) {
     componentId: cleanString(component?.componentId) || `COMPONENT-${index + 1}`,
     itemId: cleanString(component?.itemId),
     itemVariantId: cleanString(component?.itemVariantId),
+    productId: cleanString(component?.productId),
+    productVariantId: cleanString(component?.productVariantId),
     quantity: asNumber(component?.quantity) ?? 0,
     unit: cleanString(component?.unit) || "each",
     unitCost: asNumber(component?.unitCost) ?? 0,
     estimatedCost: asNumber(component?.estimatedCost) ?? 0,
     notes: cleanString(component?.notes),
-  })).filter((component) => component.itemId && component.quantity > 0);
+    inventoryTreatment: ["bring-return", "consumable", "take-home", "reference", "digital-instruction"]
+      .includes(cleanString(component?.inventoryTreatment))
+      ? cleanString(component.inventoryTreatment)
+      : "bring-return",
+    quantityBasis: ["fixed", "capacity", "confirmed-attendees", "actual-attendees"]
+      .includes(cleanString(component?.quantityBasis))
+      ? cleanString(component.quantityBasis)
+      : "fixed",
+    deductOnIssue: component?.deductOnIssue === true,
+  })).map((component) => component.itemId
+    ? { ...component, productId: "", productVariantId: "" }
+    : { ...component, itemId: "", itemVariantId: "" })
+    .filter((component) => (component.itemId || component.productId) && component.quantity > 0);
 }
 
 function cleanTemplateAssetLinks(value) {
@@ -717,7 +731,8 @@ async function updateProductRelation({
   });
   variantContentLinks.forEach((link) => {
     const linkId = `PRODUCTVARIANTLINK-${slugify(productId)}-${slugify(link.productVariantId)}-` +
-      `${slugify(link.entityType)}-${slugify(link.entityId)}-${slugify(link.entityVariantId || "ALL")}`;
+      `${slugify(link.entityType)}-${slugify(link.entityId)}-${slugify(link.entityVariantId || "ALL")}` +
+      (link.linkRole === "OperatedWith" ? "-OPERATEDWITH" : "");
     desiredVariantLinkIds.add(linkId);
     transaction.set(db.collection("productVariantContentLinks").doc(linkId), {
       productVariantContentLinkId: linkId,

@@ -94,6 +94,7 @@ export { getInventoryOperationsData } from "./products/getInventoryOperationsDat
 export { updateInventoryStocktake } from "./products/updateInventoryStocktake.js";
 export { recordManufacturingRun } from "./products/recordManufacturingRun.js";
 export { updateWorkshopAttendance } from "./products/updateWorkshopAttendance.js";
+export { recordWorkshopOperationsIssue } from "./products/recordWorkshopOperationsIssue.js";
 export { deleteProduct } from "./products/deleteProduct.js";
 export { getFirestoreProducts } from "./products/getFirestoreProducts.js";
 
