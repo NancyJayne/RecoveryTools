@@ -778,6 +778,14 @@ function variantTemplateFieldsMarkup(template) {
   return renderTemplateCustomFields(template);
 }
 
+function defaultTemplateDefinition(recordType = currentRecordType(), typeValue = "") {
+  const definitions = templateDefinitions(
+    recordType,
+    typeValue || document.getElementById("contentType")?.value || "",
+  );
+  return definitions.find((definition) => definition.isDefault === true) || definitions[0] || null;
+}
+
 function variantStockMarkup(variant, defaults) {
   if (currentRecordType() !== "item" || defaults.inventoryTracked !== true) return "";
   const suppliers = state.options.supplierOptions || [];
@@ -1093,7 +1101,9 @@ function renderEntityVariantRows(variants = []) {
       </div>
       <div class="mt-3 flex flex-wrap gap-2">
         <button type="button" class="edit-entity-variant-template rounded border border-gray-500 px-3 py-1 text-xs text-white" ${template ? "" : "disabled"}>Edit selected template</button>
-        <button type="button" class="create-entity-variant-template rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Create new template</button>
+        ${templateDefinitions(currentRecordType(), document.getElementById("contentType")?.value).length
+    ? ""
+    : `<button type="button" class="create-entity-variant-template rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Create first template</button>`}
       </div>
       <div class="entity-variant-template-fields">${variantTemplateFieldsMarkup(template, currentRecordType(), variant)}</div>
       <section class="mt-4 text-xs text-gray-300">
@@ -2656,17 +2666,15 @@ function positionTemplateField(recordType) {
   const typeValue = document.getElementById("contentType")?.value || "";
   const templates = templateDefinitions(recordType, typeValue);
   if (label) {
-    label.textContent = recordType === "plan"
-      ? "Plan template / variant"
-      : `${recordType[0].toUpperCase()}${recordType.slice(1)} template`;
+    label.textContent = `${typeValue || recordType} template variant`;
   }
-  createButton?.classList.remove("hidden");
+  createButton?.classList.toggle("hidden", templates.length > 0);
   editButton?.classList.remove("hidden");
   if (editButton) editButton.disabled = !selectedTemplate();
   help?.classList.remove("hidden");
   if (help) {
     help.textContent = templates.length
-      ? `${templates.length} saved template${templates.length === 1 ? "" : "s"} available for ${typeValue}.`
+      ? `The ${typeValue} template is selected automatically. Choose or edit one of its variants here.`
       : `Create the first reusable template for ${typeValue || `this ${recordType} type`}.`;
   }
   slot.appendChild(field);
@@ -4816,7 +4824,7 @@ function updateTemplatesForType() {
   const recordType = document.getElementById("contentRecordType")?.value || "item";
   const typeValue = document.getElementById("contentType")?.value || "";
   const templates = templateDefinitions(recordType, typeValue);
-  const defaultTemplate = templates.find((template) => template.isDefault) || templates[0];
+  const defaultTemplate = defaultTemplateDefinition(recordType, typeValue);
   const select = document.getElementById("contentTemplate");
 
   if (select) {
@@ -4830,6 +4838,19 @@ function updateTemplatesForType() {
   const editButton = document.getElementById("editContentTemplateBtn");
   if (editButton) editButton.disabled = !defaultTemplate;
   applyTemplateDefaults();
+  return defaultTemplate;
+}
+
+function applyTemplateToPrimaryEntityVariant(template, { resetFields = true } = {}) {
+  if (!template) return;
+  const variants = entityVariantsFromBuilder();
+  if (!variants.length) return;
+  const primary = variants[0];
+  const changed = primary.templateVariantId !== template.id;
+  primary.templateId = template.templateId || "";
+  primary.templateVariantId = template.id;
+  if (changed && resetFields) primary.templateFieldValues = {};
+  renderEntityVariantRows(variants);
 }
 
 function addSavedTemplatesToState(templates) {
@@ -5629,8 +5650,20 @@ export async function setupContentBuilder() {
   setupBuilderFilters();
   document.getElementById("contentType")?.addEventListener("change", () => {
     const variants = entityVariantsFromBuilder();
-    updateTemplatesForType();
-    renderEntityVariantRows(variants);
+    const defaultTemplate = updateTemplatesForType();
+    const validTemplateIds = new Set(templateDefinitions(
+      currentRecordType(),
+      document.getElementById("contentType")?.value || "",
+    ).map((template) => template.id));
+    renderEntityVariantRows(variants.map((variant) => {
+      if (validTemplateIds.has(variant.templateVariantId)) return variant;
+      return {
+        ...variant,
+        templateId: defaultTemplate?.templateId || "",
+        templateVariantId: defaultTemplate?.id || "",
+        templateFieldValues: {},
+      };
+    }));
     applyTypeDrivenFieldGroups();
     renderSimilarList();
     renderRelationshipPickers();
@@ -5641,7 +5674,11 @@ export async function setupContentBuilder() {
       isProductManufactureBlueprint(),
     );
   });
-  document.getElementById("contentTemplate")?.addEventListener("change", applyTemplateDefaults);
+  document.getElementById("contentTemplate")?.addEventListener("change", () => {
+    const template = selectedTemplate();
+    applyTemplateToPrimaryEntityVariant(template);
+    applyTemplateDefaults();
+  });
   document.getElementById("editContentTemplateBtn")?.addEventListener(
     "click",
     openTemplateEditorForSelectedTemplate,
