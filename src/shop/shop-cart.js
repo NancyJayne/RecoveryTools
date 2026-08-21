@@ -501,11 +501,10 @@ export async function renderCartItems() {
         affiliateDetails.replaceChildren();
         const business = document.createElement("div");
         business.className = "font-semibold";
-        business.textContent = selected.businessName;
+        business.textContent = selected.pickupLocation.businessName || selected.businessName;
         const address = document.createElement("div");
         address.className = "mt-1 text-gray-300";
         address.textContent = [
-          selected.pickupLocation.locationName,
           selected.pickupLocation.address,
         ].filter(Boolean).join(" — ");
         affiliateDetails.append(business, address);

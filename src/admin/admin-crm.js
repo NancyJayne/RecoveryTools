@@ -354,6 +354,10 @@ async function saveCrmProfile() {
     },
   };
   if (!profile.name || !profile.email) return showToast("Name and email are required.", "error");
+  if (profile.affiliatePickup.enabled && !profile.affiliatePickup.locationName) {
+    document.getElementById("crmAffiliatePickupName")?.focus();
+    return showToast("Enter the business name customers will see with the pickup address.", "error");
+  }
   if (creatingCrmUser) {
     const password = document.getElementById("crmCreatePassword")?.value || "";
     if (password.length < 8) return showToast("Enter a temporary password of at least 8 characters.", "error");

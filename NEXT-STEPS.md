@@ -346,6 +346,7 @@ Implemented or confirmed. Test-only gaps are kept in the launch checklist below 
 - [x] Affiliate dashboard sidebar navigation and legacy panel nesting were repaired, including removal of the duplicate workshop-panel ID.
 - [x] Marketplace tiles use the short Product description while Product detail pages use the long description, with compatibility fallbacks for older records.
 - [x] Affiliate pickup orders use the affiliate destination for packing/shipping and send the customer a ready-for-pickup email when the affiliate marks the order ready.
+- [x] Affiliate pickup addresses require a customer-facing business name. Cart and Checkout display that business name with the approved address and never substitute the affiliate's personal name or email.
 - [x] Affiliate signup timezone options are always available, with Australian choices and a Brisbane fallback.
 - [x] The cart drawer scrolls as one panel so items, pickup/affiliate selection, totals, and checkout remain reachable on short screens.
 - [x] Stripe Connect onboarding now has approved-affiliate checks, loading/error states, dual User/Affiliate account lookup, safe return URLs, and non-silent failure handling.

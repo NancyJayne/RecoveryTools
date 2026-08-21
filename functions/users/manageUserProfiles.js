@@ -63,10 +63,17 @@ async function saveAffiliatePickup(uid, value = {}, adminUid) {
   const suburb = clean(value.suburb, 100);
   const state = clean(value.state, 30).toUpperCase();
   const postcode = clean(value.postcode, 20);
+  const pickupBusinessName = clean(value.locationName, 200);
   if (enabled && (!addressLine1 || !suburb || !state || !postcode)) {
     throw new HttpsError(
       "invalid-argument",
       "Pickup requires an address line, suburb, state and postcode.",
+    );
+  }
+  if (enabled && !pickupBusinessName) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Pickup requires the business name customers will see with the address.",
     );
   }
   const locationId = clean(affiliateSnap.data()?.defaultPickupLocationId, 200) ||
@@ -82,8 +89,8 @@ async function saveAffiliatePickup(uid, value = {}, adminUid) {
   batch.set(db.collection("pickupLocations").doc(locationId), {
     affiliateId: affiliateRef.id,
     locationType: "affiliate",
-    locationName: clean(value.locationName, 200) ||
-      clean(affiliateSnap.data()?.businessName, 200) || "Affiliate pickup",
+    businessName: pickupBusinessName,
+    locationName: pickupBusinessName,
     addressLine1,
     addressLine2: clean(value.addressLine2, 200),
     suburb,

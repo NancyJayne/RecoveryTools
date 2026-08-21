@@ -96,6 +96,7 @@ export async function eligiblePickupLocations(db, {
   if (affiliate &&
       affiliate.pickupEnabled === true &&
       lower(affiliate.pickupApprovalStatus) === "approved") {
+    const affiliateBusinessName = clean(affiliate.businessName);
     const affiliateLocations = [...locations.entries()]
       .filter(([, location]) =>
         lower(location.locationType) === "affiliate" &&
@@ -104,12 +105,15 @@ export async function eligiblePickupLocations(db, {
         const defaultId = clean(affiliate.defaultPickupLocationId);
         return Number(rightId === defaultId) - Number(leftId === defaultId);
       });
-    affiliateLocations.forEach(([id, location]) => add(publicLocation(id, {
-      ...location,
-      businessName: affiliate.businessName || affiliate.name || affiliate.email,
-      contactName: location.contactName || affiliate.pickupContactName,
-      contactPhone: location.contactPhone || affiliate.pickupContactPhone,
-    }, "affiliate")));
+    if (affiliateBusinessName) {
+      affiliateLocations.forEach(([id, location]) => add(publicLocation(id, {
+        ...location,
+        businessName: clean(location.businessName) || affiliateBusinessName,
+        locationName: clean(location.businessName) || affiliateBusinessName,
+        contactName: location.contactName || affiliate.pickupContactName,
+        contactPhone: location.contactPhone || affiliate.pickupContactPhone,
+      }, "affiliate")));
+    }
   }
 
   const eventLocation = clean(variant.eventLocation);

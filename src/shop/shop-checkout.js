@@ -443,7 +443,7 @@ export async function setupCheckoutPage() {
       options.forEach((option) => {
         const entry = document.createElement("option");
         entry.value = option.pickupLocationId;
-        entry.textContent = [option.locationName, option.address].filter(Boolean).join(" — ");
+        entry.textContent = [option.businessName, option.address].filter(Boolean).join(" — ");
         select.appendChild(entry);
       });
       select.value = item.pickupLocationId || (options.length === 1 ? options[0].pickupLocationId : "");
