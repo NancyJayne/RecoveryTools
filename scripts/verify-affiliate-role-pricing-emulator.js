@@ -31,11 +31,20 @@ async function main() {
       wholesalePrice: 12,
       wholesaleMinQuantity: 2,
     });
-    const catalogue = await getFirestoreProducts.run({
+    const pendingCatalogue = await getFirestoreProducts.run({
       auth: { uid, token: { admin: true, affiliate: true } },
       data: {},
     });
-    const pricedProduct = catalogue.products.find((product) => product.id === productId);
+    const pendingProduct = pendingCatalogue.products.find((product) => product.id === productId);
+    assert.equal(pendingProduct?.price, 20);
+    assert.equal(pendingProduct?.pricingTier, "retail");
+
+    await db.collection("users").doc(uid).set({ affiliateApplicationStatus: "active" }, { merge: true });
+    const approvedCatalogue = await getFirestoreProducts.run({
+      auth: { uid, token: { admin: true, affiliate: true } },
+      data: {},
+    });
+    const pricedProduct = approvedCatalogue.products.find((product) => product.id === productId);
     assert.equal(pricedProduct?.price, 12);
     assert.equal(pricedProduct?.pricingTier, "affiliate-wholesale");
 

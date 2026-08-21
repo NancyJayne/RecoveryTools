@@ -329,7 +329,7 @@ const createCheckoutSessionHandler = async (request) => {
     ).toLowerCase();
     const approvedAffiliate = request.auth?.token?.affiliate === true &&
       userData.roles?.affiliate === true &&
-      !["rejected", "inactive", "archived"].includes(affiliateStatus);
+      !["pending", "rejected", "inactive", "archived"].includes(affiliateStatus);
 
     const workshopOrdersSnapshot = productDocs.some((doc) => {
       const data = doc.data() || {};
