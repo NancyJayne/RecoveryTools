@@ -16,6 +16,7 @@ import {
   variantForProduct,
 } from "../utils/productArchitecture.js";
 import { resolveBundleInventoryItems } from "../utils/bundleInventory.js";
+import { preferredOrderLines } from "../utils/orderLineSnapshots.js";
 import {
   pickupLocationMetadata,
   resolveSelectedPickupLocation,
@@ -32,6 +33,70 @@ const RECAPTCHA_SECRET_KEY = defineSecret("RECAPTCHA_SECRET_KEY");
 
 if (!admin.apps.length) {
   admin.initializeApp();
+}
+
+function productVariantKey(productId, variantId) {
+  return `${cleanString(productId)}:${cleanString(variantId)}`;
+}
+
+async function assertPurchasePrerequisites(db, uid, items, architecture) {
+  const requirements = items.flatMap((item) => (item.prerequisiteProductVariants || [])
+    .map((required) => ({ source: item, ...required })));
+  if (!requirements.length) return;
+
+  const available = new Set();
+  const availableAccess = new Set();
+  items.forEach((item) => {
+    if (item.variantId) available.add(productVariantKey(item.id, item.variantId));
+    (item.bundleInventoryItems || []).forEach((component) => {
+      if (component.variantId) available.add(productVariantKey(component.productId, component.variantId));
+    });
+  });
+
+  const [orders, access] = await Promise.all([
+    db.collection("users").doc(uid).collection("orders").get(),
+    db.collection("userAccess").where("userId", "==", uid).get(),
+  ]);
+  orders.docs.forEach((snapshot) => {
+    const order = snapshot.data() || {};
+    const orderStatus = cleanString(order.paymentStatus || order.status).toLowerCase();
+    if (["cancelled", "canceled", "refunded", "failed", "unpaid"].includes(orderStatus)) return;
+    preferredOrderLines(order).forEach((line) => {
+      const productId = line.productId || line.id;
+      const variantId = line.productVariantId || line.variantId;
+      if (productId && variantId) available.add(productVariantKey(productId, variantId));
+      (line.bundleInventory || line.bundleInventoryItems || []).forEach((component) => {
+        if (component.productId && (component.productVariantId || component.variantId)) {
+          available.add(productVariantKey(component.productId, component.productVariantId || component.variantId));
+        }
+      });
+    });
+  });
+  access.docs.forEach((snapshot) => {
+    const record = snapshot.data() || {};
+    if (record.revoked === true || record.active === false || cleanString(record.status).toLowerCase() === "revoked") return;
+    if (record.sourceProductId && record.sourceProductVariantId) {
+      available.add(productVariantKey(record.sourceProductId, record.sourceProductVariantId));
+    }
+    const type = record.accessType || record.accessEntityType;
+    const id = record.accessId || record.accessEntityId;
+    if (type && id) availableAccess.add(`${type}:${id}:${record.accessEntityVariantId || ""}`);
+  });
+
+  const missing = requirements.find((required) => {
+    if (available.has(productVariantKey(required.productId, required.productVariantId))) return false;
+    return !(architecture.accessGrantsByProductId.get(required.productId) || [])
+      .filter((grant) => !grant.productVariantId || grant.productVariantId === required.productVariantId)
+      .some((grant) => availableAccess.has(`${grant.accessEntityType || grant.accessType}:` +
+        `${grant.accessEntityId || grant.accessId}:${grant.accessEntityVariantId || ""}`));
+  });
+  if (!missing) return;
+  const requiredVariant = variantForProduct(missing.productId, "", missing.productVariantId, architecture);
+  const requiredName = requiredVariant?.name || missing.productVariantId;
+  throw new HttpsError(
+    "failed-precondition",
+    `${missing.source.name} requires ${requiredName}. Purchase or unlock it first, or choose a bundle that includes it.`,
+  );
 }
 
 const verifyRecaptcha = async (token) => {
@@ -490,6 +555,7 @@ const createCheckoutSessionHandler = async (request) => {
         productType: productDisplayType(data, "item"),
         accessGrants,
         bundleInventoryItems,
+        prerequisiteProductVariants: variant?.prerequisiteProductVariants || [],
         price,
         pricingTier: Number(wholesalePrice) > 0 ? "affiliate-wholesale" : "retail",
         quantity,
@@ -497,6 +563,7 @@ const createCheckoutSessionHandler = async (request) => {
         stripeAccountId: creatorMap[data.creatorId] || null,
       };
     }));
+    await assertPurchasePrerequisites(db, uid, validatedItems, architecture);
     const promotion = await applyPromotionCode(db, {
       code: promotionCode,
       items: validatedItems,

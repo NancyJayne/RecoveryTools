@@ -140,6 +140,8 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
   - [x] Confirm two signed-in customers can hold seats in separate carts and that successful payment moves a seat from Reserved to Sold.
   - [x] Hide the empty-module notice for purchased Workshops that do not use Blueprint modules.
   - [x] Show active PDF/document/download Assets linked directly to the Workshop Plan, independently of Blueprint modules.
+  - [x] Add exact Product-variant purchase prerequisites. The Marketplace identifies missing prior variants and disables Add to Cart; Checkout authoritatively accepts an existing paid purchase, active unlock, another cart line, or an exact component included in the same bundle. Configure Advanced to require Foundations, and Strategic to require Foundations plus Advanced.
+  - [ ] Emulator-test prerequisite enforcement for existing purchases, admin-granted unlocks, direct bypass attempts, refunds/revocations, same-checkout prerequisites, and the all-three Workshop bundle.
   - [ ] Confirm an abandoned Stripe Checkout expires and releases its reserved Workshop seat.
   - [ ] Confirm cancellation/refund removes Workshop access and attendee capacity is recalculated correctly.
   - [ ] Confirm the purchased Workshop page, booking information, direct downloads, and checkout flow on mobile.
@@ -151,7 +153,8 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
   - [x] Calculate required quantities from the selected basis, show shortages before the Workshop, and provide a printable/mobile Workshop packing checklist in Products & Inventory.
   - [x] Require explicit `ISSUE` admin confirmation before transactionally deducting consumable/take-home stock; ticket sales alone never deduct these allocations, and the deterministic issue record prevents accidental double deduction. Run `npm run verify:workshop-operations:emulator` while the emulators are running.
   - [ ] Add a controlled reversal/adjustment action and surface Workshop issue movements in the stock-movement audit view. Issue records already preserve the exact source identity, quantity, Workshop session, administrator, timestamp, and before/after stock values.
-- [ ] Add Workshop promotion videos and verify Asset/visibility behaviour.
+- [x] Add a variant-bound Marketplace presentation editor with one live preview for the currently open Product variant, explicit hero-image and promotion-video Assets, clickable preview regions, independent/bundle variant support, and public Workshop promotion-video playback. Public catalogue media no longer traverses linked Item, Blueprint, Plan, variant-template, or module Assets.
+- [ ] Acceptance-test Marketplace presentation with uploaded and YouTube videos, variant switching, a dedicated bundle image, mobile playback, and proof that attached preparation/teaching Assets remain private unless explicitly selected for Marketplace presentation.
 - [ ] Create an initial approved Workshop marketing pack with reusable images/video, suggested captions, event links, and trackable affiliate-ready share links; the full Marketing Centre follows in roadmap area 5.
 - [ ] Complete instructor submission, approval, publication, session-management, attendee, cancellation, notification, and reporting tools.
 - [ ] Record instructor amounts payable manually until the financial allocation engine can calculate and reconcile automated payment cycles.

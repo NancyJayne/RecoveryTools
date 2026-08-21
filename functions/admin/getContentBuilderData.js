@@ -417,11 +417,14 @@ async function getAssetRecords(db) {
     const data = doc.data() || {};
     return {
       id: doc.id,
+      assetId: data.assetId || doc.id,
       recordType: "asset",
       name: data.title || data.name || doc.id,
       type: data.type || data.assetType || "",
       status: data.status || data.displayStatus || "",
       url: data.fileUrl || data.url || "",
+      fileUrl: data.fileUrl || "",
+      embedUrl: data.embedUrl || data.youtubeUrl || "",
       thumbnailUrl: data.thumbnailUrl || "",
       altText: data.altText || "",
     };

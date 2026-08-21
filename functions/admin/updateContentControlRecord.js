@@ -338,7 +338,28 @@ function normalizeVariant(value, index, itemId, productId) {
     eventLocation: cleanString(value.eventLocation),
     instructor: cleanString(value.instructor),
     bundleComponents: cleanBundleComponents(value.bundleComponents, variantId, productId),
+    primaryAssetId: cleanString(value.primaryAssetId),
+    promotionAssetIds: cleanAssetIds(value.promotionAssetIds),
+    prerequisiteProductVariants: cleanPrerequisites(value.prerequisiteProductVariants, productId, variantId),
   };
+}
+
+function cleanAssetIds(value) {
+  return [...new Set((Array.isArray(value) ? value : []).map(cleanString).filter(Boolean))].slice(0, 20);
+}
+
+function cleanPrerequisites(value, sourceProductId, sourceVariantId) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).map((entry) => ({
+    productId: cleanString(entry?.productId),
+    productVariantId: cleanString(entry?.productVariantId),
+  })).filter((entry) => {
+    const key = `${entry.productId}:${entry.productVariantId}`;
+    if (!entry.productId || !entry.productVariantId ||
+        entry.productId === sourceProductId && entry.productVariantId === sourceVariantId || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 20);
 }
 
 function cleanBundleComponents(value, sourceProductVariantId, sourceProductId) {
@@ -831,6 +852,9 @@ async function updateProductRelation({
       eventLocation: variant.eventLocation,
       instructor: variant.instructor,
       bundleComponents: variant.bundleComponents,
+      primaryAssetId: variant.primaryAssetId,
+      promotionAssetIds: variant.promotionAssetIds,
+      prerequisiteProductVariants: variant.prerequisiteProductVariants,
       sortOrder: index + 1,
       contentOrigin: "app",
       managedByWorkbook: false,

@@ -191,6 +191,9 @@ function normalizedVariant(variant, sourceCollection) {
     inclusions: variant.inclusions || "",
     bundleComponents: Array.isArray(variant.bundleComponents) ? variant.bundleComponents : [],
     primaryAssetId: variant.primaryAssetId || "",
+    promotionAssetIds: Array.isArray(variant.promotionAssetIds) ? variant.promotionAssetIds : [],
+    prerequisiteProductVariants: Array.isArray(variant.prerequisiteProductVariants)
+      ? variant.prerequisiteProductVariants : [],
     sourceCollection,
   };
 }
@@ -243,23 +246,14 @@ function assetUrl(asset, rendition) {
 }
 
 export function mediaForProduct(productId, product, architecture) {
-  const content = primaryContentForProduct(productId, product, architecture);
-  const contentId = cleanString(
-    content?.itemId || content?.blueprintId || content?.planId || content?.id ||
-    product.itemId || product.legacyItemId,
-  );
-  const contentType = content?.planId
-    ? "plan"
-    : content?.blueprintId ? "blueprint" : "item";
   const links = (architecture.entityAssetsByEntityId.get(productId) || [])
     .filter((link) =>
       cleanString(link.entityType).toLowerCase() === "product" &&
       status(link.status, "active") === "active");
-  const contentLinks = links.length ? [] : (architecture.entityAssetsByEntityId.get(contentId) || [])
-    .filter((link) =>
-      cleanString(link.entityType).toLowerCase() === contentType &&
-      status(link.status, "active") === "active");
-  const canonicalMedia = [...links, ...contentLinks]
+  const selectedIds = [cleanString(product.primaryAssetId),
+    ...(Array.isArray(product.promotionAssetIds) ? product.promotionAssetIds.map(cleanString) : [])]
+    .filter(Boolean);
+  const canonicalMedia = [...selectedIds.map((assetId, index) => ({ assetId, sortOrder: index + 1 })), ...links]
     .map((link) => {
       const asset = architecture.assetsById.get(link.assetId);
       if (!asset || status(asset.status, "active") === "archived") return null;
@@ -284,15 +278,6 @@ export function mediaForProduct(productId, product, architecture) {
     .sort((left, right) => left.sortOrder - right.sortOrder);
 
   if (canonicalMedia.length) return canonicalMedia;
-  const templateAssetIds = [
-    ...assetIdsFromTemplateValues(content?.templateFieldValues),
-    ...(Array.isArray(content?.entityVariants) ? content.entityVariants : [])
-      .flatMap((variant) => assetIdsFromTemplateValues(variant?.templateFieldValues)),
-  ];
-  const templateMedia = [...new Set(templateAssetIds)]
-    .map((assetId, index) => assetMedia(assetId, architecture, index + 1))
-    .filter(Boolean);
-  if (templateMedia.length) return templateMedia;
   if (Array.isArray(product.media) && product.media.length) return product.media;
   const images = Array.isArray(product.images) ? product.images : [];
   return images.map((url, index) => ({
@@ -331,28 +316,9 @@ function assetMedia(assetId, architecture, sortOrder = 1) {
   };
 }
 
-function assetIdsFromTemplateValues(values) {
-  const ids = [];
-  const visit = (value) => {
-    if (Array.isArray(value)) {
-      value.forEach(visit);
-      return;
-    }
-    if (value && typeof value === "object") {
-      Object.values(value).forEach(visit);
-      return;
-    }
-    const id = cleanString(value);
-    if (id && id.toUpperCase().startsWith("ASSET-")) ids.push(id);
-  };
-  visit(values);
-  return [...new Set(ids)];
-}
-
 export function mediaForProductVariant(productId, product, variant, architecture, fallback = []) {
   if (!variant) return fallback;
   const variantId = cleanString(variant.variantId || variant.id);
-  const contentVariantId = cleanString(variant.contentVariantId);
   const directLinks = [
     ...(architecture.entityAssetsByEntityId.get(variantId) || []),
     ...(architecture.entityAssetsByEntityId.get(productId) || []),
@@ -360,8 +326,7 @@ export function mediaForProductVariant(productId, product, variant, architecture
     status(link.status, "active") === "active" &&
     (
       cleanString(link.entityType).toLowerCase() === "productvariant" ||
-      cleanString(link.productVariantId) === variantId ||
-      cleanString(link.entityVariantId) === contentVariantId
+      cleanString(link.productVariantId) === variantId
     ));
   const directMedia = directLinks
     .map((link, index) => assetMedia(link.assetId, architecture, Number(link.sortOrder ?? index + 1)))
@@ -369,12 +334,9 @@ export function mediaForProductVariant(productId, product, variant, architecture
     .sort((left, right) => left.sortOrder - right.sortOrder);
   if (directMedia.length) return directMedia;
 
-  const content = primaryContentForProduct(productId, product, architecture);
-  const contentVariant = (content?.entityVariants || []).find((candidate) =>
-    cleanString(candidate.entityVariantId) === contentVariantId);
   const assetIds = [
     cleanString(variant.primaryAssetId),
-    ...assetIdsFromTemplateValues(contentVariant?.templateFieldValues),
+    ...(Array.isArray(variant.promotionAssetIds) ? variant.promotionAssetIds.map(cleanString) : []),
   ].filter(Boolean);
   const inferredMedia = [...new Set(assetIds)]
     .map((assetId, index) => assetMedia(assetId, architecture, index + 1))

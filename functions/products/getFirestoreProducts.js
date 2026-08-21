@@ -13,6 +13,7 @@ import {
   productDisplayType,
   variantsForProduct,
 } from "../utils/productArchitecture.js";
+import { preferredOrderLines } from "../utils/orderLineSnapshots.js";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -20,6 +21,43 @@ if (!admin.apps.length) {
 
 function normalizeStatus(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function variantKey(productId, variantId) {
+  return `${String(productId || "").trim()}:${String(variantId || "").trim()}`;
+}
+
+function ownedProductVariants(uid, ordersSnapshot, accessSnapshot) {
+  const owned = new Set();
+  if (!uid) return owned;
+  ordersSnapshot.docs.forEach((snapshot) => {
+    const order = snapshot.data() || {};
+    if (![order.userId, order.buyerUid, order.uid].includes(uid)) return;
+    if (["cancelled", "canceled", "refunded", "failed", "unpaid"]
+      .includes(normalizeStatus(order.paymentStatus || order.status))) return;
+    preferredOrderLines(order).forEach((line) => {
+      if ((line.productId || line.id) && (line.productVariantId || line.variantId)) {
+        owned.add(variantKey(line.productId || line.id, line.productVariantId || line.variantId));
+      }
+      (line.bundleInventory || line.bundleInventoryItems || []).forEach((component) => {
+        if (component.productId && (component.productVariantId || component.variantId)) {
+          owned.add(variantKey(component.productId, component.productVariantId || component.variantId));
+        }
+      });
+    });
+  });
+  accessSnapshot?.docs.forEach((snapshot) => {
+    const access = snapshot.data() || {};
+    if (access.revoked === true || access.active === false || normalizeStatus(access.status) === "revoked") return;
+    if (access.sourceProductId && access.sourceProductVariantId) {
+      owned.add(variantKey(access.sourceProductId, access.sourceProductVariantId));
+    }
+    const accessType = access.accessType || access.accessEntityType;
+    const accessId = access.accessId || access.accessEntityId;
+    const accessVariantId = access.accessEntityVariantId || "";
+    if (accessType && accessId) owned.add(`ACCESS:${accessType}:${accessId}:${accessVariantId}`);
+  });
+  return owned;
 }
 
 function dateMillis(value) {
@@ -189,6 +227,7 @@ function normalizeProduct(
   approvedAffiliate = false,
   instructorsById = new Map(),
   reservations = new Map(),
+  ownedVariants = new Set(),
 ) {
   const data = doc.data() || {};
   const itemId = data.itemId || data.legacyItemId || "";
@@ -340,6 +379,20 @@ function normalizeProduct(
         ? Math.max(Number(variantInventory?.stockQty ?? variant.stock ?? 0) - reserved, 0)
         : bundleAvailable,
       bundleAvailable,
+      prerequisiteProductVariants: (variant.prerequisiteProductVariants || []).map((required) => {
+        const requiredVariant = variantsForProduct(required.productId, "", architecture, true)
+          .find((candidate) => (candidate.variantId || candidate.id) === required.productVariantId);
+        const matchingAccess = (architecture.accessGrantsByProductId.get(required.productId) || [])
+          .filter((grant) => !grant.productVariantId || grant.productVariantId === required.productVariantId)
+          .some((grant) => ownedVariants.has(`ACCESS:${grant.accessEntityType || grant.accessType}:` +
+            `${grant.accessEntityId || grant.accessId}:${grant.accessEntityVariantId || ""}`));
+        return {
+          productId: required.productId,
+          productVariantId: required.productVariantId,
+          name: requiredVariant?.name || required.productVariantId,
+          satisfied: ownedVariants.has(variantKey(required.productId, required.productVariantId)) || matchingAccess,
+        };
+      }),
       media: variantMedia,
       images: variantMedia
         .filter((asset) => normalizeStatus(asset.type) === "image")
@@ -442,15 +495,19 @@ export const getFirestoreProducts = onCall(
         query = query.where("type", "==", normalizeStatus(type));
       }
 
-      const [snapshot, architecture, ordersSnapshot, instructorsSnapshot, reservationsSnapshot] = await Promise.all([
+      const [snapshot, architecture, ordersSnapshot, instructorsSnapshot, reservationsSnapshot, accessSnapshot] = await Promise.all([
         query.get(),
         loadProductArchitecture(admin.firestore()),
         admin.firestore().collection("orders").get(),
         admin.firestore().collection("instructors").get(),
         admin.firestore().collection("inventoryReservations").where("status", "==", "active").get(),
+        request.auth?.uid
+          ? admin.firestore().collection("userAccess").where("userId", "==", request.auth.uid).get()
+          : Promise.resolve(null),
       ]);
       const ticketSales = ticketSalesFromOrders(ordersSnapshot);
       const reservations = activeReservationQuantities(reservationsSnapshot);
+      const ownedVariants = ownedProductVariants(request.auth?.uid, ordersSnapshot, accessSnapshot);
       const instructorsById = new Map(instructorsSnapshot.docs.map((doc) => [
         doc.id,
         doc.data()?.name || doc.data()?.instructorName || doc.data()?.displayName || doc.id,
@@ -464,6 +521,7 @@ export const getFirestoreProducts = onCall(
           approvedAffiliate,
           instructorsById,
           reservations,
+          ownedVariants,
         ))
         .filter((product) => includeHidden && isAdmin ? true : product.visible !== false)
         .filter((product) => tag ? product.searchTags.includes(tag) : true)

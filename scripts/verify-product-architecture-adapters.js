@@ -5,6 +5,7 @@ import {
   bundleComponentsForProduct,
   inventoryForProduct,
   mediaForProduct,
+  mediaForProductVariant,
   variantsForProduct,
 } from "../functions/utils/productArchitecture.js";
 
@@ -49,7 +50,20 @@ const architecture = {
     assetType: "image",
     fileUrl: "https://example.test/image.jpg",
     status: "active",
+  }], ["ASSET-PRIVATE", {
+    id: "ASSET-PRIVATE", assetType: "video", fileUrl: "https://example.test/private.mp4", status: "active",
+  }], ["ASSET-PUBLIC", {
+    id: "ASSET-PUBLIC", assetType: "video", fileUrl: "https://example.test/public.mp4", status: "active",
   }]]),
+  productLinksByProductId: new Map([["PROD-PRIVATE", [{
+    entityType: "Plan", linkedEntityType: "Plan", linkedEntityId: "PLAN-PRIVATE", status: "active",
+  }]]]),
+  plansById: new Map([["PLAN-PRIVATE", {
+    id: "PLAN-PRIVATE", planId: "PLAN-PRIVATE", templateFieldValues: { teachingVideo: "ASSET-PRIVATE" },
+    entityVariants: [{ entityVariantId: "PLAN-V1", templateFieldValues: { preparation: "ASSET-PRIVATE" } }],
+  }]]),
+  itemsById: new Map(),
+  blueprintsById: new Map(),
 };
 
 assert.equal(activePriceForProduct("PROD-1", architecture)?.id, "PRICE-1");
@@ -81,6 +95,13 @@ const embeddedMedia = mediaForProduct("PROD-2", {
   images: ["https://example.test/fallback.jpg"],
 }, architecture);
 assert.equal(embeddedMedia[0].url, "https://example.test/fallback.jpg");
+
+const privateBoundary = mediaForProduct("PROD-PRIVATE", {}, architecture);
+assert.deepEqual(privateBoundary, []);
+const explicitVariantMedia = mediaForProductVariant("PROD-PRIVATE", {}, {
+  variantId: "PV-PUBLIC", contentVariantId: "PLAN-V1", primaryAssetId: "ASSET-PUBLIC",
+}, architecture);
+assert.deepEqual(explicitVariantMedia.map((asset) => asset.assetId), ["ASSET-PUBLIC"]);
 
 const canonicalGrants = accessGrantsForProduct("PROD-1", {}, architecture);
 assert.equal(canonicalGrants[0].accessEntityId, "PLAN-1");

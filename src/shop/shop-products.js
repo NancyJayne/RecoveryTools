@@ -63,6 +63,42 @@ function courseVideoMedia(product) {
   return product.coursePreviewVideo?.url ? product.coursePreviewVideo : null;
 }
 
+function promotionVideos(product, variant) {
+  const media = variant?.media?.length ? variant.media : product.media || [];
+  return media.filter((asset) => asset?.type === "video" && (asset.url || asset.embedUrl));
+}
+
+function marketplaceVideoSection(product, variant) {
+  const section = document.createElement("section");
+  section.className = "mb-5 space-y-4";
+  const videos = promotionVideos(product, variant);
+  section.classList.toggle("hidden", !videos.length);
+  videos.forEach((video) => {
+    const heading = document.createElement("h3");
+    heading.className = "text-lg font-semibold text-white";
+    heading.textContent = video.title || "Preview video";
+    const embedUrl = audibleVideoEmbedUrl(video.embedUrl, video.url);
+    const player = embedUrl ? document.createElement("iframe") : document.createElement("video");
+    player.className = "aspect-video w-full rounded bg-black";
+    if (embedUrl) {
+      player.src = embedUrl;
+      player.title = video.title || "Product preview video";
+      player.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+      player.allowFullscreen = true;
+      player.loading = "lazy";
+    } else {
+      player.src = video.url;
+      player.controls = true;
+      player.preload = "metadata";
+      player.playsInline = true;
+      player.controlsList = "nodownload noremoteplayback";
+    }
+    protectDisplayedMedia(player);
+    section.append(heading, player);
+  });
+  return section;
+}
+
 function youtubeEmbedUrl(value) {
   try {
     const url = new URL(value);
@@ -605,6 +641,20 @@ export function showProductDetail(product, options = {}) {
   updateDescription();
   longDesc.className = "whitespace-pre-line text-sm text-gray-300 mb-4";
 
+  const prerequisiteNotice = document.createElement("div");
+  prerequisiteNotice.className = "mb-4 rounded border border-amber-600/60 bg-amber-950/40 p-3 text-sm text-amber-100";
+  function missingPrerequisites() {
+    return (selectedVariant?.prerequisiteProductVariants || []).filter((required) => !required.satisfied);
+  }
+  function updatePrerequisiteNotice() {
+    const missing = missingPrerequisites();
+    prerequisiteNotice.classList.toggle("hidden", !missing.length);
+    prerequisiteNotice.textContent = missing.length
+      ? `Required first: ${missing.map((required) => required.name).join(", ")}. Purchase or unlock ${missing.length === 1 ? "this workshop" : "these workshops"} first, or choose a bundle that includes them.`
+      : "";
+  }
+  updatePrerequisiteNotice();
+
   const featureList = document.createElement("ul");
   featureList.className = "list-disc ml-5 text-sm text-gray-300 mb-4";
   (product.features || []).forEach((f) => {
@@ -612,6 +662,7 @@ export function showProductDetail(product, options = {}) {
     li.textContent = f;
     featureList.appendChild(li);
   });
+  let marketplaceVideos = marketplaceVideoSection(product, selectedVariant);
   let courseDetails = courseDetailMarkup(product);
   function updateCourseDetails() {
     if (productCategory(product) !== "courses") return;
@@ -691,6 +742,10 @@ export function showProductDetail(product, options = {}) {
       updateCourseDetails();
       updateExperienceDetails();
       updateCapacityWarning();
+      updatePrerequisiteNotice();
+      const updatedVideos = marketplaceVideoSection(product, selectedVariant);
+      marketplaceVideos.replaceWith(updatedVideos);
+      marketplaceVideos = updatedVideos;
       quantity = Math.max(quantity, minimumQuantity());
       qtyDisplay.textContent = String(quantity);
       updateAddButtonState();
@@ -767,10 +822,12 @@ export function showProductDetail(product, options = {}) {
     const isComingSoon = selectedVariant
       ? selectedVariant.purchasable === false || selectedVariant.comingSoon === true
       : product.purchasable === false || product.comingSoon === true;
+    const prerequisitesMissing = missingPrerequisites().length > 0;
     btn.textContent = isComingSoon
       ? "Coming soon"
-      : isWorkshopSoldOut ? "Sold out" : isOutOfStock ? "Out of Stock" : "Add to Cart";
-    btn.disabled = isOutOfStock || isWorkshopSoldOut || isComingSoon;
+      : isWorkshopSoldOut ? "Sold out" : isOutOfStock ? "Out of Stock"
+        : prerequisitesMissing ? "Prerequisite required" : "Add to Cart";
+    btn.disabled = isOutOfStock || isWorkshopSoldOut || isComingSoon || prerequisitesMissing;
     btn.classList.toggle("opacity-50", btn.disabled);
     btn.classList.toggle("cursor-not-allowed", btn.disabled);
   }
@@ -813,7 +870,9 @@ export function showProductDetail(product, options = {}) {
   content.appendChild(title);
   content.appendChild(price);
   content.appendChild(longDesc);
+  content.appendChild(prerequisiteNotice);
   content.appendChild(featureList);
+  content.appendChild(marketplaceVideos);
   if (courseDetails) content.appendChild(courseDetails);
   if (experienceDetails.children.length) content.appendChild(experienceDetails);
   content.appendChild(capacityWarning);

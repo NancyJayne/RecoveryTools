@@ -418,7 +418,24 @@ function normalizeVariant(value, index) {
     eventLocation: cleanString(value.eventLocation),
     instructor: cleanString(value.instructor),
     bundleComponents: cleanBundleComponents(value.bundleComponents, variantId),
+    primaryAssetId: cleanString(value.primaryAssetId),
+    promotionAssetIds: [...new Set((Array.isArray(value.promotionAssetIds) ? value.promotionAssetIds : [])
+      .map(cleanString).filter(Boolean))].slice(0, 20),
+    prerequisiteProductVariants: cleanPrerequisites(value.prerequisiteProductVariants, variantId),
   };
+}
+
+function cleanPrerequisites(value, sourceVariantId) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).map((entry) => ({
+    productId: cleanString(entry?.productId),
+    productVariantId: cleanString(entry?.productVariantId),
+  })).filter((entry) => {
+    const key = `${entry.productId}:${entry.productVariantId}`;
+    if (!entry.productId || !entry.productVariantId || entry.productVariantId === sourceVariantId || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 20);
 }
 
 function cleanBundleComponents(value, sourceProductVariantId) {
@@ -1027,6 +1044,9 @@ export const createContentBuilderRecord = onCall(
                 eventLocation: variant.eventLocation,
                 instructor: variant.instructor,
                 bundleComponents: variant.bundleComponents,
+                primaryAssetId: variant.primaryAssetId,
+                promotionAssetIds: variant.promotionAssetIds,
+                prerequisiteProductVariants: variant.prerequisiteProductVariants,
                 sortOrder: index + 1,
                 createdAt: now,
                 updatedAt: now,
@@ -1257,6 +1277,9 @@ export const createContentBuilderRecord = onCall(
               eventLocation: variant.eventLocation,
               instructor: variant.instructor,
               bundleComponents: variant.bundleComponents,
+              primaryAssetId: variant.primaryAssetId,
+              promotionAssetIds: variant.promotionAssetIds,
+              prerequisiteProductVariants: variant.prerequisiteProductVariants,
               createdAt: now,
               updatedAt: now,
             });
@@ -1290,6 +1313,9 @@ export const createContentBuilderRecord = onCall(
               eventLocation: variant.eventLocation,
               instructor: variant.instructor,
               bundleComponents: variant.bundleComponents,
+              primaryAssetId: variant.primaryAssetId,
+              promotionAssetIds: variant.promotionAssetIds,
+              prerequisiteProductVariants: variant.prerequisiteProductVariants,
               sortOrder: index + 1,
               createdAt: now,
               updatedAt: now,

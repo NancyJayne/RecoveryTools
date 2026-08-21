@@ -646,6 +646,11 @@ function serializeProductVariants(variants = []) {
     shortDescription: variant.shortDescription || "",
     longDescription: variant.longDescription || "",
     inclusions: variant.inclusions || "",
+    primaryAssetId: variant.primaryAssetId || "",
+    promotionAssetIds: Array.isArray(variant.promotionAssetIds) ? variant.promotionAssetIds : [],
+    prerequisiteProductVariants: Array.isArray(variant.prerequisiteProductVariants)
+      ? variant.prerequisiteProductVariants : [],
+    bundleComponents: Array.isArray(variant.bundleComponents) ? variant.bundleComponents : [],
   })));
 }
 
@@ -1512,6 +1517,36 @@ function renderSelectedProductVariantRows(
             </div>
           </div>
           <div class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
+            <h5 class="font-semibold text-white">Marketplace presentation</h5>
+            <p class="mt-1 text-xs text-gray-400">Only Assets selected here are public. Linked Item, Blueprint and Plan material remains private.</p>
+            <div class="mt-3 grid gap-3 md:grid-cols-2">
+              <label class="block text-sm">Hero image Asset
+                <select class="product-variant-primary-asset mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                  ${marketplaceAssetOptions(productVariant.primaryAssetId, "image", "Choose an image")}
+                </select>
+              </label>
+              <label class="block text-sm">Promotion video Assets
+                <select class="product-variant-promotion-assets mt-1 h-28 w-full rounded bg-gray-800 px-3 py-2 text-white" multiple>
+                  ${marketplaceAssetOptions(productVariant.promotionAssetIds || [], "video")}
+                </select>
+                <span class="mt-1 block text-xs text-gray-400">Use Ctrl or Command to select more than one video.</span>
+              </label>
+            </div>
+            <div class="product-marketplace-preview mt-3 rounded border border-gray-600 bg-gray-800/70 p-3">
+              ${marketplaceVariantPreview(productVariant, entityVariant)}
+            </div>
+          </div>
+          <div class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h5 class="font-semibold text-white">Purchase prerequisites</h5>
+                <p class="mt-1 text-xs text-gray-400">Customers must already own, have access to, or purchase these exact Product variants in the same checkout.</p>
+              </div>
+              <button type="button" class="add-product-prerequisite rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add prerequisite</button>
+            </div>
+            <div class="product-prerequisite-rows mt-3 space-y-2">${prerequisiteRowsMarkup(productVariant.prerequisiteProductVariants || [])}</div>
+          </div>
+          <div class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <div class="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <h5 class="font-semibold text-white">Bundle inventory and tickets</h5>
@@ -1606,6 +1641,14 @@ function syncSelectedProductVariantRows() {
             componentRow.querySelector(".product-bundle-component-quantity")?.value || 1,
           ), 1),
         })).filter((component) => component.componentProductId),
+      primaryAssetId: row.querySelector(".product-variant-primary-asset")?.value || "",
+      promotionAssetIds: [...(row.querySelector(".product-variant-promotion-assets")?.selectedOptions || [])]
+        .map((option) => option.value).filter(Boolean),
+      prerequisiteProductVariants: [...row.querySelectorAll(".product-prerequisite-row")]
+        .map((prerequisiteRow) => ({
+          productId: prerequisiteRow.querySelector(".product-prerequisite-product")?.value || "",
+          productVariantId: prerequisiteRow.querySelector(".product-prerequisite-variant")?.value || "",
+        })).filter((entry) => entry.productId && entry.productVariantId && entry.productVariantId !== existingId),
     };
   });
   input.value = serializeProductVariants(variants);
@@ -3433,6 +3476,58 @@ function bundleProductOptions(selectedProductId = "") {
     const selected = product.id === selectedProductId ? " selected" : "";
     return `<option value="${escapeHTML(product.id)}"${selected}>${escapeHTML(product.name || product.id)}</option>`;
   }).join("");
+}
+
+function marketplaceAssetOptions(selectedValue = [], type = "", placeholder = "") {
+  const selected = new Set(Array.isArray(selectedValue) ? selectedValue : [selectedValue].filter(Boolean));
+  const options = (state.records.assets || []).filter((asset) => {
+    const assetType = normalizedText(asset.assetType || asset.type);
+    return !type || assetType.includes(type) || type === "video" && (asset.embedUrl || asset.youtubeUrl);
+  }).map((asset) => {
+    const id = asset.assetId || asset.id;
+    return `<option value="${escapeHTML(id)}"${selected.has(id) ? " selected" : ""}>${escapeHTML(asset.title || asset.name || id)}</option>`;
+  }).join("");
+  return `${placeholder ? `<option value="">${escapeHTML(placeholder)}</option>` : ""}${options}`;
+}
+
+function marketplaceVariantPreview(productVariant, entityVariant = {}) {
+  const assetId = productVariant.primaryAssetId || "";
+  const asset = (state.records.assets || []).find((entry) => (entry.assetId || entry.id) === assetId);
+  const url = externalUrl(asset?.fileUrl || asset?.url || "");
+  const name = productVariant.name || entityVariant.name || "Product variant";
+  return `<div class="grid gap-3 sm:grid-cols-[10rem_1fr]">
+    <button type="button" class="focus-marketplace-image flex min-h-28 items-center justify-center overflow-hidden rounded bg-gray-900 text-xs text-gray-400">
+      ${url ? `<img src="${escapeHTML(url)}" alt="${escapeHTML(name)}" class="h-32 w-full object-cover">` : "Click to choose the marketplace image"}
+    </button>
+    <button type="button" class="focus-marketplace-copy text-left">
+      <strong class="block text-white">${escapeHTML(name)}</strong>
+      <span class="mt-2 block text-sm text-gray-300">${escapeHTML(productVariant.shortDescription || "Click to edit this variant's selling description")}</span>
+      <span class="mt-3 inline-block rounded bg-[#407471] px-3 py-2 text-sm text-white">Add to Cart</span>
+    </button>
+  </div>`;
+}
+
+function updateMarketplacePreviewRow(target) {
+  const row = target?.closest?.(".content-product-variant-row");
+  const preview = row?.querySelector(".product-marketplace-preview");
+  if (!row || !preview) return;
+  preview.innerHTML = marketplaceVariantPreview({
+    name: row.querySelector(".product-variant-name")?.value || "Product variant",
+    shortDescription: row.querySelector(".product-variant-short-description")?.value || "",
+    primaryAssetId: row.querySelector(".product-variant-primary-asset")?.value || "",
+  });
+}
+
+function prerequisiteRowsMarkup(prerequisites = []) {
+  return prerequisites.map((entry) => `<div class="product-prerequisite-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_1fr_auto]">
+    <select class="product-prerequisite-product rounded bg-gray-800 px-2 py-2 text-white">
+      <option value="">Choose required Product</option>${bundleProductOptions(entry.productId)}
+    </select>
+    <select class="product-prerequisite-variant rounded bg-gray-800 px-2 py-2 text-white">
+      <option value="">Choose required variant</option>${bundleVariantOptions(entry.productId, entry.productVariantId)}
+    </select>
+    <button type="button" class="remove-product-prerequisite rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
+  </div>`).join("") || "<p class=\"product-prerequisite-empty text-xs text-gray-400\">No purchase prerequisites.</p>";
 }
 
 function bundleVariantOptions(productId, selectedVariantId = "") {
@@ -5931,6 +6026,29 @@ export async function setupContentBuilder() {
     addIndependentProductVariant,
   );
   document.getElementById("contentProductVariantRows")?.addEventListener("click", (event) => {
+    const addPrerequisite = event.target.closest(".add-product-prerequisite");
+    if (addPrerequisite) {
+      const rows = addPrerequisite.closest(".content-product-variant-row")?.querySelector(".product-prerequisite-rows");
+      rows?.querySelector(".product-prerequisite-empty")?.remove();
+      rows?.insertAdjacentHTML("beforeend", prerequisiteRowsMarkup([{ productId: "", productVariantId: "" }]));
+      return;
+    }
+    const removePrerequisite = event.target.closest(".remove-product-prerequisite");
+    if (removePrerequisite) {
+      const rows = removePrerequisite.closest(".product-prerequisite-rows");
+      removePrerequisite.closest(".product-prerequisite-row")?.remove();
+      if (rows && !rows.querySelector(".product-prerequisite-row")) rows.innerHTML = prerequisiteRowsMarkup([]);
+      syncSelectedProductVariantRows();
+      return;
+    }
+    if (event.target.closest(".focus-marketplace-image")) {
+      event.target.closest(".content-product-variant-row")?.querySelector(".product-variant-primary-asset")?.focus();
+      return;
+    }
+    if (event.target.closest(".focus-marketplace-copy")) {
+      event.target.closest(".content-product-variant-row")?.querySelector(".product-variant-short-description")?.focus();
+      return;
+    }
     const addBundleComponent = event.target.closest(".add-product-bundle-component");
     if (addBundleComponent) {
       const rows = addBundleComponent.closest(".content-product-variant-row")
@@ -5991,11 +6109,17 @@ export async function setupContentBuilder() {
     state.isDirty = true;
     showToast(`${sessionName} will be removed from sale when you save product details.`, "success");
   });
-  document.getElementById("contentProductVariantRows")?.addEventListener("input", () => {
+  document.getElementById("contentProductVariantRows")?.addEventListener("input", (event) => {
     syncSelectedProductVariantRows();
+    updateMarketplacePreviewRow(event.target);
     state.isDirty = true;
   });
   document.getElementById("contentProductVariantRows")?.addEventListener("change", (event) => {
+    if (event.target.classList.contains("product-prerequisite-product")) {
+      const row = event.target.closest(".product-prerequisite-row");
+      const variant = row?.querySelector(".product-prerequisite-variant");
+      if (variant) variant.innerHTML = `<option value="">Choose required variant</option>${bundleVariantOptions(event.target.value)}`;
+    }
     if (event.target.classList.contains("product-bundle-component-product")) {
       const row = event.target.closest(".product-bundle-component-row");
       const variant = row?.querySelector(".product-bundle-component-variant");
@@ -6004,6 +6128,7 @@ export async function setupContentBuilder() {
       }
     }
     syncSelectedProductVariantRows();
+    updateMarketplacePreviewRow(event.target);
     renderProductVariantContentLinkRows(productVariantContentLinksFromRows(true));
     state.isDirty = true;
   });
