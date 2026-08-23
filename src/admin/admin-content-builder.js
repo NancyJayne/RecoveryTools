@@ -3491,17 +3491,31 @@ function marketplaceAssetOptions(selectedValue = [], type = "", placeholder = ""
 }
 
 function marketplaceVariantPreview(productVariant, entityVariant = {}) {
+  const defaults = {
+    name: document.getElementById("contentName")?.value || "Product",
+    shortDescription: document.getElementById("contentShortDescription")?.value || "",
+    longDescription: document.getElementById("contentLongDescription")?.value || "",
+    price: optionalNumberFromInput("contentProductPrice"),
+  };
   const assetId = productVariant.primaryAssetId || "";
   const asset = (state.records.assets || []).find((entry) => (entry.assetId || entry.id) === assetId);
   const url = externalUrl(asset?.fileUrl || asset?.url || "");
-  const name = productVariant.name || entityVariant.name || "Product variant";
+  const variantName = productVariant.name || entityVariant.name || "Product variant";
+  const shortDescription = productVariant.shortDescription || defaults.shortDescription;
+  const longDescription = productVariant.longDescription || defaults.longDescription;
+  const price = productVariant.priceOverride ?? defaults.price;
   return `<div class="grid gap-3 sm:grid-cols-[10rem_1fr]">
     <button type="button" class="focus-marketplace-image flex min-h-28 items-center justify-center overflow-hidden rounded bg-gray-900 text-xs text-gray-400">
-      ${url ? `<img src="${escapeHTML(url)}" alt="${escapeHTML(name)}" class="h-32 w-full object-cover">` : "Click to choose the marketplace image"}
+      ${url ? `<img src="${escapeHTML(url)}" alt="${escapeHTML(defaults.name)}" class="h-32 w-full object-cover">` : "Click to choose the marketplace image"}
     </button>
     <button type="button" class="focus-marketplace-copy text-left">
-      <strong class="block text-white">${escapeHTML(name)}</strong>
-      <span class="mt-2 block text-sm text-gray-300">${escapeHTML(productVariant.shortDescription || "Click to edit this variant's selling description")}</span>
+      <strong class="block text-white">${escapeHTML(defaults.name)}</strong>
+      <span class="mt-1 block text-xs font-medium text-[#9edbd7]">${escapeHTML(variantName)}</span>
+      <span class="mt-2 block text-sm text-gray-300">${escapeHTML(shortDescription || "Add the main Product description or a variant override")}</span>
+      ${longDescription && longDescription !== shortDescription
+    ? `<span class="mt-2 block whitespace-pre-line text-xs text-gray-400">${escapeHTML(longDescription)}</span>` : ""}
+      ${price !== null && price !== undefined
+    ? `<span class="mt-3 block font-semibold text-green-300">$${Number(price).toFixed(2)}</span>` : ""}
       <span class="mt-3 inline-block rounded bg-[#407471] px-3 py-2 text-sm text-white">Add to Cart</span>
     </button>
   </div>`;
@@ -3514,7 +3528,15 @@ function updateMarketplacePreviewRow(target) {
   preview.innerHTML = marketplaceVariantPreview({
     name: row.querySelector(".product-variant-name")?.value || "Product variant",
     shortDescription: row.querySelector(".product-variant-short-description")?.value || "",
+    longDescription: row.querySelector(".product-variant-long-description")?.value || "",
+    priceOverride: optionalNumberFromElement(row.querySelector(".product-variant-price")),
     primaryAssetId: row.querySelector(".product-variant-primary-asset")?.value || "",
+  });
+}
+
+function refreshMarketplacePreviews() {
+  document.querySelectorAll(".content-product-variant-row").forEach((row) => {
+    updateMarketplacePreviewRow(row.querySelector(".product-variant-name") || row);
   });
 }
 
@@ -5845,6 +5867,8 @@ export async function setupContentBuilder() {
     ) closeContentAssetDrawer();
   });
   document.getElementById("contentName")?.addEventListener("input", renderSimilarList);
+  ["contentName", "contentShortDescription", "contentLongDescription", "contentProductPrice"]
+    .forEach((id) => document.getElementById(id)?.addEventListener("input", refreshMarketplacePreviews));
   document.getElementById("contentSimilarList")?.addEventListener("click", (event) => {
     const button = event.target.closest(".edit-similar-content-record");
     if (!button) return;
