@@ -510,6 +510,23 @@ export function setupWorkshopCourseOperations() {
   const panel = document.getElementById("adminWorkshopCourseOperationsSection");
   if (!panel || panel.dataset.bound === "true") return;
   panel.dataset.bound = "true";
+  const showTool = (toolName) => {
+    panel.dataset.activeTool = toolName;
+    panel.querySelectorAll(".workshop-course-tool-panel").forEach((section) => {
+      section.classList.toggle("hidden", section.dataset.workshopCoursePanel !== toolName);
+    });
+    panel.querySelectorAll(".workshop-course-tool-btn").forEach((button) => {
+      const active = button.dataset.workshopCourseTool === toolName;
+      button.classList.toggle("bg-[#407471]", active);
+      button.classList.toggle("border", !active);
+      button.classList.toggle("border-gray-600", !active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+  };
+  panel.querySelectorAll(".workshop-course-tool-btn").forEach((button) => {
+    button.addEventListener("click", () => showTool(button.dataset.workshopCourseTool || "workshops"));
+  });
+  showTool(panel.dataset.activeTool || "workshops");
   document.getElementById("refreshWorkshopCourseOperationsBtn")
     ?.addEventListener("click", loadInventoryOperations);
   document.getElementById("workshopSessionSearch")?.addEventListener("input", renderWorkshopSessions);
