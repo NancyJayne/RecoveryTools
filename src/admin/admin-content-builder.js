@@ -1288,6 +1288,28 @@ function generatedProductVariantId(entityVariantId) {
   return `PV-${cleanToken(productToken)}-${cleanToken(entityVariantId)}`;
 }
 
+function primaryImageAssetIdForEntityVariant(entityVariant) {
+  const assetIds = [];
+  const visit = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (value && typeof value === "object") {
+      Object.values(value).forEach(visit);
+      return;
+    }
+    const id = String(value || "").trim();
+    if (id) assetIds.push(id);
+  };
+  visit(entityVariant?.templateFieldValues || {});
+  return assetIds.find((assetId) => {
+    const asset = (state.records.assets || []).find((entry) =>
+      (entry.assetId || entry.id) === assetId);
+    return normalizedText(asset?.assetType || asset?.type) === "image";
+  }) || "";
+}
+
 function populateProductVariantsFromEntity() {
   const input = document.getElementById("contentProductVariants");
   if (!input) return;
@@ -1310,6 +1332,8 @@ function populateProductVariantsFromEntity() {
     }
     if (productVariant) {
       productVariant.contentVariantId = entityVariant.entityVariantId;
+      productVariant.primaryAssetId = productVariant.primaryAssetId ||
+        primaryImageAssetIdForEntityVariant(entityVariant);
       usedVariantIds.add(productVariant.variantId);
       return;
     }
@@ -1323,6 +1347,7 @@ function populateProductVariantsFromEntity() {
       stock: 0,
       status: "draft",
       contentVariantId: entityVariant.entityVariantId,
+      primaryAssetId: primaryImageAssetIdForEntityVariant(entityVariant),
     };
     retained.push(generated);
     usedVariantIds.add(generated.variantId);
@@ -6246,6 +6271,13 @@ export async function setupContentBuilder() {
     if (chevron) chevron.textContent = row.open ? "−" : "+";
   }, true);
   document.getElementById("contentEntityVariantRows")?.addEventListener("change", (event) => {
+    if (event.target.classList.contains("content-template-linked-select")) {
+      const selectedAsset = (state.records.assets || []).find((asset) =>
+        (asset.assetId || asset.id) === event.target.value);
+      if (normalizedText(selectedAsset?.assetType || selectedAsset?.type) === "image") {
+        populateProductVariantsFromEntity();
+      }
+    }
     if (event.target.classList.contains("blueprint-variant-recipe-source-type")) {
       const recipeRow = event.target.closest(".blueprint-variant-recipe-row");
       const sourceSelect = recipeRow?.querySelector(".blueprint-variant-recipe-item");
