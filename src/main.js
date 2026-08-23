@@ -146,6 +146,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   observeAdminPanel("productManagerPanel", "./admin/admin-products.js", "setupProductManager");
+  observeAdminPanel(
+    "adminWorkshopCourseOperationsSection",
+    "./admin/admin-products.js",
+    "setupWorkshopCourseOperations",
+  );
   observeAdminPanel("adminApprovalsSection", "./admin/admin-approvals.js", "setupApprovalDashboard");
   observeAdminPanel("adminContentControlsSection", "./admin/admin-content-controls.js", "setupContentControls");
   observeAdminPanel("pendingCourseApprovals", "./admin/admin-course.js", "setupCourseApprovals");

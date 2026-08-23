@@ -12,6 +12,7 @@ function rolesFromClaims(claims = {}) {
     admin: claims.admin === true,
     therapist: claims.therapist === true,
     affiliate: claims.affiliate === true,
+    instructor: claims.instructor === true,
   };
 }
 

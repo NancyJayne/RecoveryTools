@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
+import { resolveWorkshopOperations } from "../utils/workshopOperations.js";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -69,6 +70,7 @@ export const getInventoryOperationsData = onCall(
       productsSnap,
       variantsSnap,
       blueprintsSnap,
+      plansSnap,
       productLinksSnap,
       variantLinksSnap,
       ordersSnap,
@@ -86,6 +88,7 @@ export const getInventoryOperationsData = onCall(
       db.collection("products").get(),
       db.collection("productVariants").get(),
       db.collection("blueprints").get(),
+      db.collection("plans").get(),
       db.collection("productLinks").get(),
       db.collection("productVariantContentLinks").get(),
       db.collection("orders").get(),
@@ -153,6 +156,9 @@ export const getInventoryOperationsData = onCall(
     const products = new Map(productsSnap.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }]));
     const productVariantsById = new Map(variantsSnap.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }]));
     const blueprints = new Map(blueprintsSnap.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }]));
+    const plans = new Map(plansSnap.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }]));
+    const variantLinks = variantLinksSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const accessGrants = accessGrantsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     const variantsByProduct = new Map();
     variantsSnap.docs.forEach((doc) => {
       const variant = { id: doc.id, ...doc.data() };
@@ -178,19 +184,6 @@ export const getInventoryOperationsData = onCall(
         blueprintVariantId: clean(link.entityVariantId),
       });
     });
-    const operationsByProduct = new Map();
-    const operationsByVariant = new Map();
-    variantLinksSnap.docs.forEach((doc) => {
-      const link = doc.data() || {};
-      if (status(link.status) !== "active" || status(link.linkRole) !== "operatedwith") return;
-      const value = {
-        blueprintId: clean(link.entityId),
-        blueprintVariantId: clean(link.entityVariantId),
-      };
-      if (clean(link.productVariantId)) operationsByVariant.set(clean(link.productVariantId), value);
-      else if (clean(link.productId)) operationsByProduct.set(clean(link.productId), value);
-    });
-
     const stocktakeRows = [];
     items.forEach((item, itemId) => {
       const itemInventory = inventoryByItem.get(itemId) || [];
@@ -399,16 +392,22 @@ export const getInventoryOperationsData = onCall(
           const reserved = activeReservationsBySession.get(
             `${doc.id}:${clean(variant.id)}`,
           ) || 0;
-          const operationsLink = operationsByVariant.get(clean(variant.id)) ||
-            operationsByProduct.get(doc.id) || null;
-          const operationsBlueprint = operationsLink ? blueprints.get(operationsLink.blueprintId) : null;
+          const operationsResolution = resolveWorkshopOperations({
+            productId: doc.id,
+            productVariantId: clean(variant.id),
+            accessGrants,
+            variantLinks,
+            plans,
+            blueprints,
+          });
+          const operationsBlueprint = operationsResolution?.blueprint || null;
           const operationsVariant = blueprintVariant(
             operationsBlueprint,
-            operationsLink?.blueprintVariantId,
+            operationsResolution?.blueprintVariantId,
           );
           const operationsComponents = itemComponents(
             operationsBlueprint,
-            operationsLink?.blueprintVariantId,
+            operationsResolution?.blueprintVariantId,
           ).map((component) => {
             const multiplier = {
               capacity,
@@ -467,6 +466,9 @@ export const getInventoryOperationsData = onCall(
               blueprintName: operationsBlueprint.name || operationsBlueprint.title || operationsBlueprint.id,
               blueprintVariantId: clean(operationsVariant?.entityVariantId),
               blueprintVariantName: operationsVariant?.name || "",
+              workshopPlanId: operationsResolution?.planId || "",
+              workshopPlanVariantId: operationsResolution?.planVariantId || "",
+              source: operationsResolution?.source || "",
               components: operationsComponents,
               issued: completedOperationsIssues.get(clean(variant.id)) || null,
             } : null,

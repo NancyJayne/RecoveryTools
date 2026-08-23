@@ -14,6 +14,8 @@ const ids = {
   giveawayProduct: `TEST-OPS-GIVEAWAY-PRODUCT-${suffix}`,
   giveawayVariant: `TEST-OPS-GIVEAWAY-VARIANT-${suffix}`,
   blueprint: `TEST-OPS-BLUEPRINT-${suffix}`,
+  plan: `TEST-OPS-PLAN-${suffix}`,
+  grant: `TEST-OPS-GRANT-${suffix}`,
   product: `TEST-OPS-PRODUCT-${suffix}`,
   variant: `TEST-OPS-VARIANT-${suffix}`,
   link: `TEST-OPS-LINK-${suffix}`,
@@ -82,13 +84,23 @@ try {
   await set("productVariants", ids.variant, {
     productId: ids.product, variantName: "Session", seatCapacity: 10, status: "active",
   });
-  await set("productVariantContentLinks", ids.link, {
+  await set("plans", ids.plan, {
+    name: "Workshop Plan",
+    type: "workshop",
+    status: "active",
+    entityVariants: [{
+      entityVariantId: "PLAN-SESSION",
+      name: "Session plan",
+      linkedBlueprintIds: [ids.blueprint],
+    }],
+  });
+  await set("productAccessGrants", ids.grant, {
+    productAccessGrantId: ids.grant,
     productId: ids.product,
     productVariantId: ids.variant,
-    entityType: "Blueprint",
-    entityId: ids.blueprint,
-    entityVariantId: "DEFAULT",
-    linkRole: "OperatedWith",
+    accessEntityType: "Plan",
+    accessEntityId: ids.plan,
+    accessEntityVariantId: "PLAN-SESSION",
     status: "active",
   });
   await set("orders", ids.order, {
@@ -104,6 +116,8 @@ try {
   const session = operationsData.workshopSessions.find((candidate) =>
     candidate.productVariantId === ids.variant);
   assert(session?.operations, "Workshop Operations Blueprint was not resolved for the session.");
+  assert.equal(session.operations.source, "workshop-plan");
+  assert.equal(session.operations.workshopPlanId, ids.plan);
   assert.equal(session.operations.components.find((component) => component.componentId === "GIVEAWAY")
     ?.requiredQuantity, 6, "Confirmed-attendee quantity was not calculated.");
   assert.equal(session.operations.components.find((component) => component.componentId === "BALLS")

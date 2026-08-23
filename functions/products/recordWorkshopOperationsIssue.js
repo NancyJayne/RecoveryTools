@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
+import { resolveWorkshopOperations } from "../utils/workshopOperations.js";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -55,27 +56,36 @@ export const recordWorkshopOperationsIssue = onCall(
       throw new HttpsError("invalid-argument", "Choose a Workshop session and confirm ISSUE.");
     }
     const db = admin.firestore();
-    const [productSnap, variantSnap, linksSnap, ordersSnap, attendanceSnap] = await Promise.all([
+    const [productSnap, variantSnap, linksSnap, grantsSnap, plansSnap, blueprintsSnap,
+      ordersSnap, attendanceSnap] = await Promise.all([
       db.collection("products").doc(productId).get(),
       db.collection("productVariants").doc(productVariantId).get(),
       db.collection("productVariantContentLinks").where("productId", "==", productId).get(),
+      db.collection("productAccessGrants").where("productId", "==", productId).get(),
+      db.collection("plans").get(),
+      db.collection("blueprints").get(),
       db.collection("orders").get(),
       db.collection("workshopAttendance").where("productVariantId", "==", productVariantId).get(),
     ]);
     if (!productSnap.exists || !variantSnap.exists || clean(variantSnap.data()?.productId) !== productId) {
       throw new HttpsError("not-found", "Workshop session not found.");
     }
-    const link = linksSnap.docs.map((doc) => doc.data() || {}).find((candidate) =>
-      status(candidate.status || "active") === "active" &&
-      status(candidate.linkRole) === "operatedwith" &&
-      (!clean(candidate.productVariantId) || clean(candidate.productVariantId) === productVariantId));
-    if (!link) throw new HttpsError("failed-precondition", "No Workshop Operations Blueprint is connected.");
-    const blueprintId = clean(link.entityId);
-    const blueprintVariantId = clean(link.entityVariantId);
-    const blueprintSnap = await db.collection("blueprints").doc(blueprintId).get();
-    if (!blueprintSnap.exists || status(blueprintSnap.data()?.type) !== "workshop operations") {
-      throw new HttpsError("failed-precondition", "The connected Blueprint is not a Workshop Operations Blueprint.");
+    const resolution = resolveWorkshopOperations({
+      productId,
+      productVariantId,
+      accessGrants: grantsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+      variantLinks: linksSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+      plans: new Map(plansSnap.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }])),
+      blueprints: new Map(blueprintsSnap.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }])),
+    });
+    if (!resolution) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Attach a Workshop Operations Blueprint to the exact Workshop Plan variant first.",
+      );
     }
+    const blueprintId = resolution.blueprint.id;
+    const blueprintVariantId = resolution.blueprintVariantId;
 
     const variant = variantSnap.data() || {};
     const capacity = Math.max(Number(variant.seatCapacity || 0), 0);
@@ -97,7 +107,7 @@ export const recordWorkshopOperationsIssue = onCall(
       const row = doc.data() || {};
       return row.checkedIn === true && row.removed !== true ? sum + Math.max(Number(row.quantity || 1), 1) : sum;
     }, 0);
-    const components = operationsComponents(blueprintSnap.data(), blueprintVariantId);
+    const components = operationsComponents(resolution.blueprint, blueprintVariantId);
     const deductions = components.filter((component) =>
       component.deductOnIssue && ["consumable", "take-home"].includes(component.inventoryTreatment));
     const sourceSnapshots = await Promise.all(deductions.map((component) => {

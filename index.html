@@ -937,6 +937,7 @@
       <a href="/admin/crm" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">CRM</a>
       <a href="/admin/content" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Content</a>
       <a href="/admin/products" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Products &amp; Inventory</a>
+      <a href="/admin/workshops-courses" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Workshops &amp; Courses</a>
       <a href="/admin/communications" class="admin-link flex items-center justify-between px-4 py-2 rounded hover:bg-purple-800">
         <span>Communications</span>
         <span id="adminCommunicationsMenuBadge" class="hidden min-w-5 rounded-full bg-purple-600 px-1 text-center text-xs font-bold text-white">0</span>
@@ -951,6 +952,27 @@
       <div id="adminDashboardSection" class="admin-tab hidden">
         <h2 class="text-2xl font-semibold">Admin Dashboard</h2>
         <p class="text-gray-400">Welcome, admin. Choose a section from the sidebar to begin.</p>
+      </div>
+
+      <div id="adminWorkshopCourseOperationsSection" class="admin-section hidden w-full min-w-0">
+        <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="text-2xl font-semibold">Workshops &amp; Courses</h2>
+            <p class="text-sm text-gray-400">Run Workshop sessions, attendees and operational checklists, and review Course enrolments.</p>
+          </div>
+          <button id="refreshWorkshopCourseOperationsBtn" type="button" class="rounded border border-gray-600 px-3 py-2 text-sm text-white">Refresh</button>
+        </div>
+        <section class="rounded border border-gray-700 bg-gray-900/50 p-4">
+          <h3 class="text-lg font-semibold">Workshop sessions</h3>
+          <p class="text-sm text-gray-400">Packing and equipment come from the Workshop Operations Blueprint attached to the exact Workshop Plan variant.</p>
+          <input id="workshopSessionSearch" class="input mt-4 w-full" placeholder="Search Workshop, session, instructor, venue or ID">
+          <div id="workshopSessionList" class="mt-4 space-y-3">Loading Workshop sessions...</div>
+        </section>
+        <section class="mt-6 rounded border border-gray-700 bg-gray-900/50 p-4">
+          <h3 class="text-lg font-semibold">Course enrolments</h3>
+          <p class="text-sm text-gray-400">Purchases and active Course access, grouped by Product.</p>
+          <div id="courseOperationsList" class="mt-4 space-y-3">Loading Course enrolments...</div>
+        </section>
       </div>
 
       <div id="adminApprovalsSection" class="admin-tab hidden">
@@ -2599,6 +2621,7 @@
                 <select id="crmRoleFilter" class="input mt-1 w-full">
                   <option value="all">All account types</option>
                   <option value="affiliate">Affiliates</option>
+                  <option value="instructor">Instructors</option>
                   <option value="therapist">Therapists</option>
                   <option value="admin">Admins</option>
                   <option value="customer">Customers without a team role</option>
@@ -2700,6 +2723,7 @@
                 <div class="flex flex-wrap gap-5">
                   <label><input id="roleAdmin" type="checkbox"> Admin</label>
                   <label><input id="roleAffiliate" type="checkbox"> Affiliate</label>
+                  <label><input id="roleInstructor" type="checkbox"> Instructor</label>
                   <label><input id="roleTherapist" type="checkbox"> Therapist</label>
                 </div>
                 <button type="submit" class="mt-3 rounded bg-[#407471] px-4 py-2 text-white hover:bg-[#315c59]">

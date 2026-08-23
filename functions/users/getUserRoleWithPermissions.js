@@ -31,11 +31,13 @@ export const getUserRoleWithPermissions = onCall(
       const claimRoles = {
         admin: request.auth.token?.admin === true,
         affiliate: request.auth.token?.affiliate === true,
+        instructor: request.auth.token?.instructor === true,
         therapist: request.auth.token?.therapist === true,
       };
       const roles = {
         admin: userData.roles?.admin === true || claimRoles.admin,
         affiliate: userData.roles?.affiliate === true || claimRoles.affiliate,
+        instructor: userData.roles?.instructor === true || claimRoles.instructor,
         therapist: userData.roles?.therapist === true || claimRoles.therapist,
       };
       const permissions = userData.permissions || {};

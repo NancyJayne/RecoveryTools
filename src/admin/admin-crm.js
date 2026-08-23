@@ -75,7 +75,8 @@ function currentFilteredUsers() {
     if (status === "active" && archived) return false;
     if (status === "archived" && !archived) return false;
     if (term && !searchableText(user).includes(term)) return false;
-    if (role === "customer" && ["admin", "affiliate", "therapist"].some((entry) => roleEnabled(user, entry))) {
+    if (role === "customer" && ["admin", "affiliate", "instructor", "therapist"]
+      .some((entry) => roleEnabled(user, entry))) {
       return false;
     }
     if (role !== "all" && role !== "customer" && !roleEnabled(user, role)) return false;
@@ -365,6 +366,7 @@ async function saveCrmProfile() {
     profile.roles = {
       admin: document.getElementById("roleAdmin").checked,
       affiliate: document.getElementById("roleAffiliate").checked,
+      instructor: document.getElementById("roleInstructor").checked,
       therapist: document.getElementById("roleTherapist").checked,
     };
     const createUser = httpsCallable(functions, "adminCreateUser");
@@ -404,7 +406,7 @@ function startCreateCrmUser() {
   document.getElementById("selectedUserName").textContent = "New active user";
   document.getElementById("selectedUserMeta").textContent = "Complete the profile and choose roles before saving.";
   document.getElementById("roleUid").value = "";
-  ["roleAdmin", "roleAffiliate", "roleTherapist"].forEach((id) => {
+  ["roleAdmin", "roleAffiliate", "roleInstructor", "roleTherapist"].forEach((id) => {
     document.getElementById(id).checked = false;
   });
   [
@@ -467,6 +469,7 @@ async function loadUsers() {
           roles: {
             ...(user.roles || {}),
             affiliate: roleEnabled(user, "affiliate") || affiliateUids.has(userDoc.id),
+            instructor: roleEnabled(user, "instructor"),
             therapist: roleEnabled(user, "therapist") || therapistUids.has(userDoc.id),
           },
         };
@@ -682,6 +685,7 @@ export function setupRoleManager() {
     const roles = {
       admin: document.getElementById("roleAdmin").checked,
       affiliate: document.getElementById("roleAffiliate").checked,
+      instructor: document.getElementById("roleInstructor").checked,
       therapist: document.getElementById("roleTherapist").checked,
     };
     if (!uid) return showToast("Select a user first.", "error");
@@ -806,6 +810,7 @@ async function selectUser(uid) {
     roles: {
       admin: roleEnabled(user, "admin") || authoritativeRoles.admin === true,
       affiliate: roleEnabled(user, "affiliate") || authoritativeRoles.affiliate === true,
+      instructor: roleEnabled(user, "instructor") || authoritativeRoles.instructor === true,
       therapist: roleEnabled(user, "therapist") || authoritativeRoles.therapist === true,
     },
   };
@@ -813,6 +818,7 @@ async function selectUser(uid) {
   document.getElementById("roleUid").value = resolvedUid;
   document.getElementById("roleAdmin").checked = userWithRoles.roles.admin;
   document.getElementById("roleAffiliate").checked = userWithRoles.roles.affiliate;
+  document.getElementById("roleInstructor").checked = userWithRoles.roles.instructor;
   document.getElementById("roleTherapist").checked = userWithRoles.roles.therapist;
   document.getElementById(SELECTED_USER_PANEL_ID).classList.remove("hidden");
   document.getElementById("crmNoUserSelected")?.classList.add("hidden");
@@ -868,7 +874,7 @@ async function selectUser(uid) {
   );
   document.getElementById("crmBusinessFields")?.classList.toggle(
     "hidden",
-    !userWithRoles.roles.affiliate && !userWithRoles.roles.therapist,
+    !userWithRoles.roles.affiliate && !userWithRoles.roles.instructor && !userWithRoles.roles.therapist,
   );
   const cartEmail = document.getElementById("crmCartRecipientEmail");
   if (cartEmail) cartEmail.value = user.email || "";

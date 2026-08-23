@@ -236,6 +236,7 @@ export const manageUserProfiles = onCall(
         update.roles = {
           admin: profile.roles.admin === true,
           affiliate: profile.roles.affiliate === true,
+          instructor: profile.roles.instructor === true,
           therapist: profile.roles.therapist === true,
         };
       }

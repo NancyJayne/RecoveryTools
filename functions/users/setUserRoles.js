@@ -31,6 +31,7 @@ export const setUserRoles = onCall(
       const normalizedRoles = {
         admin: !!roles.admin,
         affiliate: !!roles.affiliate,
+        instructor: !!roles.instructor,
         therapist: !!roles.therapist,
       };
       const updatedAt = admin.firestore.FieldValue.serverTimestamp();
@@ -73,6 +74,23 @@ export const setUserRoles = onCall(
           pickupEnabled: false,
           updatedAt,
         }, { merge: true })));
+      }
+
+      const instructorRef = admin.firestore().collection("instructors").doc(uid);
+      if (normalizedRoles.instructor) {
+        const userRecord = await admin.auth().getUser(uid);
+        await instructorRef.set({
+          instructorId: uid,
+          userId: uid,
+          name: userRecord.displayName || userRecord.email || uid,
+          email: userRecord.email || "",
+          status: "active",
+          active: true,
+          updatedAt,
+          updatedBy: request.auth.uid,
+        }, { merge: true });
+      } else if ((await instructorRef.get()).exists) {
+        await instructorRef.set({ status: "inactive", active: false, updatedAt }, { merge: true });
       }
 
       return {

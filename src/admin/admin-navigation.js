@@ -33,6 +33,7 @@ export function initAdminNavigation(role) {
     "/admin/content/builder": "adminContentBuilderSection",
     "/admin/builder": "adminContentControlsSection",
     "/admin/products": "productManagerPanel",
+    "/admin/workshops-courses": "adminWorkshopCourseOperationsSection",
     "/admin/workshops": "adminWorkshopApprovals",
     "/admin/courses": "pendingCourseApprovals",
     "/admin/affiliates": "adminAffiliateStats",

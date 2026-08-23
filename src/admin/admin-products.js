@@ -289,6 +289,7 @@ async function loadInventoryOperations() {
     renderStocktakeList();
     renderManufacturingOptions();
     renderWorkshopSessions();
+    renderCourseOperations();
     if (document.getElementById("productList")) renderProductManagerList(cachedProducts);
   } catch (error) {
     console.error("Failed to load inventory operations:", error);
@@ -389,7 +390,12 @@ function renderWorkshopSessions() {
     const attendeeRows = session.attendees.length
       ? session.attendees.map((attendee) => `
           <tr class="border-t border-gray-800 ${attendee.removed ? "opacity-70" : ""}">
-            <td class="px-2 py-2">${escapeHTML(attendee.name)}</td>
+            <td class="px-2 py-2"><input type="checkbox" class="workshop-attendance-checkbox mr-2 accent-[#407471]"
+              data-product-id="${escapeHTML(session.productId)}"
+              data-product-variant-id="${escapeHTML(session.productVariantId || "")}"
+              data-order-id="${escapeHTML(attendee.orderId)}" data-user-id="${escapeHTML(attendee.userId || "")}"
+              ${attendee.checkedIn ? "checked" : ""} ${attendee.removed ? "disabled" : ""}
+              aria-label="Check in ${escapeHTML(attendee.name)}">${escapeHTML(attendee.name)}</td>
             <td class="px-2 py-2">${escapeHTML(attendee.email || "No email")}</td>
             <td class="px-2 py-2">${attendee.quantity}</td>
             <td class="px-2 py-2">
@@ -445,6 +451,69 @@ function renderWorkshopSessions() {
         </div>
       </details>`;
   }).join("");
+  list.querySelectorAll(".workshop-attendance-checkbox").forEach((checkbox) => {
+    checkbox.addEventListener("change", async () => {
+      const previous = !checkbox.checked;
+      checkbox.disabled = true;
+      try {
+        await updateWorkshopAttendance({
+          productId: checkbox.dataset.productId,
+          productVariantId: checkbox.dataset.productVariantId,
+          orderId: checkbox.dataset.orderId,
+          userId: checkbox.dataset.userId,
+          checkedIn: checkbox.checked,
+        });
+        showToast(checkbox.checked ? "Attendee checked in" : "Attendee check-in removed", "success");
+        await loadInventoryOperations();
+      } catch (error) {
+        checkbox.checked = previous;
+        showToast(error.message || "Failed to update attendee check-in", "error");
+      } finally {
+        checkbox.disabled = false;
+      }
+    });
+  });
+}
+
+function renderCourseOperations() {
+  const list = document.getElementById("courseOperationsList");
+  if (!list) return;
+  if (!inventoryOperations.accessSummaries.length) {
+    list.textContent = "No Course purchases or active access found.";
+    return;
+  }
+  list.innerHTML = inventoryOperations.accessSummaries.map((summary) => {
+    const product = cachedProducts.find((entry) => (entry.id || entry.productId) === summary.productId);
+    const users = summary.unlockedUsers || [];
+    return `<details class="overflow-hidden rounded border border-gray-700 bg-gray-950/40">
+      <summary class="cursor-pointer p-4 hover:bg-gray-900/70">
+        <div class="flex flex-wrap justify-between gap-3">
+          <strong>${escapeHTML(product?.name || summary.productId)}</strong>
+          <span class="text-sm text-gray-300">${Number(summary.purchased || 0)} purchased · ${users.length} unlocked</span>
+        </div>
+      </summary>
+      <div class="overflow-x-auto border-t border-gray-700 p-3"><table class="min-w-full text-sm">
+        <thead><tr class="text-left text-xs uppercase text-gray-400">
+          <th class="px-2 py-2">User</th><th class="px-2 py-2">Email</th><th class="px-2 py-2">Access</th>
+        </tr></thead>
+        <tbody>${users.length ? users.map((user) => `<tr class="border-t border-gray-800">
+          <td class="px-2 py-2">${escapeHTML(user.name)}</td>
+          <td class="px-2 py-2">${escapeHTML(user.email || "No email")}</td>
+          <td class="px-2 py-2">${escapeHTML(user.accessId || "Unlocked")}</td>
+        </tr>`).join("") : `<tr><td colspan="3" class="px-2 py-3 text-gray-400">No active access.</td></tr>`}</tbody>
+      </table></div>
+    </details>`;
+  }).join("");
+}
+
+export function setupWorkshopCourseOperations() {
+  const panel = document.getElementById("adminWorkshopCourseOperationsSection");
+  if (!panel || panel.dataset.bound === "true") return;
+  panel.dataset.bound = "true";
+  document.getElementById("refreshWorkshopCourseOperationsBtn")
+    ?.addEventListener("click", loadInventoryOperations);
+  document.getElementById("workshopSessionSearch")?.addEventListener("input", renderWorkshopSessions);
+  Promise.all([loadProducts(), loadInventoryOperations()]).then(renderCourseOperations);
 }
 
 function createWorkshopSessionsPanel(product) {
@@ -1019,12 +1088,6 @@ function renderProductManagerList(products) {
       actions.appendChild(actionBtn);
     });
     body.appendChild(actions);
-
-    const workshopPanel = createWorkshopSessionsPanel(p);
-    if (workshopPanel) body.appendChild(workshopPanel);
-
-    const courseAccessPanel = createCourseAccessPanel(p);
-    if (courseAccessPanel) body.appendChild(courseAccessPanel);
 
     if (p.inventoryTracked === true) {
       const inventoryPanel = document.createElement("div");
