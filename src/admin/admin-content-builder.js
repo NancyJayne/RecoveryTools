@@ -1392,78 +1392,73 @@ function renderSelectedProductVariantRows(
     const entityVariant = selectedEntityVariants.find((variant) =>
       variant.entityVariantId === productVariant.contentVariantId) || {};
     return `
-      <details name="content-product-variant-editor"
-        class="content-product-variant-row group overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80"
+      <div class="content-product-variant-row overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80"
         data-content-variant-id="${escapeHTML(productVariant.contentVariantId || "")}"
         data-product-variant-id="${escapeHTML(productVariant.variantId || "")}">
-        <summary class="cursor-pointer list-none bg-gray-800/90 p-3 hover:bg-gray-800">
-          <div class="group-open:hidden">
-            ${marketplaceVariantCardPreview(productVariant, entityVariant, index === 0)}
-          </div>
-          <div class="hidden items-center justify-between gap-3 group-open:flex">
-            <div>
-              <p class="font-semibold text-white">Editing ${escapeHTML(productVariant.name || entityVariant.name || "Product variant")}</p>
-              <p class="text-xs text-gray-400">Marketplace detail view</p>
-            </div>
-            <span class="text-sm font-medium text-[#c15cff]">Close detail</span>
-          </div>
-        </summary>
-        <div class="grid gap-3 border-t border-gray-700 bg-gray-950/30 p-4 md:grid-cols-2 xl:grid-cols-4">
-          <section class="rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
-            <div class="mb-3 flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <h5 class="font-semibold text-white">Marketplace detail</h5>
-                <p class="text-xs text-gray-400">Edit what customers see for this selected variant. Blank descriptions and price inherit from the main Product.</p>
-              </div>
-              <span class="product-variant-status-badge rounded bg-gray-950 px-2 py-1 text-xs text-gray-300">${escapeHTML(productVariant.status || "draft")}</span>
-            </div>
-            <div class="grid gap-3 md:grid-cols-[12rem_1fr]">
-              <label class="block text-sm">Marketplace image
-                <select class="product-variant-primary-asset mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-                  ${marketplaceAssetOptions(productVariant.primaryAssetId, "image", "Choose an image")}
-                </select>
-                <span class="mt-1 block text-xs text-gray-400">Only the Asset selected here is public.</span>
-              </label>
-              <div class="grid gap-3 md:grid-cols-2">
-                <label class="block text-sm md:col-span-2">Selling name
-                  <input class="product-variant-name mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.name || entityVariant.name || "")}">
-                </label>
-                <label class="block text-sm md:col-span-2">Short description
-                  <input class="product-variant-short-description mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
-                    value="${escapeHTML(productVariant.shortDescription || "")}" placeholder="Use the main Product description">
-                </label>
-                <label class="block text-sm md:col-span-2">Long description
-                  <textarea class="product-variant-long-description mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
-                    rows="4" placeholder="Use the main Product description">${escapeHTML(productVariant.longDescription || "")}</textarea>
-                </label>
-                <label class="block text-sm">Regular price override
-                  <input class="product-variant-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
-                    type="number" min="0" step="0.01" value="${escapeHTML(productVariant.priceOverride ?? "")}" placeholder="Use main Product price">
-                </label>
-                <label class="block text-sm">Status
-                  <select class="product-variant-status mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-                    ${compactSelectOptions(["draft", "active", "paused", "archived"], productVariant.status || "draft")}
-                  </select>
-                </label>
-              </div>
-            </div>
+        <div class="bg-gray-800/90 p-3">
+          ${marketplaceVariantCardPreview(productVariant, entityVariant, index === 0)}
+        </div>
+        <div class="product-variant-editor-panel hidden grid gap-3 border-t border-gray-700 bg-gray-950/30 p-4 md:grid-cols-2 xl:grid-cols-4">
+          <section data-variant-editor-section="image" class="rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
+            <h5 class="font-semibold text-white">Marketplace image</h5>
+            <label class="mt-3 block text-sm">Hero image Asset
+              <select class="product-variant-primary-asset mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                ${marketplaceAssetOptions(productVariant.primaryAssetId, "image", "Choose an image")}
+              </select>
+              <span class="mt-1 block text-xs text-gray-400">Only the Asset selected here is public.</span>
+            </label>
           </section>
-          <label class="block text-sm">Product variant ID
+          <section data-variant-editor-section="identity" class="grid gap-3 rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 md:grid-cols-2 xl:col-span-4 xl:grid-cols-4">
+            <div class="md:col-span-2 xl:col-span-4">
+              <h5 class="font-semibold text-white">Product variant details</h5>
+              <p class="text-xs text-gray-400">Identity and labels for this sellable variant.</p>
+            </div>
+            <label class="block text-sm">Selling name
+              <input class="product-variant-name mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.name || entityVariant.name || "")}">
+            </label>
+            <label class="block text-sm">Product variant ID
             <input class="product-variant-id mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.variantId || "")}">
-          </label>
-          <label class="block text-sm">SKU
+            </label>
+            <label class="block text-sm">SKU
             <input class="product-variant-sku mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.sku || "")}" placeholder="Auto-filled if blank">
-          </label>
-          <label class="block text-sm">Colour
+            </label>
+            <label class="block text-sm">Status
+              <select class="product-variant-status mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                ${compactSelectOptions(["draft", "active", "paused", "archived"], productVariant.status || "draft")}
+              </select>
+            </label>
+            <label class="block text-sm">Colour
             <input class="product-variant-colour mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.colour || "")}">
-          </label>
-          <label class="block text-sm">Size / weight
+            </label>
+            <label class="block text-sm">Size / weight
             <input class="product-variant-size mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.size || entityVariant.sizeLabel || "")}">
-          </label>
-          <label class="block text-sm md:col-span-2">Inclusions summary
-            <textarea class="product-variant-inclusions mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
-              rows="2" placeholder="Example: Includes 2 small cups, 2 large cups, box and keychain.">${escapeHTML(productVariant.inclusions || "")}</textarea>
-          </label>
+            </label>
+          </section>
+          <section data-variant-editor-section="description" class="grid gap-3 rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
+            <div>
+              <h5 class="font-semibold text-white">Description overrides</h5>
+              <p class="text-xs text-gray-400">Leave these blank to use the main Product descriptions.</p>
+            </div>
+            <label class="block text-sm">Short description
+              <input class="product-variant-short-description mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                value="${escapeHTML(productVariant.shortDescription || "")}" placeholder="Use the main Product description">
+            </label>
+            <label class="block text-sm">Long description
+              <textarea class="product-variant-long-description mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                rows="4" placeholder="Use the main Product description">${escapeHTML(productVariant.longDescription || "")}</textarea>
+            </label>
+            <label class="block text-sm">Inclusions summary
+              <textarea class="product-variant-inclusions mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                rows="2" placeholder="Example: Includes 2 small cups, 2 large cups, box and keychain.">${escapeHTML(productVariant.inclusions || "")}</textarea>
+            </label>
+          </section>
+          <section data-variant-editor-section="price" class="rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
+            <h5 class="font-semibold text-white">Marketplace price</h5>
+            <label class="mt-3 block text-sm">Regular price override
+              <input class="product-variant-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+                type="number" min="0" step="0.01" value="${escapeHTML(productVariant.priceOverride ?? "")}" placeholder="Use main Product price">
+            </label>
+          </section>
           <label class="product-variant-stock-field block text-sm">Product stock
             <input class="product-variant-stock mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.stock ?? 0)}">
             <span class="mt-1 block text-xs text-gray-400">Finished sellable stock. This is separate from the connected Item variant stock.</span>
@@ -1611,7 +1606,7 @@ function renderSelectedProductVariantRows(
             <button type="button" class="remove-content-product-variant rounded border border-red-700 px-3 py-2 text-sm text-red-200">Remove session from sale</button>
           </div>
         </div>
-      </details>`;
+      </div>`;
   }).join("");
 }
 
@@ -3527,10 +3522,16 @@ function marketplaceAssetOptions(selectedValue = [], type = "", placeholder = ""
   return `${placeholder ? `<option value="">${escapeHTML(placeholder)}</option>` : ""}${options}`;
 }
 
-function marketplaceVariantCardPreview(productVariant, entityVariant = {}, isPrimary = false) {
+function marketplaceVariantCardPreview(
+  productVariant,
+  entityVariant = {},
+  isPrimary = false,
+  detailMode = false,
+) {
   const defaults = {
     name: document.getElementById("contentName")?.value || "Product",
     shortDescription: document.getElementById("contentShortDescription")?.value || "",
+    longDescription: document.getElementById("contentLongDescription")?.value || "",
     price: optionalNumberFromInput("contentProductPrice"),
   };
   const assetId = productVariant.primaryAssetId || "";
@@ -3538,40 +3539,50 @@ function marketplaceVariantCardPreview(productVariant, entityVariant = {}, isPri
   const url = externalUrl(asset?.fileUrl || asset?.url || "");
   const variantName = productVariant.name || entityVariant.name || "Product variant";
   const description = productVariant.shortDescription || defaults.shortDescription;
+  const longDescription = productVariant.longDescription || defaults.longDescription;
   const price = productVariant.priceOverride ?? defaults.price;
   const marketplaceMode = productVariant.marketplaceMode || "inherit";
   const statusLabel = marketplaceMode === "inherit"
     ? productVariant.status || "draft"
     : marketplaceMode;
-  return `<div class="product-variant-card-preview grid gap-3 sm:grid-cols-[10rem_1fr_auto]">
-    <div class="flex min-h-28 items-center justify-center overflow-hidden rounded bg-gray-950 text-center text-xs text-gray-400">
+  return `<div class="product-variant-card-preview grid gap-3 sm:grid-cols-[10rem_1fr_auto]" data-preview-mode="${detailMode ? "detail" : "card"}">
+    <button type="button" data-variant-editor="image" title="Edit marketplace image"
+      class="flex min-h-28 items-center justify-center overflow-hidden rounded bg-gray-950 text-center text-xs text-gray-400 ring-[#407471] hover:ring-2">
       ${url
     ? `<img src="${escapeHTML(url)}" alt="${escapeHTML(defaults.name)}" class="h-32 w-full object-cover">`
     : "No marketplace image selected"}
-    </div>
+    </button>
     <div class="min-w-0 py-1">
-      <div class="flex flex-wrap items-center gap-2">
+      <button type="button" data-variant-editor="identity" title="Edit Product variant details"
+        class="flex flex-wrap items-center gap-2 text-left hover:text-[#c15cff]">
         <strong class="text-white">${escapeHTML(defaults.name)}</strong>
         <span class="text-sm font-medium text-[#c15cff]">${escapeHTML(variantName)}</span>
-      </div>
+      </button>
       <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
         ${isPrimary ? `<span class="font-medium text-[#9edbd7]">Primary</span>` : ""}
         <span class="rounded bg-gray-950 px-2 py-1 text-gray-300">${escapeHTML(statusLabel)}</span>
       </div>
-      <p class="mt-2 line-clamp-2 text-sm text-gray-300">${escapeHTML(description || "Add a Product description")}</p>
+      <button type="button" data-variant-editor="description" title="Edit description overrides"
+        class="mt-2 block w-full text-left text-sm text-gray-300 hover:text-white ${detailMode ? "" : "line-clamp-2"}">
+        ${escapeHTML((detailMode ? longDescription || description : description) || "Add a Product description")}
+      </button>
       ${price !== null && price !== undefined
-    ? `<p class="mt-2 font-semibold text-green-300">$${Number(price).toFixed(2)}</p>` : ""}
+    ? `<button type="button" data-variant-editor="price" title="Edit marketplace price" class="mt-2 block font-semibold text-green-300 hover:text-green-200">$${Number(price).toFixed(2)}</button>` : ""}
+      ${detailMode
+    ? `<p class="mt-3 text-xs font-medium uppercase tracking-wide text-[#9edbd7]">Shop detail preview</p>` : ""}
     </div>
-    <div class="flex items-end justify-end self-stretch">
-      <span class="font-medium text-[#c15cff]">Detail…</span>
+    <div class="flex flex-col items-end justify-between gap-3 self-stretch">
+      <button type="button" data-variant-editor="admin" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Admin fields</button>
+      <button type="button" data-variant-preview-toggle class="font-medium text-[#c15cff] hover:text-[#d991ff]">${detailMode ? "Shop card…" : "Detail…"}</button>
     </div>
   </div>`;
 }
 
-function updateMarketplacePreviewRow(target) {
+function updateMarketplacePreviewRow(target, detailModeOverride) {
   const row = target?.closest?.(".content-product-variant-row");
   const preview = row?.querySelector(".product-variant-card-preview");
   if (!row || !preview) return;
+  const detailMode = detailModeOverride ?? preview.dataset.previewMode === "detail";
   const contentVariantId = row.dataset.contentVariantId || "";
   const entityVariant = entityVariantsFromBuilder()
     .find((variant) => variant.entityVariantId === contentVariantId) || {};
@@ -3588,6 +3599,7 @@ function updateMarketplacePreviewRow(target) {
     productVariant,
     entityVariant,
     row === row.parentElement?.querySelector(".content-product-variant-row"),
+    detailMode,
   );
 }
 
@@ -6107,6 +6119,35 @@ export async function setupContentBuilder() {
     addIndependentProductVariant,
   );
   document.getElementById("contentProductVariantRows")?.addEventListener("click", (event) => {
+    const previewToggle = event.target.closest("[data-variant-preview-toggle]");
+    if (previewToggle) {
+      const preview = previewToggle.closest(".product-variant-card-preview");
+      updateMarketplacePreviewRow(previewToggle, preview?.dataset.previewMode !== "detail");
+      return;
+    }
+    const editorTrigger = event.target.closest("[data-variant-editor]");
+    if (editorTrigger) {
+      const row = editorTrigger.closest(".content-product-variant-row");
+      const panel = row?.querySelector(".product-variant-editor-panel");
+      const section = editorTrigger.dataset.variantEditor || "admin";
+      if (!row || !panel) return;
+      document.querySelectorAll(".content-product-variant-row").forEach((otherRow) => {
+        if (otherRow === row) return;
+        const otherPanel = otherRow.querySelector(".product-variant-editor-panel");
+        otherPanel?.classList.add("hidden");
+        if (otherPanel) otherPanel.dataset.editorSection = "";
+      });
+      const closingCurrent = !panel.classList.contains("hidden") &&
+        panel.dataset.editorSection === section;
+      panel.classList.toggle("hidden", closingCurrent);
+      panel.dataset.editorSection = closingCurrent ? "" : section;
+      [...panel.children].forEach((child) => {
+        child.hidden = !closingCurrent && section !== "admin" &&
+          child.dataset.variantEditorSection !== section;
+      });
+      if (!closingCurrent) panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      return;
+    }
     const addPrerequisite = event.target.closest(".add-product-prerequisite");
     if (addPrerequisite) {
       const rows = addPrerequisite.closest(".content-product-variant-row")?.querySelector(".product-prerequisite-rows");
