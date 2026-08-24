@@ -107,6 +107,53 @@ function marketplaceVideoSection(product, variant) {
   return section;
 }
 
+function productVariantHref(productSlug, productId, productVariantId) {
+  const productKey = productSlug || productId;
+  if (!productKey) return "#";
+  const query = productVariantId
+    ? `?variant=${encodeURIComponent(productVariantId)}`
+    : "";
+  return `/shop/${encodeURIComponent(productKey)}${query}`;
+}
+
+function marketplaceLinkedVariantList(title, entries = []) {
+  const section = document.createElement("section");
+  section.className = "mb-4 hidden";
+  if (!entries.length) return section;
+
+  const heading = document.createElement("h3");
+  heading.className = "mb-2 text-base font-semibold text-white";
+  heading.textContent = title;
+  const list = document.createElement("ul");
+  list.className = "list-disc space-y-2 pl-5 text-sm text-gray-300";
+  entries.forEach((entry) => {
+    const item = document.createElement("li");
+    const link = document.createElement("a");
+    link.className = "font-semibold text-[#9edbd7] hover:underline";
+    link.href = productVariantHref(
+      entry.productSlug,
+      entry.productId || entry.componentProductId,
+      entry.productVariantId || entry.componentProductVariantId,
+    );
+    const quantity = Number(entry.quantity || 1);
+    const productName = entry.productName || entry.name || entry.productId || entry.componentProductId;
+    const variantName = entry.productVariantName || entry.name ||
+      entry.productVariantId || entry.componentProductVariantId;
+    link.textContent = `${quantity > 1 ? `${quantity} × ` : ""}${productName}` +
+      `${variantName ? ` — ${variantName}` : ""}`;
+    item.appendChild(link);
+    if (entry.shortDescription) {
+      const description = document.createElement("span");
+      description.textContent = ` — ${entry.shortDescription}`;
+      item.appendChild(description);
+    }
+    list.appendChild(item);
+  });
+  section.append(heading, list);
+  section.classList.remove("hidden");
+  return section;
+}
+
 function youtubeEmbedUrl(value) {
   try {
     const url = new URL(value);
@@ -570,7 +617,10 @@ export function showProductDetail(product, options = {}) {
   const productName = getProductName(product);
   const productImage = getProductImage(product);
   const variants = Array.isArray(product.variants) ? product.variants : [];
+  const requestedVariantId = new URLSearchParams(window.location.search).get("variant") || "";
   let selectedVariant = variants.find((variant) =>
+    (variant.variantId || variant.id) === requestedVariantId && variant.purchasable !== false,
+  ) || variants.find((variant) =>
     variant.purchasable !== false && Number(variant.stock ?? 0) > 0,
   ) || variants.find((variant) => variant.purchasable !== false) || variants[0] || null;
   let finalPrice = getVariantPrice(product, selectedVariant);
@@ -638,11 +688,44 @@ export function showProductDetail(product, options = {}) {
   const longDesc = document.createElement("p");
   function updateDescription() {
     const description = getVariantLongDescription(product, selectedVariant);
-    const inclusions = selectedVariant?.inclusions || "";
-    longDesc.textContent = [description, inclusions].filter(Boolean).join("\n\n");
+    longDesc.textContent = description;
   }
   updateDescription();
   longDesc.className = "whitespace-pre-line text-sm text-gray-300 mb-4";
+
+  let inclusions = document.createElement("section");
+  let bundleContents = document.createElement("section");
+  let prerequisiteDetails = document.createElement("section");
+  function updateIncludedDetails() {
+    const bundleEntries = selectedVariant?.bundleProductVariants || [];
+    const replacementBundle = marketplaceLinkedVariantList("Bundle includes", bundleEntries);
+    bundleContents.replaceWith(replacementBundle);
+    bundleContents = replacementBundle;
+
+    const replacementInclusions = document.createElement("section");
+    replacementInclusions.className = "mb-4";
+    if (!bundleEntries.length && selectedVariant?.inclusions) {
+      const heading = document.createElement("h3");
+      heading.className = "mb-2 text-base font-semibold text-white";
+      heading.textContent = "Inclusions";
+      const copy = document.createElement("p");
+      copy.className = "whitespace-pre-line text-sm text-gray-300";
+      copy.textContent = selectedVariant.inclusions;
+      replacementInclusions.append(heading, copy);
+    } else {
+      replacementInclusions.classList.add("hidden");
+    }
+    inclusions.replaceWith(replacementInclusions);
+    inclusions = replacementInclusions;
+
+    const replacementPrerequisites = marketplaceLinkedVariantList(
+      "Prerequisites",
+      selectedVariant?.prerequisiteProductVariants || [],
+    );
+    prerequisiteDetails.replaceWith(replacementPrerequisites);
+    prerequisiteDetails = replacementPrerequisites;
+  }
+  updateIncludedDetails();
 
   const prerequisiteNotice = document.createElement("div");
   prerequisiteNotice.className = "mb-4 rounded border border-amber-600/60 bg-amber-950/40 p-3 text-sm text-amber-100";
@@ -742,6 +825,7 @@ export function showProductDetail(product, options = {}) {
       updatePriceDisplay();
       updateProductImage();
       updateDescription();
+      updateIncludedDetails();
       updateCourseDetails();
       updateExperienceDetails();
       updateCapacityWarning();
@@ -752,6 +836,9 @@ export function showProductDetail(product, options = {}) {
       quantity = Math.max(quantity, minimumQuantity());
       qtyDisplay.textContent = String(quantity);
       updateAddButtonState();
+      const url = new URL(window.location.href);
+      url.searchParams.set("variant", selectedVariant?.variantId || selectedVariant?.id || "");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}`);
     });
 
     variantLabel.appendChild(variantSelect);
@@ -873,6 +960,9 @@ export function showProductDetail(product, options = {}) {
   content.appendChild(title);
   content.appendChild(price);
   content.appendChild(longDesc);
+  content.appendChild(inclusions);
+  content.appendChild(bundleContents);
+  content.appendChild(prerequisiteDetails);
   content.appendChild(prerequisiteNotice);
   content.appendChild(featureList);
   content.appendChild(marketplaceVideos);

@@ -332,8 +332,6 @@ export function mediaForProductVariant(productId, product, variant, architecture
     .map((link, index) => assetMedia(link.assetId, architecture, Number(link.sortOrder ?? index + 1)))
     .filter(Boolean)
     .sort((left, right) => left.sortOrder - right.sortOrder);
-  if (directMedia.length) return directMedia;
-
   const assetIds = [
     cleanString(variant.primaryAssetId),
     ...(Array.isArray(variant.promotionAssetIds) ? variant.promotionAssetIds.map(cleanString) : []),
@@ -341,7 +339,14 @@ export function mediaForProductVariant(productId, product, variant, architecture
   const inferredMedia = [...new Set(assetIds)]
     .map((assetId, index) => assetMedia(assetId, architecture, index + 1))
     .filter(Boolean);
-  return inferredMedia.length ? inferredMedia : fallback;
+  const seen = new Set();
+  const combinedMedia = [...directMedia, ...inferredMedia].filter((asset) => {
+    const key = asset.assetId || asset.url;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return combinedMedia.length ? combinedMedia : fallback;
 }
 
 function legacyAccessGrants(productId, product) {

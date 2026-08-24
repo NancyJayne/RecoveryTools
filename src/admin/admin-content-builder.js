@@ -3743,7 +3743,6 @@ function marketplaceTilePreviewMarkup() {
         <button type="button" data-product-editor-target="contentProductCategoryId" class="${marketplacePreviewAttention(!category, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">Filter: ${escapeHTML(categoryLabel)}</button>
         <button type="button" data-product-editor-target="contentProductDeliveryType" class="${marketplacePreviewAttention(!deliveryType, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">Delivery: ${escapeHTML(deliveryType || "Set delivery")}</button>
         <button type="button" data-product-editor-target="contentProductHasPhysicalFulfilment" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-left text-gray-200 hover:text-white")}">Product fulfilment: ${escapeHTML(fulfilmentSelections.join(", ") || "Select")}</button>
-        <button type="button" data-product-editor-target="contentProductWholesalePrice" class="${marketplacePreviewAttention(wholesalePrice === null, "rounded bg-gray-950 px-2 py-1 text-[#9edbd7] hover:text-white")}">Affiliate ${wholesalePrice !== null ? `$${Number(wholesalePrice).toFixed(2)}` : "not set"}</button>
       </div>
     </div>
   </div>`;
@@ -3874,6 +3873,66 @@ function closeVariantEditorAndReturn(row) {
   returnToVariantPreview(refreshedRow);
 }
 
+function adminLinkedProductVariant(entry = {}, bundle = false) {
+  const productId = bundle ? entry.componentProductId : entry.productId;
+  const productVariantId = bundle ? entry.componentProductVariantId : entry.productVariantId;
+  const product = (state.records.products || []).find((candidate) => candidate.id === productId) || {};
+  const variant = (product.variants || []).find((candidate) =>
+    (candidate.variantId || candidate.id) === productVariantId) || {};
+  return {
+    quantity: Number(entry.quantity || 1),
+    productName: product.name || product.productName || productId,
+    variantName: variant.name || variant.variantName || productVariantId,
+    shortDescription: variant.shortDescription || product.shortDescription || product.description || "",
+    href: `/shop/${encodeURIComponent(product.slug || productId)}?variant=${encodeURIComponent(productVariantId)}`,
+  };
+}
+
+function adminLinkedVariantList(title, entries = [], bundle = false) {
+  if (!entries.length) return "";
+  return `<section class="mt-3 text-left text-sm text-gray-300">
+    <h4 class="mb-2 font-semibold text-white">${escapeHTML(title)}</h4>
+    <ul class="list-disc space-y-2 pl-5">
+      ${entries.map((entry) => {
+    const detail = adminLinkedProductVariant(entry, bundle);
+    const quantity = bundle && detail.quantity > 1 ? `${detail.quantity} × ` : "";
+    const label = `${quantity}${detail.productName} — ${detail.variantName}`;
+    return `<li><a href="${escapeHTML(detail.href)}" target="_blank" rel="noopener"
+        class="font-semibold text-[#9edbd7] hover:underline">${escapeHTML(label)}</a>` +
+      `${detail.shortDescription ? ` — ${escapeHTML(detail.shortDescription)}` : ""}</li>`;
+  }).join("")}
+    </ul>
+  </section>`;
+}
+
+function adminPromotionVideoPreview(productVariant) {
+  const assets = (productVariant.promotionAssetIds || []).map((assetId) =>
+    (state.records.assets || []).find((asset) => (asset.assetId || asset.id) === assetId))
+    .filter(Boolean);
+  if (!assets.length) {
+    return `<button type="button" data-variant-editor="promotion"
+      class="mt-3 min-h-20 w-full rounded border border-purple-500 bg-purple-950/50 px-3 py-2 text-sm text-purple-100 ring-1 ring-purple-500/60">
+      Set promotion video
+    </button>`;
+  }
+  return `<section class="mt-4 space-y-3 text-left">
+    <button type="button" data-variant-editor="promotion" class="font-semibold text-white hover:text-[#9edbd7]">
+      Promotion ${assets.length === 1 ? "video" : "videos"}
+    </button>
+    ${assets.map((asset) => {
+    const url = externalUrl(asset.fileUrl || asset.url || "");
+    const embedUrl = externalUrl(asset.embedUrl || youtubeEmbedUrl(url));
+    const title = asset.title || asset.name || "Product promotion video";
+    return embedUrl
+      ? `<iframe src="${escapeHTML(embedUrl)}" title="${escapeHTML(title)}"
+          class="aspect-video w-full rounded bg-black" loading="lazy" allowfullscreen></iframe>`
+      : url
+        ? `<video src="${escapeHTML(url)}" class="aspect-video w-full rounded bg-black" controls preload="metadata"></video>`
+        : "";
+  }).join("")}
+  </section>`;
+}
+
 function marketplaceVariantCardPreview(
   productVariant,
   entityVariant = {},
@@ -3891,9 +3950,9 @@ function marketplaceVariantCardPreview(
   const url = externalUrl(asset?.fileUrl || asset?.url || "");
   const variantName = productVariant.name || entityVariant.name || "";
   const description = productVariant.shortDescription || defaults.shortDescription;
-  const longDescription = productVariant.longDescription || defaults.longDescription ||
-    entityVariant.longDescription || description;
-  const inclusions = productVariant.inclusions || "";
+  const longDescription = productVariant.longDescription || entityVariant.longDescription ||
+    defaults.longDescription || description;
+  const inclusions = productVariant.inclusions || entityVariant.inclusions || "";
   const price = productVariant.priceOverride ?? defaults.price;
   const salePrice = productVariant.salePrice ?? optionalNumberFromInput("contentProductSalePrice");
   const marketplaceMode = productVariant.marketplaceMode || "inherit";
@@ -3957,6 +4016,18 @@ function marketplaceVariantCardPreview(
   const promotionMissing = !(productVariant.promotionAssetIds || []).length;
   const prerequisitesMissing = !(productVariant.prerequisiteProductVariants || []).length;
   const bundleMissing = !(productVariant.bundleComponents || []).length;
+  const bundleDetails = adminLinkedVariantList(
+    "Bundle includes",
+    productVariant.bundleComponents || [],
+    true,
+  );
+  const inclusionDetails = !bundleDetails && inclusions
+    ? `<section class="mt-3 text-left text-sm text-gray-300"><h4 class="mb-2 font-semibold text-white">Inclusions</h4><p class="whitespace-pre-line">${escapeHTML(inclusions)}</p></section>`
+    : "";
+  const prerequisiteDetails = adminLinkedVariantList(
+    "Prerequisites",
+    productVariant.prerequisiteProductVariants || [],
+  );
   return `<div class="product-variant-card-preview relative overflow-hidden rounded bg-gray-900/40 ${active ? "ring-2 ring-green-500/80" : ""}" data-preview-mode="${detailMode ? "detail" : "card"}">
     ${previewState
     ? marketplacePreviewStateOverlay(
@@ -3978,7 +4049,10 @@ function marketplaceVariantCardPreview(
         <button type="button" data-variant-editor="price" title="Edit marketplace price"
           class="${marketplacePreviewAttention((price === null || price === undefined) && salePrice === null, "mt-2 w-fit rounded text-left text-xl font-bold text-green-400 hover:text-green-300")}">${salePrice !== null && price !== null && price !== undefined ? `<span class="mr-2 text-gray-500 line-through">$${Number(price).toFixed(2)}</span><span class="font-bold text-green-400">$${Number(salePrice).toFixed(2)}</span>` : price !== null && price !== undefined ? `$${Number(price).toFixed(2)}` : "Set price"}</button>
         <button type="button" data-variant-editor="description" title="Edit description overrides"
-          class="${marketplacePreviewAttention(missingDescription, "mt-3 min-h-16 rounded whitespace-pre-line text-left text-sm text-gray-300 hover:text-white")}">${escapeHTML([longDescription, inclusions].filter(Boolean).join("\n\n") || "Set Product long description")}</button>
+          class="${marketplacePreviewAttention(missingDescription, "mt-3 min-h-16 rounded whitespace-pre-line text-left text-sm text-gray-300 hover:text-white")}">${escapeHTML(longDescription || "Set Product long description")}</button>
+        ${bundleDetails || inclusionDetails}
+        ${prerequisiteDetails}
+        ${adminPromotionVideoPreview(productVariant)}
         <label class="mt-4 text-left text-sm text-gray-300">Choose option
           <button type="button" data-variant-editor="identity" class="${marketplacePreviewAttention(detailsMissing, "mt-1 block w-full rounded bg-gray-800 px-3 py-2 text-left text-white")}">${escapeHTML(`${variantName || "Set variant name"}${price !== null && price !== undefined ? ` - $${Number(price).toFixed(2)}` : ""}`)}</button>
         </label>
@@ -4051,6 +4125,9 @@ function updateMarketplacePreviewRow(target) {
         componentProductId: componentRow.querySelector(".product-bundle-component-product")?.value || "",
         componentProductVariantId:
           componentRow.querySelector(".product-bundle-component-variant")?.value || "",
+        quantity: Math.max(Number(
+          componentRow.querySelector(".product-bundle-component-quantity")?.value || 1,
+        ), 1),
       })).filter((component) => component.componentProductId),
     status: row.dataset.pendingStatus || row.querySelector(".product-variant-status")?.value || "draft",
   };

@@ -228,6 +228,7 @@ function normalizeProduct(
   instructorsById = new Map(),
   reservations = new Map(),
   ownedVariants = new Set(),
+  productsById = new Map(),
 ) {
   const data = doc.data() || {};
   const itemId = data.itemId || data.legacyItemId || "";
@@ -332,6 +333,31 @@ function normalizeProduct(
       : wholesalePrice;
     const instructorId = variant.instructorId || variant.instructor || "";
     const bundleComponents = bundleComponentsForProduct(doc.id, variantId, architecture);
+    const bundleProductVariants = bundleComponents.map((component) => {
+      const componentProduct = productsById.get(component.componentProductId) || {};
+      const componentVariants = variantsForProduct(
+        component.componentProductId,
+        componentProduct.itemId || componentProduct.legacyItemId || "",
+        architecture,
+        true,
+      );
+      const componentVariant = componentVariants.find((candidate) =>
+        (candidate.variantId || candidate.id) === component.componentProductVariantId) || {};
+      const componentContent = primaryContentForProduct(
+        component.componentProductId,
+        componentProduct,
+        architecture,
+      );
+      return {
+        ...component,
+        productName: productDisplayName(componentProduct, component.componentProductId),
+        productSlug: componentProduct.slug || component.componentProductId,
+        productVariantName: componentVariant.name || component.componentProductVariantId,
+        shortDescription: componentVariant.shortDescription || componentProduct.shortDescription ||
+          componentContent?.shortDescription || componentProduct.description ||
+          componentContent?.description || "",
+      };
+    });
     const bundleAvailable = bundleComponents.length
       ? Math.min(...bundleComponents.map((component) => {
         const componentVariant = (architecture.canonicalVariantsByProductId
@@ -380,8 +406,16 @@ function normalizeProduct(
         ? Math.max(Number(variantInventory?.stockQty ?? variant.stock ?? 0) - reserved, 0)
         : bundleAvailable,
       bundleAvailable,
+      bundleProductVariants,
       prerequisiteProductVariants: (variant.prerequisiteProductVariants || []).map((required) => {
-        const requiredVariant = variantsForProduct(required.productId, "", architecture, true)
+        const requiredProduct = productsById.get(required.productId) || {};
+        const requiredContent = primaryContentForProduct(required.productId, requiredProduct, architecture);
+        const requiredVariant = variantsForProduct(
+          required.productId,
+          requiredProduct.itemId || requiredProduct.legacyItemId || "",
+          architecture,
+          true,
+        )
           .find((candidate) => (candidate.variantId || candidate.id) === required.productVariantId);
         const matchingAccess = (architecture.accessGrantsByProductId.get(required.productId) || [])
           .filter((grant) => !grant.productVariantId || grant.productVariantId === required.productVariantId)
@@ -390,7 +424,12 @@ function normalizeProduct(
         return {
           productId: required.productId,
           productVariantId: required.productVariantId,
+          productName: productDisplayName(requiredProduct, required.productId),
+          productSlug: requiredProduct.slug || required.productId,
           name: requiredVariant?.name || required.productVariantId,
+          shortDescription: requiredVariant?.shortDescription || requiredProduct.shortDescription ||
+            requiredContent?.shortDescription || requiredProduct.description ||
+            requiredContent?.description || "",
           satisfied: ownedVariants.has(variantKey(required.productId, required.productVariantId)) || matchingAccess,
         };
       }),
@@ -528,6 +567,7 @@ export const getFirestoreProducts = onCall(
         doc.id,
         doc.data()?.name || doc.data()?.instructorName || doc.data()?.displayName || doc.id,
       ]));
+      const productsById = new Map(snapshot.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }]));
 
       const products = snapshot.docs
         .map((doc) => normalizeProduct(
@@ -538,6 +578,7 @@ export const getFirestoreProducts = onCall(
           instructorsById,
           reservations,
           ownedVariants,
+          productsById,
         ))
         .filter((product) => includeHidden && isAdmin ? true : product.visible !== false)
         .filter((product) => tag ? product.searchTags.includes(tag) : true)
