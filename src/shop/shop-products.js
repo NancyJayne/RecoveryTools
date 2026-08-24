@@ -492,13 +492,6 @@ export function createProductTile(product) {
       px-2 py-1 text-xs font-semibold text-white`;
     wrapper.appendChild(badge);
   }
-  if (product.pricingTier === "affiliate-wholesale") {
-    const badge = document.createElement("span");
-    badge.textContent = "Affiliate wholesale";
-    badge.className = "absolute bottom-2 left-2 rounded bg-[#407471] px-2 py-1 text-xs font-semibold text-white";
-    wrapper.appendChild(badge);
-  }
-
   const image = document.createElement("img");
   image.src = productImage;
   image.alt = getProductImageAlt(product);
