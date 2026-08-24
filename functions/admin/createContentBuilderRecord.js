@@ -1153,7 +1153,8 @@ export const createContentBuilderRecord = onCall(
             shopStatus: normalizeStatus(data.shopStatus || (doc.visible ? "active" : "draft")),
             visible: data.shopVisible === true || doc.visible === true,
             websiteVisible: doc.websiteVisible === true,
-            archived: false,
+            archived: data.productRelation?.archived === true ||
+              variants.length > 0 && variants.every((variant) => variant.status === "archived"),
             featured: data.featured === true,
             marketplaceTileImageSource: cleanString(
               data.productRelation?.marketplaceTileImageSource || "entity",

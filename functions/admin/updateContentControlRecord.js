@@ -648,7 +648,8 @@ async function updateProductRelation({
     marketplaceMode,
     marketplaceStartsAt,
     marketplaceEndsAt,
-    archived: asBoolean(relation.archived),
+    archived: asBoolean(relation.archived) ||
+      variants.length > 0 && variants.every((variant) => variant.status === "archived"),
     featured: asBoolean(relation.featured),
     marketplaceTileImageSource: cleanString(
       relation.marketplaceTileImageSource || "entity",

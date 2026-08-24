@@ -1609,6 +1609,7 @@ function renderSelectedProductVariantRows(
         </div>
       </div>`;
   }).join("");
+  syncProductArchivedFromVariants(productVariants);
   renderMarketplaceTileControls();
 }
 
@@ -1686,6 +1687,7 @@ function syncSelectedProductVariantRows() {
     };
   });
   input.value = serializeProductVariants(variants);
+  syncProductArchivedFromVariants(variants);
 }
 
 function addIndependentProductVariant() {
@@ -3404,14 +3406,23 @@ function orderProductDrawerSections() {
   const variants = document.getElementById("contentProductVariants")?.closest("details");
   const fulfilment = document.getElementById("contentProductPhysicalFulfilment")?.closest("details");
   const manufacturing = document.getElementById("contentProductBlueprintId")?.closest("details");
+  const unlocks = document.getElementById("contentProductUnlockRows")?.closest("section");
+  const variantConnections = document.getElementById("contentVariantOwnedConnections");
   if (!variants || !fulfilment) return;
-  if (variants.nextElementSibling !== fulfilment) variants.after(fulfilment);
+  if (fulfilment.nextElementSibling !== variants) variants.before(fulfilment);
+  if (variantConnections && manufacturing && manufacturing.parentElement !== variantConnections) {
+    variantConnections.appendChild(manufacturing);
+  }
+  if (variantConnections && unlocks && unlocks.parentElement !== variantConnections) {
+    variantConnections.appendChild(unlocks);
+  }
+  const drawerBody = document.querySelector("#contentProductDrawer > div");
+  [...(drawerBody?.children || [])].filter((child) => child.tagName === "DETAILS")
+    .forEach((details) => details.setAttribute("name", "product-editor-section"));
   const fulfilmentNumber = fulfilment.querySelector("summary span");
   const variantsNumber = variants.querySelector("summary span");
-  const manufacturingNumber = manufacturing?.querySelector("summary span");
-  if (variantsNumber) variantsNumber.textContent = "1";
-  if (fulfilmentNumber) fulfilmentNumber.textContent = "2";
-  if (manufacturingNumber) manufacturingNumber.textContent = "3";
+  if (fulfilmentNumber) fulfilmentNumber.textContent = "1";
+  if (variantsNumber) variantsNumber.textContent = "2";
 }
 
 function closeContentProductDrawer() {
@@ -3522,6 +3533,24 @@ function productUnlockTargetVariants(entityType, entityId) {
 
 function currentProductVariants() {
   return parseProductVariants(document.getElementById("contentProductVariants")?.value);
+}
+
+function syncProductArchivedFromVariants(variants = currentProductVariants()) {
+  const archivedInput = document.getElementById("contentProductArchived");
+  if (!archivedInput || !variants.length) return;
+  const allArchived = variants.every((variant) => variant.status === "archived");
+  const wasChecked = archivedInput.checked;
+  if (allArchived) {
+    archivedInput.checked = true;
+    archivedInput.dataset.autoArchived = "true";
+  } else if (archivedInput.dataset.autoArchived === "true") {
+    archivedInput.checked = false;
+    delete archivedInput.dataset.autoArchived;
+  }
+  if (wasChecked !== archivedInput.checked) {
+    renderMarketplaceTileControls();
+    refreshMarketplacePreviews();
+  }
 }
 
 function bundleProductOptions(selectedProductId = "") {
@@ -3654,8 +3683,16 @@ function focusProductEditorTarget(targetId) {
   const target = document.getElementById(targetId);
   if (!target) return;
   if (targetId === "contentName") closeContentProductDrawer();
+  document.querySelectorAll("[data-product-context-panel]").forEach((panel) => {
+    panel.classList.toggle("hidden", panel.dataset.productContextPanel !== targetId);
+  });
   const section = target.closest("details");
-  if (section) section.open = true;
+  if (section) {
+    document.querySelectorAll("#contentProductDrawer details").forEach((details) => {
+      if (details !== section && !details.contains(section)) details.open = false;
+    });
+    section.open = true;
+  }
   target.scrollIntoView({ behavior: "smooth", block: "center" });
   target.focus({ preventScroll: true });
 }
@@ -6244,7 +6281,7 @@ export async function setupContentBuilder() {
   });
   document.getElementById("addProductVariantContentLinkBtn")?.addEventListener(
     "click",
-    () => addProductVariantContentLinkRow(),
+    (event) => addProductVariantContentLinkRow(event.currentTarget.dataset.productVariantId || ""),
   );
   document.getElementById("productVariantContentLinkRows")?.addEventListener("click", (event) => {
     const remove = event.target.closest(".remove-product-variant-content-link");
@@ -6291,6 +6328,17 @@ export async function setupContentBuilder() {
   ["contentProductWholesalePrice", "contentProductDeliveryType", "contentProductCategoryId",
     "contentProductFeatured", "contentProductArchived", "contentProductHasPhysicalFulfilment"]
     .forEach((id) => document.getElementById(id)?.addEventListener("change", () => {
+      if (id === "contentProductArchived") {
+        const archivedInput = document.getElementById(id);
+        if (archivedInput && !archivedInput.checked && currentProductVariants().length &&
+            currentProductVariants().every((variant) => variant.status === "archived")) {
+          archivedInput.checked = true;
+          archivedInput.dataset.autoArchived = "true";
+          showToast("Reactivate at least one Product variant before restoring the Product.", "error");
+        } else if (archivedInput) {
+          delete archivedInput.dataset.autoArchived;
+        }
+      }
       renderMarketplaceTileControls();
       refreshMarketplacePreviews();
     }));
@@ -6305,6 +6353,11 @@ export async function setupContentBuilder() {
       const productVariantId = row?.dataset.productVariantId || "";
       const connection = connectionTrigger.dataset.variantConnection;
       if (connection === "blueprint") {
+        const addButton = document.getElementById("addProductVariantContentLinkBtn");
+        if (addButton) {
+          addButton.dataset.productVariantId = productVariantId;
+          addButton.disabled = !productVariantId;
+        }
         const existing = productVariantContentLinksFromRows(true)
           .some((link) => link.productVariantId === productVariantId);
         if (!existing) addProductVariantContentLinkRow(productVariantId);
@@ -6312,6 +6365,11 @@ export async function setupContentBuilder() {
         if (section) section.open = true;
         section?.scrollIntoView({ behavior: "smooth", block: "start" });
       } else if (connection === "unlock") {
+        const addButton = document.getElementById("addContentProductUnlockBtn");
+        if (addButton) {
+          addButton.dataset.productVariantId = productVariantId;
+          addButton.disabled = !productVariantId;
+        }
         const existing = productUnlocksFromRows().some((grant) => grant.productVariantId === productVariantId);
         if (!existing) addProductUnlockRow(productVariantId);
         const section = document.getElementById("contentProductUnlockRows")?.closest("section");
@@ -6604,7 +6662,9 @@ export async function setupContentBuilder() {
     }
     window.open(externalUrl(url), "_blank", "noopener,noreferrer");
   });
-  document.getElementById("addContentProductUnlockBtn")?.addEventListener("click", () => addProductUnlockRow());
+  document.getElementById("addContentProductUnlockBtn")?.addEventListener("click", (event) => {
+    addProductUnlockRow(event.currentTarget.dataset.productVariantId || "");
+  });
   document.getElementById("contentProductUnlockRows")?.addEventListener("change", (event) => {
     if (!event.target.classList.contains("content-product-unlock-type") &&
         !event.target.classList.contains("content-product-unlock-target")) return;

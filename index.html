@@ -1802,6 +1802,23 @@
                     <option value="archived">Archived</option>
                   </select>
                 </div>
+                <section class="mt-4 rounded border border-[#407471] bg-gray-900/80 p-4">
+                  <div>
+                    <h5 class="font-semibold text-white">Shop tile presentation</h5>
+                    <p class="mt-1 text-xs text-gray-400">This is the single Marketplace tile for the Product. Select an area of the preview to edit its source or setting.</p>
+                  </div>
+                  <div id="contentProductTilePreview" class="mt-3 rounded border border-gray-700 bg-gray-950/60 p-3"></div>
+                  <div id="contentProductTileImageSourceField" data-product-context-panel="contentProductTileImageSource" class="mt-3 hidden rounded border border-gray-700 p-3">
+                    <label class="block text-sm">Tile image source
+                      <select id="contentProductTileImageSource" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                    </label>
+                  </div>
+                  <div id="contentProductTileDescriptionSourceField" data-product-context-panel="contentProductTileDescriptionSource" class="mt-3 hidden rounded border border-gray-700 p-3">
+                    <label class="block text-sm">Tile short-description source
+                      <select id="contentProductTileDescriptionSource" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                    </label>
+                  </div>
+                </section>
                 <details class="mt-4 overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80 shadow-md" open>
                   <summary class="cursor-pointer bg-gray-800/90 p-4 hover:bg-gray-800">
                     <div class="flex items-center gap-3">
@@ -1810,34 +1827,19 @@
                     </div>
                   </summary>
                   <div class="border-t border-gray-700 bg-gray-950/30 p-4">
-                    <section class="mb-4 rounded border border-[#407471] bg-gray-900/80 p-4">
-                      <div>
-                        <h5 class="font-semibold text-white">Shop tile presentation</h5>
-                        <p class="mt-1 text-xs text-gray-400">Choose which existing entity or Product variant supplies the single Marketplace tile. These choices do not change the Product detail pages.</p>
-                      </div>
-                      <div class="mt-3 grid gap-3 md:grid-cols-2">
-                        <label class="block text-sm">Tile image source
-                          <select id="contentProductTileImageSource" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
-                        </label>
-                        <label class="block text-sm">Tile short-description source
-                          <select id="contentProductTileDescriptionSource" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
-                        </label>
-                      </div>
-                      <div id="contentProductTilePreview" class="mt-3 rounded border border-gray-700 bg-gray-950/60 p-3"></div>
-                    </section>
-                    <p class="text-xs text-gray-400">Entity variants can start a Product variant, but the sellable configurations remain independent.</p>
                     <input id="contentProductVariants" type="hidden">
                     <div id="contentProductVariantRows" class="mt-3 space-y-4"></div>
                     <div class="mt-4 flex justify-end">
                       <button id="addContentProductVariantBtn" type="button" class="rounded border border-[#407471] px-3 py-2 text-sm text-[#9edbd7]">Add Product variant</button>
                     </div>
+                    <div id="contentVariantOwnedConnections" class="mt-4 space-y-4"></div>
                   </div>
                 </details>
                 <details class="mt-4 overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80 shadow-md">
                   <summary class="cursor-pointer bg-gray-800/90 p-4 hover:bg-gray-800">
                     <div class="flex items-center gap-3">
-                      <span class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#407471] bg-[#153b38] font-semibold text-[#bce7e4]">2</span>
-                      <div><h4 class="font-semibold text-white">Manufacturing and Workshop operations</h4><p class="text-xs text-gray-400">Connect manufacturing recipes or session setup and packing Blueprints.</p></div>
+                      <span class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#407471] bg-[#153b38] font-semibold text-[#bce7e4]">↳</span>
+                      <div><h4 class="font-semibold text-white">Variant Blueprint connections</h4><p class="text-xs text-gray-400">Connect manufacturing, lecture, session setup, or packing Blueprints to exact Product variants.</p></div>
                     </div>
                   </summary>
                   <div class="border-t border-gray-700 bg-gray-950/30 p-4 text-sm">
@@ -1845,9 +1847,9 @@
                     <div class="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <h5 class="font-medium text-white">Select Blueprint connections</h5>
-                        <p class="mt-1 text-xs text-gray-400">Choose Manufacturing recipe or Workshop operations, then connect it to all Product variants or an exact session.</p>
+                        <p class="mt-1 text-xs text-gray-400">Open Blueprints from a Product variant preview so the connection is attached to that exact sellable variant or session.</p>
                       </div>
-                      <button id="addProductVariantContentLinkBtn" type="button" class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add Blueprint</button>
+                      <button id="addProductVariantContentLinkBtn" type="button" disabled class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7] disabled:cursor-not-allowed disabled:opacity-40">Add another Blueprint</button>
                     </div>
                     <div id="productVariantContentLinkRows" class="mt-3 space-y-2"></div>
                     <p class="mt-3">Default manufacturing Blueprint: <strong id="contentProductBlueprintLabel">Not connected</strong></p>
@@ -1945,19 +1947,13 @@
                     <p class="text-xs text-gray-400 md:col-span-2">The regular price returns automatically when the sale ends.</p>
                   </div>
                 </details>
-                <div class="mt-3 grid gap-3 md:grid-cols-2">
-                  <label class="inline-flex items-center gap-2">
-                    <input id="contentProductArchived" type="checkbox" class="accent-[#407471]">
-                    Archived
-                  </label>
-                </div>
                 <section class="mt-4 rounded border border-gray-700 bg-gray-900/70 p-3">
                   <div class="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <h4 class="font-semibold text-white">Unlock after purchase</h4>
-                      <p class="mt-1 text-xs text-gray-400">Use this only when payment should give access to digital content, a course, plan, program, or workshop. A physical-only Product normally has no unlocks.</p>
+                      <p class="mt-1 text-xs text-gray-400">Open Unlocks from a Product variant preview so purchased access belongs to that exact variant.</p>
                     </div>
-                    <button id="addContentProductUnlockBtn" type="button" class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7] hover:bg-[#153b38]">Add unlock</button>
+                    <button id="addContentProductUnlockBtn" type="button" disabled class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7] hover:bg-[#153b38] disabled:cursor-not-allowed disabled:opacity-40">Add another unlock</button>
                   </div>
                   <div id="contentProductUnlockRows" class="mt-3 space-y-2"></div>
                 </section>
@@ -1967,7 +1963,11 @@
                     No assets linked.
                   </div>
                 </div>
-                <div class="mt-5 flex justify-end">
+                <div class="mt-5 flex flex-wrap items-center justify-end gap-4">
+                  <label class="inline-flex items-center gap-2 rounded border border-gray-700 px-3 py-2">
+                    <input id="contentProductArchived" type="checkbox" class="accent-[#407471]">
+                    Archived
+                  </label>
                   <button id="applyContentProductBtn" type="button" class="rounded bg-[#407471] px-4 py-2 text-white hover:bg-[#305a56]">Save product details</button>
                 </div>
                 </div>
