@@ -1509,7 +1509,7 @@ function renderSelectedProductVariantRows(
                 "<option value=\"\" disabled>No instructors saved</option>"}
             </select>
           </label>
-          <div class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
+          <div data-variant-editor-section="visibility" class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Marketplace visibility</h5>
             <div class="mt-3 grid gap-3 md:grid-cols-3">
               <label class="block text-sm">Marketplace listing
@@ -1532,7 +1532,7 @@ function renderSelectedProductVariantRows(
               </label>
             </div>
           </div>
-          <div class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
+          <div data-variant-editor-section="sale" class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Price and sale</h5>
             <div class="mt-3 grid gap-3 md:grid-cols-2">
               <label class="block text-sm">Affiliate wholesale price
@@ -1557,7 +1557,7 @@ function renderSelectedProductVariantRows(
               </label>
             </div>
           </div>
-          <div class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
+          <div data-variant-editor-section="promotion" class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Promotion videos</h5>
             <p class="mt-1 text-xs text-gray-400">Only Assets selected here are public. Linked Item, Blueprint and Plan material remains private.</p>
             <div class="mt-3">
@@ -1569,7 +1569,7 @@ function renderSelectedProductVariantRows(
               </label>
             </div>
           </div>
-          <div class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
+          <div data-variant-editor-section="prerequisites" class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <div class="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <h5 class="font-semibold text-white">Purchase prerequisites</h5>
@@ -1579,7 +1579,7 @@ function renderSelectedProductVariantRows(
             </div>
             <div class="product-prerequisite-rows mt-3 space-y-2">${prerequisiteRowsMarkup(productVariant.prerequisiteProductVariants || [])}</div>
           </div>
-          <div class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
+          <div data-variant-editor-section="bundle" class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <div class="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <h5 class="font-semibold text-white">Bundle inventory and tickets</h5>
@@ -1589,7 +1589,7 @@ function renderSelectedProductVariantRows(
             </div>
             <div class="product-bundle-component-rows mt-3 space-y-2">${bundleComponentsMarkup(productVariant.bundleComponents || [])}</div>
           </div>
-          <div class="md:col-span-2 xl:col-span-4">
+          <div data-variant-editor-section="lifecycle" class="md:col-span-2 xl:col-span-4">
             <div class="mb-3 flex flex-wrap gap-2">
               <button type="button" data-product-variant-action="active"
                 class="product-variant-status-action rounded border border-[#407471] px-3 py-2 text-sm text-[#9bd3cf]">
@@ -1605,6 +1605,9 @@ function renderSelectedProductVariantRows(
               </button>
             </div>
             <button type="button" class="remove-content-product-variant rounded border border-red-700 px-3 py-2 text-sm text-red-200">Remove session from sale</button>
+          </div>
+          <div class="variant-editor-actions flex justify-end md:col-span-2 xl:col-span-4">
+            <button type="button" data-close-variant-editor class="rounded border border-[#407471] px-3 py-1 text-[#9edbd7]">Done</button>
           </div>
         </div>
       </div>`;
@@ -3107,8 +3110,9 @@ function productRelationPayload() {
     ? "shipping-or-pickup"
     : variantFulfilment[0] || "none";
   setInputValue("contentProductPhysicalFulfilment", physicalFulfilment);
-  const requiresShipping = variantFulfilment
-    .some((value) => ["shipping", "shipping-or-pickup"].includes(value));
+  const requiresShipping =
+    document.getElementById("contentProductRequiresShipping")?.checked === true ||
+    variantFulfilment.some((value) => ["shipping", "shipping-or-pickup"].includes(value));
   const inventoryTracked =
     document.getElementById("contentProductInventoryTracked")?.checked === true;
   const totalVariantStock = variants.reduce((total, variant) => total + Number(variant.stock || 0), 0);
@@ -3403,7 +3407,7 @@ export async function openProductDrawerFromAdmin({ productId, entityType, entity
 }
 
 function orderProductDrawerSections() {
-  const variants = document.getElementById("contentProductVariants")?.closest("details");
+  const variants = document.getElementById("contentProductVariantsSection");
   const fulfilment = document.getElementById("contentProductPhysicalFulfilment")?.closest("details");
   const manufacturing = document.getElementById("contentProductBlueprintId")?.closest("details");
   const unlocks = document.getElementById("contentProductUnlockRows")?.closest("section");
@@ -3419,10 +3423,6 @@ function orderProductDrawerSections() {
   const drawerBody = document.querySelector("#contentProductDrawer > div");
   [...(drawerBody?.children || [])].filter((child) => child.tagName === "DETAILS")
     .forEach((details) => details.setAttribute("name", "product-editor-section"));
-  const fulfilmentNumber = fulfilment.querySelector("summary span");
-  const variantsNumber = variants.querySelector("summary span");
-  if (fulfilmentNumber) fulfilmentNumber.textContent = "1";
-  if (variantsNumber) variantsNumber.textContent = "2";
 }
 
 function closeContentProductDrawer() {
@@ -3451,21 +3451,11 @@ function populateGeneratedProductSku() {
   if (sku && !sku.value.trim()) sku.value = generatedProductSku();
 }
 
-function isPhysicalProductConnection() {
-  const hasPhysicalVariant = [...document.querySelectorAll(".product-variant-physical-fulfilment")]
-    .some((select) => select.value && select.value !== "none");
-  return ["Physical", "Hybrid"]
-    .includes(document.getElementById("contentProductDeliveryType")?.value || "") ||
-    document.getElementById("contentProductHasPhysicalFulfilment")?.checked === true ||
-    hasPhysicalVariant;
-}
-
-function productDeliveryControlValue(productType, requiresShipping) {
+function productDeliveryControlValue(productType) {
   return productType || "Physical";
 }
 
 function updateProductPhysicalFields() {
-  const physical = isPhysicalProductConnection();
   const physicalFulfilmentEnabled =
     document.getElementById("contentProductHasPhysicalFulfilment")?.checked === true;
   if (!physicalFulfilmentEnabled) {
@@ -3474,16 +3464,8 @@ function updateProductPhysicalFields() {
     });
     setInputValue("contentProductPhysicalFulfilment", "none");
   }
-  const requiresShipping = physicalFulfilmentEnabled &&
-    [...document.querySelectorAll(".product-variant-physical-fulfilment")]
-      .some((select) => ["shipping", "shipping-or-pickup"].includes(select.value));
-  setCheckboxValue(
-    "contentProductRequiresShipping",
-    requiresShipping,
-  );
   const tracked = document.getElementById("contentProductInventoryTracked")?.checked === true;
-  document.getElementById("contentProductRequiresShipping")?.closest("label")
-    ?.classList.toggle("hidden", !physical);
+  document.getElementById("contentProductRequiresShipping")?.closest("label")?.classList.remove("hidden");
   document.getElementById("contentProductInventoryTrackedField")?.classList.remove("hidden");
   document.getElementById("contentProductInventoryHelp")?.classList.remove("hidden");
   document.querySelectorAll(".product-variant-stock-field").forEach((field) => {
@@ -3513,6 +3495,20 @@ function updateProductPhysicalFields() {
     field.classList.toggle("hidden", !instructor);
   });
   if (!tracked) setInputValue("contentProductStock", "");
+  const summary = document.getElementById("contentProductFulfilmentSummary");
+  if (summary) {
+    const labels = [
+      physicalFulfilmentEnabled ? "Physical fulfilment" : "",
+      document.getElementById("contentProductRequiresShipping")?.checked ? "Requires shipping" : "",
+      tracked ? "Tracked inventory" : "",
+      calendar ? "Calendar" : "",
+      timing ? "Session time" : "",
+      seats ? "Tickets/seats" : "",
+      location ? "Location" : "",
+      instructor ? "Instructor" : "",
+    ].filter(Boolean);
+    summary.textContent = labels.length ? labels.join(" • ") : "No fulfilment requirements selected";
+  }
 }
 
 function updateItemInventoryFields() {
@@ -3688,6 +3684,7 @@ function focusProductEditorTarget(targetId) {
   });
   const section = target.closest("details");
   if (section) {
+    if (section.hasAttribute("data-product-preview-section")) section.classList.remove("hidden");
     document.querySelectorAll("#contentProductDrawer details").forEach((details) => {
       if (details !== section && !details.contains(section)) details.open = false;
     });
@@ -3759,6 +3756,14 @@ function marketplaceVariantCardPreview(
       <button type="button" data-variant-connection="blueprint" class="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:border-[#407471] hover:text-white">Blueprints</button>
       <button type="button" data-variant-connection="unlock" class="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:border-[#407471] hover:text-white">Unlocks</button>
       <button type="button" data-variant-editor="description" class="font-medium text-[#c15cff] hover:text-[#d991ff]">Product detail</button>
+    </div>
+    <div class="flex flex-wrap gap-2 border-t border-gray-700 pt-3 sm:col-span-3">
+      <button type="button" data-variant-editor="visibility" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Visibility</button>
+      <button type="button" data-variant-editor="sale" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Price &amp; sale</button>
+      <button type="button" data-variant-editor="promotion" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Promotion videos</button>
+      <button type="button" data-variant-editor="prerequisites" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Prerequisites</button>
+      <button type="button" data-variant-editor="bundle" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Bundle</button>
+      <button type="button" data-variant-editor="lifecycle" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Lifecycle</button>
     </div>
   </div>`;
 }
@@ -6259,7 +6264,7 @@ export async function setupContentBuilder() {
     "change",
     updateProductPhysicalFields,
   );
-  ["contentProductRequiresCalendar", "contentProductTracksSeats", "contentProductRequiresSessionTime",
+  ["contentProductRequiresShipping", "contentProductRequiresCalendar", "contentProductTracksSeats", "contentProductRequiresSessionTime",
     "contentProductRequiresLocation", "contentProductRequiresInstructor"].forEach((id) => {
     document.getElementById(id)?.addEventListener("change", updateProductPhysicalFields);
   });
@@ -6318,8 +6323,17 @@ export async function setupContentBuilder() {
   ["contentProductTileImageSource", "contentProductTileDescriptionSource"].forEach((id) => {
     document.getElementById(id)?.addEventListener("change", () => {
       renderMarketplaceTileControls();
+      document.getElementById(id)?.closest("[data-product-context-panel]")?.classList.add("hidden");
       state.isDirty = true;
     });
+  });
+  document.getElementById("contentProductDrawer")?.addEventListener("click", (event) => {
+    const closeButton = event.target.closest("[data-close-product-editor]");
+    if (!closeButton) return;
+    const section = closeButton.closest("details");
+    if (!section) return;
+    section.open = false;
+    if (section.hasAttribute("data-product-preview-section")) section.classList.add("hidden");
   });
   document.getElementById("contentProductTilePreview")?.addEventListener("click", (event) => {
     const trigger = event.target.closest("[data-product-editor-target]");
@@ -6347,6 +6361,14 @@ export async function setupContentBuilder() {
     renderMarketplaceTileControls,
   );
   document.getElementById("contentProductVariantRows")?.addEventListener("click", (event) => {
+    const closeEditor = event.target.closest("[data-close-variant-editor]");
+    if (closeEditor) {
+      syncSelectedProductVariantRows();
+      const panel = closeEditor.closest(".product-variant-editor-panel");
+      panel?.classList.add("hidden");
+      if (panel) panel.dataset.editorSection = "";
+      return;
+    }
     const connectionTrigger = event.target.closest("[data-variant-connection]");
     if (connectionTrigger) {
       const row = connectionTrigger.closest(".content-product-variant-row");
@@ -6394,6 +6416,10 @@ export async function setupContentBuilder() {
       panel.classList.toggle("hidden", closingCurrent);
       panel.dataset.editorSection = closingCurrent ? "" : section;
       [...panel.children].forEach((child) => {
+        if (child.classList.contains("variant-editor-actions")) {
+          child.hidden = closingCurrent;
+          return;
+        }
         child.hidden = !closingCurrent && section !== "admin" &&
           child.dataset.variantEditorSection !== section;
       });
