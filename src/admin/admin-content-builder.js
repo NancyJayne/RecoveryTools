@@ -3608,7 +3608,7 @@ function marketplacePreviewAttention(missing, extraClasses = "") {
     : ""}`.trim();
 }
 
-function marketplacePreviewStateOverlay(label, tone = "purple") {
+function marketplacePreviewStateOverlay(label, tone = "purple", editorTarget = "") {
   if (!label) return "";
   const tones = {
     amber: "border-amber-400 text-amber-200",
@@ -3617,7 +3617,10 @@ function marketplacePreviewStateOverlay(label, tone = "purple") {
     gray: "border-gray-400 text-gray-200",
   };
   return `<div class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
-    <span class="-rotate-12 rounded border-4 bg-gray-950/80 ${tones[tone] || tones.purple} px-5 py-2 text-2xl font-black uppercase tracking-widest shadow-xl">${escapeHTML(label)}</span>
+    <button type="button" ${editorTarget} aria-label="Edit ${escapeHTML(label)} status"
+      class="pointer-events-auto -rotate-12 rounded border-4 bg-gray-950/80 ${tones[tone] || tones.purple} px-5 py-2 text-2xl font-black uppercase tracking-widest shadow-xl">
+      ${escapeHTML(label)}
+    </button>
   </div>`;
 }
 
@@ -3710,7 +3713,9 @@ function marketplaceTilePreviewMarkup() {
     active = false;
   }
   return `<div class="relative mx-auto max-w-sm rounded-lg bg-gray-800 p-4 shadow hover:ring-2 hover:ring-[#407471] ${active ? "ring-2 ring-green-500/80" : ""}">
-    ${previewState ? marketplacePreviewStateOverlay(previewState.label, previewState.tone) : ""}
+    ${previewState
+    ? marketplacePreviewStateOverlay(previewState.label, previewState.tone, previewState.target)
+    : ""}
     <button type="button" data-product-editor-target="contentProductTileImageSource"
       class="${marketplacePreviewAttention(!imageUrl, "flex h-48 w-full items-center justify-center overflow-hidden rounded bg-gray-950 text-xs text-gray-400 ring-[#407471] hover:ring-2")}">
       ${imageUrl
@@ -3953,7 +3958,13 @@ function marketplaceVariantCardPreview(
   const prerequisitesMissing = !(productVariant.prerequisiteProductVariants || []).length;
   const bundleMissing = !(productVariant.bundleComponents || []).length;
   return `<div class="product-variant-card-preview relative overflow-hidden rounded bg-gray-900/40 ${active ? "ring-2 ring-green-500/80" : ""}" data-preview-mode="${detailMode ? "detail" : "card"}">
-    ${previewState ? marketplacePreviewStateOverlay(previewState.label, previewState.tone) : ""}
+    ${previewState
+    ? marketplacePreviewStateOverlay(
+      previewState.label,
+      previewState.tone,
+      `data-variant-editor="${escapeHTML(previewState.section)}"`,
+    )
+    : ""}
     <div class="flex flex-col gap-6 p-3 md:flex-row md:items-start">
       <button type="button" data-variant-editor="image" title="Edit marketplace image"
         class="${marketplacePreviewAttention(!url, "flex min-h-56 w-full items-center justify-center overflow-hidden rounded bg-gray-950 text-center text-xs text-gray-400 ring-[#407471] hover:ring-2 md:w-1/2")}">
@@ -4707,8 +4718,11 @@ function populateBuilderFromRecord(record) {
 
   setInputValue("contentName", record.name);
   setInputValue("contentId", record.id);
-  setInputValue("contentShortDescription", record.shortDescription);
-  setInputValue("contentLongDescription", record.longDescription);
+  setInputValue("contentShortDescription", record.shortDescription || record.description || "");
+  setInputValue(
+    "contentLongDescription",
+    record.longDescription || record.notes || record.description || record.shortDescription || "",
+  );
   renderTagControls(record.tags || []);
   const storedVariants = Array.isArray(record.entityVariants) ? record.entityVariants : [];
   const legacyShopEnabled = record.productLinkRole !== "ManufacturedFrom" &&
