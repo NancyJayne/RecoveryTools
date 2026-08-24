@@ -348,6 +348,33 @@ function normalizeProduct(
         componentProduct,
         architecture,
       );
+      const componentPrice = activePriceForVariant(
+        component.componentProductId,
+        component.componentProductVariantId,
+        architecture,
+      );
+      const componentRetailPrice = positiveNumber(
+        componentVariant.priceOverride,
+        componentPrice?.retailPrice,
+        componentProduct.retailPrice,
+        componentProduct.price,
+      );
+      const componentSaleStartsMs = dateMillis(componentVariant.saleStartsAt);
+      const componentSaleEndsMs = dateMillis(componentVariant.saleEndsAt);
+      const componentOnSale = componentVariant.salePrice !== null &&
+        componentVariant.salePrice !== undefined && componentVariant.salePrice !== "" &&
+        (!componentSaleStartsMs || componentSaleStartsMs <= nowMs) &&
+        (!componentSaleEndsMs || componentSaleEndsMs > nowMs);
+      const componentWholesaleValue = componentVariant.wholesalePrice ??
+        componentPrice?.wholesalePrice ?? componentPrice?.affiliatePrice ??
+        componentProduct.wholesalePrice;
+      const componentMedia = mediaForProductVariant(
+        component.componentProductId,
+        componentProduct,
+        componentVariant,
+        architecture,
+        mediaForProduct(component.componentProductId, componentProduct, architecture),
+      );
       return {
         ...component,
         productName: productDisplayName(componentProduct, component.componentProductId),
@@ -356,6 +383,12 @@ function normalizeProduct(
         shortDescription: componentVariant.shortDescription || componentProduct.shortDescription ||
           componentContent?.shortDescription || componentProduct.description ||
           componentContent?.description || "",
+        image: componentMedia.find((asset) => normalizeStatus(asset.type) === "image")?.url || "",
+        retailPrice: componentRetailPrice,
+        salePrice: componentOnSale ? Number(componentVariant.salePrice) : null,
+        wholesalePrice: approvedAffiliate && Number(componentWholesaleValue) > 0
+          ? Number(componentWholesaleValue)
+          : null,
       };
     });
     const bundleAvailable = bundleComponents.length

@@ -3935,11 +3935,20 @@ function adminLinkedProductVariant(entry = {}, bundle = false) {
   const product = (state.records.products || []).find((candidate) => candidate.id === productId) || {};
   const variant = (product.variants || []).find((candidate) =>
     (candidate.variantId || candidate.id) === productVariantId) || {};
+  const assetId = variant.primaryAssetId || product.primaryAssetId || "";
+  const asset = (state.records.assets || []).find((candidate) =>
+    (candidate.assetId || candidate.id) === assetId) || {};
   return {
+    productId,
+    productVariantId,
     quantity: Number(entry.quantity || 1),
     productName: product.name || product.productName || productId,
     variantName: variant.name || variant.variantName || productVariantId,
     shortDescription: variant.shortDescription || product.shortDescription || product.description || "",
+    image: externalUrl(asset.fileUrl || asset.url || ""),
+    retailPrice: variant.priceOverride ?? product.retailPrice ?? product.price ?? null,
+    salePrice: variant.salePrice ?? product.salePrice ?? null,
+    wholesalePrice: variant.wholesalePrice ?? product.wholesalePrice ?? null,
     href: `/shop/${encodeURIComponent(product.slug || productId)}?variant=${encodeURIComponent(productVariantId)}`,
   };
 }
@@ -3953,12 +3962,55 @@ function adminLinkedVariantList(title, entries = [], bundle = false) {
     const detail = adminLinkedProductVariant(entry, bundle);
     const quantity = bundle && detail.quantity > 1 ? `${detail.quantity} × ` : "";
     const label = `${quantity}${detail.productName} — ${detail.variantName}`;
-    return `<li><a href="${escapeHTML(detail.href)}" target="_blank" rel="noopener"
-        class="font-semibold text-[#9edbd7] hover:underline">${escapeHTML(label)}</a>` +
+    const linkedControl = bundle
+      ? `<button type="button" class="open-admin-linked-variant-bubble font-semibold text-[#9edbd7] hover:underline"
+          data-product-id="${escapeHTML(detail.productId)}"
+          data-product-variant-id="${escapeHTML(detail.productVariantId)}">${escapeHTML(label)}</button>`
+      : `<a href="${escapeHTML(detail.href)}" target="_blank" rel="noopener"
+          class="font-semibold text-[#9edbd7] hover:underline">${escapeHTML(label)}</a>`;
+    return `<li>${linkedControl}` +
       `${detail.shortDescription ? ` — ${escapeHTML(detail.shortDescription)}` : ""}</li>`;
   }).join("")}
     </ul>
   </section>`;
+}
+
+function showAdminLinkedVariantBubble(trigger) {
+  document.querySelectorAll(".admin-linked-variant-bubble").forEach((bubble) => bubble.remove());
+  const detail = adminLinkedProductVariant({
+    componentProductId: trigger.dataset.productId,
+    componentProductVariantId: trigger.dataset.productVariantId,
+  }, true);
+  const bubble = document.createElement("div");
+  bubble.className = `admin-linked-variant-bubble fixed left-1/2 top-1/2 z-[80] w-[min(22rem,calc(100vw-2rem))]
+    -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[#407471] bg-gray-800 p-4 shadow-2xl`;
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-gray-950 text-xl text-white";
+  close.setAttribute("aria-label", "Close bundled Product preview");
+  close.textContent = "×";
+  close.addEventListener("click", () => bubble.remove());
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = "block w-full text-left";
+  card.addEventListener("click", () => window.open(detail.href, "_blank", "noopener"));
+  const image = detail.image
+    ? `<img src="${escapeHTML(detail.image)}" alt="${escapeHTML(`${detail.productName} — ${detail.variantName}`)}" class="h-40 w-full rounded object-cover">`
+    : `<div class="flex h-40 w-full items-center justify-center rounded bg-gray-950 text-xs text-gray-400">No image selected</div>`;
+  const hasSale = detail.salePrice !== null && detail.salePrice !== undefined;
+  const price = hasSale
+    ? `<span class="mr-2 text-gray-500 line-through">$${Number(detail.retailPrice || 0).toFixed(2)}</span><span class="font-bold text-green-400">$${Number(detail.salePrice).toFixed(2)}</span>`
+    : `<span class="font-bold text-green-400">$${Number(detail.retailPrice || 0).toFixed(2)}</span>`;
+  const affiliate = detail.wholesalePrice !== null && detail.wholesalePrice !== undefined
+    ? `<p class="mt-1 text-sm font-semibold text-[#9edbd7]">Affiliate $${Number(detail.wholesalePrice).toFixed(2)}</p>`
+    : "";
+  card.innerHTML = `${image}<h4 class="mt-3 pr-7 text-lg font-semibold text-white">${escapeHTML(
+    `${detail.productName} — ${detail.variantName}`,
+  )}</h4><div class="mt-1">${price}${affiliate}</div>` +
+    `${detail.shortDescription ? `<p class="mt-2 text-sm text-gray-300">${escapeHTML(detail.shortDescription)}</p>` : ""}`;
+  bubble.append(close, card);
+  document.body.appendChild(bubble);
+  close.focus();
 }
 
 function adminPromotionVideoPreview(productVariant) {
@@ -6878,6 +6930,11 @@ export async function setupContentBuilder() {
     renderMarketplaceTileControls,
   );
   document.getElementById("contentProductVariantRows")?.addEventListener("click", (event) => {
+    const linkedVariantPreview = event.target.closest(".open-admin-linked-variant-bubble");
+    if (linkedVariantPreview) {
+      showAdminLinkedVariantBubble(linkedVariantPreview);
+      return;
+    }
     const createPromotionAsset = event.target.closest(".create-product-variant-promotion-asset");
     if (createPromotionAsset) {
       openContentAssetDrawer(createPromotionAsset);

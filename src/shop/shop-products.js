@@ -116,7 +116,69 @@ function productVariantHref(productSlug, productId, productVariantId) {
   return `/shop/${encodeURIComponent(productKey)}${query}`;
 }
 
-function marketplaceLinkedVariantList(title, entries = []) {
+function showMarketplaceVariantBubble(entry) {
+  document.querySelectorAll(".marketplace-variant-bubble").forEach((bubble) => bubble.remove());
+  const href = productVariantHref(
+    entry.productSlug,
+    entry.productId || entry.componentProductId,
+    entry.productVariantId || entry.componentProductVariantId,
+  );
+  const productName = entry.productName || entry.name || entry.productId || entry.componentProductId;
+  const variantName = entry.productVariantName || entry.name ||
+    entry.productVariantId || entry.componentProductVariantId;
+  const bubble = document.createElement("div");
+  bubble.className = `marketplace-variant-bubble fixed left-1/2 top-1/2 z-[70] w-[min(22rem,calc(100vw-2rem))]
+    -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[#407471] bg-gray-800 p-4 shadow-2xl`;
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-gray-950 text-xl text-white";
+  close.setAttribute("aria-label", "Close bundled Product preview");
+  close.textContent = "×";
+  close.addEventListener("click", (event) => {
+    event.stopPropagation();
+    bubble.remove();
+  });
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = "block w-full text-left";
+  card.addEventListener("click", () => {
+    window.location.href = href;
+  });
+  const image = document.createElement("img");
+  image.src = entry.image || PRODUCT_PLACEHOLDER;
+  image.alt = `${productName} — ${variantName}`;
+  image.className = "h-40 w-full rounded object-cover";
+  protectDisplayedMedia(image);
+  const title = document.createElement("h4");
+  title.className = "mt-3 pr-7 text-lg font-semibold text-white";
+  title.textContent = `${productName} — ${variantName}`;
+  const price = document.createElement("div");
+  price.className = "mt-1";
+  const retailPrice = Number(entry.retailPrice);
+  const salePrice = Number(entry.salePrice);
+  const hasSale = entry.salePrice !== null && entry.salePrice !== undefined && Number.isFinite(salePrice);
+  price.innerHTML = hasSale
+    ? `<span class="mr-2 text-gray-500 line-through">${asMoney(retailPrice)}</span>` +
+      `<span class="font-bold text-green-400">${asMoney(salePrice)}</span>`
+    : `<span class="font-bold text-green-400">${asMoney(retailPrice)}</span>`;
+  const wholesalePrice = Number(entry.wholesalePrice);
+  if (Number.isFinite(wholesalePrice) && wholesalePrice > 0) {
+    const affiliate = document.createElement("p");
+    affiliate.className = "mt-1 text-sm font-semibold text-[#9edbd7]";
+    affiliate.textContent = `Affiliate ${asMoney(wholesalePrice)}`;
+    price.appendChild(affiliate);
+  }
+  const description = document.createElement("p");
+  description.className = "mt-2 text-sm text-gray-300";
+  description.textContent = entry.shortDescription || "";
+  card.append(image, title, price);
+  if (description.textContent) card.appendChild(description);
+  bubble.append(close, card);
+  document.body.appendChild(bubble);
+  close.focus();
+}
+
+function marketplaceLinkedVariantList(title, entries = [], usePreviewBubble = false) {
   const section = document.createElement("section");
   section.className = "mb-4 hidden";
   if (!entries.length) return section;
@@ -128,13 +190,18 @@ function marketplaceLinkedVariantList(title, entries = []) {
   list.className = "list-disc space-y-2 pl-5 text-sm text-gray-300";
   entries.forEach((entry) => {
     const item = document.createElement("li");
-    const link = document.createElement("a");
+    const link = document.createElement(usePreviewBubble ? "button" : "a");
+    if (usePreviewBubble) link.type = "button";
     link.className = "font-semibold text-[#9edbd7] hover:underline";
-    link.href = productVariantHref(
-      entry.productSlug,
-      entry.productId || entry.componentProductId,
-      entry.productVariantId || entry.componentProductVariantId,
-    );
+    if (usePreviewBubble) {
+      link.addEventListener("click", () => showMarketplaceVariantBubble(entry));
+    } else {
+      link.href = productVariantHref(
+        entry.productSlug,
+        entry.productId || entry.componentProductId,
+        entry.productVariantId || entry.componentProductVariantId,
+      );
+    }
     const quantity = Number(entry.quantity || 1);
     const productName = entry.productName || entry.name || entry.productId || entry.componentProductId;
     const variantName = entry.productVariantName || entry.name ||
@@ -698,7 +765,7 @@ export function showProductDetail(product, options = {}) {
   let prerequisiteDetails = document.createElement("section");
   function updateIncludedDetails() {
     const bundleEntries = selectedVariant?.bundleProductVariants || [];
-    const replacementBundle = marketplaceLinkedVariantList("Bundle includes", bundleEntries);
+    const replacementBundle = marketplaceLinkedVariantList("Bundle includes", bundleEntries, true);
     bundleContents.replaceWith(replacementBundle);
     bundleContents = replacementBundle;
 
