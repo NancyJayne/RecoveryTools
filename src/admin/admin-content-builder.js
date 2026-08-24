@@ -12,6 +12,7 @@ const upsertAdminAsset = httpsCallable(functions, "upsertAdminAsset");
 let assetDrawerField = null;
 let assetDrawerFile = null;
 let resumeAssetSaveAfterFileSelection = false;
+let adminLinkedVariantBubbleCloseTimer = null;
 
 let state = {
   options: {
@@ -3975,25 +3976,35 @@ function adminLinkedVariantList(title, entries = [], bundle = false) {
   </section>`;
 }
 
-function showAdminLinkedVariantBubble(trigger) {
+function closeAdminLinkedVariantBubbleSoon() {
+  clearTimeout(adminLinkedVariantBubbleCloseTimer);
+  adminLinkedVariantBubbleCloseTimer = setTimeout(() => {
+    const bubble = document.querySelector(".admin-linked-variant-bubble");
+    if (bubble?.dataset.pinned !== "true") bubble?.remove();
+  }, 180);
+}
+
+function showAdminLinkedVariantBubble(trigger, pinned = false) {
+  clearTimeout(adminLinkedVariantBubbleCloseTimer);
   document.querySelectorAll(".admin-linked-variant-bubble").forEach((bubble) => bubble.remove());
   const detail = adminLinkedProductVariant({
     componentProductId: trigger.dataset.productId,
     componentProductVariantId: trigger.dataset.productVariantId,
   }, true);
   const bubble = document.createElement("div");
-  bubble.className = `admin-linked-variant-bubble fixed left-1/2 top-1/2 z-[80] w-[min(22rem,calc(100vw-2rem))]
+  bubble.className = `admin-linked-variant-bubble fixed left-1/2 top-1/2 z-[140] w-[min(22rem,calc(100vw-2rem))]
     -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[#407471] bg-gray-800 p-4 shadow-2xl`;
+  bubble.dataset.pinned = pinned ? "true" : "false";
+  bubble.addEventListener("mouseenter", () => clearTimeout(adminLinkedVariantBubbleCloseTimer));
+  bubble.addEventListener("mouseleave", closeAdminLinkedVariantBubbleSoon);
   const close = document.createElement("button");
   close.type = "button";
   close.className = "absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-gray-950 text-xl text-white";
   close.setAttribute("aria-label", "Close bundled Product preview");
   close.textContent = "×";
   close.addEventListener("click", () => bubble.remove());
-  const card = document.createElement("button");
-  card.type = "button";
+  const card = document.createElement("div");
   card.className = "block w-full text-left";
-  card.addEventListener("click", () => window.open(detail.href, "_blank", "noopener"));
   const image = detail.image
     ? `<img src="${escapeHTML(detail.image)}" alt="${escapeHTML(`${detail.productName} — ${detail.variantName}`)}" class="h-40 w-full rounded object-cover">`
     : `<div class="flex h-40 w-full items-center justify-center rounded bg-gray-950 text-xs text-gray-400">No image selected</div>`;
@@ -4007,10 +4018,12 @@ function showAdminLinkedVariantBubble(trigger) {
   card.innerHTML = `${image}<h4 class="mt-3 pr-7 text-lg font-semibold text-white">${escapeHTML(
     `${detail.productName} — ${detail.variantName}`,
   )}</h4><div class="mt-1">${price}${affiliate}</div>` +
-    `${detail.shortDescription ? `<p class="mt-2 text-sm text-gray-300">${escapeHTML(detail.shortDescription)}</p>` : ""}`;
+    `${detail.shortDescription ? `<p class="mt-2 text-sm text-gray-300">${escapeHTML(detail.shortDescription)}</p>` : ""}` +
+    `<a href="${escapeHTML(detail.href)}" target="_blank" rel="noopener"
+      class="mt-4 inline-flex rounded bg-[#407471] px-4 py-2 text-sm font-semibold text-white hover:bg-[#315e5b]">More detail</a>`;
   bubble.append(close, card);
   document.body.appendChild(bubble);
-  close.focus();
+  if (pinned) close.focus();
 }
 
 function adminPromotionVideoPreview(productVariant) {
@@ -6929,10 +6942,18 @@ export async function setupContentBuilder() {
     "input",
     renderMarketplaceTileControls,
   );
+  document.getElementById("contentProductVariantRows")?.addEventListener("mouseover", (event) => {
+    const trigger = event.target.closest(".open-admin-linked-variant-bubble");
+    if (trigger && !trigger.contains(event.relatedTarget)) showAdminLinkedVariantBubble(trigger);
+  });
+  document.getElementById("contentProductVariantRows")?.addEventListener("mouseout", (event) => {
+    const trigger = event.target.closest(".open-admin-linked-variant-bubble");
+    if (trigger && !trigger.contains(event.relatedTarget)) closeAdminLinkedVariantBubbleSoon();
+  });
   document.getElementById("contentProductVariantRows")?.addEventListener("click", (event) => {
     const linkedVariantPreview = event.target.closest(".open-admin-linked-variant-bubble");
     if (linkedVariantPreview) {
-      showAdminLinkedVariantBubble(linkedVariantPreview);
+      showAdminLinkedVariantBubble(linkedVariantPreview, true);
       return;
     }
     const createPromotionAsset = event.target.closest(".create-product-variant-promotion-asset");

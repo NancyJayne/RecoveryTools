@@ -13,6 +13,7 @@ import { showToast, showTabContent } from "../utils/utils.js";
 const PRODUCT_PLACEHOLDER = "/images/product-placeholder.png";
 let allMarketplaceProducts = [];
 let activeMarketplaceFilter = "all";
+let marketplaceVariantBubbleCloseTimer = null;
 
 function asMoney(value) {
   const amount = Number(value ?? 0);
@@ -116,7 +117,16 @@ function productVariantHref(productSlug, productId, productVariantId) {
   return `/shop/${encodeURIComponent(productKey)}${query}`;
 }
 
-function showMarketplaceVariantBubble(entry) {
+function closeMarketplaceVariantBubbleSoon() {
+  clearTimeout(marketplaceVariantBubbleCloseTimer);
+  marketplaceVariantBubbleCloseTimer = setTimeout(() => {
+    const bubble = document.querySelector(".marketplace-variant-bubble");
+    if (bubble?.dataset.pinned !== "true") bubble?.remove();
+  }, 180);
+}
+
+function showMarketplaceVariantBubble(entry, pinned = false) {
+  clearTimeout(marketplaceVariantBubbleCloseTimer);
   document.querySelectorAll(".marketplace-variant-bubble").forEach((bubble) => bubble.remove());
   const href = productVariantHref(
     entry.productSlug,
@@ -129,6 +139,9 @@ function showMarketplaceVariantBubble(entry) {
   const bubble = document.createElement("div");
   bubble.className = `marketplace-variant-bubble fixed left-1/2 top-1/2 z-[70] w-[min(22rem,calc(100vw-2rem))]
     -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[#407471] bg-gray-800 p-4 shadow-2xl`;
+  bubble.dataset.pinned = pinned ? "true" : "false";
+  bubble.addEventListener("mouseenter", () => clearTimeout(marketplaceVariantBubbleCloseTimer));
+  bubble.addEventListener("mouseleave", closeMarketplaceVariantBubbleSoon);
   const close = document.createElement("button");
   close.type = "button";
   close.className = "absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-gray-950 text-xl text-white";
@@ -138,12 +151,8 @@ function showMarketplaceVariantBubble(entry) {
     event.stopPropagation();
     bubble.remove();
   });
-  const card = document.createElement("button");
-  card.type = "button";
+  const card = document.createElement("div");
   card.className = "block w-full text-left";
-  card.addEventListener("click", () => {
-    window.location.href = href;
-  });
   const image = document.createElement("img");
   image.src = entry.image || PRODUCT_PLACEHOLDER;
   image.alt = `${productName} — ${variantName}`;
@@ -173,9 +182,14 @@ function showMarketplaceVariantBubble(entry) {
   description.textContent = entry.shortDescription || "";
   card.append(image, title, price);
   if (description.textContent) card.appendChild(description);
+  const moreDetail = document.createElement("a");
+  moreDetail.href = href;
+  moreDetail.className = "mt-4 inline-flex rounded bg-[#407471] px-4 py-2 text-sm font-semibold text-white hover:bg-[#315e5b]";
+  moreDetail.textContent = "More detail";
+  card.appendChild(moreDetail);
   bubble.append(close, card);
   document.body.appendChild(bubble);
-  close.focus();
+  if (pinned) close.focus();
 }
 
 function marketplaceLinkedVariantList(title, entries = [], usePreviewBubble = false) {
@@ -194,7 +208,9 @@ function marketplaceLinkedVariantList(title, entries = [], usePreviewBubble = fa
     if (usePreviewBubble) link.type = "button";
     link.className = "font-semibold text-[#9edbd7] hover:underline";
     if (usePreviewBubble) {
-      link.addEventListener("click", () => showMarketplaceVariantBubble(entry));
+      link.addEventListener("mouseenter", () => showMarketplaceVariantBubble(entry));
+      link.addEventListener("mouseleave", closeMarketplaceVariantBubbleSoon);
+      link.addEventListener("click", () => showMarketplaceVariantBubble(entry, true));
     } else {
       link.href = productVariantHref(
         entry.productSlug,
