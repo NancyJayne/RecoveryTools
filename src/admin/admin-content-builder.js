@@ -1614,7 +1614,6 @@ function renderSelectedProductVariantRows(
                 </label>`).join("")}
               <button type="button" data-save-variant-editor class="rounded bg-[#407471] px-4 py-2 text-sm font-semibold text-white hover:bg-[#305a56]">Save variant</button>
             </div>
-            <button type="button" class="remove-content-product-variant mt-3 rounded border border-red-700 px-3 py-2 text-sm text-red-200">Remove variant from sale</button>
           </div>
         </div>
       </div>`;
@@ -3725,8 +3724,12 @@ function marketplaceTilePreviewMarkup() {
       class="${marketplacePreviewAttention(!productName, "mt-2 block w-full rounded text-left text-lg font-semibold text-white hover:text-[#9edbd7]")}">${escapeHTML(productName || "Set Product name")}</button>
     <button type="button" data-product-editor-target="contentProductTileDescriptionSource"
       class="${marketplacePreviewAttention(!description, "mt-1 block w-full rounded text-left text-sm text-gray-300 hover:text-white")}">${escapeHTML(description || "Set short description")}</button>
-    <button type="button" data-product-editor-target="contentProductPrice"
-      class="${marketplacePreviewAttention(price === null && salePrice === null, "mt-1 block rounded font-semibold text-green-300 hover:text-green-200")}">${salePrice !== null && price !== null ? `<span class="mr-2 text-gray-500 line-through">$${Number(price).toFixed(2)}</span><span class="font-bold text-green-400">$${Number(salePrice).toFixed(2)}</span>` : price !== null ? `$${Number(price).toFixed(2)}` : "Set price"}</button>
+    <div class="mt-1 flex items-center justify-between gap-3">
+      <button type="button" data-product-editor-target="contentProductPrice"
+        class="${marketplacePreviewAttention(price === null && salePrice === null, "rounded font-semibold text-green-300 hover:text-green-200")}">${salePrice !== null && price !== null ? `<span class="mr-2 text-gray-500 line-through">$${Number(price).toFixed(2)}</span><span class="font-bold text-green-400">$${Number(salePrice).toFixed(2)}</span>` : price !== null ? `$${Number(price).toFixed(2)}` : "Set price"}</button>
+      <button type="button" data-product-editor-target="contentProductWholesalePrice"
+        class="${marketplacePreviewAttention(wholesalePrice === null, "rounded text-right text-sm font-semibold text-[#9edbd7] hover:text-white")}">Affiliate ${wholesalePrice !== null ? `$${Number(wholesalePrice).toFixed(2)}` : "not set"}</button>
+    </div>
     <div class="mt-4 border-t border-gray-700 pt-3">
       <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Product setup</p>
       <div class="flex flex-wrap gap-2 text-xs">
@@ -6936,42 +6939,6 @@ export async function setupContentBuilder() {
       state.isDirty = true;
       return;
     }
-    const statusAction = event.target.closest(".product-variant-status-action");
-    if (statusAction) {
-      const row = statusAction.closest(".content-product-variant-row");
-      const status = row?.querySelector(".product-variant-status");
-      const nextStatus = statusAction.dataset.productVariantAction || "draft";
-      const sessionName = row?.querySelector(".product-variant-name")?.value || "this session";
-      if (["paused", "archived"].includes(nextStatus) &&
-          !window.confirm(`Are you sure you want to ${nextStatus === "paused" ? "hide or cancel" : "archive"} ${sessionName}?`)) {
-        return;
-      }
-      if (status) status.value = nextStatus;
-      if (row) row.dataset.pendingStatus = nextStatus;
-      const badge = row?.querySelector(".product-variant-status-badge");
-      if (badge) badge.textContent = nextStatus;
-      syncSelectedProductVariantRows();
-      updateMarketplacePreviewRow(statusAction);
-      state.isDirty = true;
-      showToast(`${sessionName} marked ${nextStatus}. Save product details when you finish editing.`, "success");
-      return;
-    }
-    const remove = event.target.closest(".remove-content-product-variant");
-    if (!remove) return;
-    const row = remove.closest(".content-product-variant-row");
-    const sessionName = row?.querySelector(".product-variant-name")?.value || "this workshop session";
-    if (!window.confirm(
-      `Are you sure you want to remove ${sessionName}? It will be archived so existing orders and tickets remain intact.`,
-    )) return;
-    const status = row?.querySelector(".product-variant-status");
-    if (status) status.value = "archived";
-    if (row) row.dataset.pendingStatus = "archived";
-    const badge = row?.querySelector(".product-variant-status-badge");
-    if (badge) badge.textContent = "archived";
-    syncSelectedProductVariantRows();
-    updateMarketplacePreviewRow(remove);
-    state.isDirty = true;
-    showToast(`${sessionName} will be removed from sale when you save product details.`, "success");
   });
   document.getElementById("contentProductVariantRows")?.addEventListener("input", (event) => {
     syncSelectedProductVariantRows();

@@ -513,17 +513,20 @@ export function createProductTile(product) {
   shortDesc.textContent = getMarketplaceTileShortDescription(product);
   shortDesc.className = "text-sm text-gray-300 mt-1";
 
-  const price = document.createElement("p");
-  price.innerHTML =
-  product.onSale && product.salePrice
-    ? `<span class="line-through text-gray-500 mr-2">
-         ${asMoney(product.retailPrice)}
-       </span><span class="text-green-400 font-bold">
-         ${asMoney(finalPrice)}
-       </span>`
-    : asMoney(finalPrice);
-
-  price.className = "mt-1";
+  const price = document.createElement("div");
+  price.className = "mt-1 flex items-center justify-between gap-3";
+  const retailPrice = document.createElement("p");
+  retailPrice.innerHTML = product.retailOnSale && product.salePrice !== null
+    ? `<span class="mr-2 line-through text-gray-500">${asMoney(product.retailPrice)}</span>` +
+      `<span class="font-bold text-green-400">${asMoney(product.salePrice)}</span>`
+    : `<span class="font-semibold text-green-300">${asMoney(product.retailPrice)}</span>`;
+  price.appendChild(retailPrice);
+  if (Number(product.wholesalePrice) > 0) {
+    const affiliatePrice = document.createElement("p");
+    affiliatePrice.className = "text-right text-sm font-semibold text-[#9edbd7]";
+    affiliatePrice.textContent = `Affiliate ${asMoney(product.wholesalePrice)}`;
+    price.appendChild(affiliatePrice);
+  }
 
   wrapper.appendChild(image);
   wrapper.appendChild(name);
@@ -562,7 +565,6 @@ export function createProductTile(product) {
 
 export function showProductDetail(product, options = {}) {
   const detail = document.getElementById("productDetailContainer");
-  if (detail.dataset.currentId === product.id) return;
   if (detail.dataset.mediaProtectionBound !== "true") {
     detail.dataset.mediaProtectionBound = "true";
     detail.addEventListener("contextmenu", (event) => {

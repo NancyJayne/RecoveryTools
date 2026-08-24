@@ -366,6 +366,7 @@ function normalizeProduct(
       retailPriceOverride: variantRetailPrice,
       priceOverride: variantWholesalePrice ?? (variantOnSale ? Number(variant.salePrice) : variantRetailPrice),
       onSale: !variantWholesalePrice && variantOnSale,
+      retailOnSale: variantOnSale,
       wholesalePrice: variantWholesalePrice,
       pricingTier: variantWholesalePrice ? "affiliate-wholesale" : "retail",
       wholesaleMinQuantity: Math.max(Number(
@@ -414,7 +415,8 @@ function normalizeProduct(
       (variant.variantId || variant.id) === data.marketplaceTileDescriptionVariantId)
     : null;
   const marketplaceTileImage = tileImageVariant?.images?.[0] ||
-    tileImageVariant?.media?.find((asset) => normalizeStatus(asset.type) === "image")?.url || image;
+    tileImageVariant?.media?.find((asset) => normalizeStatus(asset.type) === "image")?.url ||
+    normalizedVariants.find((variant) => variant.images?.[0])?.images?.[0] || image;
   const marketplaceTileShortDescription = tileDescriptionVariant?.shortDescription || shortDescription;
   const displayType = productDisplayType(data, linkedContent?.type || "tool");
   const isCourse = normalizeStatus(displayType).includes("course") ||
@@ -435,6 +437,7 @@ function normalizeProduct(
     saleStartsAt,
     saleEndsAt,
     onSale: !wholesalePrice && onSale,
+    retailOnSale: onSale,
     wholesalePrice,
     wholesaleMinQuantity: Math.max(Number(
       data.wholesaleMinQuantity || activePrice?.wholesaleMinQuantity || 1,
