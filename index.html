@@ -1850,7 +1850,15 @@
                     <div class="mt-4 flex justify-end">
                       <button id="addContentProductVariantBtn" type="button" class="rounded border border-[#407471] px-3 py-2 text-sm text-[#9edbd7]">Add Product variant</button>
                     </div>
-                    <div id="contentVariantOwnedConnections" class="mt-4 space-y-4"></div>
+                    <div id="contentVariantOwnedConnections" class="mt-4 hidden space-y-4 rounded border border-[#407471] bg-gray-950/40 p-3">
+                      <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h5 class="font-semibold text-white">Selected variant connections</h5>
+                          <p id="contentVariantOwnedConnectionsSummary" class="mt-1 text-xs text-gray-400">Select Blueprints or Unlocks from a variant preview.</p>
+                        </div>
+                        <button type="button" id="closeVariantOwnedConnectionsBtn" class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Done</button>
+                      </div>
+                    </div>
                   </div>
                 </section>
                 <details class="mt-4 overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80 shadow-md">
@@ -1983,10 +1991,25 @@
                   </div>
                 </div>
                 <div class="mt-5 flex flex-wrap items-center justify-end gap-4">
-                  <label class="inline-flex items-center gap-2 rounded border border-gray-700 px-3 py-2">
-                    <input id="contentProductArchived" type="checkbox" class="accent-[#407471]">
-                    Archived
-                  </label>
+                  <fieldset class="flex flex-wrap items-center gap-2">
+                    <legend class="sr-only">Product status</legend>
+                    <label class="inline-flex items-center gap-2 rounded border border-gray-700 px-3 py-2">
+                      <input type="checkbox" class="content-product-status-checkbox accent-[#407471]" data-content-product-status="draft">
+                      Draft
+                    </label>
+                    <label class="inline-flex items-center gap-2 rounded border border-gray-700 px-3 py-2">
+                      <input type="checkbox" class="content-product-status-checkbox accent-[#407471]" data-content-product-status="active">
+                      Active
+                    </label>
+                    <label class="inline-flex items-center gap-2 rounded border border-gray-700 px-3 py-2">
+                      <input type="checkbox" class="content-product-status-checkbox accent-[#407471]" data-content-product-status="paused">
+                      Paused / hidden
+                    </label>
+                    <label class="inline-flex items-center gap-2 rounded border border-gray-700 px-3 py-2">
+                      <input id="contentProductArchived" type="checkbox" class="content-product-status-checkbox accent-[#407471]" data-content-product-status="archived">
+                      Archived
+                    </label>
+                  </fieldset>
                   <button id="applyContentProductBtn" type="button" class="rounded bg-[#407471] px-4 py-2 text-white hover:bg-[#305a56]">Save product details</button>
                 </div>
                 </div>
