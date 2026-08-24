@@ -1400,6 +1400,13 @@ function renderSelectedProductVariantRows(
           ${marketplaceVariantCardPreview(productVariant, entityVariant, index === 0, true)}
         </div>
         <div class="product-variant-editor-panel hidden grid gap-3 border-t border-gray-700 bg-gray-950/30 p-4 md:grid-cols-2 xl:grid-cols-4">
+          <div class="variant-editor-heading flex flex-wrap items-start justify-between gap-3 rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
+            <div>
+              <h5 class="variant-editor-heading-title font-semibold text-white">Product variant details</h5>
+              <p class="mt-1 text-xs text-gray-400">Edit this section, then select Done to return to the variant detail preview.</p>
+            </div>
+            <button type="button" data-close-variant-section class="rounded border border-[#407471] px-3 py-1 text-[#9edbd7]">Done</button>
+          </div>
           <section data-variant-editor-section="image" class="rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Marketplace image</h5>
             <label class="mt-3 block text-sm">Hero image Asset
@@ -3759,7 +3766,20 @@ function hydrateMarketplaceTileControls(record = {}) {
 function focusProductEditorTarget(targetId) {
   const target = document.getElementById(targetId);
   if (!target) return;
-  if (targetId === "contentName") closeContentProductDrawer();
+  const contextPanel = document.querySelector(
+    `[data-product-context-panel="${CSS.escape(targetId)}"]`,
+  );
+  if (targetId === "contentName") {
+    setInputValue("contentProductPreviewName", target.value);
+    setInputValue(
+      "contentProductPreviewShortDescription",
+      document.getElementById("contentShortDescription")?.value || "",
+    );
+    setInputValue(
+      "contentProductPreviewLongDescription",
+      document.getElementById("contentLongDescription")?.value || "",
+    );
+  }
   document.querySelectorAll("[data-product-context-panel]").forEach((panel) => {
     panel.classList.toggle("hidden", panel.dataset.productContextPanel !== targetId);
   });
@@ -3771,8 +3791,9 @@ function focusProductEditorTarget(targetId) {
     });
     section.open = true;
   }
-  target.scrollIntoView({ behavior: "smooth", block: "center" });
-  target.focus({ preventScroll: true });
+  const focusTarget = contextPanel?.querySelector("input, textarea, select, button") || target;
+  (contextPanel || target).scrollIntoView({ behavior: "smooth", block: "center" });
+  focusTarget.focus({ preventScroll: true });
 }
 
 function returnToProductTilePreview() {
@@ -6493,7 +6514,26 @@ export async function setupContentBuilder() {
       returnToProductTilePreview();
     });
   });
+  [
+    ["contentProductPreviewName", "contentName"],
+    ["contentProductPreviewShortDescription", "contentShortDescription"],
+    ["contentProductPreviewLongDescription", "contentLongDescription"],
+  ].forEach(([sourceId, targetId]) => {
+    document.getElementById(sourceId)?.addEventListener("input", (event) => {
+      setInputValue(targetId, event.target.value);
+      if (targetId === "contentName") renderSimilarList();
+      refreshMarketplacePreviews();
+      renderMarketplaceTileControls();
+      state.isDirty = true;
+    });
+  });
   document.getElementById("contentProductDrawer")?.addEventListener("click", (event) => {
+    const closeContext = event.target.closest("[data-close-product-context]");
+    if (closeContext) {
+      closeContext.closest("[data-product-context-panel]")?.classList.add("hidden");
+      returnToProductTilePreview();
+      return;
+    }
     const closeButton = event.target.closest("[data-close-product-editor]");
     if (!closeButton) return;
     const section = closeButton.closest("details");
@@ -6552,6 +6592,18 @@ export async function setupContentBuilder() {
       panel?.classList.add("hidden");
       if (panel) panel.dataset.editorSection = "";
       returnToVariantPreview(row);
+      return;
+    }
+    const closeSection = event.target.closest("[data-close-variant-section]");
+    if (closeSection) {
+      const row = closeSection.closest(".content-product-variant-row");
+      const panel = closeSection.closest(".product-variant-editor-panel");
+      syncSelectedProductVariantRows();
+      updateMarketplacePreviewRow(closeSection);
+      panel?.classList.add("hidden");
+      if (panel) panel.dataset.editorSection = "";
+      returnToVariantPreview(row);
+      state.isDirty = true;
       return;
     }
     const statusCheckbox = event.target.closest(".product-variant-status-checkbox");
@@ -6649,7 +6701,26 @@ export async function setupContentBuilder() {
         panel.dataset.editorSection === section;
       panel.classList.toggle("hidden", closingCurrent);
       panel.dataset.editorSection = closingCurrent ? "" : section;
+      const sectionTitles = {
+        image: "Marketplace image",
+        identity: "Product variant details",
+        description: "Description overrides",
+        price: "Marketplace price",
+        fulfilment: "Product variant fulfilment",
+        visibility: "Marketplace visibility",
+        sale: "Price and sale",
+        promotion: "Promotion videos",
+        prerequisites: "Purchase prerequisites",
+        bundle: "Bundle inventory and tickets",
+        lifecycle: "Variant status and save",
+      };
+      const heading = panel.querySelector(".variant-editor-heading-title");
+      if (heading) heading.textContent = sectionTitles[section] || "Product variant details";
       [...panel.children].forEach((child) => {
+        if (child.classList.contains("variant-editor-heading")) {
+          child.hidden = closingCurrent;
+          return;
+        }
         if (child.classList.contains("variant-editor-actions")) {
           child.hidden = closingCurrent;
           return;
