@@ -1599,7 +1599,7 @@ function renderSelectedProductVariantRows(
             </div>
             <div class="product-bundle-component-rows mt-3 space-y-2">${bundleComponentsMarkup(productVariant.bundleComponents || [])}</div>
           </div>
-          <div data-variant-editor-section="lifecycle" class="variant-editor-actions rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
+          <div data-variant-editor-section="visibility" class="variant-editor-actions rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Variant status and save</h5>
             <p class="mt-1 text-xs text-gray-400">Choose one status, then save this variant to return to its detail preview.</p>
             <select class="product-variant-status hidden" aria-hidden="true" tabindex="-1">
@@ -3435,6 +3435,8 @@ function orderProductDrawerSections() {
   if (variantConnections && unlocks && unlocks.parentElement !== variantConnections) {
     variantConnections.appendChild(unlocks);
   }
+  const connectionFooter = document.getElementById("contentVariantOwnedConnectionsFooter");
+  if (variantConnections && connectionFooter) variantConnections.appendChild(connectionFooter);
   const drawerBody = document.querySelector("#contentProductDrawer > div");
   [...(drawerBody?.children || [])].filter((child) => child.tagName === "DETAILS")
     .forEach((details) => details.setAttribute("name", "product-editor-section"));
@@ -3978,7 +3980,7 @@ function marketplaceVariantCardPreview(
       <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Variant setup</p>
       <div class="flex flex-wrap gap-2">
       ${isPrimary ? `<button type="button" data-variant-editor="identity" class="rounded bg-gray-950 px-2 py-1 text-xs font-medium text-[#9edbd7] hover:text-white">Primary</button>` : ""}
-      <button type="button" data-variant-editor="lifecycle" class="rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white">Status: ${escapeHTML(statusLabel)}</button>
+      <button type="button" data-variant-editor="visibility" class="rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white">Status: ${escapeHTML(statusLabel)}</button>
       <span class="rounded bg-gray-950 px-2 py-1 text-xs text-gray-300">Type: ${escapeHTML(productType)}</span>
       <button type="button" data-variant-editor="fulfilment" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">${escapeHTML(fulfilmentMissing ? "Set fulfilment" : fulfilmentSummary)}</button>
       <button type="button" data-product-editor-target="contentProductCategoryId" class="${marketplacePreviewAttention(!category, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">${escapeHTML(categoryLabel || "Set category")}</button>
@@ -3987,12 +3989,11 @@ function marketplaceVariantCardPreview(
       <button type="button" data-variant-editor="description" class="${marketplacePreviewAttention(missingDescription, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Descriptions</button>
       <button type="button" data-variant-connection="blueprint" class="${marketplacePreviewAttention(blueprintMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Blueprints</button>
       <button type="button" data-variant-connection="unlock" class="${marketplacePreviewAttention(unlockMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Unlocks</button>
-      <button type="button" data-variant-editor="visibility" class="${marketplacePreviewAttention(visibilityMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Visibility</button>
+      <button type="button" data-variant-editor="visibility" class="${marketplacePreviewAttention(visibilityMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Visibility &amp; status</button>
       <button type="button" data-variant-editor="sale" class="${marketplacePreviewAttention(priceSaleMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Price &amp; sale</button>
       <button type="button" data-variant-editor="promotion" class="${marketplacePreviewAttention(promotionMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Promotion videos</button>
       <button type="button" data-variant-editor="prerequisites" class="${marketplacePreviewAttention(prerequisitesMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Prerequisites</button>
       <button type="button" data-variant-editor="bundle" class="${marketplacePreviewAttention(bundleMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Bundle</button>
-      <button type="button" data-variant-editor="lifecycle" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Status / archive / cancel</button>
       </div>
     </div>
   </div>`;
@@ -6854,12 +6855,11 @@ export async function setupContentBuilder() {
         description: "Description overrides",
         price: "Marketplace price",
         fulfilment: "Product variant fulfilment",
-        visibility: "Marketplace visibility",
+        visibility: "Visibility and status",
         sale: "Price and sale",
         promotion: "Promotion videos",
         prerequisites: "Purchase prerequisites",
         bundle: "Bundle inventory and tickets",
-        lifecycle: "Variant status and save",
       };
       const heading = panel.querySelector(".variant-editor-heading-title");
       if (heading) heading.textContent = sectionTitles[section] || "Product variant details";
@@ -6868,9 +6868,10 @@ export async function setupContentBuilder() {
         `[data-variant-editor-section="${CSS.escape(section)}"]`,
       );
       if (doneFooter) {
-        if (!closingCurrent && section !== "lifecycle" && activeSection) {
+        if (!closingCurrent && section !== "visibility" && activeSection) {
           activeSection.appendChild(doneFooter);
           doneFooter.hidden = false;
+          doneFooter.classList.remove("hidden");
         } else {
           panel.appendChild(doneFooter);
           doneFooter.hidden = true;
@@ -6879,14 +6880,18 @@ export async function setupContentBuilder() {
       [...panel.children].forEach((child) => {
         if (child.classList.contains("variant-editor-heading")) {
           child.hidden = closingCurrent;
+          child.classList.toggle("hidden", closingCurrent);
           return;
         }
         if (child.classList.contains("variant-editor-done-footer")) {
           child.hidden = true;
+          child.classList.add("hidden");
           return;
         }
-        child.hidden = !closingCurrent && section !== "admin" &&
+        const shouldHide = !closingCurrent && section !== "admin" &&
           child.dataset.variantEditorSection !== section;
+        child.hidden = shouldHide;
+        child.classList.toggle("hidden", shouldHide);
       });
       if (!closingCurrent) panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
       return;
