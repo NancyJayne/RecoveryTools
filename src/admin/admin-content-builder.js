@@ -1400,11 +1400,13 @@ function renderSelectedProductVariantRows(
           ${marketplaceVariantCardPreview(productVariant, entityVariant, index === 0, true)}
         </div>
         <div class="product-variant-editor-panel hidden grid gap-3 border-t border-gray-700 bg-gray-950/30 p-4 md:grid-cols-2 xl:grid-cols-4">
-          <div class="variant-editor-heading flex flex-wrap items-start justify-between gap-3 rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
+          <div class="variant-editor-heading rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
             <div>
               <h5 class="variant-editor-heading-title font-semibold text-white">Product variant details</h5>
               <p class="mt-1 text-xs text-gray-400">Edit this section, then select Done to return to the variant detail preview.</p>
             </div>
+          </div>
+          <div class="variant-editor-done-footer flex justify-end md:col-span-2 xl:col-span-4">
             <button type="button" data-close-variant-section class="rounded border border-[#407471] px-3 py-1 text-[#9edbd7]">Done</button>
           </div>
           <section data-variant-editor-section="image" class="rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
@@ -3731,7 +3733,7 @@ function marketplaceTilePreviewMarkup() {
         <button type="button" data-product-editor-target="contentProductCategoryId" class="${marketplacePreviewAttention(!category, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">Filter: ${escapeHTML(categoryLabel)}</button>
         <button type="button" data-product-editor-target="contentProductDeliveryType" class="${marketplacePreviewAttention(!deliveryType, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">Delivery: ${escapeHTML(deliveryType || "Set delivery")}</button>
         <button type="button" data-product-editor-target="contentProductHasPhysicalFulfilment" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-left text-gray-200 hover:text-white")}">Product fulfilment: ${escapeHTML(fulfilmentSelections.join(", ") || "Select")}</button>
-        <button type="button" data-product-editor-target="contentProductWholesalePrice" class="rounded bg-gray-950 px-2 py-1 text-[#9edbd7] hover:text-white">Affiliate ${wholesalePrice !== null ? `$${Number(wholesalePrice).toFixed(2)}` : "not set"}</button>
+        <button type="button" data-product-editor-target="contentProductWholesalePrice" class="${marketplacePreviewAttention(wholesalePrice === null, "rounded bg-gray-950 px-2 py-1 text-[#9edbd7] hover:text-white")}">Affiliate ${wholesalePrice !== null ? `$${Number(wholesalePrice).toFixed(2)}` : "not set"}</button>
       </div>
     </div>
   </div>`;
@@ -6808,13 +6810,26 @@ export async function setupContentBuilder() {
       };
       const heading = panel.querySelector(".variant-editor-heading-title");
       if (heading) heading.textContent = sectionTitles[section] || "Product variant details";
+      const doneFooter = panel.querySelector(".variant-editor-done-footer");
+      const activeSection = panel.querySelector(
+        `[data-variant-editor-section="${CSS.escape(section)}"]`,
+      );
+      if (doneFooter) {
+        if (!closingCurrent && section !== "lifecycle" && activeSection) {
+          activeSection.appendChild(doneFooter);
+          doneFooter.hidden = false;
+        } else {
+          panel.appendChild(doneFooter);
+          doneFooter.hidden = true;
+        }
+      }
       [...panel.children].forEach((child) => {
         if (child.classList.contains("variant-editor-heading")) {
           child.hidden = closingCurrent;
           return;
         }
-        if (child.classList.contains("variant-editor-actions")) {
-          child.hidden = closingCurrent;
+        if (child.classList.contains("variant-editor-done-footer")) {
+          child.hidden = true;
           return;
         }
         child.hidden = !closingCurrent && section !== "admin" &&
