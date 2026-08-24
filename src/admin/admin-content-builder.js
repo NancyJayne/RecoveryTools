@@ -3586,6 +3586,12 @@ function marketplaceTileSourceVariant(source = "") {
   return currentProductVariants().find((variant) => variant.variantId === variantId) || null;
 }
 
+function marketplacePreviewAttention(missing, extraClasses = "") {
+  return `${extraClasses} ${missing
+    ? "border border-purple-500 bg-purple-950/50 text-purple-100 ring-1 ring-purple-500/60"
+    : ""}`.trim();
+}
+
 function marketplaceTilePreviewMarkup() {
   const imageSource = document.getElementById("contentProductTileImageSource")?.value || "entity";
   const descriptionSource = document.getElementById("contentProductTileDescriptionSource")?.value || "entity";
@@ -3596,16 +3602,17 @@ function marketplaceTilePreviewMarkup() {
   const assetId = imageVariant?.primaryAssetId || entityAssetId;
   const asset = (state.records.assets || []).find((entry) => (entry.assetId || entry.id) === assetId);
   const imageUrl = externalUrl(asset?.fileUrl || asset?.url || "");
-  const productName = document.getElementById("contentName")?.value || "Product";
+  const productName = document.getElementById("contentName")?.value || "";
   const description = descriptionVariant?.shortDescription ||
-    document.getElementById("contentShortDescription")?.value || "Add a short description";
+    document.getElementById("contentShortDescription")?.value || "";
   const price = optionalNumberFromInput("contentProductPrice");
+  const salePrice = optionalNumberFromInput("contentProductSalePrice");
   const wholesalePrice = optionalNumberFromInput("contentProductWholesalePrice");
   const productTypeSelect = document.getElementById("contentProductDeliveryType");
-  const productType = productTypeSelect?.selectedOptions?.[0]?.textContent ||
-    productTypeSelect?.value || "Product";
+  const productType = productTypeSelect?.value || "";
   const categorySelect = document.getElementById("contentProductCategoryId");
-  const category = categorySelect?.selectedOptions?.[0]?.textContent || "No category";
+  const category = categorySelect?.value || "";
+  const categoryLabel = categorySelect?.selectedOptions?.[0]?.textContent || "Set category";
   const featured = document.getElementById("contentProductFeatured")?.checked === true;
   const archived = document.getElementById("contentProductArchived")?.checked === true;
   const fulfilmentLabels = [...new Set(currentProductVariants()
@@ -3615,29 +3622,35 @@ function marketplaceTilePreviewMarkup() {
     ? fulfilmentLabels.join(" / ").replaceAll("-", " ")
     : document.getElementById("contentProductHasPhysicalFulfilment")?.checked === true
       ? "Physical fulfilment enabled" : "No physical fulfilment";
-  return `<div class="relative mx-auto max-w-sm overflow-hidden rounded-lg bg-gray-800 p-4 shadow">
+  const fulfilmentMissing = !productType ||
+    ["Physical", "Hybrid"].includes(productType) && physicalFulfilment === "No physical fulfilment";
+  return `<div class="relative mx-auto max-w-sm rounded-lg bg-gray-800 p-4 shadow hover:ring-2 hover:ring-[#407471]">
     ${archived ? `<div class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/55">
       <button type="button" data-product-editor-target="contentProductArchived" class="pointer-events-auto -rotate-12 rounded border-4 border-red-400 px-5 py-2 text-2xl font-black uppercase tracking-widest text-red-300">Archived</button>
     </div>` : ""}
     <button type="button" data-product-editor-target="contentProductTileImageSource"
-      class="flex h-40 w-full items-center justify-center overflow-hidden rounded bg-gray-950 text-xs text-gray-400 ring-[#407471] hover:ring-2">
+      class="${marketplacePreviewAttention(!imageUrl, "flex h-48 w-full items-center justify-center overflow-hidden rounded bg-gray-950 text-xs text-gray-400 ring-[#407471] hover:ring-2")}">
       ${imageUrl
-    ? `<img src="${escapeHTML(imageUrl)}" alt="${escapeHTML(productName)}" class="h-full w-full object-cover">`
-    : "No image available from the selected source"}
+    ? `<img src="${escapeHTML(imageUrl)}" alt="${escapeHTML(productName || "Product")}" class="h-full w-full object-cover">`
+    : "Set Marketplace image"}
     </button>
-    <div class="mt-3 flex items-start justify-between gap-2">
-      <button type="button" data-product-editor-target="contentName" class="text-left font-semibold text-white hover:text-[#9edbd7]">${escapeHTML(productName)}</button>
-      <button type="button" data-product-editor-target="contentProductFeatured" class="text-yellow-300 hover:text-yellow-200" title="Edit featured status">${featured ? "★ Featured" : "☆ Not featured"}</button>
-    </div>
-    <button type="button" data-product-editor-target="contentProductTileDescriptionSource" class="mt-1 block w-full text-left text-sm text-gray-300 hover:text-white">${escapeHTML(description)}</button>
-    <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-      <button type="button" data-product-editor-target="contentProductPrice" class="font-semibold text-green-300 hover:text-green-200">${price !== null ? `$${Number(price).toFixed(2)}` : "Set price"}</button>
-      <button type="button" data-product-editor-target="contentProductWholesalePrice" class="text-[#9edbd7] hover:text-white">Affiliate ${wholesalePrice !== null ? `$${Number(wholesalePrice).toFixed(2)}` : "not set"}</button>
-    </div>
-    <div class="mt-3 flex flex-wrap gap-2 text-xs">
-      <button type="button" data-product-editor-target="contentProductDeliveryType" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">${escapeHTML(productType)}</button>
-      <button type="button" data-product-editor-target="contentProductCategoryId" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">${escapeHTML(category)}</button>
-      <button type="button" data-product-editor-target="contentProductHasPhysicalFulfilment" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">${escapeHTML(physicalFulfilment)}</button>
+    <button type="button" data-product-editor-target="contentProductCategoryId"
+      class="${marketplacePreviewAttention(!category, "absolute right-2 top-2 rounded bg-[#407471] px-2 py-1 text-xs font-semibold text-white")}">${escapeHTML(categoryLabel)}</button>
+    ${featured ? `<button type="button" data-product-editor-target="contentProductFeatured" class="absolute left-2 top-2 rounded bg-yellow-500 px-2 py-1 text-xs text-black">★ Featured</button>` : ""}
+    <button type="button" data-product-editor-target="contentName"
+      class="${marketplacePreviewAttention(!productName, "mt-2 block w-full rounded text-left text-lg font-semibold text-white hover:text-[#9edbd7]")}">${escapeHTML(productName || "Set Product name")}</button>
+    <button type="button" data-product-editor-target="contentProductTileDescriptionSource"
+      class="${marketplacePreviewAttention(!description, "mt-1 block w-full rounded text-left text-sm text-gray-300 hover:text-white")}">${escapeHTML(description || "Set short description")}</button>
+    <button type="button" data-product-editor-target="contentProductPrice"
+      class="${marketplacePreviewAttention(price === null && salePrice === null, "mt-1 block rounded font-semibold text-green-300 hover:text-green-200")}">${salePrice !== null && price !== null ? `<span class="mr-2 text-gray-500 line-through">$${Number(price).toFixed(2)}</span><span class="font-bold text-green-400">$${Number(salePrice).toFixed(2)}</span>` : price !== null ? `$${Number(price).toFixed(2)}` : "Set price"}</button>
+    <div class="mt-4 border-t border-gray-700 pt-3">
+      <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Product setup</p>
+      <div class="flex flex-wrap gap-2 text-xs">
+        <button type="button" data-product-editor-target="contentProductFeatured" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">${featured ? "★ Featured" : "☆ Not featured"}</button>
+        <button type="button" data-product-editor-target="contentProductDeliveryType" class="${marketplacePreviewAttention(!productType, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">${escapeHTML(productType || "Set Product type")}</button>
+        <button type="button" data-product-editor-target="contentProductHasPhysicalFulfilment" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">${escapeHTML(fulfilmentMissing ? "Set fulfilment" : physicalFulfilment)}</button>
+        <button type="button" data-product-editor-target="contentProductWholesalePrice" class="rounded bg-gray-950 px-2 py-1 text-[#9edbd7] hover:text-white">Affiliate ${wholesalePrice !== null ? `$${Number(wholesalePrice).toFixed(2)}` : "not set"}</button>
+      </div>
     </div>
   </div>`;
 }
@@ -3706,64 +3719,75 @@ function marketplaceVariantCardPreview(
     longDescription: document.getElementById("contentLongDescription")?.value || "",
     price: optionalNumberFromInput("contentProductPrice"),
   };
-  const assetId = productVariant.primaryAssetId || "";
+  const assetId = productVariant.primaryAssetId || primaryImageAssetIdForEntityVariant(entityVariant) || "";
   const asset = (state.records.assets || []).find((entry) => (entry.assetId || entry.id) === assetId);
   const url = externalUrl(asset?.fileUrl || asset?.url || "");
-  const variantName = productVariant.name || entityVariant.name || "Product variant";
+  const variantName = productVariant.name || entityVariant.name || "";
   const description = productVariant.shortDescription || defaults.shortDescription;
   const longDescription = productVariant.longDescription || defaults.longDescription;
   const price = productVariant.priceOverride ?? defaults.price;
+  const salePrice = productVariant.salePrice ?? optionalNumberFromInput("contentProductSalePrice");
   const marketplaceMode = productVariant.marketplaceMode || "inherit";
   const statusLabel = marketplaceMode === "inherit"
     ? productVariant.status || "draft"
     : marketplaceMode;
   const archived = document.getElementById("contentProductArchived")?.checked === true ||
     productVariant.status === "archived";
-  const fulfilmentSummary = [productVariant.deliveryMode, productVariant.physicalFulfilment]
+  const productType = document.getElementById("contentProductDeliveryType")?.value || "";
+  const fulfilmentSummary = [productVariant.deliveryMode || productType, productVariant.physicalFulfilment]
     .filter((value) => value && value !== "none")
-    .join(" / ").replaceAll("-", " ") || "Fulfilment";
-  return `<div class="product-variant-card-preview relative grid overflow-hidden rounded gap-3 sm:grid-cols-[10rem_1fr_auto]" data-preview-mode="${detailMode ? "detail" : "card"}">
+    .join(" / ").replaceAll("-", " ");
+  const category = document.getElementById("contentProductCategoryId")?.value || "";
+  const categorySelect = document.getElementById("contentProductCategoryId");
+  const categoryLabel = categorySelect?.selectedOptions?.[0]?.textContent || "";
+  const hasVariantPhysicalFulfilment = productVariant.physicalFulfilment &&
+    productVariant.physicalFulfilment !== "none";
+  const fulfilmentMissing = !productType ||
+    ["Physical", "Hybrid"].includes(productType) && !hasVariantPhysicalFulfilment;
+  const missingDescription = !(longDescription || description);
+  return `<div class="product-variant-card-preview relative overflow-hidden rounded bg-gray-900/40" data-preview-mode="${detailMode ? "detail" : "card"}">
     ${archived ? `<div class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/55">
       <button type="button" data-variant-editor="identity" class="pointer-events-auto -rotate-12 rounded border-4 border-red-400 px-5 py-2 text-2xl font-black uppercase tracking-widest text-red-300">Archived</button>
     </div>` : ""}
-    <button type="button" data-variant-editor="image" title="Edit marketplace image"
-      class="flex min-h-28 items-center justify-center overflow-hidden rounded bg-gray-950 text-center text-xs text-gray-400 ring-[#407471] hover:ring-2">
-      ${url
-    ? `<img src="${escapeHTML(url)}" alt="${escapeHTML(defaults.name)}" class="h-32 w-full object-cover">`
-    : "No marketplace image selected"}
-    </button>
-    <div class="min-w-0 py-1">
-      <button type="button" data-variant-editor="identity" title="Edit Product variant details"
-        class="flex flex-wrap items-center gap-2 text-left hover:text-[#c15cff]">
-        <strong class="text-white">${escapeHTML(defaults.name)}</strong>
-        <span class="text-sm font-medium text-[#c15cff]">${escapeHTML(variantName)}</span>
+    <div class="flex flex-col gap-6 p-3 md:flex-row md:items-start">
+      <button type="button" data-variant-editor="image" title="Edit marketplace image"
+        class="${marketplacePreviewAttention(!url, "flex min-h-56 w-full items-center justify-center overflow-hidden rounded bg-gray-950 text-center text-xs text-gray-400 ring-[#407471] hover:ring-2 md:w-1/2")}">
+        ${url
+    ? `<img src="${escapeHTML(url)}" alt="${escapeHTML(defaults.name || variantName || "Product")}" class="h-full max-h-80 w-full object-cover">`
+    : "Set Product detail image"}
       </button>
-      <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
-        ${isPrimary ? `<button type="button" data-variant-editor="identity" class="font-medium text-[#9edbd7] hover:text-white">Primary</button>` : ""}
-        <button type="button" data-variant-editor="identity" class="rounded bg-gray-950 px-2 py-1 text-gray-300 hover:text-white">${escapeHTML(statusLabel)}</button>
+      <div class="flex min-w-0 flex-1 flex-col px-2">
+        <button type="button" data-variant-editor="identity" title="Edit Product variant details"
+          class="${marketplacePreviewAttention(!(defaults.name || variantName), "rounded text-left text-2xl font-bold text-white hover:text-[#c15cff]")}">${escapeHTML([defaults.name, variantName].filter(Boolean).join(" — ") || "Set Product and variant name")}</button>
+        <button type="button" data-variant-editor="price" title="Edit marketplace price"
+          class="${marketplacePreviewAttention((price === null || price === undefined) && salePrice === null, "mt-2 w-fit rounded text-left text-xl font-bold text-green-400 hover:text-green-300")}">${salePrice !== null && price !== null && price !== undefined ? `<span class="mr-2 text-gray-500 line-through">$${Number(price).toFixed(2)}</span><span class="font-bold text-green-400">$${Number(salePrice).toFixed(2)}</span>` : price !== null && price !== undefined ? `$${Number(price).toFixed(2)}` : "Set price"}</button>
+        <button type="button" data-variant-editor="description" title="Edit description overrides"
+          class="${marketplacePreviewAttention(missingDescription, "mt-3 min-h-16 rounded whitespace-pre-line text-left text-sm text-gray-300 hover:text-white")}">${escapeHTML((detailMode ? longDescription || description : description) || "Set Product description")}</button>
+        <button type="button" data-variant-editor="identity" class="${marketplacePreviewAttention(!variantName, "mt-4 rounded bg-gray-800 px-3 py-2 text-left text-sm text-white")}">Option: ${escapeHTML(variantName || "Set variant name")}</button>
+        <div class="mt-4 flex items-center gap-4">
+          <span class="flex h-8 w-8 items-center justify-center rounded bg-gray-700 text-lg">−</span>
+          <span class="w-8 text-center font-semibold text-white">1</span>
+          <span class="flex h-8 w-8 items-center justify-center rounded bg-gray-700 text-lg">+</span>
+        </div>
+        <span class="mt-4 w-fit rounded bg-[#407471] px-4 py-2 text-white">Add to Cart</span>
       </div>
-      <button type="button" data-variant-editor="description" title="Edit description overrides"
-        class="mt-2 block w-full text-left text-sm text-gray-300 hover:text-white ${detailMode ? "" : "line-clamp-2"}">
-        ${escapeHTML((detailMode ? longDescription || description : description) || "Add a Product description")}
-      </button>
-      ${price !== null && price !== undefined
-    ? `<button type="button" data-variant-editor="price" title="Edit marketplace price" class="mt-2 block font-semibold text-green-300 hover:text-green-200">$${Number(price).toFixed(2)}</button>` : ""}
-      ${detailMode
-    ? `<p class="mt-3 text-xs font-medium uppercase tracking-wide text-[#9edbd7]">Shop detail preview</p>` : ""}
     </div>
-    <div class="flex flex-col items-end justify-between gap-2 self-stretch text-xs">
-      <button type="button" data-variant-editor="fulfilment" class="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:border-[#407471] hover:text-white">${escapeHTML(fulfilmentSummary)}</button>
-      <button type="button" data-variant-connection="blueprint" class="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:border-[#407471] hover:text-white">Blueprints</button>
-      <button type="button" data-variant-connection="unlock" class="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:border-[#407471] hover:text-white">Unlocks</button>
-      <button type="button" data-variant-editor="description" class="font-medium text-[#c15cff] hover:text-[#d991ff]">Product detail</button>
-    </div>
-    <div class="flex flex-wrap gap-2 border-t border-gray-700 pt-3 sm:col-span-3">
+    <div class="border-t border-gray-700 bg-gray-950/40 p-3">
+      <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Variant setup</p>
+      <div class="flex flex-wrap gap-2">
+      ${isPrimary ? `<button type="button" data-variant-editor="identity" class="rounded bg-gray-950 px-2 py-1 text-xs font-medium text-[#9edbd7] hover:text-white">Primary</button>` : ""}
+      <button type="button" data-variant-editor="identity" class="rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white">${escapeHTML(statusLabel)}</button>
+      <button type="button" data-variant-editor="fulfilment" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">${escapeHTML(fulfilmentMissing ? "Set fulfilment" : fulfilmentSummary)}</button>
+      <button type="button" data-product-editor-target="contentProductCategoryId" class="${marketplacePreviewAttention(!category, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">${escapeHTML(categoryLabel || "Set category")}</button>
+      <button type="button" data-variant-connection="blueprint" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Blueprints</button>
+      <button type="button" data-variant-connection="unlock" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Unlocks</button>
       <button type="button" data-variant-editor="visibility" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Visibility</button>
       <button type="button" data-variant-editor="sale" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Price &amp; sale</button>
       <button type="button" data-variant-editor="promotion" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Promotion videos</button>
       <button type="button" data-variant-editor="prerequisites" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Prerequisites</button>
       <button type="button" data-variant-editor="bundle" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Bundle</button>
       <button type="button" data-variant-editor="lifecycle" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Lifecycle</button>
+      </div>
     </div>
   </div>`;
 }
@@ -3780,6 +3804,7 @@ function updateMarketplacePreviewRow(target) {
     shortDescription: row.querySelector(".product-variant-short-description")?.value || "",
     longDescription: row.querySelector(".product-variant-long-description")?.value || "",
     priceOverride: optionalNumberFromElement(row.querySelector(".product-variant-price")),
+    salePrice: optionalNumberFromElement(row.querySelector(".product-variant-sale-price")),
     primaryAssetId: row.querySelector(".product-variant-primary-asset")?.value || "",
     deliveryMode: row.querySelector(".product-variant-delivery-mode")?.value || "",
     physicalFulfilment: row.querySelector(".product-variant-physical-fulfilment")?.value || "none",
@@ -6136,7 +6161,8 @@ export async function setupContentBuilder() {
     ) closeContentAssetDrawer();
   });
   document.getElementById("contentName")?.addEventListener("input", renderSimilarList);
-  ["contentName", "contentShortDescription", "contentLongDescription", "contentProductPrice"]
+  ["contentName", "contentShortDescription", "contentLongDescription", "contentProductPrice",
+    "contentProductSalePrice"]
     .forEach((id) => document.getElementById(id)?.addEventListener("input", () => {
       refreshMarketplacePreviews();
       renderMarketplaceTileControls();
@@ -6361,6 +6387,11 @@ export async function setupContentBuilder() {
     renderMarketplaceTileControls,
   );
   document.getElementById("contentProductVariantRows")?.addEventListener("click", (event) => {
+    const productEditorTrigger = event.target.closest("[data-product-editor-target]");
+    if (productEditorTrigger) {
+      focusProductEditorTarget(productEditorTrigger.dataset.productEditorTarget);
+      return;
+    }
     const closeEditor = event.target.closest("[data-close-variant-editor]");
     if (closeEditor) {
       syncSelectedProductVariantRows();
