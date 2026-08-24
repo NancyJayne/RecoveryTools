@@ -1713,6 +1713,8 @@ function addIndependentProductVariant() {
   });
   setInputValue("contentProductVariants", serializeProductVariants(variants));
   renderSelectedProductVariantRows(variants);
+  const newRow = document.querySelector(`.content-product-variant-row[data-product-variant-id="${CSS.escape(customId)}"]`);
+  newRow?.scrollIntoView({ behavior: "smooth", block: "center" });
   updateProductPhysicalFields();
   state.isDirty = true;
 }
@@ -3611,6 +3613,20 @@ function marketplacePreviewStateOverlay(label, target, tone = "purple") {
   </div>`;
 }
 
+function marketplacePreviewProductType(deliveryType = "") {
+  const source = normalizedText([
+    document.getElementById("contentType")?.value,
+    currentRecordType(),
+    deliveryType,
+  ].filter(Boolean).join(" "));
+  if (source.includes("workshop") || source.includes("event")) return "Workshop";
+  if (source.includes("course")) return "Course";
+  if (source.includes("program")) return "Program";
+  if (source.includes("plan")) return "Plan";
+  if (source.includes("service")) return "Service";
+  return "Tool";
+}
+
 function marketplaceTilePreviewMarkup() {
   const imageSource = document.getElementById("contentProductTileImageSource")?.value || "entity";
   const descriptionSource = document.getElementById("contentProductTileDescriptionSource")?.value || "entity";
@@ -3628,7 +3644,8 @@ function marketplaceTilePreviewMarkup() {
   const salePrice = optionalNumberFromInput("contentProductSalePrice");
   const wholesalePrice = optionalNumberFromInput("contentProductWholesalePrice");
   const productTypeSelect = document.getElementById("contentProductDeliveryType");
-  const productType = productTypeSelect?.value || "";
+  const deliveryType = productTypeSelect?.value || "";
+  const productType = marketplacePreviewProductType(deliveryType);
   const categorySelect = document.getElementById("contentProductCategoryId");
   const category = categorySelect?.value || "";
   const categoryLabel = categorySelect?.selectedOptions?.[0]?.textContent || "Set category";
@@ -3662,8 +3679,8 @@ function marketplaceTilePreviewMarkup() {
     ? fulfilmentLabels.join(" / ").replaceAll("-", " ")
     : document.getElementById("contentProductHasPhysicalFulfilment")?.checked === true
       ? "Physical fulfilment enabled" : "No physical fulfilment";
-  const fulfilmentMissing = !productType ||
-    ["Physical", "Hybrid"].includes(productType) && physicalFulfilment === "No physical fulfilment";
+  const fulfilmentMissing = !deliveryType ||
+    ["Physical", "Hybrid"].includes(deliveryType) && physicalFulfilment === "No physical fulfilment";
   return `<div class="relative mx-auto max-w-sm rounded-lg bg-gray-800 p-4 shadow hover:ring-2 hover:ring-[#407471] ${active ? "ring-2 ring-green-500/80" : ""}">
     ${previewState ? marketplacePreviewStateOverlay(previewState.label, previewState.target, previewState.tone) : ""}
     <button type="button" data-product-editor-target="contentProductTileImageSource"
@@ -3673,7 +3690,7 @@ function marketplaceTilePreviewMarkup() {
     : "Set Marketplace image"}
     </button>
     <button type="button" data-product-editor-target="contentProductDeliveryType"
-      class="${marketplacePreviewAttention(!productType, "absolute right-2 top-2 rounded bg-[#407471] px-2 py-1 text-xs font-semibold text-white")}">${escapeHTML(productType || "Set Product type")}</button>
+      class="absolute right-2 top-2 rounded bg-[#407471] px-2 py-1 text-xs font-semibold text-white">${escapeHTML(productType)}</button>
     ${featured ? `<button type="button" data-product-editor-target="contentProductFeatured" class="absolute left-2 top-2 rounded bg-yellow-500 px-2 py-1 text-xs text-black">★ Featured</button>` : ""}
     <button type="button" data-product-editor-target="contentName"
       class="${marketplacePreviewAttention(!productName, "mt-2 block w-full rounded text-left text-lg font-semibold text-white hover:text-[#9edbd7]")}">${escapeHTML(productName || "Set Product name")}</button>
@@ -3686,6 +3703,7 @@ function marketplaceTilePreviewMarkup() {
       <div class="flex flex-wrap gap-2 text-xs">
         <button type="button" data-product-editor-target="contentProductFeatured" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">${featured ? "★ Featured" : "☆ Not featured"}</button>
         <button type="button" data-product-editor-target="contentProductCategoryId" class="${marketplacePreviewAttention(!category, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">Filter: ${escapeHTML(categoryLabel)}</button>
+        <button type="button" data-product-editor-target="contentProductDeliveryType" class="${marketplacePreviewAttention(!deliveryType, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">Delivery: ${escapeHTML(deliveryType || "Set delivery")}</button>
         <button type="button" data-product-editor-target="contentProductHasPhysicalFulfilment" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">${escapeHTML(fulfilmentMissing ? "Set fulfilment" : physicalFulfilment)}</button>
         <button type="button" data-product-editor-target="contentProductWholesalePrice" class="rounded bg-gray-950 px-2 py-1 text-[#9edbd7] hover:text-white">Affiliate ${wholesalePrice !== null ? `$${Number(wholesalePrice).toFixed(2)}` : "not set"}</button>
       </div>
@@ -3745,6 +3763,18 @@ function focusProductEditorTarget(targetId) {
   target.focus({ preventScroll: true });
 }
 
+function returnToProductTilePreview() {
+  const preview = document.getElementById("contentProductTilePreview");
+  preview?.scrollIntoView({ behavior: "smooth", block: "center" });
+  preview?.querySelector("button")?.focus({ preventScroll: true });
+}
+
+function returnToVariantPreview(row) {
+  const preview = row?.querySelector(".product-variant-card-preview");
+  preview?.scrollIntoView({ behavior: "smooth", block: "center" });
+  preview?.querySelector("button")?.focus({ preventScroll: true });
+}
+
 function marketplaceVariantCardPreview(
   productVariant,
   entityVariant = {},
@@ -3790,8 +3820,9 @@ function marketplaceVariantCardPreview(
               ? { label: "Hidden", section: "visibility", tone: "amber" }
               : null;
   const active = !archived && variantStatus === "active" && effectiveMarketplaceMode === "active";
-  const productType = document.getElementById("contentProductDeliveryType")?.value || "";
-  const fulfilmentSummary = [productVariant.deliveryMode || productType, productVariant.physicalFulfilment]
+  const deliveryType = document.getElementById("contentProductDeliveryType")?.value || "";
+  const productType = marketplacePreviewProductType(deliveryType);
+  const fulfilmentSummary = [productVariant.deliveryMode || deliveryType, productVariant.physicalFulfilment]
     .filter((value) => value && value !== "none")
     .join(" / ").replaceAll("-", " ");
   const category = document.getElementById("contentProductCategoryId")?.value || "";
@@ -3799,8 +3830,8 @@ function marketplaceVariantCardPreview(
   const categoryLabel = categorySelect?.selectedOptions?.[0]?.textContent || "";
   const hasVariantPhysicalFulfilment = productVariant.physicalFulfilment &&
     productVariant.physicalFulfilment !== "none";
-  const fulfilmentMissing = !productType ||
-    ["Physical", "Hybrid"].includes(productType) && !hasVariantPhysicalFulfilment;
+  const fulfilmentMissing = !deliveryType ||
+    ["Physical", "Hybrid"].includes(deliveryType) && !hasVariantPhysicalFulfilment;
   const missingDescription = !(longDescription || description);
   return `<div class="product-variant-card-preview relative overflow-hidden rounded bg-gray-900/40 ${active ? "ring-2 ring-green-500/80" : ""}" data-preview-mode="${detailMode ? "detail" : "card"}">
     ${previewState ? marketplacePreviewStateOverlay(
@@ -3835,9 +3866,13 @@ function marketplaceVariantCardPreview(
       <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Variant setup</p>
       <div class="flex flex-wrap gap-2">
       ${isPrimary ? `<button type="button" data-variant-editor="identity" class="rounded bg-gray-950 px-2 py-1 text-xs font-medium text-[#9edbd7] hover:text-white">Primary</button>` : ""}
-      <button type="button" data-variant-editor="identity" class="rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white">${escapeHTML(statusLabel)}</button>
+      <button type="button" data-variant-editor="lifecycle" class="rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white">Status: ${escapeHTML(statusLabel)}</button>
+      <span class="rounded bg-gray-950 px-2 py-1 text-xs text-gray-300">Type: ${escapeHTML(productType)}</span>
       <button type="button" data-variant-editor="fulfilment" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">${escapeHTML(fulfilmentMissing ? "Set fulfilment" : fulfilmentSummary)}</button>
       <button type="button" data-product-editor-target="contentProductCategoryId" class="${marketplacePreviewAttention(!category, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">${escapeHTML(categoryLabel || "Set category")}</button>
+      <button type="button" data-product-editor-target="contentProductDeliveryType" class="${marketplacePreviewAttention(!deliveryType, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">Delivery: ${escapeHTML(deliveryType || "Set delivery")}</button>
+      <button type="button" data-variant-editor="identity" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Variant details</button>
+      <button type="button" data-variant-editor="description" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Descriptions</button>
       <button type="button" data-variant-connection="blueprint" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Blueprints</button>
       <button type="button" data-variant-connection="unlock" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Unlocks</button>
       <button type="button" data-variant-editor="visibility" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Visibility</button>
@@ -3845,7 +3880,7 @@ function marketplaceVariantCardPreview(
       <button type="button" data-variant-editor="promotion" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Promotion videos</button>
       <button type="button" data-variant-editor="prerequisites" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Prerequisites</button>
       <button type="button" data-variant-editor="bundle" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Bundle</button>
-      <button type="button" data-variant-editor="lifecycle" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Lifecycle</button>
+      <button type="button" data-variant-editor="lifecycle" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Status / archive / cancel</button>
       </div>
     </div>
   </div>`;
@@ -6437,6 +6472,7 @@ export async function setupContentBuilder() {
       renderMarketplaceTileControls();
       document.getElementById(id)?.closest("[data-product-context-panel]")?.classList.add("hidden");
       state.isDirty = true;
+      returnToProductTilePreview();
     });
   });
   document.getElementById("contentProductDrawer")?.addEventListener("click", (event) => {
@@ -6446,6 +6482,7 @@ export async function setupContentBuilder() {
     if (!section) return;
     section.open = false;
     if (section.hasAttribute("data-product-preview-section")) section.classList.add("hidden");
+    returnToProductTilePreview();
   });
   document.getElementById("contentProductTilePreview")?.addEventListener("click", (event) => {
     const trigger = event.target.closest("[data-product-editor-target]");
@@ -6476,6 +6513,7 @@ export async function setupContentBuilder() {
       refreshMarketplacePreviews();
       if (["contentProductDeliveryType", "contentProductCategoryId"].includes(id)) {
         document.getElementById(id)?.closest("[data-product-context-panel]")?.classList.add("hidden");
+        returnToProductTilePreview();
       }
     }));
   document.getElementById("contentProductWholesalePrice")?.addEventListener(
@@ -6492,8 +6530,10 @@ export async function setupContentBuilder() {
     if (closeEditor) {
       syncSelectedProductVariantRows();
       const panel = closeEditor.closest(".product-variant-editor-panel");
+      const row = closeEditor.closest(".content-product-variant-row");
       panel?.classList.add("hidden");
       if (panel) panel.dataset.editorSection = "";
+      returnToVariantPreview(row);
       return;
     }
     const connectionTrigger = event.target.closest("[data-variant-connection]");
@@ -6513,7 +6553,10 @@ export async function setupContentBuilder() {
         if (!existing) addProductVariantContentLinkRow(productVariantId);
         filterVariantOwnedConnections(productVariantId);
         const section = document.getElementById("productVariantContentLinkRows")?.closest("details");
-        if (section) section.open = true;
+        if (section) {
+          section.classList.remove("hidden");
+          section.open = true;
+        }
         section?.scrollIntoView({ behavior: "smooth", block: "start" });
       } else if (connection === "unlock") {
         const addButton = document.getElementById("addContentProductUnlockBtn");
@@ -6525,6 +6568,7 @@ export async function setupContentBuilder() {
         if (!existing) addProductUnlockRow(productVariantId);
         filterVariantOwnedConnections(productVariantId);
         const section = document.getElementById("contentProductUnlockRows")?.closest("section");
+        section?.classList.remove("hidden");
         section?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
       return;
