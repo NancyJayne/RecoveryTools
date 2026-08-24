@@ -3592,7 +3592,7 @@ function marketplacePreviewAttention(missing, extraClasses = "") {
     : ""}`.trim();
 }
 
-function marketplacePreviewStateOverlay(label, target, tone = "purple") {
+function marketplacePreviewStateOverlay(label, tone = "purple") {
   if (!label) return "";
   const tones = {
     amber: "border-amber-400 text-amber-200",
@@ -3600,8 +3600,8 @@ function marketplacePreviewStateOverlay(label, target, tone = "purple") {
     red: "border-red-400 text-red-300",
     gray: "border-gray-400 text-gray-200",
   };
-  return `<div class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/60">
-    <button type="button" ${target} class="pointer-events-auto -rotate-12 rounded border-4 ${tones[tone] || tones.purple} px-5 py-2 text-2xl font-black uppercase tracking-widest">${escapeHTML(label)}</button>
+  return `<div class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+    <span class="-rotate-12 rounded border-4 bg-gray-950/80 ${tones[tone] || tones.purple} px-5 py-2 text-2xl font-black uppercase tracking-widest shadow-xl">${escapeHTML(label)}</span>
   </div>`;
 }
 
@@ -3677,6 +3677,16 @@ function marketplaceTilePreviewMarkup() {
       ? "Physical fulfilment enabled" : "No physical fulfilment";
   const fulfilmentMissing = !deliveryType ||
     ["Physical", "Hybrid"].includes(deliveryType) && physicalFulfilment === "No physical fulfilment";
+  const fulfilmentSelections = [
+    document.getElementById("contentProductInventoryTracked")?.checked ? "Track inventory" : "",
+    document.getElementById("contentProductHasPhysicalFulfilment")?.checked ? "Physical fulfilment" : "",
+    document.getElementById("contentProductRequiresShipping")?.checked ? "Shipping required" : "",
+    document.getElementById("contentProductRequiresCalendar")?.checked ? "Calendar booking" : "",
+    document.getElementById("contentProductRequiresSessionTime")?.checked ? "Session timing" : "",
+    document.getElementById("contentProductTracksSeats")?.checked ? "Track seats" : "",
+    document.getElementById("contentProductRequiresLocation")?.checked ? "Location" : "",
+    document.getElementById("contentProductRequiresInstructor")?.checked ? "Instructor" : "",
+  ].filter(Boolean);
   const requiredFieldsComplete = !!imageUrl && !!productName && !!description &&
     (price !== null || salePrice !== null) && !!category && !!deliveryType && !fulfilmentMissing;
   if (isUnsavedProduct() && !requiredFieldsComplete) {
@@ -3684,7 +3694,7 @@ function marketplaceTilePreviewMarkup() {
     active = false;
   }
   return `<div class="relative mx-auto max-w-sm rounded-lg bg-gray-800 p-4 shadow hover:ring-2 hover:ring-[#407471] ${active ? "ring-2 ring-green-500/80" : ""}">
-    ${previewState ? marketplacePreviewStateOverlay(previewState.label, previewState.target, previewState.tone) : ""}
+    ${previewState ? marketplacePreviewStateOverlay(previewState.label, previewState.tone) : ""}
     <button type="button" data-product-editor-target="contentProductTileImageSource"
       class="${marketplacePreviewAttention(!imageUrl, "flex h-48 w-full items-center justify-center overflow-hidden rounded bg-gray-950 text-xs text-gray-400 ring-[#407471] hover:ring-2")}">
       ${imageUrl
@@ -3706,7 +3716,7 @@ function marketplaceTilePreviewMarkup() {
         <button type="button" data-product-editor-target="contentProductFeatured" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">${featured ? "★ Featured" : "☆ Not featured"}</button>
         <button type="button" data-product-editor-target="contentProductCategoryId" class="${marketplacePreviewAttention(!category, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">Filter: ${escapeHTML(categoryLabel)}</button>
         <button type="button" data-product-editor-target="contentProductDeliveryType" class="${marketplacePreviewAttention(!deliveryType, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">Delivery: ${escapeHTML(deliveryType || "Set delivery")}</button>
-        <button type="button" data-product-editor-target="contentProductHasPhysicalFulfilment" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">${escapeHTML(fulfilmentMissing ? "Set fulfilment" : physicalFulfilment)}</button>
+        <button type="button" data-product-editor-target="contentProductHasPhysicalFulfilment" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-left text-gray-200 hover:text-white")}">Product fulfilment: ${escapeHTML(fulfilmentSelections.join(", ") || "Select")}</button>
         <button type="button" data-product-editor-target="contentProductWholesalePrice" class="rounded bg-gray-950 px-2 py-1 text-[#9edbd7] hover:text-white">Affiliate ${wholesalePrice !== null ? `$${Number(wholesalePrice).toFixed(2)}` : "not set"}</button>
       </div>
     </div>
@@ -3843,11 +3853,7 @@ function marketplaceVariantCardPreview(
     active = false;
   }
   return `<div class="product-variant-card-preview relative overflow-hidden rounded bg-gray-900/40 ${active ? "ring-2 ring-green-500/80" : ""}" data-preview-mode="${detailMode ? "detail" : "card"}">
-    ${previewState ? marketplacePreviewStateOverlay(
-    previewState.label,
-    `data-variant-editor="${previewState.section}"`,
-    previewState.tone,
-  ) : ""}
+    ${previewState ? marketplacePreviewStateOverlay(previewState.label, previewState.tone) : ""}
     <div class="flex flex-col gap-6 p-3 md:flex-row md:items-start">
       <button type="button" data-variant-editor="image" title="Edit marketplace image"
         class="${marketplacePreviewAttention(!url, "flex min-h-56 w-full items-center justify-center overflow-hidden rounded bg-gray-950 text-center text-xs text-gray-400 ring-[#407471] hover:ring-2 md:w-1/2")}">
@@ -4050,12 +4056,12 @@ function renderProductVariantContentLinkRows(links = []) {
 
 function addProductVariantContentLinkRow(productVariantId = "") {
   renderProductVariantContentLinkRows([
-    ...productVariantContentLinksFromRows(),
+    ...productVariantContentLinksFromRows(true),
     { productVariantId, entityType: "Blueprint", entityId: "", entityVariantId: "", linkRole: "ManufacturedFrom" },
   ]);
 }
 
-function productUnlocksFromRows() {
+function productUnlocksFromRows(includeIncomplete = false) {
   return [...document.querySelectorAll(".content-product-unlock-row")].map((row) => ({
     productVariantId: row.querySelector(".content-product-unlock-variant")?.value || "",
     accessEntityType: row.querySelector(".content-product-unlock-type")?.value || "Plan",
@@ -4070,7 +4076,7 @@ function productUnlocksFromRows() {
     endsAt: row.querySelector(".content-product-unlock-ends-at")?.value || "",
     revocable: true,
     status: "active",
-  })).filter((grant) => grant.accessEntityId);
+  })).filter((grant) => includeIncomplete || grant.accessEntityId);
 }
 
 function renderProductUnlockRows(grants = []) {
@@ -4159,7 +4165,7 @@ function filterVariantOwnedConnections(productVariantId = "") {
 
 function addProductUnlockRow(productVariantId = "") {
   renderProductUnlockRows([
-    ...productUnlocksFromRows(),
+    ...productUnlocksFromRows(true),
     {
       productVariantId,
       accessEntityType: "Plan",
@@ -6419,7 +6425,10 @@ export async function setupContentBuilder() {
   );
   ["contentProductRequiresShipping", "contentProductRequiresCalendar", "contentProductTracksSeats", "contentProductRequiresSessionTime",
     "contentProductRequiresLocation", "contentProductRequiresInstructor"].forEach((id) => {
-    document.getElementById(id)?.addEventListener("change", updateProductPhysicalFields);
+    document.getElementById(id)?.addEventListener("change", () => {
+      updateProductPhysicalFields();
+      renderMarketplaceTileControls();
+    });
   });
   document.getElementById("contentItemUnitCost")?.addEventListener("input", updateConnectedProductCostPreview);
   document.getElementById("contentProductManufacturingRecipe")?.addEventListener("change", (event) => {
@@ -6614,7 +6623,8 @@ export async function setupContentBuilder() {
           addButton.dataset.productVariantId = productVariantId;
           addButton.disabled = !productVariantId;
         }
-        const existing = productUnlocksFromRows().some((grant) => grant.productVariantId === productVariantId);
+        const existing = productUnlocksFromRows(true)
+          .some((grant) => grant.productVariantId === productVariantId);
         if (!existing) addProductUnlockRow(productVariantId);
         filterVariantOwnedConnections(productVariantId);
         const section = document.getElementById("contentProductUnlockRows")?.closest("section");
@@ -6927,7 +6937,7 @@ export async function setupContentBuilder() {
         !event.target.classList.contains("content-product-unlock-target")) return;
     const allRows = [...document.querySelectorAll(".content-product-unlock-row")];
     const index = allRows.indexOf(event.target.closest(".content-product-unlock-row"));
-    const grants = productUnlocksFromRows();
+    const grants = productUnlocksFromRows(true);
     if (event.target.classList.contains("content-product-unlock-type")) {
       grants[index].accessEntityType = event.target.value;
       grants[index].accessEntityId = "";
@@ -6940,7 +6950,7 @@ export async function setupContentBuilder() {
     if (!remove) return;
     const allRows = [...document.querySelectorAll(".content-product-unlock-row")];
     const index = allRows.indexOf(remove.closest(".content-product-unlock-row"));
-    const grants = productUnlocksFromRows();
+    const grants = productUnlocksFromRows(true);
     grants.splice(index, 1);
     renderProductUnlockRows(grants);
   });
