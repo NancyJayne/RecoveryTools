@@ -427,12 +427,22 @@ function normalizeVariant(value, index) {
 
 function cleanPrerequisites(value, sourceVariantId) {
   const seen = new Set();
-  return (Array.isArray(value) ? value : []).map((entry) => ({
-    productId: cleanString(entry?.productId),
-    productVariantId: cleanString(entry?.productVariantId),
-  })).filter((entry) => {
-    const key = `${entry.productId}:${entry.productVariantId}`;
-    if (!entry.productId || !entry.productVariantId || entry.productVariantId === sourceVariantId || seen.has(key)) return false;
+  return (Array.isArray(value) ? value : []).map((entry) => {
+    const requirementType = cleanString(entry?.requirementType) === "item" || entry?.itemId
+      ? "item" : "product-variant";
+    return {
+      requirementType,
+      itemId: requirementType === "item" ? cleanString(entry?.itemId) : "",
+      productId: requirementType === "product-variant" ? cleanString(entry?.productId) : "",
+      productVariantId: requirementType === "product-variant"
+        ? cleanString(entry?.productVariantId) : "",
+    };
+  }).filter((entry) => {
+    const key = entry.requirementType === "item"
+      ? `item:${entry.itemId}` : `product:${entry.productId}:${entry.productVariantId}`;
+    const complete = entry.requirementType === "item"
+      ? entry.itemId : entry.productId && entry.productVariantId;
+    if (!complete || entry.productVariantId === sourceVariantId || seen.has(key)) return false;
     seen.add(key);
     return true;
   }).slice(0, 20);

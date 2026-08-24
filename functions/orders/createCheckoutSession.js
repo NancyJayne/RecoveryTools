@@ -41,6 +41,7 @@ function productVariantKey(productId, variantId) {
 
 async function assertPurchasePrerequisites(db, uid, items, architecture) {
   const requirements = items.flatMap((item) => (item.prerequisiteProductVariants || [])
+    .filter((required) => required.requirementType !== "item" && !required.itemId)
     .map((required) => ({ source: item, ...required })));
   if (!requirements.length) return;
 

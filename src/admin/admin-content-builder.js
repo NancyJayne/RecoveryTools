@@ -1596,7 +1596,7 @@ function renderSelectedProductVariantRows(
             <div class="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <h5 class="font-semibold text-white">Purchase prerequisites</h5>
-                <p class="mt-1 text-xs text-gray-400">Customers must already own, have access to, or purchase these exact Product variants in the same checkout.</p>
+                <p class="mt-1 text-xs text-gray-400">Choose an exact Product variant for automatic purchase/access checks, or an Item such as an external qualification for future manual verification.</p>
               </div>
               <button type="button" class="add-product-prerequisite rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add prerequisite</button>
             </div>
@@ -1708,10 +1708,8 @@ function syncSelectedProductVariantRows() {
       promotionAssetIds: [...(row.querySelector(".product-variant-promotion-assets")?.selectedOptions || [])]
         .map((option) => option.value).filter(Boolean),
       prerequisiteProductVariants: [...row.querySelectorAll(".product-prerequisite-row")]
-        .map((prerequisiteRow) => ({
-          productId: prerequisiteRow.querySelector(".product-prerequisite-product")?.value || "",
-          productVariantId: prerequisiteRow.querySelector(".product-prerequisite-variant")?.value || "",
-        })).filter((entry) => entry.productId && entry.productVariantId && entry.productVariantId !== existingId),
+        .map(prerequisiteFromRow).filter((entry) =>
+          entry && (entry.requirementType === "item" || entry.productVariantId !== existingId)),
     };
   });
   input.value = serializeProductVariants(variants);
@@ -3931,6 +3929,16 @@ function closeVariantEditorAndReturn(row) {
 }
 
 function adminLinkedProductVariant(entry = {}, bundle = false) {
+  if (!bundle && (entry.requirementType === "item" || entry.itemId)) {
+    const item = (state.records.items || []).find((candidate) => candidate.id === entry.itemId) || {};
+    return {
+      isItem: true,
+      productName: item.name || item.itemName || entry.itemId,
+      variantName: "",
+      shortDescription: item.shortDescription || item.description || "",
+      href: "",
+    };
+  }
   const productId = bundle ? entry.componentProductId : entry.productId;
   const productVariantId = bundle ? entry.componentProductVariantId : entry.productVariantId;
   const product = (state.records.products || []).find((candidate) => candidate.id === productId) || {};
@@ -3962,13 +3970,15 @@ function adminLinkedVariantList(title, entries = [], bundle = false) {
       ${entries.map((entry) => {
     const detail = adminLinkedProductVariant(entry, bundle);
     const quantity = bundle && detail.quantity > 1 ? `${detail.quantity} × ` : "";
-    const label = `${quantity}${detail.productName} — ${detail.variantName}`;
-    const linkedControl = bundle
-      ? `<button type="button" class="open-admin-linked-variant-bubble font-semibold text-[#9edbd7] hover:underline"
+    const label = `${quantity}${detail.productName}${detail.variantName ? ` — ${detail.variantName}` : ""}`;
+    const linkedControl = detail.isItem
+      ? `<span class="font-semibold text-[#9edbd7]">${escapeHTML(label)}</span>`
+      : (bundle
+        ? `<button type="button" class="open-admin-linked-variant-bubble font-semibold text-[#9edbd7] hover:underline"
           data-product-id="${escapeHTML(detail.productId)}"
           data-product-variant-id="${escapeHTML(detail.productVariantId)}">${escapeHTML(label)}</button>`
-      : `<a href="${escapeHTML(detail.href)}" target="_blank" rel="noopener"
-          class="font-semibold text-[#9edbd7] hover:underline">${escapeHTML(label)}</a>`;
+        : `<a href="${escapeHTML(detail.href)}" target="_blank" rel="noopener"
+          class="font-semibold text-[#9edbd7] hover:underline">${escapeHTML(label)}</a>`);
     return `<li>${linkedControl}` +
       `${detail.shortDescription ? ` — ${escapeHTML(detail.shortDescription)}` : ""}</li>`;
   }).join("")}
@@ -4237,10 +4247,7 @@ function updateMarketplacePreviewRow(target) {
     promotionAssetIds: [...(row.querySelector(".product-variant-promotion-assets")?.selectedOptions || [])]
       .map((option) => option.value).filter(Boolean),
     prerequisiteProductVariants: [...row.querySelectorAll(".product-prerequisite-row")]
-      .map((prerequisiteRow) => ({
-        productId: prerequisiteRow.querySelector(".product-prerequisite-product")?.value || "",
-        productVariantId: prerequisiteRow.querySelector(".product-prerequisite-variant")?.value || "",
-      })).filter((entry) => entry.productId && entry.productVariantId),
+      .map(prerequisiteFromRow).filter(Boolean),
     bundleComponents: [...row.querySelectorAll(".product-bundle-component-row")]
       .map((componentRow) => ({
         componentProductId: componentRow.querySelector(".product-bundle-component-product")?.value || "",
@@ -4266,16 +4273,47 @@ function refreshMarketplacePreviews() {
   });
 }
 
+function prerequisiteTargetOptions(entry = {}) {
+  const selectedValue = entry.requirementType === "item" || entry.itemId
+    ? `item:${entry.itemId}` : entry.productId ? `product:${entry.productId}` : "";
+  const products = (state.records.products || []).map((product) => {
+    const value = `product:${product.id}`;
+    return `<option value="${escapeHTML(value)}"${value === selectedValue ? " selected" : ""}>${escapeHTML(product.name || product.id)}</option>`;
+  }).join("");
+  const items = (state.records.items || []).map((item) => {
+    const value = `item:${item.id}`;
+    return `<option value="${escapeHTML(value)}"${value === selectedValue ? " selected" : ""}>${escapeHTML(item.name || item.id)}</option>`;
+  }).join("");
+  return `<option value="">Choose prerequisite</option><optgroup label="Product variants">${products}</optgroup><optgroup label="Items or external qualifications">${items}</optgroup>`;
+}
+
+function prerequisiteFromRow(row) {
+  const [requirementType, targetId] = String(
+    row.querySelector(".product-prerequisite-target")?.value || "",
+  ).split(":");
+  if (requirementType === "item" && targetId) {
+    return { requirementType: "item", itemId: targetId };
+  }
+  const productVariantId = row.querySelector(".product-prerequisite-variant")?.value || "";
+  return requirementType === "product" && targetId && productVariantId
+    ? { requirementType: "product-variant", productId: targetId, productVariantId }
+    : null;
+}
+
 function prerequisiteRowsMarkup(prerequisites = []) {
-  return prerequisites.map((entry) => `<div class="product-prerequisite-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_1fr_auto]">
-    <select class="product-prerequisite-product rounded bg-gray-800 px-2 py-2 text-white">
-      <option value="">Choose required Product</option>${bundleProductOptions(entry.productId)}
-    </select>
-    <select class="product-prerequisite-variant rounded bg-gray-800 px-2 py-2 text-white">
-      <option value="">Choose required variant</option>${bundleVariantOptions(entry.productId, entry.productVariantId)}
-    </select>
-    <button type="button" class="remove-product-prerequisite rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
-  </div>`).join("") || "<p class=\"product-prerequisite-empty text-xs text-gray-400\">No purchase prerequisites.</p>";
+  return prerequisites.map((entry) => {
+    const itemRequirement = entry.requirementType === "item" || entry.itemId;
+    return `<div class="product-prerequisite-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_1fr_auto]">
+      <select class="product-prerequisite-target rounded bg-gray-800 px-2 py-2 text-white">
+        ${prerequisiteTargetOptions(entry)}
+      </select>
+      <select class="product-prerequisite-variant rounded bg-gray-800 px-2 py-2 text-white"${itemRequirement ? " disabled" : ""}>
+        <option value="">${itemRequirement ? "Manual verification will be added later" : "Choose required variant"}</option>
+        ${itemRequirement ? "" : bundleVariantOptions(entry.productId, entry.productVariantId)}
+      </select>
+      <button type="button" class="remove-product-prerequisite rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
+    </div>`;
+  }).join("") || "<p class=\"product-prerequisite-empty text-xs text-gray-400\">No prerequisites.</p>";
 }
 
 function bundleVariantOptions(productId, selectedVariantId = "") {
@@ -7207,10 +7245,16 @@ export async function setupContentBuilder() {
     state.isDirty = true;
   });
   document.getElementById("contentProductVariantRows")?.addEventListener("change", (event) => {
-    if (event.target.classList.contains("product-prerequisite-product")) {
+    if (event.target.classList.contains("product-prerequisite-target")) {
       const row = event.target.closest(".product-prerequisite-row");
       const variant = row?.querySelector(".product-prerequisite-variant");
-      if (variant) variant.innerHTML = `<option value="">Choose required variant</option>${bundleVariantOptions(event.target.value)}`;
+      const [requirementType, targetId] = event.target.value.split(":");
+      if (variant) {
+        variant.disabled = requirementType === "item";
+        variant.innerHTML = requirementType === "item"
+          ? "<option value=\"\">Manual verification will be added later</option>"
+          : `<option value="">Choose required variant</option>${bundleVariantOptions(targetId)}`;
+      }
     }
     if (event.target.classList.contains("product-bundle-component-product")) {
       const row = event.target.closest(".product-bundle-component-row");

@@ -441,6 +441,17 @@ function normalizeProduct(
       bundleAvailable,
       bundleProductVariants,
       prerequisiteProductVariants: (variant.prerequisiteProductVariants || []).map((required) => {
+        if (required.requirementType === "item" || required.itemId) {
+          const requiredItem = architecture.itemsById.get(required.itemId) || {};
+          return {
+            requirementType: "item",
+            itemId: required.itemId,
+            name: requiredItem.name || requiredItem.itemName || required.itemId,
+            shortDescription: requiredItem.shortDescription || requiredItem.description || "",
+            satisfied: true,
+            manualVerificationRequired: true,
+          };
+        }
         const requiredProduct = productsById.get(required.productId) || {};
         const requiredContent = primaryContentForProduct(required.productId, requiredProduct, architecture);
         const requiredVariant = variantsForProduct(

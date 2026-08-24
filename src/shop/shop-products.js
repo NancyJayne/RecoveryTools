@@ -204,10 +204,13 @@ function marketplaceLinkedVariantList(title, entries = [], usePreviewBubble = fa
   list.className = "list-disc space-y-2 pl-5 text-sm text-gray-300";
   entries.forEach((entry) => {
     const item = document.createElement("li");
-    const link = document.createElement(usePreviewBubble ? "button" : "a");
+    const manualItem = entry.requirementType === "item" || entry.itemId;
+    const link = document.createElement(manualItem ? "span" : usePreviewBubble ? "button" : "a");
     if (usePreviewBubble) link.type = "button";
     link.className = "font-semibold text-[#9edbd7] hover:underline";
-    if (usePreviewBubble) {
+    if (manualItem) {
+      link.className = "font-semibold text-[#9edbd7]";
+    } else if (usePreviewBubble) {
       link.addEventListener("mouseenter", () => showMarketplaceVariantBubble(entry));
       link.addEventListener("mouseleave", closeMarketplaceVariantBubbleSoon);
       link.addEventListener("click", () => showMarketplaceVariantBubble(entry, true));
@@ -219,8 +222,9 @@ function marketplaceLinkedVariantList(title, entries = [], usePreviewBubble = fa
       );
     }
     const quantity = Number(entry.quantity || 1);
-    const productName = entry.productName || entry.name || entry.productId || entry.componentProductId;
-    const variantName = entry.productVariantName || entry.name ||
+    const productName = entry.productName || entry.name || entry.itemId ||
+      entry.productId || entry.componentProductId;
+    const variantName = manualItem ? "" : entry.productVariantName || entry.name ||
       entry.productVariantId || entry.componentProductVariantId;
     link.textContent = `${quantity > 1 ? `${quantity} × ` : ""}${productName}` +
       `${variantName ? ` — ${variantName}` : ""}`;
