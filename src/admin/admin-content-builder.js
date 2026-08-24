@@ -1571,12 +1571,24 @@ function renderSelectedProductVariantRows(
             <h5 class="font-semibold text-white">Promotion videos</h5>
             <p class="mt-1 text-xs text-gray-400">Only Assets selected here are public. Linked Item, Blueprint and Plan material remains private.</p>
             <div class="mt-3">
-              <label class="block text-sm">Promotion video Assets
-                <select class="product-variant-promotion-assets mt-1 h-28 w-full rounded bg-gray-800 px-3 py-2 text-white" multiple>
-                  ${marketplaceAssetOptions(productVariant.promotionAssetIds || [], "video")}
+              <label class="block text-sm">Choose an existing promotion video Asset
+                <select class="product-variant-promotion-asset-picker mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                  ${marketplaceAssetOptions([], "video", "Choose a video Asset")}
                 </select>
-                <span class="mt-1 block text-xs text-gray-400">Use Ctrl or Command to select more than one video.</span>
               </label>
+              <button type="button"
+                class="add-existing-product-variant-promotion-asset mt-2 rounded border border-gray-600 px-3 py-1 text-xs text-gray-200 hover:border-[#407471]">
+                Attach selected video
+              </button>
+              <select class="product-variant-promotion-assets hidden" multiple aria-hidden="true" tabindex="-1">
+                ${marketplaceAssetOptions(productVariant.promotionAssetIds || [], "video")}
+              </select>
+              <div class="product-variant-promotion-selection mt-3 space-y-2">
+                ${promotionSelectedAssetsMarkup(productVariant.promotionAssetIds || [])}
+              </div>
+              <button type="button"
+                class="create-product-variant-promotion-asset mt-3 rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7] hover:bg-[#153b38]"
+                data-field-name="Promotion video" data-asset-type="Video">Add new video Asset</button>
             </div>
           </div>
           <div data-variant-editor-section="prerequisites" class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
@@ -2413,11 +2425,14 @@ function assetFileAccept(assetType) {
 
 function openContentAssetDrawer(button) {
   const repeatableField = button.closest(".content-template-linked-field");
+  const promotionSelect = button.closest(".content-product-variant-row")
+    ?.querySelector(".product-variant-promotion-assets") || null;
   assetDrawerField = {
     key: templateFieldKey(button.dataset.fieldKey || repeatableField?.dataset.fieldKey),
     name: button.dataset.fieldName || repeatableField?.dataset.fieldName || "Template Asset",
     type: button.dataset.assetType || repeatableField?.dataset.assetType || "Document",
     repeatableField,
+    promotionSelect,
     trigger: button,
   };
   const form = document.getElementById("contentAssetDrawerForm");
@@ -2516,6 +2531,22 @@ function assertAssetFileType(file, assetType) {
 }
 
 function selectNewTemplateAsset(asset) {
+  const promotionSelect = assetDrawerField?.promotionSelect;
+  if (promotionSelect) {
+    if (![...promotionSelect.options].some((option) => option.value === asset.id)) {
+      promotionSelect.add(new Option(asset.title || asset.assetName || asset.name || asset.id, asset.id));
+    }
+    const option = [...promotionSelect.options].find((candidate) => candidate.value === asset.id);
+    if (option) option.selected = true;
+    const row = promotionSelect.closest(".content-product-variant-row");
+    const picker = row?.querySelector(".product-variant-promotion-asset-picker");
+    if (picker && ![...picker.options].some((candidate) => candidate.value === asset.id)) {
+      picker.add(new Option(asset.title || asset.assetName || asset.name || asset.id, asset.id));
+    }
+    refreshPromotionAssetSelection(row);
+    updateMarketplacePreviewRow(promotionSelect);
+    return;
+  }
   const key = assetDrawerField?.key;
   if (!key) return;
   let selects = [...document.querySelectorAll(
@@ -2605,6 +2636,9 @@ async function saveContentAsset(event) {
         fieldKey: assetDrawerField.key,
       }] : [],
     });
+    const savedEmbedUrl = storageMethod === "external" && externalProvider === "youtube"
+      ? youtubeEmbedUrl(fileUrl)
+      : "";
     const savedAsset = {
       id: response.data?.assetId || assetId,
       assetId: response.data?.assetId || assetId,
@@ -2614,6 +2648,8 @@ async function saveContentAsset(event) {
       type: assetType.toLowerCase(),
       title: document.getElementById("contentAssetTitle")?.value.trim() || assetName,
       fileUrl,
+      embedUrl: savedEmbedUrl,
+      externalProvider: storageMethod === "external" ? externalProvider : "",
       status: document.getElementById("contentAssetStatus")?.value || "active",
     };
     state.records.assets = [...state.records.assets.filter((asset) => asset.id !== savedAsset.id), savedAsset];
@@ -3582,6 +3618,26 @@ function marketplaceAssetOptions(selectedValue = [], type = "", placeholder = ""
     return `<option value="${escapeHTML(id)}"${selected.has(id) ? " selected" : ""}>${escapeHTML(asset.title || asset.name || id)}</option>`;
   }).join("");
   return `${placeholder ? `<option value="">${escapeHTML(placeholder)}</option>` : ""}${options}`;
+}
+
+function promotionSelectedAssetsMarkup(assetIds = []) {
+  const selected = new Set(assetIds);
+  const assets = (state.records.assets || []).filter((asset) =>
+    selected.has(asset.assetId || asset.id));
+  return assets.length
+    ? assets.map((asset) => `<div class="flex items-center justify-between gap-3 rounded bg-gray-950 px-3 py-2 text-sm">
+      <span>${escapeHTML(asset.title || asset.assetName || asset.name || asset.id)}</span>
+      <button type="button" class="remove-product-variant-promotion-asset text-xs text-red-200 hover:text-red-100"
+        data-asset-id="${escapeHTML(asset.assetId || asset.id)}">Remove</button>
+    </div>`).join("")
+    : "<p class=\"text-xs text-gray-400\">No promotion videos attached.</p>";
+}
+
+function refreshPromotionAssetSelection(row) {
+  const selectedIds = [...(row?.querySelector(".product-variant-promotion-assets")?.selectedOptions || [])]
+    .map((option) => option.value).filter(Boolean);
+  const list = row?.querySelector(".product-variant-promotion-selection");
+  if (list) list.innerHTML = promotionSelectedAssetsMarkup(selectedIds);
 }
 
 function marketplaceTileSourceOptions(selectedValue = "entity") {
@@ -6822,6 +6878,41 @@ export async function setupContentBuilder() {
     renderMarketplaceTileControls,
   );
   document.getElementById("contentProductVariantRows")?.addEventListener("click", (event) => {
+    const createPromotionAsset = event.target.closest(".create-product-variant-promotion-asset");
+    if (createPromotionAsset) {
+      openContentAssetDrawer(createPromotionAsset);
+      return;
+    }
+    const addPromotionAsset = event.target.closest(".add-existing-product-variant-promotion-asset");
+    if (addPromotionAsset) {
+      const row = addPromotionAsset.closest(".content-product-variant-row");
+      const picker = row?.querySelector(".product-variant-promotion-asset-picker");
+      const selected = row?.querySelector(".product-variant-promotion-assets");
+      const assetId = picker?.value || "";
+      const option = [...(selected?.options || [])].find((candidate) => candidate.value === assetId);
+      if (!assetId || !option) {
+        showToast("Choose a video Asset first.", "error");
+        return;
+      }
+      option.selected = true;
+      picker.value = "";
+      refreshPromotionAssetSelection(row);
+      updateMarketplacePreviewRow(selected);
+      state.isDirty = true;
+      return;
+    }
+    const removePromotionAsset = event.target.closest(".remove-product-variant-promotion-asset");
+    if (removePromotionAsset) {
+      const row = removePromotionAsset.closest(".content-product-variant-row");
+      const selected = row?.querySelector(".product-variant-promotion-assets");
+      const option = [...(selected?.options || [])].find((candidate) =>
+        candidate.value === removePromotionAsset.dataset.assetId);
+      if (option) option.selected = false;
+      refreshPromotionAssetSelection(row);
+      updateMarketplacePreviewRow(selected);
+      state.isDirty = true;
+      return;
+    }
     const productEditorTrigger = event.target.closest("[data-product-editor-target]");
     if (productEditorTrigger) {
       focusProductEditorTarget(productEditorTrigger.dataset.productEditorTarget);
