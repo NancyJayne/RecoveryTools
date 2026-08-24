@@ -470,9 +470,13 @@ const createCheckoutSessionHandler = async (request) => {
       const variantSaleActive = variant?.salePrice !== null && variant?.salePrice !== undefined &&
         variant?.salePrice !== "" && (!variantSaleStartsMs || variantSaleStartsMs <= nowMs) &&
         (!variantSaleEndsMs || variantSaleEndsMs > nowMs);
-      const wholesalePrice = approvedAffiliate
-        ? variant?.wholesalePrice ?? variantPrice?.wholesalePrice ?? variantPrice?.affiliatePrice ??
-          data.wholesalePrice ?? activePrice?.wholesalePrice ?? activePrice?.affiliatePrice ?? null
+      const storedWholesalePrice = variant?.wholesalePrice ?? variantPrice?.wholesalePrice ??
+        variantPrice?.affiliatePrice ?? data.wholesalePrice ?? activePrice?.wholesalePrice ??
+        activePrice?.affiliatePrice ?? null;
+      const affiliateAvailable = data.affiliateAvailable === true ||
+        data.affiliateAvailable === undefined && Number(storedWholesalePrice) > 0;
+      const wholesalePrice = approvedAffiliate && affiliateAvailable
+        ? storedWholesalePrice
         : null;
       const wholesaleMinQuantity = Math.max(Number(
         variant?.wholesaleMinQuantity || variantPrice?.wholesaleMinQuantity ||

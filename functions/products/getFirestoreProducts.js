@@ -265,7 +265,9 @@ function normalizeProduct(
   const onSale = Number(salePrice) >= 0 && salePrice !== null && salePrice !== "" &&
     (!saleStartsMs || saleStartsMs <= nowMs) && (!saleEndsMs || saleEndsMs > nowMs);
   const productWholesalePrice = data.wholesalePrice ?? activePrice?.wholesalePrice ?? activePrice?.affiliatePrice;
-  const wholesalePrice = approvedAffiliate && Number(productWholesalePrice) > 0
+  const affiliateAvailable = data.affiliateAvailable === true ||
+    data.affiliateAvailable === undefined && Number(productWholesalePrice) > 0;
+  const wholesalePrice = approvedAffiliate && affiliateAvailable && Number(productWholesalePrice) > 0
     ? Number(productWholesalePrice)
     : null;
   const price = wholesalePrice ?? (onSale ? Number(salePrice) : regularPrice);
@@ -328,7 +330,7 @@ function normalizeProduct(
       : regularPrice;
     const variantWholesaleValue = variant.wholesalePrice ?? variantPrice?.wholesalePrice ??
       variantPrice?.affiliatePrice;
-    const variantWholesalePrice = approvedAffiliate && Number(variantWholesaleValue) > 0
+    const variantWholesalePrice = approvedAffiliate && affiliateAvailable && Number(variantWholesaleValue) > 0
       ? Number(variantWholesaleValue)
       : wholesalePrice;
     const instructorId = variant.instructorId || variant.instructor || "";
@@ -386,7 +388,10 @@ function normalizeProduct(
         image: componentMedia.find((asset) => normalizeStatus(asset.type) === "image")?.url || "",
         retailPrice: componentRetailPrice,
         salePrice: componentOnSale ? Number(componentVariant.salePrice) : null,
-        wholesalePrice: approvedAffiliate && Number(componentWholesaleValue) > 0
+        wholesalePrice: approvedAffiliate &&
+          (componentProduct.affiliateAvailable === true ||
+            componentProduct.affiliateAvailable === undefined && Number(componentWholesaleValue) > 0) &&
+          Number(componentWholesaleValue) > 0
           ? Number(componentWholesaleValue)
           : null,
       };

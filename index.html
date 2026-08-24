@@ -1910,6 +1910,10 @@
                         <input id="contentProductInventoryTracked" type="checkbox" class="accent-[#407471]">
                         Track Product inventory
                       </label>
+                      <label class="inline-flex min-h-10 items-center gap-3">
+                        <input id="contentProductAvailableToAffiliates" type="checkbox" class="accent-[#407471]">
+                        Available to affiliates
+                      </label>
                       <label class="min-h-10 items-center gap-3 inline-flex">
                         <input id="contentProductRequiresShipping" type="checkbox" class="accent-[#407471]">
                         Requires shipping
@@ -1963,11 +1967,11 @@
                     <label class="block md:col-span-2">Regular shop price
                       <input id="contentProductPrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                     </label>
-                    <label class="block">Affiliate wholesale price
+                    <label class="content-product-affiliate-pricing-field hidden block">Affiliate wholesale price
                       <input id="contentProductWholesalePrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                       <span class="mt-1 block text-xs text-gray-400">Only available to approved affiliates.</span>
                     </label>
-                    <label class="block">Minimum wholesale quantity
+                    <label class="content-product-affiliate-pricing-field hidden block">Minimum wholesale quantity
                       <input id="contentProductWholesaleMinQuantity" type="number" min="1" step="1" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="1">
                     </label>
                     <label class="block md:col-span-2">Sale price

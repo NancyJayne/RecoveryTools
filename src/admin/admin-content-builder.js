@@ -1376,6 +1376,7 @@ function renderSelectedProductVariantRows(
   if (summary) {
     summary.textContent = `${productVariants.length} Product variant${productVariants.length === 1 ? "" : "s"}`;
   }
+  const affiliateAvailable = document.getElementById("contentProductAvailableToAffiliates")?.checked === true;
   const instructorOptions = (selectedInstructor = "") => {
     const options = [...(state.options.instructorOptions || [])];
     if (selectedInstructor && !options.some((option) =>
@@ -1546,11 +1547,11 @@ function renderSelectedProductVariantRows(
           <div data-variant-editor-section="sale" class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Price and sale</h5>
             <div class="mt-3 grid gap-3 md:grid-cols-2">
-              <label class="block text-sm">Affiliate wholesale price
+              <label class="product-variant-affiliate-pricing-field ${affiliateAvailable ? "" : "hidden"} block text-sm">Affiliate wholesale price
                 <input class="product-variant-wholesale-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
                   type="number" min="0" step="0.01" value="${escapeHTML(productVariant.wholesalePrice ?? "")}">
               </label>
-              <label class="block text-sm">Wholesale minimum quantity
+              <label class="product-variant-affiliate-pricing-field ${affiliateAvailable ? "" : "hidden"} block text-sm">Wholesale minimum quantity
                 <input class="product-variant-wholesale-min-quantity mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
                   type="number" min="1" step="1" value="${escapeHTML(productVariant.wholesaleMinQuantity ?? "")}">
               </label>
@@ -3164,6 +3165,12 @@ function productRelationPayload() {
     variantFulfilment.some((value) => ["shipping", "shipping-or-pickup"].includes(value));
   const inventoryTracked =
     document.getElementById("contentProductInventoryTracked")?.checked === true;
+  const affiliateAvailable =
+    document.getElementById("contentProductAvailableToAffiliates")?.checked === true;
+  const wholesalePrice = optionalNumberFromInput("contentProductWholesalePrice");
+  if (affiliateAvailable && wholesalePrice === null) {
+    throw new Error("Enter the default Affiliate wholesale price, then add variant overrides only where needed.");
+  }
   const totalVariantStock = variants.reduce((total, variant) => total + Number(variant.stock || 0), 0);
   setInputValue("contentProductStock", inventoryTracked ? totalVariantStock : "");
   const linkRole = document.getElementById("contentProductLinkRole")?.value || "Represents";
@@ -3216,8 +3223,10 @@ function productRelationPayload() {
       ? tileDescriptionValue.slice("variant:".length) : "",
     retailPrice: optionalNumberFromInput("contentProductPrice"),
     salePrice: optionalNumberFromInput("contentProductSalePrice"),
-    wholesalePrice: optionalNumberFromInput("contentProductWholesalePrice"),
-    wholesaleMinQuantity: optionalNumberFromInput("contentProductWholesaleMinQuantity") || 1,
+    wholesalePrice: affiliateAvailable ? wholesalePrice : null,
+    wholesaleMinQuantity: affiliateAvailable
+      ? optionalNumberFromInput("contentProductWholesaleMinQuantity") || 1 : 1,
+    affiliateAvailable,
     saleStartsAt: isoFromDatetimeLocal(saleStartsAt),
     saleEndsAt: isoFromDatetimeLocal(saleEndsAt),
     featured: document.getElementById("contentProductFeatured")?.checked === true,
@@ -3333,6 +3342,13 @@ function chooseExistingProduct(productId) {
   );
   setCheckboxValue("contentProductRequiresShipping", product.requiresShipping === true);
   setCheckboxValue("contentProductInventoryTracked", product.inventoryTracked === true);
+  setCheckboxValue(
+    "contentProductAvailableToAffiliates",
+    product.affiliateAvailable === true ||
+      product.affiliateAvailable === undefined &&
+        (Number(product.wholesalePrice) > 0 ||
+          (product.variants || []).some((variant) => Number(variant.wholesalePrice) > 0)),
+  );
   setCheckboxValue("contentProductRequiresCalendar", product.requiresCalendar === true);
   setCheckboxValue("contentProductRequiresSessionTime", product.requiresSessionTime === true);
   setCheckboxValue("contentProductTracksSeats", product.tracksSeats === true);
@@ -3396,7 +3412,8 @@ function chooseNewProduct() {
   setInputValue("contentProductPhysicalFulfilment", "none");
   setCheckboxValue("contentProductHasPhysicalFulfilment", false);
   updateProductRelationshipControl("Represents");
-  ["contentProductRequiresShipping", "contentProductInventoryTracked", "contentProductRequiresCalendar",
+  ["contentProductRequiresShipping", "contentProductInventoryTracked", "contentProductAvailableToAffiliates",
+    "contentProductRequiresCalendar",
     "contentProductRequiresSessionTime", "contentProductTracksSeats", "contentProductRequiresLocation",
     "contentProductRequiresInstructor"].forEach((id) => setCheckboxValue(id, false));
   setSelectValue("contentProductShopStatus", "draft");
@@ -3516,6 +3533,11 @@ function updateProductPhysicalFields() {
     setInputValue("contentProductPhysicalFulfilment", "none");
   }
   const tracked = document.getElementById("contentProductInventoryTracked")?.checked === true;
+  const affiliateAvailable =
+    document.getElementById("contentProductAvailableToAffiliates")?.checked === true;
+  document.querySelectorAll(
+    ".content-product-affiliate-pricing-field, .product-variant-affiliate-pricing-field",
+  ).forEach((field) => field.classList.toggle("hidden", !affiliateAvailable));
   document.getElementById("contentProductRequiresShipping")?.closest("label")?.classList.remove("hidden");
   document.getElementById("contentProductInventoryTrackedField")?.classList.remove("hidden");
   document.getElementById("contentProductInventoryHelp")?.classList.remove("hidden");
@@ -3552,6 +3574,7 @@ function updateProductPhysicalFields() {
       physicalFulfilmentEnabled ? "Physical fulfilment" : "",
       document.getElementById("contentProductRequiresShipping")?.checked ? "Requires shipping" : "",
       tracked ? "Tracked inventory" : "",
+      affiliateAvailable ? "Available to affiliates" : "",
       calendar ? "Calendar" : "",
       timing ? "Session time" : "",
       seats ? "Tickets/seats" : "",
@@ -3657,10 +3680,13 @@ function marketplaceTileSourceVariant(source = "") {
   return currentProductVariants().find((variant) => variant.variantId === variantId) || null;
 }
 
-function marketplacePreviewAttention(missing, extraClasses = "") {
-  return `${extraClasses} ${missing
-    ? "border border-purple-500 bg-purple-950/50 text-purple-100 ring-1 ring-purple-500/60"
-    : ""}`.trim();
+function marketplacePreviewAttention(missing, extraClasses = "", tone = "required") {
+  const tones = {
+    required: "border border-purple-500 bg-purple-950/50 text-purple-100 ring-1 ring-purple-500/60",
+    optional: "border border-blue-500 bg-blue-950/50 text-blue-100 ring-1 ring-blue-500/60",
+    review: "border border-yellow-500 bg-yellow-950/50 text-yellow-100 ring-1 ring-yellow-500/60",
+  };
+  return `${extraClasses} ${missing ? tones[tone] || tones.required : ""}`.trim();
 }
 
 function marketplacePreviewStateOverlay(label, tone = "purple", editorTarget = "") {
@@ -3713,6 +3739,7 @@ function marketplaceTilePreviewMarkup() {
   const price = optionalNumberFromInput("contentProductPrice");
   const salePrice = optionalNumberFromInput("contentProductSalePrice");
   const wholesalePrice = optionalNumberFromInput("contentProductWholesalePrice");
+  const affiliateAvailable = document.getElementById("contentProductAvailableToAffiliates")?.checked === true;
   const productTypeSelect = document.getElementById("contentProductDeliveryType");
   const deliveryType = productTypeSelect?.value || "";
   const productType = marketplacePreviewProductType(deliveryType);
@@ -3753,6 +3780,7 @@ function marketplaceTilePreviewMarkup() {
     ["Physical", "Hybrid"].includes(deliveryType) && physicalFulfilment === "No physical fulfilment";
   const fulfilmentSelections = [
     document.getElementById("contentProductInventoryTracked")?.checked ? "Track inventory" : "",
+    affiliateAvailable ? "Affiliate sales" : "",
     document.getElementById("contentProductHasPhysicalFulfilment")?.checked ? "Physical fulfilment" : "",
     document.getElementById("contentProductRequiresShipping")?.checked ? "Shipping required" : "",
     document.getElementById("contentProductRequiresCalendar")?.checked ? "Calendar booking" : "",
@@ -3762,7 +3790,8 @@ function marketplaceTilePreviewMarkup() {
     document.getElementById("contentProductRequiresInstructor")?.checked ? "Instructor" : "",
   ].filter(Boolean);
   const requiredFieldsComplete = !!imageUrl && !!productName && !!description &&
-    (price !== null || salePrice !== null) && !!category && !!deliveryType && !fulfilmentMissing;
+    (price !== null || salePrice !== null) && (!affiliateAvailable || wholesalePrice !== null) &&
+    !!category && !!deliveryType && !fulfilmentMissing;
   if (isUnsavedProduct() && !requiredFieldsComplete) {
     previewState = null;
     active = false;
@@ -3787,8 +3816,9 @@ function marketplaceTilePreviewMarkup() {
     <div class="mt-1 flex items-center justify-between gap-3">
       <button type="button" data-product-editor-target="contentProductPrice"
         class="${marketplacePreviewAttention(price === null && salePrice === null, "rounded font-semibold text-green-300 hover:text-green-200")}">${salePrice !== null && price !== null ? `<span class="mr-2 text-gray-500 line-through">$${Number(price).toFixed(2)}</span><span class="font-bold text-green-400">$${Number(salePrice).toFixed(2)}</span>` : price !== null ? `$${Number(price).toFixed(2)}` : "Set price"}</button>
-      <button type="button" data-product-editor-target="contentProductWholesalePrice"
+      ${affiliateAvailable ? `<button type="button" data-product-editor-target="contentProductWholesalePrice"
         class="${marketplacePreviewAttention(wholesalePrice === null, "rounded text-right text-sm font-semibold text-[#9edbd7] hover:text-white")}">Affiliate ${wholesalePrice !== null ? `$${Number(wholesalePrice).toFixed(2)}` : "not set"}</button>
+      ` : ""}
     </div>
     <div class="mt-4 border-t border-gray-700 pt-3">
       <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Product setup</p>
@@ -4042,7 +4072,7 @@ function adminPromotionVideoPreview(productVariant) {
     .filter(Boolean);
   if (!assets.length) {
     return `<button type="button" data-variant-editor="promotion"
-      class="mt-3 min-h-20 w-full rounded border border-purple-500 bg-purple-950/50 px-3 py-2 text-sm text-purple-100 ring-1 ring-purple-500/60">
+      class="mt-3 min-h-20 w-full rounded border border-blue-500 bg-blue-950/50 px-3 py-2 text-sm text-blue-100 ring-1 ring-blue-500/60">
       Set promotion video
     </button>`;
   }
@@ -4119,6 +4149,7 @@ function marketplaceVariantCardPreview(
   const category = document.getElementById("contentProductCategoryId")?.value || "";
   const categorySelect = document.getElementById("contentProductCategoryId");
   const categoryLabel = categorySelect?.selectedOptions?.[0]?.textContent || "";
+  const affiliateAvailable = document.getElementById("contentProductAvailableToAffiliates")?.checked === true;
   const hasVariantPhysicalFulfilment = productVariant.physicalFulfilment &&
     productVariant.physicalFulfilment !== "none";
   const fulfilmentMissing = !deliveryType ||
@@ -4143,10 +4174,16 @@ function marketplaceVariantCardPreview(
       unlockRow.querySelector(".content-product-unlock-target")?.value);
   const visibilityMissing = !productVariant.marketplaceMode;
   const priceSaleMissing = price === null && salePrice === null &&
-    (productVariant.wholesalePrice === null || productVariant.wholesalePrice === undefined);
+    (productVariant.wholesalePrice === null || productVariant.wholesalePrice === undefined) ||
+    affiliateAvailable &&
+      (productVariant.wholesalePrice === null || productVariant.wholesalePrice === undefined) &&
+      optionalNumberFromInput("contentProductWholesalePrice") === null;
   const promotionMissing = !(productVariant.promotionAssetIds || []).length;
   const prerequisitesMissing = !(productVariant.prerequisiteProductVariants || []).length;
   const bundleMissing = !(productVariant.bundleComponents || []).length;
+  const blueprintTone = ["Tool", "Workshop"].includes(productType) ? "review" : "optional";
+  const unlockTone = ["Course", "Program", "Plan", "Workshop"].includes(productType)
+    ? "review" : "optional";
   const bundleDetails = adminLinkedVariantList(
     "Bundle includes",
     productVariant.bundleComponents || [],
@@ -4206,13 +4243,13 @@ function marketplaceVariantCardPreview(
       <button type="button" data-product-editor-target="contentProductDeliveryType" class="${marketplacePreviewAttention(!deliveryType, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">Delivery: ${escapeHTML(deliveryType || "Set delivery")}</button>
       <button type="button" data-variant-editor="identity" class="${marketplacePreviewAttention(detailsMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Variant details</button>
       <button type="button" data-variant-editor="description" class="${marketplacePreviewAttention(missingDescription, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Descriptions</button>
-      <button type="button" data-variant-connection="blueprint" class="${marketplacePreviewAttention(blueprintMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Blueprints</button>
-      <button type="button" data-variant-connection="unlock" class="${marketplacePreviewAttention(unlockMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Unlocks</button>
+      <button type="button" data-variant-connection="blueprint" class="${marketplacePreviewAttention(blueprintMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white", blueprintTone)}">Blueprints</button>
+      <button type="button" data-variant-connection="unlock" class="${marketplacePreviewAttention(unlockMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white", unlockTone)}">Unlocks</button>
       <button type="button" data-variant-editor="visibility" class="${marketplacePreviewAttention(visibilityMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Visibility &amp; status</button>
       <button type="button" data-variant-editor="sale" class="${marketplacePreviewAttention(priceSaleMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Price &amp; sale</button>
-      <button type="button" data-variant-editor="promotion" class="${marketplacePreviewAttention(promotionMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Promotion videos</button>
-      <button type="button" data-variant-editor="prerequisites" class="${marketplacePreviewAttention(prerequisitesMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Prerequisites</button>
-      <button type="button" data-variant-editor="bundle" class="${marketplacePreviewAttention(bundleMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Bundle</button>
+      <button type="button" data-variant-editor="promotion" class="${marketplacePreviewAttention(promotionMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white", "optional")}">Promotion videos</button>
+      <button type="button" data-variant-editor="prerequisites" class="${marketplacePreviewAttention(prerequisitesMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white", "optional")}">Prerequisites</button>
+      <button type="button" data-variant-editor="bundle" class="${marketplacePreviewAttention(bundleMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white", "optional")}">Bundle</button>
       </div>
     </div>
   </div>`;
@@ -5060,6 +5097,9 @@ function populateBuilderFromRecord(record) {
     );
     setCheckboxValue("contentProductRequiresShipping", record.productRequiresShipping === true);
     setCheckboxValue("contentProductInventoryTracked", record.productInventoryTracked === true);
+    setCheckboxValue("contentProductAvailableToAffiliates", record.productAffiliateAvailable === true);
+    setInputValue("contentProductWholesalePrice", record.productWholesalePrice ?? "");
+    setInputValue("contentProductWholesaleMinQuantity", record.productWholesaleMinQuantity ?? 1);
     setCheckboxValue("contentProductRequiresCalendar", record.productRequiresCalendar === true);
     setCheckboxValue("contentProductRequiresSessionTime", record.productRequiresSessionTime === true);
     setCheckboxValue("contentProductTracksSeats", record.productTracksSeats === true);
@@ -5112,6 +5152,9 @@ function populateBuilderFromRecord(record) {
     );
     setCheckboxValue("contentProductRequiresShipping", record.productRequiresShipping === true);
     setCheckboxValue("contentProductInventoryTracked", record.productInventoryTracked === true);
+    setCheckboxValue("contentProductAvailableToAffiliates", record.productAffiliateAvailable === true);
+    setInputValue("contentProductWholesalePrice", record.productWholesalePrice ?? "");
+    setInputValue("contentProductWholesaleMinQuantity", record.productWholesaleMinQuantity ?? 1);
     setCheckboxValue("contentProductRequiresCalendar", record.productRequiresCalendar === true);
     setCheckboxValue("contentProductRequiresSessionTime", record.productRequiresSessionTime === true);
     setCheckboxValue("contentProductTracksSeats", record.productTracksSeats === true);
@@ -6813,6 +6856,12 @@ export async function setupContentBuilder() {
       refreshMarketplacePreviews();
     },
   );
+  document.getElementById("contentProductAvailableToAffiliates")?.addEventListener("change", () => {
+    updateProductPhysicalFields();
+    renderMarketplaceTileControls();
+    refreshMarketplacePreviews();
+    state.isDirty = true;
+  });
   ["contentProductRequiresShipping", "contentProductRequiresCalendar", "contentProductTracksSeats", "contentProductRequiresSessionTime",
     "contentProductRequiresLocation", "contentProductRequiresInstructor"].forEach((id) => {
     document.getElementById(id)?.addEventListener("change", () => {

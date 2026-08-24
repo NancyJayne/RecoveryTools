@@ -195,6 +195,10 @@ function normalizeItemRecord(doc, related = {}) {
     productMarketplaceTileDescriptionVariantId: product?.marketplaceTileDescriptionVariantId || "",
     productRequiresShipping: product?.requiresShipping === true,
     productInventoryTracked: product?.inventoryTracked === true,
+    productAffiliateAvailable: product?.affiliateAvailable === true ||
+      product?.affiliateAvailable === undefined && Number(product?.wholesalePrice) > 0,
+    productWholesalePrice: product?.wholesalePrice ?? activePrice?.wholesalePrice ?? null,
+    productWholesaleMinQuantity: product?.wholesaleMinQuantity ?? activePrice?.wholesaleMinQuantity ?? 1,
     productRequiresCalendar: product?.requiresCalendar === true,
     productRequiresSessionTime: product?.requiresSessionTime === true,
     productTracksSeats: product?.tracksSeats === true,
@@ -323,6 +327,10 @@ function addLinkedProducts(records, entityType, productsById, links, architectur
       productPhysicalFulfilment: product.physicalFulfilment ||
         (product.requiresShipping === true ? "shipping" : "none"),
       productInventoryTracked: product.inventoryTracked === true,
+      productAffiliateAvailable: product.affiliateAvailable === true ||
+        product.affiliateAvailable === undefined && Number(product.wholesalePrice) > 0,
+      productWholesalePrice: product.wholesalePrice ?? activePrice?.wholesalePrice ?? null,
+      productWholesaleMinQuantity: product.wholesaleMinQuantity ?? activePrice?.wholesaleMinQuantity ?? 1,
       productRequiresCalendar: product.requiresCalendar === true,
       productRequiresSessionTime: product.requiresSessionTime === true,
       productTracksSeats: product.tracksSeats === true,

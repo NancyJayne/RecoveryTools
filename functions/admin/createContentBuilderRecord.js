@@ -402,6 +402,11 @@ function normalizeVariant(value, index) {
     size: cleanString(value.size),
     sku: cleanString(value.sku),
     priceOverride: (asNumber(value.priceOverride) ?? 0) > 0 ? asNumber(value.priceOverride) : null,
+    salePrice: asNumber(value.salePrice),
+    wholesalePrice: asNumber(value.wholesalePrice),
+    wholesaleMinQuantity: Math.max(asNumber(value.wholesaleMinQuantity) ?? 1, 1),
+    saleStartsAt: cleanString(value.saleStartsAt),
+    saleEndsAt: cleanString(value.saleEndsAt),
     stockQty: asNumber(value.stockQty ?? value.stock) ?? 0,
     status: cleanString(value.status || "active").toLowerCase(),
     contentVariantId: cleanString(value.contentVariantId),
@@ -988,6 +993,11 @@ export const createContentBuilderRecord = onCall(
               }, { merge: true });
             }
             transaction.set(productRef, {
+              affiliateAvailable: data.productRelation?.affiliateAvailable === true,
+              wholesalePrice: data.productRelation?.affiliateAvailable === true
+                ? asNumber(data.productRelation?.wholesalePrice) : null,
+              wholesaleMinQuantity: data.productRelation?.affiliateAvailable === true
+                ? Math.max(asNumber(data.productRelation?.wholesaleMinQuantity) ?? 1, 1) : 1,
               manufacturingBlueprintId,
               estimatedUnitCost: asNumber(data.productRelation?.estimatedUnitCost) ?? 0,
               variantContentLinks,
@@ -1050,6 +1060,11 @@ export const createContentBuilderRecord = onCall(
                 isDefault: index === 0,
                 optionSummary: [variant.colour, variant.size].filter(Boolean).join(" / "),
                 priceOverride: variant.priceOverride,
+                salePrice: variant.salePrice,
+                wholesalePrice: variant.wholesalePrice,
+                wholesaleMinQuantity: variant.wholesaleMinQuantity,
+                saleStartsAt: variant.saleStartsAt,
+                saleEndsAt: variant.saleEndsAt,
                 currency: "AUD",
                 requiresShippingOverride: ["shipping", "shipping-or-pickup"]
                   .includes(variant.physicalFulfilment),
@@ -1082,8 +1097,12 @@ export const createContentBuilderRecord = onCall(
                   variantId,
                   currency: "AUD",
                   retailPrice: variant.priceOverride,
-                  salePrice: null,
-                  onSale: false,
+                  salePrice: variant.salePrice,
+                  wholesalePrice: data.productRelation?.affiliateAvailable === true
+                    ? variant.wholesalePrice : null,
+                  wholesaleMinQuantity: data.productRelation?.affiliateAvailable === true
+                    ? variant.wholesaleMinQuantity : 1,
+                  onSale: variant.salePrice !== null,
                   effectiveShopPrice: variant.priceOverride,
                   gstIncluded: true,
                   gstAmount: Number((variant.priceOverride / 11).toFixed(2)),
@@ -1184,6 +1203,7 @@ export const createContentBuilderRecord = onCall(
                 (data.productRelation?.requiresShipping ? "shipping" : "none"),
             ).toLowerCase(),
             inventoryTracked: data.productRelation?.inventoryTracked === true,
+            affiliateAvailable: data.productRelation?.affiliateAvailable === true,
             manufacturingBlueprintId,
             estimatedUnitCost: asNumber(data.productRelation?.estimatedUnitCost) ?? 0,
             variantContentLinks,
@@ -1214,6 +1234,10 @@ export const createContentBuilderRecord = onCall(
             price: effectivePrice,
             retailPrice,
             salePrice,
+            wholesalePrice: data.productRelation?.affiliateAvailable === true
+              ? asNumber(data.productRelation?.wholesalePrice) : null,
+            wholesaleMinQuantity: data.productRelation?.affiliateAvailable === true
+              ? Math.max(asNumber(data.productRelation?.wholesaleMinQuantity) ?? 1, 1) : 1,
             onSale: salePrice !== null,
             priceFrom: variants
               .map((variant) => variant.priceOverride)
@@ -1273,6 +1297,10 @@ export const createContentBuilderRecord = onCall(
             currency: "AUD",
             retailPrice,
             salePrice,
+            wholesalePrice: data.productRelation?.affiliateAvailable === true
+              ? asNumber(data.productRelation?.wholesalePrice) : null,
+            wholesaleMinQuantity: data.productRelation?.affiliateAvailable === true
+              ? Math.max(asNumber(data.productRelation?.wholesaleMinQuantity) ?? 1, 1) : 1,
             onSale: salePrice !== null,
             effectiveShopPrice: effectivePrice,
             gstIncluded: true,
@@ -1296,6 +1324,11 @@ export const createContentBuilderRecord = onCall(
               size: variant.size,
               sku: variant.sku,
               priceOverride: variant.priceOverride,
+              salePrice: variant.salePrice,
+              wholesalePrice: variant.wholesalePrice,
+              wholesaleMinQuantity: variant.wholesaleMinQuantity,
+              saleStartsAt: variant.saleStartsAt,
+              saleEndsAt: variant.saleEndsAt,
               status: variant.status || "active",
               contentVariantId: variant.contentVariantId,
               shortDescription: variant.shortDescription,
@@ -1333,6 +1366,11 @@ export const createContentBuilderRecord = onCall(
               isDefault: index === 0,
               optionSummary: [variant.colour, variant.size].filter(Boolean).join(" / "),
               priceOverride: variant.priceOverride,
+              salePrice: variant.salePrice,
+              wholesalePrice: variant.wholesalePrice,
+              wholesaleMinQuantity: variant.wholesaleMinQuantity,
+              saleStartsAt: variant.saleStartsAt,
+              saleEndsAt: variant.saleEndsAt,
               currency: "AUD",
               requiresShippingOverride: ["shipping", "shipping-or-pickup"].includes(variant.physicalFulfilment),
               inventoryTracked: data.productRelation?.inventoryTracked === true,
@@ -1365,8 +1403,12 @@ export const createContentBuilderRecord = onCall(
                 variantId,
                 currency: "AUD",
                 retailPrice: variant.priceOverride,
-                salePrice: null,
-                onSale: false,
+                salePrice: variant.salePrice,
+                wholesalePrice: data.productRelation?.affiliateAvailable === true
+                  ? variant.wholesalePrice : null,
+                wholesaleMinQuantity: data.productRelation?.affiliateAvailable === true
+                  ? variant.wholesaleMinQuantity : 1,
+                onSale: variant.salePrice !== null,
                 effectiveShopPrice: variant.priceOverride,
                 gstIncluded: true,
                 gstAmount: Number((variant.priceOverride / 11).toFixed(2)),
