@@ -1724,7 +1724,7 @@
                   <div>
                     <h3 class="font-semibold text-white">Shop product relationship</h3>
                     <p class="mt-1 text-xs text-gray-400">
-                      Create a new shop product or connect this content to an existing product and its variants.
+                      Edit this Product and its connection to the current entity.
                     </p>
                   </div>
                   <div class="flex gap-2">
@@ -1756,9 +1756,8 @@
                 <select id="contentExistingProductId" class="hidden" aria-hidden="true">
                   <option value="">Create a new Product</option>
                 </select>
-                <div class="mb-4 rounded border border-gray-700 bg-gray-900/70 p-3">
+                <div id="contentProductConnectionPicker" class="mb-4 rounded border border-gray-700 bg-gray-900/70 p-3">
                   <div class="flex flex-wrap gap-2">
-                    <button id="createNewProductChoiceBtn" type="button" class="rounded bg-[#407471] px-3 py-2 text-white">Create new product</button>
                     <input id="contentProductSearch" class="min-w-52 flex-1 rounded bg-gray-800 px-3 py-2 text-white" placeholder="Search existing products or variants">
                   </div>
                   <div id="contentProductChoiceList" class="mt-3 max-h-64 space-y-2 overflow-y-auto"></div>
@@ -1826,12 +1825,12 @@
                       </div>
                       <div id="contentProductTilePreview" class="mt-3 rounded border border-gray-700 bg-gray-950/60 p-3"></div>
                     </section>
-                    <div class="flex flex-wrap items-center justify-between gap-3">
-                      <p class="text-xs text-gray-400">Entity variants can start a Product variant, but the sellable configurations remain independent.</p>
-                      <button id="addContentProductVariantBtn" type="button" class="rounded border border-[#407471] px-3 py-2 text-sm text-[#9edbd7]">Add Product variant</button>
-                    </div>
+                    <p class="text-xs text-gray-400">Entity variants can start a Product variant, but the sellable configurations remain independent.</p>
                     <input id="contentProductVariants" type="hidden">
                     <div id="contentProductVariantRows" class="mt-3 space-y-4"></div>
+                    <div class="mt-4 flex justify-end">
+                      <button id="addContentProductVariantBtn" type="button" class="rounded border border-[#407471] px-3 py-2 text-sm text-[#9edbd7]">Add Product variant</button>
+                    </div>
                   </div>
                 </details>
                 <details class="mt-4 overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80 shadow-md">

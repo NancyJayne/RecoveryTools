@@ -1460,14 +1460,14 @@ function renderSelectedProductVariantRows(
                 type="number" min="0" step="0.01" value="${escapeHTML(productVariant.priceOverride ?? "")}" placeholder="Use main Product price">
             </label>
           </section>
-          <label class="product-variant-stock-field block text-sm">Product stock
+          <label data-variant-editor-section="fulfilment" class="product-variant-stock-field block text-sm">Product stock
             <input class="product-variant-stock mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.stock ?? 0)}">
             <span class="mt-1 block text-xs text-gray-400">Finished sellable stock. This is separate from the connected Item variant stock.</span>
           </label>
-          <label class="product-variant-calendar-field hidden block text-sm">Calendar / booking reference
+          <label data-variant-editor-section="fulfilment" class="product-variant-calendar-field hidden block text-sm">Calendar / booking reference
             <input class="product-variant-calendar-reference mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.calendarBookingReference || "")}" placeholder="Calendar ID, booking link or reference">
           </label>
-          <label class="product-variant-delivery-field block text-sm">Delivery mode
+          <label data-variant-editor-section="fulfilment" class="product-variant-delivery-field block text-sm">Delivery mode
             <select class="product-variant-delivery-mode mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
               <option value="">Select delivery mode</option>
               <option value="physical"${productVariant.deliveryMode === "physical" ? " selected" : ""}>Physical delivery</option>
@@ -1478,7 +1478,7 @@ function renderSelectedProductVariantRows(
               <option value="digital-download"${productVariant.deliveryMode === "digital-download" ? " selected" : ""}>Digital download</option>
             </select>
           </label>
-          <label class="product-variant-physical-fulfilment-field hidden block text-sm">Physical fulfilment
+          <label data-variant-editor-section="fulfilment" class="product-variant-physical-fulfilment-field hidden block text-sm">Physical fulfilment
             <select class="product-variant-physical-fulfilment mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
               ${compactSelectOptions(
     ["none", "shipping", "pickup", "shipping-or-pickup"],
@@ -1486,23 +1486,23 @@ function renderSelectedProductVariantRows(
   )}
             </select>
           </label>
-          <label class="product-variant-seats-field hidden block text-sm">Ticket / seat capacity
+          <label data-variant-editor-section="fulfilment" class="product-variant-seats-field hidden block text-sm">Ticket / seat capacity
             <input class="product-variant-seat-capacity mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.seatCapacity ?? "")}">
           </label>
-          <label class="product-variant-seats-field hidden block text-sm">Near capacity warning
+          <label data-variant-editor-section="fulfilment" class="product-variant-seats-field hidden block text-sm">Near capacity warning
             <input class="product-variant-near-capacity-warning mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.nearCapacityWarning ?? "")}" placeholder="Example: 10">
             <span class="mt-1 block text-xs text-gray-400">Show “Almost sold out” when this many seats or fewer remain.</span>
           </label>
-          <label class="product-variant-session-field hidden block text-sm">Session starts
+          <label data-variant-editor-section="fulfilment" class="product-variant-session-field hidden block text-sm">Session starts
             <input class="product-variant-event-start mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="datetime-local" value="${escapeHTML(productVariant.eventStartAt || "")}">
           </label>
-          <label class="product-variant-session-field hidden block text-sm">Session ends
+          <label data-variant-editor-section="fulfilment" class="product-variant-session-field hidden block text-sm">Session ends
             <input class="product-variant-event-end mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="datetime-local" value="${escapeHTML(productVariant.eventEndAt || "")}">
           </label>
-          <label class="product-variant-location-field hidden block text-sm md:col-span-2">Location
+          <label data-variant-editor-section="fulfilment" class="product-variant-location-field hidden block text-sm md:col-span-2">Location
             <input class="product-variant-event-location mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.eventLocation || "")}" placeholder="Venue, address or online location">
           </label>
-          <label class="product-variant-instructor-field hidden block text-sm md:col-span-2">Instructor
+          <label data-variant-editor-section="fulfilment" class="product-variant-instructor-field hidden block text-sm md:col-span-2">Instructor
             <select class="product-variant-instructor mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
               <option value="">Choose instructor</option>
               ${instructorOptions(productVariant.instructor || "") ||
@@ -3129,6 +3129,14 @@ function productRelationPayload() {
   if (saleStartsAt && saleEndsAt && saleEndsAt <= saleStartsAt) {
     throw new Error("The sale end date must be after its start date.");
   }
+  const variantContentLinks = productVariantContentLinksFromRows();
+  const accessGrants = productUnlocksFromRows();
+  if (variantContentLinks.some((link) => !link.productVariantId)) {
+    throw new Error("Choose an exact Product variant for every manufacturing or operations Blueprint.");
+  }
+  if (accessGrants.some((grant) => !grant.productVariantId)) {
+    throw new Error("Choose an exact Product variant for every unlock after purchase.");
+  }
   return {
     existingProductId: document.getElementById("contentExistingProductId")?.value || "",
     productId: document.getElementById("contentProductId")?.value || "",
@@ -3173,8 +3181,8 @@ function productRelationPayload() {
       ? document.getElementById("contentId")?.value || state.editingRecord?.id || ""
       : document.getElementById("contentProductBlueprintId")?.value || "",
     estimatedUnitCost: updateConnectedProductCostPreview(),
-    variantContentLinks: productVariantContentLinksFromRows(),
-    accessGrants: productUnlocksFromRows(),
+    variantContentLinks,
+    accessGrants,
   };
 }
 
@@ -3396,13 +3404,13 @@ function orderProductDrawerSections() {
   const variants = document.getElementById("contentProductVariants")?.closest("details");
   const fulfilment = document.getElementById("contentProductPhysicalFulfilment")?.closest("details");
   const manufacturing = document.getElementById("contentProductBlueprintId")?.closest("details");
-  if (!variants || !fulfilment || fulfilment.nextElementSibling === variants) return;
-  variants.before(fulfilment);
+  if (!variants || !fulfilment) return;
+  if (variants.nextElementSibling !== fulfilment) variants.after(fulfilment);
   const fulfilmentNumber = fulfilment.querySelector("summary span");
   const variantsNumber = variants.querySelector("summary span");
   const manufacturingNumber = manufacturing?.querySelector("summary span");
-  if (fulfilmentNumber) fulfilmentNumber.textContent = "1";
-  if (variantsNumber) variantsNumber.textContent = "2";
+  if (variantsNumber) variantsNumber.textContent = "1";
+  if (fulfilmentNumber) fulfilmentNumber.textContent = "2";
   if (manufacturingNumber) manufacturingNumber.textContent = "3";
 }
 
@@ -3567,15 +3575,45 @@ function marketplaceTilePreviewMarkup() {
   const description = descriptionVariant?.shortDescription ||
     document.getElementById("contentShortDescription")?.value || "Add a short description";
   const price = optionalNumberFromInput("contentProductPrice");
-  return `<div class="mx-auto max-w-sm rounded-lg bg-gray-800 p-4 shadow">
-    <div class="flex h-40 items-center justify-center overflow-hidden rounded bg-gray-950 text-xs text-gray-400">
+  const wholesalePrice = optionalNumberFromInput("contentProductWholesalePrice");
+  const productTypeSelect = document.getElementById("contentProductDeliveryType");
+  const productType = productTypeSelect?.selectedOptions?.[0]?.textContent ||
+    productTypeSelect?.value || "Product";
+  const categorySelect = document.getElementById("contentProductCategoryId");
+  const category = categorySelect?.selectedOptions?.[0]?.textContent || "No category";
+  const featured = document.getElementById("contentProductFeatured")?.checked === true;
+  const archived = document.getElementById("contentProductArchived")?.checked === true;
+  const fulfilmentLabels = [...new Set(currentProductVariants()
+    .map((variant) => variant.physicalFulfilment)
+    .filter((value) => value && value !== "none"))];
+  const physicalFulfilment = fulfilmentLabels.length
+    ? fulfilmentLabels.join(" / ").replaceAll("-", " ")
+    : document.getElementById("contentProductHasPhysicalFulfilment")?.checked === true
+      ? "Physical fulfilment enabled" : "No physical fulfilment";
+  return `<div class="relative mx-auto max-w-sm overflow-hidden rounded-lg bg-gray-800 p-4 shadow">
+    ${archived ? `<div class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/55">
+      <button type="button" data-product-editor-target="contentProductArchived" class="pointer-events-auto -rotate-12 rounded border-4 border-red-400 px-5 py-2 text-2xl font-black uppercase tracking-widest text-red-300">Archived</button>
+    </div>` : ""}
+    <button type="button" data-product-editor-target="contentProductTileImageSource"
+      class="flex h-40 w-full items-center justify-center overflow-hidden rounded bg-gray-950 text-xs text-gray-400 ring-[#407471] hover:ring-2">
       ${imageUrl
     ? `<img src="${escapeHTML(imageUrl)}" alt="${escapeHTML(productName)}" class="h-full w-full object-cover">`
     : "No image available from the selected source"}
+    </button>
+    <div class="mt-3 flex items-start justify-between gap-2">
+      <button type="button" data-product-editor-target="contentName" class="text-left font-semibold text-white hover:text-[#9edbd7]">${escapeHTML(productName)}</button>
+      <button type="button" data-product-editor-target="contentProductFeatured" class="text-yellow-300 hover:text-yellow-200" title="Edit featured status">${featured ? "★ Featured" : "☆ Not featured"}</button>
     </div>
-    <h5 class="mt-3 font-semibold text-white">${escapeHTML(productName)}</h5>
-    <p class="mt-1 text-sm text-gray-300">${escapeHTML(description)}</p>
-    ${price !== null ? `<p class="mt-2 font-semibold text-green-300">$${Number(price).toFixed(2)}</p>` : ""}
+    <button type="button" data-product-editor-target="contentProductTileDescriptionSource" class="mt-1 block w-full text-left text-sm text-gray-300 hover:text-white">${escapeHTML(description)}</button>
+    <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+      <button type="button" data-product-editor-target="contentProductPrice" class="font-semibold text-green-300 hover:text-green-200">${price !== null ? `$${Number(price).toFixed(2)}` : "Set price"}</button>
+      <button type="button" data-product-editor-target="contentProductWholesalePrice" class="text-[#9edbd7] hover:text-white">Affiliate ${wholesalePrice !== null ? `$${Number(wholesalePrice).toFixed(2)}` : "not set"}</button>
+    </div>
+    <div class="mt-3 flex flex-wrap gap-2 text-xs">
+      <button type="button" data-product-editor-target="contentProductDeliveryType" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">${escapeHTML(productType)}</button>
+      <button type="button" data-product-editor-target="contentProductCategoryId" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">${escapeHTML(category)}</button>
+      <button type="button" data-product-editor-target="contentProductHasPhysicalFulfilment" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">${escapeHTML(physicalFulfilment)}</button>
+    </div>
   </div>`;
 }
 
@@ -3612,6 +3650,16 @@ function hydrateMarketplaceTileControls(record = {}) {
   if (descriptionSelect) descriptionSelect.dataset.savedValue = descriptionValue;
 }
 
+function focusProductEditorTarget(targetId) {
+  const target = document.getElementById(targetId);
+  if (!target) return;
+  if (targetId === "contentName") closeContentProductDrawer();
+  const section = target.closest("details");
+  if (section) section.open = true;
+  target.scrollIntoView({ behavior: "smooth", block: "center" });
+  target.focus({ preventScroll: true });
+}
+
 function marketplaceVariantCardPreview(
   productVariant,
   entityVariant = {},
@@ -3635,7 +3683,15 @@ function marketplaceVariantCardPreview(
   const statusLabel = marketplaceMode === "inherit"
     ? productVariant.status || "draft"
     : marketplaceMode;
-  return `<div class="product-variant-card-preview grid gap-3 sm:grid-cols-[10rem_1fr_auto]" data-preview-mode="${detailMode ? "detail" : "card"}">
+  const archived = document.getElementById("contentProductArchived")?.checked === true ||
+    productVariant.status === "archived";
+  const fulfilmentSummary = [productVariant.deliveryMode, productVariant.physicalFulfilment]
+    .filter((value) => value && value !== "none")
+    .join(" / ").replaceAll("-", " ") || "Fulfilment";
+  return `<div class="product-variant-card-preview relative grid overflow-hidden rounded gap-3 sm:grid-cols-[10rem_1fr_auto]" data-preview-mode="${detailMode ? "detail" : "card"}">
+    ${archived ? `<div class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/55">
+      <button type="button" data-variant-editor="identity" class="pointer-events-auto -rotate-12 rounded border-4 border-red-400 px-5 py-2 text-2xl font-black uppercase tracking-widest text-red-300">Archived</button>
+    </div>` : ""}
     <button type="button" data-variant-editor="image" title="Edit marketplace image"
       class="flex min-h-28 items-center justify-center overflow-hidden rounded bg-gray-950 text-center text-xs text-gray-400 ring-[#407471] hover:ring-2">
       ${url
@@ -3649,8 +3705,8 @@ function marketplaceVariantCardPreview(
         <span class="text-sm font-medium text-[#c15cff]">${escapeHTML(variantName)}</span>
       </button>
       <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
-        ${isPrimary ? `<span class="font-medium text-[#9edbd7]">Primary</span>` : ""}
-        <span class="rounded bg-gray-950 px-2 py-1 text-gray-300">${escapeHTML(statusLabel)}</span>
+        ${isPrimary ? `<button type="button" data-variant-editor="identity" class="font-medium text-[#9edbd7] hover:text-white">Primary</button>` : ""}
+        <button type="button" data-variant-editor="identity" class="rounded bg-gray-950 px-2 py-1 text-gray-300 hover:text-white">${escapeHTML(statusLabel)}</button>
       </div>
       <button type="button" data-variant-editor="description" title="Edit description overrides"
         class="mt-2 block w-full text-left text-sm text-gray-300 hover:text-white ${detailMode ? "" : "line-clamp-2"}">
@@ -3661,9 +3717,11 @@ function marketplaceVariantCardPreview(
       ${detailMode
     ? `<p class="mt-3 text-xs font-medium uppercase tracking-wide text-[#9edbd7]">Shop detail preview</p>` : ""}
     </div>
-    <div class="flex flex-col items-end justify-between gap-3 self-stretch">
-      <button type="button" data-variant-editor="admin" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Admin fields</button>
-      <span class="text-xs font-medium text-[#c15cff]">Product detail</span>
+    <div class="flex flex-col items-end justify-between gap-2 self-stretch text-xs">
+      <button type="button" data-variant-editor="fulfilment" class="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:border-[#407471] hover:text-white">${escapeHTML(fulfilmentSummary)}</button>
+      <button type="button" data-variant-connection="blueprint" class="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:border-[#407471] hover:text-white">Blueprints</button>
+      <button type="button" data-variant-connection="unlock" class="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:border-[#407471] hover:text-white">Unlocks</button>
+      <button type="button" data-variant-editor="description" class="font-medium text-[#c15cff] hover:text-[#d991ff]">Product detail</button>
     </div>
   </div>`;
 }
@@ -3681,6 +3739,8 @@ function updateMarketplacePreviewRow(target) {
     longDescription: row.querySelector(".product-variant-long-description")?.value || "",
     priceOverride: optionalNumberFromElement(row.querySelector(".product-variant-price")),
     primaryAssetId: row.querySelector(".product-variant-primary-asset")?.value || "",
+    deliveryMode: row.querySelector(".product-variant-delivery-mode")?.value || "",
+    physicalFulfilment: row.querySelector(".product-variant-physical-fulfilment")?.value || "none",
     marketplaceMode: row.querySelector(".product-variant-marketplace-mode")?.value || "inherit",
     status: row.dataset.pendingStatus || row.querySelector(".product-variant-status")?.value || "draft",
   };
@@ -3801,7 +3861,7 @@ function renderProductVariantContentLinkRows(links = []) {
           <option value="OperatedWith"${linkRole === "OperatedWith" ? " selected" : ""}>Workshop operations</option>
         </select>
         <select class="variant-content-product-variant rounded bg-gray-800 px-2 py-2 text-white">
-          <option value="">All Product variants</option>${productVariantOptions}
+          <option value=""${link.productVariantId ? "" : " selected"}>Choose Product variant${link.productVariantId ? "" : " — legacy all-variant link"}</option>${productVariantOptions}
         </select>
         <select class="variant-content-blueprint rounded bg-gray-800 px-2 py-2 text-white">
           <option value="">Choose Blueprint</option>${blueprintOptions}
@@ -3814,10 +3874,10 @@ function renderProductVariantContentLinkRows(links = []) {
   }).join("") || "<p class=\"text-xs text-gray-400\">No manufacturing or Workshop Operations Blueprint selected.</p>";
 }
 
-function addProductVariantContentLinkRow() {
+function addProductVariantContentLinkRow(productVariantId = "") {
   renderProductVariantContentLinkRows([
     ...productVariantContentLinksFromRows(),
-    { productVariantId: "", entityType: "Blueprint", entityId: "", entityVariantId: "", linkRole: "ManufacturedFrom" },
+    { productVariantId, entityType: "Blueprint", entityId: "", entityVariantId: "", linkRole: "ManufacturedFrom" },
   ]);
 }
 
@@ -3872,7 +3932,7 @@ function renderProductUnlockRows(grants = []) {
       <div class="content-product-unlock-row grid gap-2 rounded border border-gray-700 p-2
         md:grid-cols-2 xl:grid-cols-[12rem_9rem_1fr_1fr_9rem_7rem_13rem_auto]">
         <select class="content-product-unlock-variant rounded bg-gray-800 px-2 py-2 text-white">
-          <option value="">All Product variants</option>
+          <option value=""${grant.productVariantId ? "" : " selected"}>Choose Product variant${grant.productVariantId ? "" : " — legacy all-variant unlock"}</option>
           ${variantOptions}
         </select>
         <select class="content-product-unlock-type rounded bg-gray-800 px-2 py-2 text-white"
@@ -3907,11 +3967,11 @@ function renderProductUnlockRows(grants = []) {
   }).join("") || "<p class=\"text-xs text-gray-400\">No additional content unlocks selected.</p>";
 }
 
-function addProductUnlockRow() {
+function addProductUnlockRow(productVariantId = "") {
   renderProductUnlockRows([
     ...productUnlocksFromRows(),
     {
-      productVariantId: "",
+      productVariantId,
       accessEntityType: "Plan",
       accessEntityId: "",
       accessEntityVariantId: "",
@@ -3925,14 +3985,21 @@ function addProductUnlockRow() {
 function updateProductRelationStatus(record) {
   const status = document.getElementById("contentProductRelationStatus");
   const unlinkButton = document.getElementById("unlinkContentProductBtn");
+  const connectionPicker = document.getElementById("contentProductConnectionPicker");
   if (!status) return;
   const productId = record?.productId || record?.itemProductId || "";
-  status.textContent = productId ? `Linked: ${productId}` : "No linked product";
+  const entityType = currentRecordType();
+  const entityId = document.getElementById("contentId")?.value || state.editingRecord?.id || "new entity";
+  const entityName = document.getElementById("contentName")?.value || state.editingRecord?.name || "";
+  status.textContent = productId
+    ? `Linked: ${productId} ↔ ${entityType} ${entityName || entityId} (${entityId})`
+    : `No Product linked to ${entityType} ${entityName || entityId}`;
   status.classList.toggle("bg-green-900/60", !!productId);
   status.classList.toggle("text-green-200", !!productId);
   status.classList.toggle("bg-gray-800", !productId);
   status.classList.toggle("text-gray-300", !productId);
   unlinkButton?.classList.toggle("hidden", !productId);
+  connectionPicker?.classList.toggle("hidden", !!productId);
 }
 
 function renderCurrentAssets(record) {
@@ -6175,10 +6242,9 @@ export async function setupContentBuilder() {
     const choice = event.target.closest("[data-product-choice]");
     if (choice) chooseExistingProduct(choice.dataset.productChoice);
   });
-  document.getElementById("createNewProductChoiceBtn")?.addEventListener("click", chooseNewProduct);
   document.getElementById("addProductVariantContentLinkBtn")?.addEventListener(
     "click",
-    addProductVariantContentLinkRow,
+    () => addProductVariantContentLinkRow(),
   );
   document.getElementById("productVariantContentLinkRows")?.addEventListener("click", (event) => {
     const remove = event.target.closest(".remove-product-variant-content-link");
@@ -6218,7 +6284,41 @@ export async function setupContentBuilder() {
       state.isDirty = true;
     });
   });
+  document.getElementById("contentProductTilePreview")?.addEventListener("click", (event) => {
+    const trigger = event.target.closest("[data-product-editor-target]");
+    if (trigger) focusProductEditorTarget(trigger.dataset.productEditorTarget);
+  });
+  ["contentProductWholesalePrice", "contentProductDeliveryType", "contentProductCategoryId",
+    "contentProductFeatured", "contentProductArchived", "contentProductHasPhysicalFulfilment"]
+    .forEach((id) => document.getElementById(id)?.addEventListener("change", () => {
+      renderMarketplaceTileControls();
+      refreshMarketplacePreviews();
+    }));
+  document.getElementById("contentProductWholesalePrice")?.addEventListener(
+    "input",
+    renderMarketplaceTileControls,
+  );
   document.getElementById("contentProductVariantRows")?.addEventListener("click", (event) => {
+    const connectionTrigger = event.target.closest("[data-variant-connection]");
+    if (connectionTrigger) {
+      const row = connectionTrigger.closest(".content-product-variant-row");
+      const productVariantId = row?.dataset.productVariantId || "";
+      const connection = connectionTrigger.dataset.variantConnection;
+      if (connection === "blueprint") {
+        const existing = productVariantContentLinksFromRows(true)
+          .some((link) => link.productVariantId === productVariantId);
+        if (!existing) addProductVariantContentLinkRow(productVariantId);
+        const section = document.getElementById("productVariantContentLinkRows")?.closest("details");
+        if (section) section.open = true;
+        section?.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else if (connection === "unlock") {
+        const existing = productUnlocksFromRows().some((grant) => grant.productVariantId === productVariantId);
+        if (!existing) addProductUnlockRow(productVariantId);
+        const section = document.getElementById("contentProductUnlockRows")?.closest("section");
+        section?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      return;
+    }
     const editorTrigger = event.target.closest("[data-variant-editor]");
     if (editorTrigger) {
       const row = editorTrigger.closest(".content-product-variant-row");
@@ -6297,6 +6397,7 @@ export async function setupContentBuilder() {
       const badge = row?.querySelector(".product-variant-status-badge");
       if (badge) badge.textContent = nextStatus;
       syncSelectedProductVariantRows();
+      updateMarketplacePreviewRow(statusAction);
       state.isDirty = true;
       showToast(`${sessionName} marked ${nextStatus}. Save product details when you finish editing.`, "success");
       return;
@@ -6314,6 +6415,7 @@ export async function setupContentBuilder() {
     const badge = row?.querySelector(".product-variant-status-badge");
     if (badge) badge.textContent = "archived";
     syncSelectedProductVariantRows();
+    updateMarketplacePreviewRow(remove);
     state.isDirty = true;
     showToast(`${sessionName} will be removed from sale when you save product details.`, "success");
   });
@@ -6502,7 +6604,7 @@ export async function setupContentBuilder() {
     }
     window.open(externalUrl(url), "_blank", "noopener,noreferrer");
   });
-  document.getElementById("addContentProductUnlockBtn")?.addEventListener("click", addProductUnlockRow);
+  document.getElementById("addContentProductUnlockBtn")?.addEventListener("click", () => addProductUnlockRow());
   document.getElementById("contentProductUnlockRows")?.addEventListener("change", (event) => {
     if (!event.target.classList.contains("content-product-unlock-type") &&
         !event.target.classList.contains("content-product-unlock-target")) return;

@@ -934,6 +934,18 @@ export const createContentBuilderRecord = onCall(
               productVariantId: link.productVariantId,
             });
           });
+          if (variantContentLinks.some((link) => !link.productVariantId)) {
+            throw new HttpsError(
+              "failed-precondition",
+              "Every manufacturing, Workshop operations, or lecture Blueprint must belong to an exact Product variant.",
+            );
+          }
+          if (accessTargets.some((grant) => !grant.productVariantId)) {
+            throw new HttpsError(
+              "failed-precondition",
+              "Every unlock after purchase must belong to an exact Product variant.",
+            );
+          }
           const selectedAssetMedia = linkedAssets.map((asset) => ({
             type: cleanString(asset.data.type || asset.data.assetType) ||
               assetTypeFromUrl(asset.data.fileUrl || asset.data.url),

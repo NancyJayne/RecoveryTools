@@ -435,6 +435,18 @@ async function updateProductRelation({
     });
   }
   const variantContentLinks = cleanVariantContentLinks(relation.variantContentLinks);
+  if (variantContentLinks.some((link) => !link.productVariantId)) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Every manufacturing, Workshop operations, or lecture Blueprint must belong to an exact Product variant.",
+    );
+  }
+  if (accessTargets.some((grant) => !grant.productVariantId)) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Every unlock after purchase must belong to an exact Product variant.",
+    );
+  }
   const desiredAccessGrantIds = new Set();
   const desiredVariantLinkIds = new Set();
   variantContentLinks.filter((link) => link.linkRole === "Unlocks").forEach((link) => {
