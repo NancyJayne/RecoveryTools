@@ -1423,11 +1423,6 @@ function renderSelectedProductVariantRows(
             <label class="block text-sm">SKU
             <input class="product-variant-sku mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.sku || "")}" placeholder="Auto-filled if blank">
             </label>
-            <label class="block text-sm">Status
-              <select class="product-variant-status mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-                ${compactSelectOptions(["draft", "active", "paused", "archived"], productVariant.status || "draft")}
-              </select>
-            </label>
             <label class="block text-sm">Colour
             <input class="product-variant-colour mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.colour || "")}">
             </label>
@@ -1589,25 +1584,22 @@ function renderSelectedProductVariantRows(
             </div>
             <div class="product-bundle-component-rows mt-3 space-y-2">${bundleComponentsMarkup(productVariant.bundleComponents || [])}</div>
           </div>
-          <div data-variant-editor-section="lifecycle" class="md:col-span-2 xl:col-span-4">
-            <div class="mb-3 flex flex-wrap gap-2">
-              <button type="button" data-product-variant-action="active"
-                class="product-variant-status-action rounded border border-[#407471] px-3 py-2 text-sm text-[#9bd3cf]">
-                Activate session
-              </button>
-              <button type="button" data-product-variant-action="paused"
-                class="product-variant-status-action rounded border border-amber-700 px-3 py-2 text-sm text-amber-200">
-                Hide / cancel session
-              </button>
-              <button type="button" data-product-variant-action="archived"
-                class="product-variant-status-action rounded border border-red-700 px-3 py-2 text-sm text-red-200">
-                Archive session
-              </button>
+          <div data-variant-editor-section="lifecycle" class="variant-editor-actions rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
+            <h5 class="font-semibold text-white">Variant status and save</h5>
+            <p class="mt-1 text-xs text-gray-400">Choose one status, then save this variant to return to its detail preview.</p>
+            <select class="product-variant-status hidden" aria-hidden="true" tabindex="-1">
+              ${compactSelectOptions(["draft", "active", "paused", "archived"], productVariant.status || "draft")}
+            </select>
+            <div class="mt-3 flex flex-wrap items-center gap-4">
+              ${["draft", "active", "paused", "archived"].map((status) => `
+                <label class="inline-flex items-center gap-2 rounded border border-gray-700 px-3 py-2 text-sm">
+                  <input type="checkbox" class="product-variant-status-checkbox accent-[#407471]"
+                    data-product-variant-status="${status}"${(productVariant.status || "draft") === status ? " checked" : ""}>
+                  ${status === "paused" ? "Paused / hidden" : status[0].toUpperCase() + status.slice(1)}
+                </label>`).join("")}
+              <button type="button" data-save-variant-editor class="rounded bg-[#407471] px-4 py-2 text-sm font-semibold text-white hover:bg-[#305a56]">Save variant</button>
             </div>
-            <button type="button" class="remove-content-product-variant rounded border border-red-700 px-3 py-2 text-sm text-red-200">Remove session from sale</button>
-          </div>
-          <div class="variant-editor-actions flex justify-end md:col-span-2 xl:col-span-4">
-            <button type="button" data-close-variant-editor class="rounded border border-[#407471] px-3 py-1 text-[#9edbd7]">Done</button>
+            <button type="button" class="remove-content-product-variant mt-3 rounded border border-red-700 px-3 py-2 text-sm text-red-200">Remove variant from sale</button>
           </div>
         </div>
       </div>`;
@@ -3627,6 +3619,10 @@ function marketplacePreviewProductType(deliveryType = "") {
   return "Tool";
 }
 
+function isUnsavedProduct() {
+  return !String(document.getElementById("contentExistingProductId")?.value || "").trim();
+}
+
 function marketplaceTilePreviewMarkup() {
   const imageSource = document.getElementById("contentProductTileImageSource")?.value || "entity";
   const descriptionSource = document.getElementById("contentProductTileDescriptionSource")?.value || "entity";
@@ -3660,7 +3656,7 @@ function marketplaceTilePreviewMarkup() {
     ["inherit", "active"].includes(variant.marketplaceMode || "inherit"));
   const outOfStock = inventoryTracked && sellableStockVariants.length > 0 &&
     sellableStockVariants.every((variant) => Number(variant.stock ?? 0) <= 0);
-  const previewState = archived
+  let previewState = archived
     ? { label: "Archived", target: "data-product-editor-target=\"contentProductArchived\"", tone: "red" }
     : outOfStock
       ? { label: "Out of Stock", target: "data-product-editor-target=\"contentProductHasPhysicalFulfilment\"", tone: "gray" }
@@ -3671,7 +3667,7 @@ function marketplaceTilePreviewMarkup() {
           : ["hidden", "scheduled"].includes(marketplaceMode)
             ? { label: "Hidden", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "amber" }
             : null;
-  const active = !archived && marketplaceMode === "active" && shopStatus === "active";
+  let active = !archived && marketplaceMode === "active" && shopStatus === "active";
   const fulfilmentLabels = [...new Set(currentProductVariants()
     .map((variant) => variant.physicalFulfilment)
     .filter((value) => value && value !== "none"))];
@@ -3681,6 +3677,12 @@ function marketplaceTilePreviewMarkup() {
       ? "Physical fulfilment enabled" : "No physical fulfilment";
   const fulfilmentMissing = !deliveryType ||
     ["Physical", "Hybrid"].includes(deliveryType) && physicalFulfilment === "No physical fulfilment";
+  const requiredFieldsComplete = !!imageUrl && !!productName && !!description &&
+    (price !== null || salePrice !== null) && !!category && !!deliveryType && !fulfilmentMissing;
+  if (isUnsavedProduct() && !requiredFieldsComplete) {
+    previewState = null;
+    active = false;
+  }
   return `<div class="relative mx-auto max-w-sm rounded-lg bg-gray-800 p-4 shadow hover:ring-2 hover:ring-[#407471] ${active ? "ring-2 ring-green-500/80" : ""}">
     ${previewState ? marketplacePreviewStateOverlay(previewState.label, previewState.target, previewState.tone) : ""}
     <button type="button" data-product-editor-target="contentProductTileImageSource"
@@ -3806,7 +3808,7 @@ function marketplaceVariantCardPreview(
   const inventoryTracked = document.getElementById("contentProductInventoryTracked")?.checked === true;
   const outOfStock = inventoryTracked && Number(productVariant.stock ?? 0) <= 0;
   const variantStatus = productVariant.status || "draft";
-  const previewState = archived
+  let previewState = archived
     ? { label: "Archived", section: "identity", tone: "red" }
     : outOfStock
       ? { label: "Out of Stock", section: "fulfilment", tone: "gray" }
@@ -3819,7 +3821,7 @@ function marketplaceVariantCardPreview(
             : ["hidden", "scheduled"].includes(effectiveMarketplaceMode)
               ? { label: "Hidden", section: "visibility", tone: "amber" }
               : null;
-  const active = !archived && variantStatus === "active" && effectiveMarketplaceMode === "active";
+  let active = !archived && variantStatus === "active" && effectiveMarketplaceMode === "active";
   const deliveryType = document.getElementById("contentProductDeliveryType")?.value || "";
   const productType = marketplacePreviewProductType(deliveryType);
   const fulfilmentSummary = [productVariant.deliveryMode || deliveryType, productVariant.physicalFulfilment]
@@ -3833,6 +3835,13 @@ function marketplaceVariantCardPreview(
   const fulfilmentMissing = !deliveryType ||
     ["Physical", "Hybrid"].includes(deliveryType) && !hasVariantPhysicalFulfilment;
   const missingDescription = !(longDescription || description);
+  const requiredFieldsComplete = !!url && !!(defaults.name || variantName) && !missingDescription &&
+    (price !== null && price !== undefined || salePrice !== null) && !!category &&
+    !!deliveryType && !fulfilmentMissing;
+  if (isUnsavedProduct() && !requiredFieldsComplete) {
+    previewState = null;
+    active = false;
+  }
   return `<div class="product-variant-card-preview relative overflow-hidden rounded bg-gray-900/40 ${active ? "ring-2 ring-green-500/80" : ""}" data-preview-mode="${detailMode ? "detail" : "card"}">
     ${previewState ? marketplacePreviewStateOverlay(
     previewState.label,
@@ -6534,6 +6543,47 @@ export async function setupContentBuilder() {
       panel?.classList.add("hidden");
       if (panel) panel.dataset.editorSection = "";
       returnToVariantPreview(row);
+      return;
+    }
+    const statusCheckbox = event.target.closest(".product-variant-status-checkbox");
+    if (statusCheckbox) {
+      const row = statusCheckbox.closest(".content-product-variant-row");
+      const nextStatus = statusCheckbox.dataset.productVariantStatus || "draft";
+      if (!statusCheckbox.checked) {
+        statusCheckbox.checked = true;
+        return;
+      }
+      const currentStatus = row?.querySelector(".product-variant-status")?.value || "draft";
+      const variantName = row?.querySelector(".product-variant-name")?.value || "this variant";
+      if (["paused", "archived"].includes(nextStatus) && nextStatus !== currentStatus &&
+          !window.confirm(`Are you sure you want to mark ${variantName} as ${nextStatus}?`)) {
+        statusCheckbox.checked = false;
+        const currentCheckbox = row?.querySelector(
+          `.product-variant-status-checkbox[data-product-variant-status="${currentStatus}"]`,
+        );
+        if (currentCheckbox) currentCheckbox.checked = true;
+        return;
+      }
+      row?.querySelectorAll(".product-variant-status-checkbox").forEach((checkbox) => {
+        checkbox.checked = checkbox === statusCheckbox;
+      });
+      const status = row?.querySelector(".product-variant-status");
+      if (status) status.value = nextStatus;
+      if (row) row.dataset.pendingStatus = nextStatus;
+      state.isDirty = true;
+      return;
+    }
+    const saveVariant = event.target.closest("[data-save-variant-editor]");
+    if (saveVariant) {
+      const row = saveVariant.closest(".content-product-variant-row");
+      const panel = saveVariant.closest(".product-variant-editor-panel");
+      syncSelectedProductVariantRows();
+      updateMarketplacePreviewRow(saveVariant);
+      panel?.classList.add("hidden");
+      if (panel) panel.dataset.editorSection = "";
+      returnToVariantPreview(row);
+      state.isDirty = true;
+      showToast("Variant changes are ready. Save Product details when you finish editing.", "success");
       return;
     }
     const connectionTrigger = event.target.closest("[data-variant-connection]");
