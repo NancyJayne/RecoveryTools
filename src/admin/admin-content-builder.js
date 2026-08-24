@@ -3849,6 +3849,21 @@ function returnToVariantPreview(row) {
   preview?.querySelector("button")?.focus({ preventScroll: true });
 }
 
+function closeVariantEditorAndReturn(row) {
+  const variantId = row?.querySelector(".product-variant-id")?.value.trim() ||
+    row?.dataset.productVariantId || "";
+  syncSelectedProductVariantRows();
+  const variants = currentProductVariants();
+  renderSelectedProductVariantRows(variants);
+  updateProductPhysicalFields();
+  const refreshedRow = variantId
+    ? document.querySelector(
+      `.content-product-variant-row[data-product-variant-id="${CSS.escape(variantId)}"]`,
+    )
+    : document.querySelector(".content-product-variant-row");
+  returnToVariantPreview(refreshedRow);
+}
+
 function marketplaceVariantCardPreview(
   productVariant,
   entityVariant = {},
@@ -3917,7 +3932,7 @@ function marketplaceVariantCardPreview(
     active = false;
   }
   const variantId = productVariant.variantId || "";
-  const detailsMissing = !variantName || !variantId || !productVariant.sku;
+  const detailsMissing = !variantName || !variantId;
   const blueprintMissing = ![...document.querySelectorAll(".product-variant-content-link-row")]
     .some((linkRow) =>
       linkRow.querySelector(".variant-content-product-variant")?.value === variantId &&
@@ -6730,12 +6745,7 @@ export async function setupContentBuilder() {
     const closeSection = event.target.closest("[data-close-variant-section]");
     if (closeSection) {
       const row = closeSection.closest(".content-product-variant-row");
-      const panel = closeSection.closest(".product-variant-editor-panel");
-      syncSelectedProductVariantRows();
-      updateMarketplacePreviewRow(closeSection);
-      panel?.classList.add("hidden");
-      if (panel) panel.dataset.editorSection = "";
-      returnToVariantPreview(row);
+      closeVariantEditorAndReturn(row);
       state.isDirty = true;
       return;
     }
@@ -6770,12 +6780,7 @@ export async function setupContentBuilder() {
     const saveVariant = event.target.closest("[data-save-variant-editor]");
     if (saveVariant) {
       const row = saveVariant.closest(".content-product-variant-row");
-      const panel = saveVariant.closest(".product-variant-editor-panel");
-      syncSelectedProductVariantRows();
-      updateMarketplacePreviewRow(saveVariant);
-      panel?.classList.add("hidden");
-      if (panel) panel.dataset.editorSection = "";
-      returnToVariantPreview(row);
+      closeVariantEditorAndReturn(row);
       state.isDirty = true;
       showToast("Variant changes are ready. Save Product details when you finish editing.", "success");
       return;
