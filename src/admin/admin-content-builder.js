@@ -3866,7 +3866,9 @@ function marketplaceVariantCardPreview(
   const url = externalUrl(asset?.fileUrl || asset?.url || "");
   const variantName = productVariant.name || entityVariant.name || "";
   const description = productVariant.shortDescription || defaults.shortDescription;
-  const longDescription = productVariant.longDescription || defaults.longDescription;
+  const longDescription = productVariant.longDescription || defaults.longDescription ||
+    entityVariant.longDescription || description;
+  const inclusions = productVariant.inclusions || "";
   const price = productVariant.priceOverride ?? defaults.price;
   const salePrice = productVariant.salePrice ?? optionalNumberFromInput("contentProductSalePrice");
   const marketplaceMode = productVariant.marketplaceMode || "inherit";
@@ -3914,6 +3916,22 @@ function marketplaceVariantCardPreview(
     previewState = null;
     active = false;
   }
+  const variantId = productVariant.variantId || "";
+  const detailsMissing = !variantName || !variantId || !productVariant.sku;
+  const blueprintMissing = ![...document.querySelectorAll(".product-variant-content-link-row")]
+    .some((linkRow) =>
+      linkRow.querySelector(".variant-content-product-variant")?.value === variantId &&
+      linkRow.querySelector(".variant-content-blueprint")?.value);
+  const unlockMissing = ![...document.querySelectorAll(".content-product-unlock-row")]
+    .some((unlockRow) =>
+      unlockRow.querySelector(".content-product-unlock-variant")?.value === variantId &&
+      unlockRow.querySelector(".content-product-unlock-target")?.value);
+  const visibilityMissing = !productVariant.marketplaceMode;
+  const priceSaleMissing = price === null && salePrice === null &&
+    (productVariant.wholesalePrice === null || productVariant.wholesalePrice === undefined);
+  const promotionMissing = !(productVariant.promotionAssetIds || []).length;
+  const prerequisitesMissing = !(productVariant.prerequisiteProductVariants || []).length;
+  const bundleMissing = !(productVariant.bundleComponents || []).length;
   return `<div class="product-variant-card-preview relative overflow-hidden rounded bg-gray-900/40 ${active ? "ring-2 ring-green-500/80" : ""}" data-preview-mode="${detailMode ? "detail" : "card"}">
     ${previewState ? marketplacePreviewStateOverlay(previewState.label, previewState.tone) : ""}
     <div class="flex flex-col gap-6 p-3 md:flex-row md:items-start">
@@ -3925,12 +3943,14 @@ function marketplaceVariantCardPreview(
       </button>
       <div class="flex min-w-0 flex-1 flex-col px-2">
         <button type="button" data-variant-editor="identity" title="Edit Product variant details"
-          class="${marketplacePreviewAttention(!(defaults.name || variantName), "rounded text-left text-2xl font-bold text-white hover:text-[#c15cff]")}">${escapeHTML([defaults.name, variantName].filter(Boolean).join(" — ") || "Set Product and variant name")}</button>
+          class="${marketplacePreviewAttention(!defaults.name, "rounded text-left text-2xl font-bold text-white hover:text-[#c15cff]")}">${escapeHTML(defaults.name || "Set Product name")}</button>
         <button type="button" data-variant-editor="price" title="Edit marketplace price"
           class="${marketplacePreviewAttention((price === null || price === undefined) && salePrice === null, "mt-2 w-fit rounded text-left text-xl font-bold text-green-400 hover:text-green-300")}">${salePrice !== null && price !== null && price !== undefined ? `<span class="mr-2 text-gray-500 line-through">$${Number(price).toFixed(2)}</span><span class="font-bold text-green-400">$${Number(salePrice).toFixed(2)}</span>` : price !== null && price !== undefined ? `$${Number(price).toFixed(2)}` : "Set price"}</button>
         <button type="button" data-variant-editor="description" title="Edit description overrides"
-          class="${marketplacePreviewAttention(missingDescription, "mt-3 min-h-16 rounded whitespace-pre-line text-left text-sm text-gray-300 hover:text-white")}">${escapeHTML((detailMode ? longDescription || description : description) || "Set Product description")}</button>
-        <button type="button" data-variant-editor="identity" class="${marketplacePreviewAttention(!variantName, "mt-4 rounded bg-gray-800 px-3 py-2 text-left text-sm text-white")}">Option: ${escapeHTML(variantName || "Set variant name")}</button>
+          class="${marketplacePreviewAttention(missingDescription, "mt-3 min-h-16 rounded whitespace-pre-line text-left text-sm text-gray-300 hover:text-white")}">${escapeHTML([longDescription, inclusions].filter(Boolean).join("\n\n") || "Set Product long description")}</button>
+        <label class="mt-4 text-left text-sm text-gray-300">Choose option
+          <button type="button" data-variant-editor="identity" class="${marketplacePreviewAttention(detailsMissing, "mt-1 block w-full rounded bg-gray-800 px-3 py-2 text-left text-white")}">${escapeHTML(`${variantName || "Set variant name"}${price !== null && price !== undefined ? ` - $${Number(price).toFixed(2)}` : ""}`)}</button>
+        </label>
         <div class="mt-4 flex items-center gap-4">
           <span class="flex h-8 w-8 items-center justify-center rounded bg-gray-700 text-lg">−</span>
           <span class="w-8 text-center font-semibold text-white">1</span>
@@ -3948,15 +3968,15 @@ function marketplaceVariantCardPreview(
       <button type="button" data-variant-editor="fulfilment" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">${escapeHTML(fulfilmentMissing ? "Set fulfilment" : fulfilmentSummary)}</button>
       <button type="button" data-product-editor-target="contentProductCategoryId" class="${marketplacePreviewAttention(!category, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">${escapeHTML(categoryLabel || "Set category")}</button>
       <button type="button" data-product-editor-target="contentProductDeliveryType" class="${marketplacePreviewAttention(!deliveryType, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">Delivery: ${escapeHTML(deliveryType || "Set delivery")}</button>
-      <button type="button" data-variant-editor="identity" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Variant details</button>
-      <button type="button" data-variant-editor="description" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Descriptions</button>
-      <button type="button" data-variant-connection="blueprint" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Blueprints</button>
-      <button type="button" data-variant-connection="unlock" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Unlocks</button>
-      <button type="button" data-variant-editor="visibility" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Visibility</button>
-      <button type="button" data-variant-editor="sale" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Price &amp; sale</button>
-      <button type="button" data-variant-editor="promotion" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Promotion videos</button>
-      <button type="button" data-variant-editor="prerequisites" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Prerequisites</button>
-      <button type="button" data-variant-editor="bundle" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Bundle</button>
+      <button type="button" data-variant-editor="identity" class="${marketplacePreviewAttention(detailsMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Variant details</button>
+      <button type="button" data-variant-editor="description" class="${marketplacePreviewAttention(missingDescription, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Descriptions</button>
+      <button type="button" data-variant-connection="blueprint" class="${marketplacePreviewAttention(blueprintMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Blueprints</button>
+      <button type="button" data-variant-connection="unlock" class="${marketplacePreviewAttention(unlockMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Unlocks</button>
+      <button type="button" data-variant-editor="visibility" class="${marketplacePreviewAttention(visibilityMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Visibility</button>
+      <button type="button" data-variant-editor="sale" class="${marketplacePreviewAttention(priceSaleMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Price &amp; sale</button>
+      <button type="button" data-variant-editor="promotion" class="${marketplacePreviewAttention(promotionMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Promotion videos</button>
+      <button type="button" data-variant-editor="prerequisites" class="${marketplacePreviewAttention(prerequisitesMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Prerequisites</button>
+      <button type="button" data-variant-editor="bundle" class="${marketplacePreviewAttention(bundleMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Bundle</button>
       <button type="button" data-variant-editor="lifecycle" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Status / archive / cancel</button>
       </div>
     </div>
@@ -3970,17 +3990,38 @@ function updateMarketplacePreviewRow(target) {
   const contentVariantId = row.dataset.contentVariantId || "";
   const entityVariant = entityVariantsFromBuilder()
     .find((variant) => variant.entityVariantId === contentVariantId) || {};
+  const existingProductVariant = currentProductVariants().find((variant) =>
+    variant.variantId === row.dataset.productVariantId ||
+    contentVariantId && variant.contentVariantId === contentVariantId) || {};
   const productVariant = {
+    ...existingProductVariant,
+    variantId: row.querySelector(".product-variant-id")?.value || row.dataset.productVariantId || "",
     name: row.querySelector(".product-variant-name")?.value || "Product variant",
+    sku: row.querySelector(".product-variant-sku")?.value || "",
     shortDescription: row.querySelector(".product-variant-short-description")?.value || "",
     longDescription: row.querySelector(".product-variant-long-description")?.value || "",
+    inclusions: row.querySelector(".product-variant-inclusions")?.value || "",
     priceOverride: optionalNumberFromElement(row.querySelector(".product-variant-price")),
     salePrice: optionalNumberFromElement(row.querySelector(".product-variant-sale-price")),
+    wholesalePrice: optionalNumberFromElement(row.querySelector(".product-variant-wholesale-price")),
     primaryAssetId: row.querySelector(".product-variant-primary-asset")?.value || "",
     stock: optionalNumberFromElement(row.querySelector(".product-variant-stock")) ?? 0,
     deliveryMode: row.querySelector(".product-variant-delivery-mode")?.value || "",
     physicalFulfilment: row.querySelector(".product-variant-physical-fulfilment")?.value || "none",
     marketplaceMode: row.querySelector(".product-variant-marketplace-mode")?.value || "inherit",
+    promotionAssetIds: [...(row.querySelector(".product-variant-promotion-assets")?.selectedOptions || [])]
+      .map((option) => option.value).filter(Boolean),
+    prerequisiteProductVariants: [...row.querySelectorAll(".product-prerequisite-row")]
+      .map((prerequisiteRow) => ({
+        productId: prerequisiteRow.querySelector(".product-prerequisite-product")?.value || "",
+        productVariantId: prerequisiteRow.querySelector(".product-prerequisite-variant")?.value || "",
+      })).filter((entry) => entry.productId && entry.productVariantId),
+    bundleComponents: [...row.querySelectorAll(".product-bundle-component-row")]
+      .map((componentRow) => ({
+        componentProductId: componentRow.querySelector(".product-bundle-component-product")?.value || "",
+        componentProductVariantId:
+          componentRow.querySelector(".product-bundle-component-variant")?.value || "",
+      })).filter((component) => component.componentProductId),
     status: row.dataset.pendingStatus || row.querySelector(".product-variant-status")?.value || "draft",
   };
   preview.outerHTML = marketplaceVariantCardPreview(
@@ -6539,6 +6580,7 @@ export async function setupContentBuilder() {
     filterVariantOwnedConnections(
       document.getElementById("contentVariantOwnedConnections")?.dataset.activeProductVariantId || "",
     );
+    refreshMarketplacePreviews();
     state.isDirty = true;
   });
   document.getElementById("productVariantContentLinkRows")?.addEventListener("change", (event) => {
@@ -6556,6 +6598,7 @@ export async function setupContentBuilder() {
     }
     productVariantContentLinksFromRows(true);
     renderProductBlueprintOptions(document.getElementById("contentProductBlueprintId")?.value || "");
+    refreshMarketplacePreviews();
     state.isDirty = true;
   });
   document.getElementById("contentProductVariants")?.addEventListener("change", () => {
@@ -6740,6 +6783,10 @@ export async function setupContentBuilder() {
     const connectionTrigger = event.target.closest("[data-variant-connection]");
     if (connectionTrigger) {
       const row = connectionTrigger.closest(".content-product-variant-row");
+      document.querySelectorAll(".product-variant-editor-panel").forEach((panel) => {
+        panel.classList.add("hidden");
+        panel.dataset.editorSection = "";
+      });
       const connection = connectionTrigger.dataset.variantConnection;
       const productVariantId = openVariantOwnedConnections(row, connection);
       if (!productVariantId) return;
@@ -6785,6 +6832,7 @@ export async function setupContentBuilder() {
       const panel = row?.querySelector(".product-variant-editor-panel");
       const section = editorTrigger.dataset.variantEditor || "admin";
       if (!row || !panel) return;
+      document.getElementById("contentVariantOwnedConnections")?.classList.add("hidden");
       document.querySelectorAll(".content-product-variant-row").forEach((otherRow) => {
         if (otherRow === row) return;
         const otherPanel = otherRow.querySelector(".product-variant-editor-panel");
@@ -7109,6 +7157,7 @@ export async function setupContentBuilder() {
         document.getElementById("contentVariantOwnedConnections")?.dataset.activeProductVariantId || "",
       );
       state.isDirty = true;
+      refreshMarketplacePreviews();
       return;
     }
     if (!event.target.classList.contains("content-product-unlock-type") &&
@@ -7122,6 +7171,7 @@ export async function setupContentBuilder() {
     }
     grants[index].accessEntityVariantId = "";
     renderProductUnlockRows(grants);
+    refreshMarketplacePreviews();
   });
   document.getElementById("contentProductUnlockRows")?.addEventListener("click", (event) => {
     const remove = event.target.closest(".remove-content-product-unlock");
@@ -7131,6 +7181,7 @@ export async function setupContentBuilder() {
     const grants = productUnlocksFromRows(true);
     grants.splice(index, 1);
     renderProductUnlockRows(grants);
+    refreshMarketplacePreviews();
   });
   document.getElementById("closeContentProductDrawerBtn")?.addEventListener("click", closeContentProductDrawer);
   document.getElementById("toggleContentProductHelpBtn")?.addEventListener("click", () => {

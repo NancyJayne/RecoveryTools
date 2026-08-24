@@ -64,7 +64,7 @@ function getProductLongDescription(product) {
 }
 
 function getVariantLongDescription(product, variant) {
-  return variant?.longDescription || variant?.shortDescription || getProductLongDescription(product);
+  return variant?.longDescription || getProductLongDescription(product) || variant?.shortDescription || "";
 }
 
 function courseVideoMedia(product) {
