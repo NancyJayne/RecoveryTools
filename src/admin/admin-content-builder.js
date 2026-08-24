@@ -1613,6 +1613,12 @@ function renderSelectedProductVariantRows(
       </div>`;
   }).join("");
   syncProductArchivedFromVariants(productVariants);
+  const connections = document.getElementById("contentVariantOwnedConnections");
+  if (connections && !productVariants.some((variant) =>
+    variant.variantId === connections.dataset.activeProductVariantId)) {
+    connections.dataset.activeProductVariantId = productVariants[0]?.variantId || "";
+  }
+  filterVariantOwnedConnections(connections?.dataset.activeProductVariantId || "");
   renderMarketplaceTileControls();
 }
 
@@ -3592,6 +3598,19 @@ function marketplacePreviewAttention(missing, extraClasses = "") {
     : ""}`.trim();
 }
 
+function marketplacePreviewStateOverlay(label, target, tone = "purple") {
+  if (!label) return "";
+  const tones = {
+    amber: "border-amber-400 text-amber-200",
+    purple: "border-purple-400 text-purple-200",
+    red: "border-red-400 text-red-300",
+    gray: "border-gray-400 text-gray-200",
+  };
+  return `<div class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/60">
+    <button type="button" ${target} class="pointer-events-auto -rotate-12 rounded border-4 ${tones[tone] || tones.purple} px-5 py-2 text-2xl font-black uppercase tracking-widest">${escapeHTML(label)}</button>
+  </div>`;
+}
+
 function marketplaceTilePreviewMarkup() {
   const imageSource = document.getElementById("contentProductTileImageSource")?.value || "entity";
   const descriptionSource = document.getElementById("contentProductTileDescriptionSource")?.value || "entity";
@@ -3615,6 +3634,27 @@ function marketplaceTilePreviewMarkup() {
   const categoryLabel = categorySelect?.selectedOptions?.[0]?.textContent || "Set category";
   const featured = document.getElementById("contentProductFeatured")?.checked === true;
   const archived = document.getElementById("contentProductArchived")?.checked === true;
+  const marketplaceMode = document.getElementById("contentProductMarketplaceMode")?.value || "hidden";
+  const shopStatus = document.getElementById("contentProductShopStatus")?.value || "draft";
+  const inventoryTracked = document.getElementById("contentProductInventoryTracked")?.checked === true;
+  const allProductVariants = currentProductVariants();
+  const sellableStockVariants = allProductVariants.filter((variant) =>
+    variant.status === "active" &&
+    ["inherit", "active"].includes(variant.marketplaceMode || "inherit"));
+  const outOfStock = inventoryTracked && sellableStockVariants.length > 0 &&
+    sellableStockVariants.every((variant) => Number(variant.stock ?? 0) <= 0);
+  const previewState = archived
+    ? { label: "Archived", target: "data-product-editor-target=\"contentProductArchived\"", tone: "red" }
+    : outOfStock
+      ? { label: "Out of Stock", target: "data-product-editor-target=\"contentProductHasPhysicalFulfilment\"", tone: "gray" }
+      : shopStatus === "draft"
+        ? { label: "Draft", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "gray" }
+        : marketplaceMode === "coming-soon"
+          ? { label: "Coming Soon", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "purple" }
+          : ["hidden", "scheduled"].includes(marketplaceMode)
+            ? { label: "Hidden", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "amber" }
+            : null;
+  const active = !archived && marketplaceMode === "active" && shopStatus === "active";
   const fulfilmentLabels = [...new Set(currentProductVariants()
     .map((variant) => variant.physicalFulfilment)
     .filter((value) => value && value !== "none"))];
@@ -3624,18 +3664,16 @@ function marketplaceTilePreviewMarkup() {
       ? "Physical fulfilment enabled" : "No physical fulfilment";
   const fulfilmentMissing = !productType ||
     ["Physical", "Hybrid"].includes(productType) && physicalFulfilment === "No physical fulfilment";
-  return `<div class="relative mx-auto max-w-sm rounded-lg bg-gray-800 p-4 shadow hover:ring-2 hover:ring-[#407471]">
-    ${archived ? `<div class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/55">
-      <button type="button" data-product-editor-target="contentProductArchived" class="pointer-events-auto -rotate-12 rounded border-4 border-red-400 px-5 py-2 text-2xl font-black uppercase tracking-widest text-red-300">Archived</button>
-    </div>` : ""}
+  return `<div class="relative mx-auto max-w-sm rounded-lg bg-gray-800 p-4 shadow hover:ring-2 hover:ring-[#407471] ${active ? "ring-2 ring-green-500/80" : ""}">
+    ${previewState ? marketplacePreviewStateOverlay(previewState.label, previewState.target, previewState.tone) : ""}
     <button type="button" data-product-editor-target="contentProductTileImageSource"
       class="${marketplacePreviewAttention(!imageUrl, "flex h-48 w-full items-center justify-center overflow-hidden rounded bg-gray-950 text-xs text-gray-400 ring-[#407471] hover:ring-2")}">
       ${imageUrl
     ? `<img src="${escapeHTML(imageUrl)}" alt="${escapeHTML(productName || "Product")}" class="h-full w-full object-cover">`
     : "Set Marketplace image"}
     </button>
-    <button type="button" data-product-editor-target="contentProductCategoryId"
-      class="${marketplacePreviewAttention(!category, "absolute right-2 top-2 rounded bg-[#407471] px-2 py-1 text-xs font-semibold text-white")}">${escapeHTML(categoryLabel)}</button>
+    <button type="button" data-product-editor-target="contentProductDeliveryType"
+      class="${marketplacePreviewAttention(!productType, "absolute right-2 top-2 rounded bg-[#407471] px-2 py-1 text-xs font-semibold text-white")}">${escapeHTML(productType || "Set Product type")}</button>
     ${featured ? `<button type="button" data-product-editor-target="contentProductFeatured" class="absolute left-2 top-2 rounded bg-yellow-500 px-2 py-1 text-xs text-black">★ Featured</button>` : ""}
     <button type="button" data-product-editor-target="contentName"
       class="${marketplacePreviewAttention(!productName, "mt-2 block w-full rounded text-left text-lg font-semibold text-white hover:text-[#9edbd7]")}">${escapeHTML(productName || "Set Product name")}</button>
@@ -3647,7 +3685,7 @@ function marketplaceTilePreviewMarkup() {
       <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Product setup</p>
       <div class="flex flex-wrap gap-2 text-xs">
         <button type="button" data-product-editor-target="contentProductFeatured" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">${featured ? "★ Featured" : "☆ Not featured"}</button>
-        <button type="button" data-product-editor-target="contentProductDeliveryType" class="${marketplacePreviewAttention(!productType, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">${escapeHTML(productType || "Set Product type")}</button>
+        <button type="button" data-product-editor-target="contentProductCategoryId" class="${marketplacePreviewAttention(!category, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">Filter: ${escapeHTML(categoryLabel)}</button>
         <button type="button" data-product-editor-target="contentProductHasPhysicalFulfilment" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">${escapeHTML(fulfilmentMissing ? "Set fulfilment" : physicalFulfilment)}</button>
         <button type="button" data-product-editor-target="contentProductWholesalePrice" class="rounded bg-gray-950 px-2 py-1 text-[#9edbd7] hover:text-white">Affiliate ${wholesalePrice !== null ? `$${Number(wholesalePrice).toFixed(2)}` : "not set"}</button>
       </div>
@@ -3728,11 +3766,30 @@ function marketplaceVariantCardPreview(
   const price = productVariant.priceOverride ?? defaults.price;
   const salePrice = productVariant.salePrice ?? optionalNumberFromInput("contentProductSalePrice");
   const marketplaceMode = productVariant.marketplaceMode || "inherit";
+  const productMarketplaceMode = document.getElementById("contentProductMarketplaceMode")?.value || "hidden";
+  const effectiveMarketplaceMode = marketplaceMode === "inherit" ? productMarketplaceMode : marketplaceMode;
   const statusLabel = marketplaceMode === "inherit"
     ? productVariant.status || "draft"
     : marketplaceMode;
   const archived = document.getElementById("contentProductArchived")?.checked === true ||
     productVariant.status === "archived";
+  const inventoryTracked = document.getElementById("contentProductInventoryTracked")?.checked === true;
+  const outOfStock = inventoryTracked && Number(productVariant.stock ?? 0) <= 0;
+  const variantStatus = productVariant.status || "draft";
+  const previewState = archived
+    ? { label: "Archived", section: "identity", tone: "red" }
+    : outOfStock
+      ? { label: "Out of Stock", section: "fulfilment", tone: "gray" }
+      : variantStatus === "paused"
+        ? { label: "Paused", section: "lifecycle", tone: "amber" }
+        : variantStatus === "draft"
+          ? { label: "Draft", section: "lifecycle", tone: "gray" }
+          : effectiveMarketplaceMode === "coming-soon"
+            ? { label: "Coming Soon", section: "visibility", tone: "purple" }
+            : ["hidden", "scheduled"].includes(effectiveMarketplaceMode)
+              ? { label: "Hidden", section: "visibility", tone: "amber" }
+              : null;
+  const active = !archived && variantStatus === "active" && effectiveMarketplaceMode === "active";
   const productType = document.getElementById("contentProductDeliveryType")?.value || "";
   const fulfilmentSummary = [productVariant.deliveryMode || productType, productVariant.physicalFulfilment]
     .filter((value) => value && value !== "none")
@@ -3745,10 +3802,12 @@ function marketplaceVariantCardPreview(
   const fulfilmentMissing = !productType ||
     ["Physical", "Hybrid"].includes(productType) && !hasVariantPhysicalFulfilment;
   const missingDescription = !(longDescription || description);
-  return `<div class="product-variant-card-preview relative overflow-hidden rounded bg-gray-900/40" data-preview-mode="${detailMode ? "detail" : "card"}">
-    ${archived ? `<div class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/55">
-      <button type="button" data-variant-editor="identity" class="pointer-events-auto -rotate-12 rounded border-4 border-red-400 px-5 py-2 text-2xl font-black uppercase tracking-widest text-red-300">Archived</button>
-    </div>` : ""}
+  return `<div class="product-variant-card-preview relative overflow-hidden rounded bg-gray-900/40 ${active ? "ring-2 ring-green-500/80" : ""}" data-preview-mode="${detailMode ? "detail" : "card"}">
+    ${previewState ? marketplacePreviewStateOverlay(
+    previewState.label,
+    `data-variant-editor="${previewState.section}"`,
+    previewState.tone,
+  ) : ""}
     <div class="flex flex-col gap-6 p-3 md:flex-row md:items-start">
       <button type="button" data-variant-editor="image" title="Edit marketplace image"
         class="${marketplacePreviewAttention(!url, "flex min-h-56 w-full items-center justify-center overflow-hidden rounded bg-gray-950 text-center text-xs text-gray-400 ring-[#407471] hover:ring-2 md:w-1/2")}">
@@ -3806,6 +3865,7 @@ function updateMarketplacePreviewRow(target) {
     priceOverride: optionalNumberFromElement(row.querySelector(".product-variant-price")),
     salePrice: optionalNumberFromElement(row.querySelector(".product-variant-sale-price")),
     primaryAssetId: row.querySelector(".product-variant-primary-asset")?.value || "",
+    stock: optionalNumberFromElement(row.querySelector(".product-variant-stock")) ?? 0,
     deliveryMode: row.querySelector(".product-variant-delivery-mode")?.value || "",
     physicalFulfilment: row.querySelector(".product-variant-physical-fulfilment")?.value || "none",
     marketplaceMode: row.querySelector(".product-variant-marketplace-mode")?.value || "inherit",
@@ -3939,6 +3999,9 @@ function renderProductVariantContentLinkRows(links = []) {
         <button type="button" class="remove-product-variant-content-link rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
       </div>`;
   }).join("") || "<p class=\"text-xs text-gray-400\">No manufacturing or Workshop Operations Blueprint selected.</p>";
+  filterVariantOwnedConnections(
+    document.getElementById("contentVariantOwnedConnections")?.dataset.activeProductVariantId || "",
+  );
 }
 
 function addProductVariantContentLinkRow(productVariantId = "") {
@@ -4032,6 +4095,22 @@ function renderProductUnlockRows(grants = []) {
       </div>
     `;
   }).join("") || "<p class=\"text-xs text-gray-400\">No additional content unlocks selected.</p>";
+  filterVariantOwnedConnections(
+    document.getElementById("contentVariantOwnedConnections")?.dataset.activeProductVariantId || "",
+  );
+}
+
+function filterVariantOwnedConnections(productVariantId = "") {
+  const owner = document.getElementById("contentVariantOwnedConnections");
+  if (owner) owner.dataset.activeProductVariantId = productVariantId;
+  document.querySelectorAll(".product-variant-content-link-row").forEach((row) => {
+    const rowVariantId = row.querySelector(".variant-content-product-variant")?.value || "";
+    row.classList.toggle("hidden", !!productVariantId && !!rowVariantId && rowVariantId !== productVariantId);
+  });
+  document.querySelectorAll(".content-product-unlock-row").forEach((row) => {
+    const rowVariantId = row.querySelector(".content-product-unlock-variant")?.value || "";
+    row.classList.toggle("hidden", !!productVariantId && !!rowVariantId && rowVariantId !== productVariantId);
+  });
 }
 
 function addProductUnlockRow(productVariantId = "") {
@@ -6288,7 +6367,11 @@ export async function setupContentBuilder() {
   });
   document.getElementById("contentProductInventoryTracked")?.addEventListener(
     "change",
-    updateProductPhysicalFields,
+    () => {
+      updateProductPhysicalFields();
+      renderMarketplaceTileControls();
+      refreshMarketplacePreviews();
+    },
   );
   ["contentProductRequiresShipping", "contentProductRequiresCalendar", "contentProductTracksSeats", "contentProductRequiresSessionTime",
     "contentProductRequiresLocation", "contentProductRequiresInstructor"].forEach((id) => {
@@ -6320,6 +6403,9 @@ export async function setupContentBuilder() {
     remove.closest(".product-variant-content-link-row")?.remove();
     productVariantContentLinksFromRows(true);
     renderProductBlueprintOptions(document.getElementById("contentProductBlueprintId")?.value || "");
+    filterVariantOwnedConnections(
+      document.getElementById("contentVariantOwnedConnections")?.dataset.activeProductVariantId || "",
+    );
     state.isDirty = true;
   });
   document.getElementById("productVariantContentLinkRows")?.addEventListener("change", (event) => {
@@ -6365,6 +6451,13 @@ export async function setupContentBuilder() {
     const trigger = event.target.closest("[data-product-editor-target]");
     if (trigger) focusProductEditorTarget(trigger.dataset.productEditorTarget);
   });
+  ["contentProductMarketplaceMode", "contentProductShopStatus"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("change", () => {
+      renderMarketplaceTileControls();
+      refreshMarketplacePreviews();
+      state.isDirty = true;
+    });
+  });
   ["contentProductWholesalePrice", "contentProductDeliveryType", "contentProductCategoryId",
     "contentProductFeatured", "contentProductArchived", "contentProductHasPhysicalFulfilment"]
     .forEach((id) => document.getElementById(id)?.addEventListener("change", () => {
@@ -6381,6 +6474,9 @@ export async function setupContentBuilder() {
       }
       renderMarketplaceTileControls();
       refreshMarketplacePreviews();
+      if (["contentProductDeliveryType", "contentProductCategoryId"].includes(id)) {
+        document.getElementById(id)?.closest("[data-product-context-panel]")?.classList.add("hidden");
+      }
     }));
   document.getElementById("contentProductWholesalePrice")?.addEventListener(
     "input",
@@ -6405,6 +6501,7 @@ export async function setupContentBuilder() {
       const row = connectionTrigger.closest(".content-product-variant-row");
       const productVariantId = row?.dataset.productVariantId || "";
       const connection = connectionTrigger.dataset.variantConnection;
+      filterVariantOwnedConnections(productVariantId);
       if (connection === "blueprint") {
         const addButton = document.getElementById("addProductVariantContentLinkBtn");
         if (addButton) {
@@ -6414,6 +6511,7 @@ export async function setupContentBuilder() {
         const existing = productVariantContentLinksFromRows(true)
           .some((link) => link.productVariantId === productVariantId);
         if (!existing) addProductVariantContentLinkRow(productVariantId);
+        filterVariantOwnedConnections(productVariantId);
         const section = document.getElementById("productVariantContentLinkRows")?.closest("details");
         if (section) section.open = true;
         section?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -6425,6 +6523,7 @@ export async function setupContentBuilder() {
         }
         const existing = productUnlocksFromRows().some((grant) => grant.productVariantId === productVariantId);
         if (!existing) addProductUnlockRow(productVariantId);
+        filterVariantOwnedConnections(productVariantId);
         const section = document.getElementById("contentProductUnlockRows")?.closest("section");
         section?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
@@ -6723,6 +6822,13 @@ export async function setupContentBuilder() {
     addProductUnlockRow(event.currentTarget.dataset.productVariantId || "");
   });
   document.getElementById("contentProductUnlockRows")?.addEventListener("change", (event) => {
+    if (event.target.classList.contains("content-product-unlock-variant")) {
+      filterVariantOwnedConnections(
+        document.getElementById("contentVariantOwnedConnections")?.dataset.activeProductVariantId || "",
+      );
+      state.isDirty = true;
+      return;
+    }
     if (!event.target.classList.contains("content-product-unlock-type") &&
         !event.target.classList.contains("content-product-unlock-target")) return;
     const allRows = [...document.querySelectorAll(".content-product-unlock-row")];
