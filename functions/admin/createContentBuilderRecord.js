@@ -1143,6 +1143,18 @@ export const createContentBuilderRecord = onCall(
             websiteVisible: doc.websiteVisible === true,
             archived: false,
             featured: data.featured === true,
+            marketplaceTileImageSource: cleanString(
+              data.productRelation?.marketplaceTileImageSource || "entity",
+            ).toLowerCase(),
+            marketplaceTileImageVariantId: cleanString(
+              data.productRelation?.marketplaceTileImageVariantId,
+            ),
+            marketplaceTileDescriptionSource: cleanString(
+              data.productRelation?.marketplaceTileDescriptionSource || "entity",
+            ).toLowerCase(),
+            marketplaceTileDescriptionVariantId: cleanString(
+              data.productRelation?.marketplaceTileDescriptionVariantId,
+            ),
             requiresShipping: data.productRelation?.requiresShipping === true,
             physicalFulfilment: cleanString(
               data.productRelation?.physicalFulfilment ||

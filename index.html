@@ -1811,6 +1811,21 @@
                     </div>
                   </summary>
                   <div class="border-t border-gray-700 bg-gray-950/30 p-4">
+                    <section class="mb-4 rounded border border-[#407471] bg-gray-900/80 p-4">
+                      <div>
+                        <h5 class="font-semibold text-white">Shop tile presentation</h5>
+                        <p class="mt-1 text-xs text-gray-400">Choose which existing entity or Product variant supplies the single Marketplace tile. These choices do not change the Product detail pages.</p>
+                      </div>
+                      <div class="mt-3 grid gap-3 md:grid-cols-2">
+                        <label class="block text-sm">Tile image source
+                          <select id="contentProductTileImageSource" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                        </label>
+                        <label class="block text-sm">Tile short-description source
+                          <select id="contentProductTileDescriptionSource" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                        </label>
+                      </div>
+                      <div id="contentProductTilePreview" class="mt-3 rounded border border-gray-700 bg-gray-950/60 p-3"></div>
+                    </section>
                     <div class="flex flex-wrap items-center justify-between gap-3">
                       <p class="text-xs text-gray-400">Entity variants can start a Product variant, but the sellable configurations remain independent.</p>
                       <button id="addContentProductVariantBtn" type="button" class="rounded border border-[#407471] px-3 py-2 text-sm text-[#9edbd7]">Add Product variant</button>

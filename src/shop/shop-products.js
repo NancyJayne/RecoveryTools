@@ -51,6 +51,14 @@ function getProductShortDescription(product) {
   return product.shortDescription || product.description || product.longDescription || "";
 }
 
+function getMarketplaceTileImage(product) {
+  return product.marketplaceTileImage || getProductImage(product);
+}
+
+function getMarketplaceTileShortDescription(product) {
+  return product.marketplaceTileShortDescription || getProductShortDescription(product);
+}
+
 function getProductLongDescription(product) {
   return product.longDescription || product.description || product.shortDescription || "";
 }
@@ -439,7 +447,7 @@ export async function loadProducts() {
 export function createProductTile(product) {
   if (product.visible === false) return null;
   const productName = getProductName(product);
-  const productImage = getProductImage(product);
+  const productImage = getMarketplaceTileImage(product);
   const finalPrice = getProductPrice(product);
 
   const wrapper = document.createElement("div");
@@ -461,7 +469,7 @@ export function createProductTile(product) {
   wrapper.dataset.productName = productName;
   wrapper.dataset.productPrice = finalPrice;
   wrapper.dataset.productImage = productImage;
-  wrapper.dataset.productDescription = getProductShortDescription(product);
+  wrapper.dataset.productDescription = getMarketplaceTileShortDescription(product);
   wrapper.dataset.productStock = product.stock ?? 0;
   wrapper.dataset.productFull = JSON.stringify(product);
 
@@ -502,7 +510,7 @@ export function createProductTile(product) {
   name.className = "text-lg font-semibold mt-2 text-white";
 
   const shortDesc = document.createElement("p");
-  shortDesc.textContent = getProductShortDescription(product);
+  shortDesc.textContent = getMarketplaceTileShortDescription(product);
   shortDesc.className = "text-sm text-gray-300 mt-1";
 
   const price = document.createElement("p");

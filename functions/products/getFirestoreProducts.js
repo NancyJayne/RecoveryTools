@@ -405,6 +405,17 @@ function normalizeProduct(
   const longDescription = data.longDescription ||
     linkedContent?.longDescription || linkedContent?.notes ||
     data.description || linkedContent?.description || shortDescription;
+  const tileImageVariant = data.marketplaceTileImageSource === "product-variant"
+    ? normalizedVariants.find((variant) =>
+      (variant.variantId || variant.id) === data.marketplaceTileImageVariantId)
+    : null;
+  const tileDescriptionVariant = data.marketplaceTileDescriptionSource === "product-variant"
+    ? normalizedVariants.find((variant) =>
+      (variant.variantId || variant.id) === data.marketplaceTileDescriptionVariantId)
+    : null;
+  const marketplaceTileImage = tileImageVariant?.images?.[0] ||
+    tileImageVariant?.media?.find((asset) => normalizeStatus(asset.type) === "image")?.url || image;
+  const marketplaceTileShortDescription = tileDescriptionVariant?.shortDescription || shortDescription;
   const displayType = productDisplayType(data, linkedContent?.type || "tool");
   const isCourse = normalizeStatus(displayType).includes("course") ||
     normalizeStatus(data.type).includes("course") ||
@@ -467,6 +478,8 @@ function normalizeProduct(
     variants: normalizedVariants,
     shortDescription,
     longDescription,
+    marketplaceTileImage,
+    marketplaceTileShortDescription,
     courseModules: isCourse ? courseModules(linkedContent, architecture) : [],
     coursePreviewVideo: isCourse ? coursePreviewVideo(linkedContent, architecture) : null,
     connectedEntityType: primaryLink?.linkedEntityType || "",

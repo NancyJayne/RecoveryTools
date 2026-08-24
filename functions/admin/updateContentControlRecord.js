@@ -638,6 +638,14 @@ async function updateProductRelation({
     marketplaceEndsAt,
     archived: asBoolean(relation.archived),
     featured: asBoolean(relation.featured),
+    marketplaceTileImageSource: cleanString(
+      relation.marketplaceTileImageSource || "entity",
+    ).toLowerCase(),
+    marketplaceTileImageVariantId: cleanString(relation.marketplaceTileImageVariantId),
+    marketplaceTileDescriptionSource: cleanString(
+      relation.marketplaceTileDescriptionSource || "entity",
+    ).toLowerCase(),
+    marketplaceTileDescriptionVariantId: cleanString(relation.marketplaceTileDescriptionVariantId),
     requiresShipping: asBoolean(relation.requiresShipping),
     physicalFulfilment: cleanString(
       relation.physicalFulfilment || (asBoolean(relation.requiresShipping) ? "shipping" : "none"),

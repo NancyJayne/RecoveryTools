@@ -1369,6 +1369,7 @@ function renderSelectedProductVariantRows(
   if (!productVariants.length) {
     if (summary) summary.textContent = "No Product variants yet.";
     container.innerHTML = "<p class=\"text-sm text-gray-400\">Add a Product variant or select an entity variant for Shop.</p>";
+    renderMarketplaceTileControls();
     return;
   }
   if (summary) {
@@ -1396,7 +1397,7 @@ function renderSelectedProductVariantRows(
         data-content-variant-id="${escapeHTML(productVariant.contentVariantId || "")}"
         data-product-variant-id="${escapeHTML(productVariant.variantId || "")}">
         <div class="bg-gray-800/90 p-3">
-          ${marketplaceVariantCardPreview(productVariant, entityVariant, index === 0)}
+          ${marketplaceVariantCardPreview(productVariant, entityVariant, index === 0, true)}
         </div>
         <div class="product-variant-editor-panel hidden grid gap-3 border-t border-gray-700 bg-gray-950/30 p-4 md:grid-cols-2 xl:grid-cols-4">
           <section data-variant-editor-section="image" class="rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
@@ -1608,6 +1609,7 @@ function renderSelectedProductVariantRows(
         </div>
       </div>`;
   }).join("");
+  renderMarketplaceTileControls();
 }
 
 function syncSelectedProductVariantRows() {
@@ -3116,6 +3118,8 @@ function productRelationPayload() {
   const marketplaceEndsAt = document.getElementById("contentProductMarketplaceEndsAt")?.value || "";
   const saleStartsAt = document.getElementById("contentProductSaleStartsAt")?.value || "";
   const saleEndsAt = document.getElementById("contentProductSaleEndsAt")?.value || "";
+  const tileImageValue = document.getElementById("contentProductTileImageSource")?.value || "entity";
+  const tileDescriptionValue = document.getElementById("contentProductTileDescriptionSource")?.value || "entity";
   if (["scheduled", "coming-soon"].includes(marketplaceMode) && !marketplaceStartsAt) {
     throw new Error("Choose a marketplace start date for a scheduled or Coming soon Product.");
   }
@@ -3140,6 +3144,13 @@ function productRelationPayload() {
     marketplaceMode,
     marketplaceStartsAt: isoFromDatetimeLocal(marketplaceStartsAt),
     marketplaceEndsAt: isoFromDatetimeLocal(marketplaceEndsAt),
+    marketplaceTileImageSource: tileImageValue.startsWith("variant:") ? "product-variant" : "entity",
+    marketplaceTileImageVariantId: tileImageValue.startsWith("variant:")
+      ? tileImageValue.slice("variant:".length) : "",
+    marketplaceTileDescriptionSource: tileDescriptionValue.startsWith("variant:")
+      ? "product-variant" : "entity",
+    marketplaceTileDescriptionVariantId: tileDescriptionValue.startsWith("variant:")
+      ? tileDescriptionValue.slice("variant:".length) : "",
     retailPrice: optionalNumberFromInput("contentProductPrice"),
     salePrice: optionalNumberFromInput("contentProductSalePrice"),
     wholesalePrice: optionalNumberFromInput("contentProductWholesalePrice"),
@@ -3292,6 +3303,7 @@ function chooseExistingProduct(productId) {
   state.retainedProductVariantContentLinks = (product.variantContentLinks || [])
     .filter((link) => !["ManufacturedFrom", "OperatedWith"].includes(link.linkRole));
   setInputValue("contentProductVariants", serializeProductVariants(product.variants || []));
+  hydrateMarketplaceTileControls(product);
   populateProductVariantsFromEntity();
   renderProductBlueprintOptions(product.manufacturingBlueprintId || "");
   renderProductVariantContentLinkRows(product.variantContentLinks || []);
@@ -3339,6 +3351,7 @@ function chooseNewProduct() {
   setCheckboxValue("contentProductFeatured", false);
   setCheckboxValue("contentProductArchived", false);
   setInputValue("contentProductVariants", "");
+  hydrateMarketplaceTileControls({});
   state.retainedProductVariantContentLinks = [];
   populateProductVariantsFromEntity();
   renderProductVariantContentLinkRows([]);
@@ -3522,6 +3535,83 @@ function marketplaceAssetOptions(selectedValue = [], type = "", placeholder = ""
   return `${placeholder ? `<option value="">${escapeHTML(placeholder)}</option>` : ""}${options}`;
 }
 
+function marketplaceTileSourceOptions(selectedValue = "entity") {
+  const variants = currentProductVariants();
+  return [
+    `<option value="entity"${selectedValue === "entity" ? " selected" : ""}>Main entity / Product</option>`,
+    ...variants.map((variant) => {
+      const value = `variant:${variant.variantId}`;
+      const selected = value === selectedValue ? " selected" : "";
+      return `<option value="${escapeHTML(value)}"${selected}>Product variant — ${escapeHTML(variant.name || variant.variantId)}</option>`;
+    }),
+  ].join("");
+}
+
+function marketplaceTileSourceVariant(source = "") {
+  if (!source.startsWith("variant:")) return null;
+  const variantId = source.slice("variant:".length);
+  return currentProductVariants().find((variant) => variant.variantId === variantId) || null;
+}
+
+function marketplaceTilePreviewMarkup() {
+  const imageSource = document.getElementById("contentProductTileImageSource")?.value || "entity";
+  const descriptionSource = document.getElementById("contentProductTileDescriptionSource")?.value || "entity";
+  const imageVariant = marketplaceTileSourceVariant(imageSource);
+  const descriptionVariant = marketplaceTileSourceVariant(descriptionSource);
+  const entityVariant = entityVariantsFromBuilder()[0] || {};
+  const entityAssetId = primaryImageAssetIdForEntityVariant(entityVariant);
+  const assetId = imageVariant?.primaryAssetId || entityAssetId;
+  const asset = (state.records.assets || []).find((entry) => (entry.assetId || entry.id) === assetId);
+  const imageUrl = externalUrl(asset?.fileUrl || asset?.url || "");
+  const productName = document.getElementById("contentName")?.value || "Product";
+  const description = descriptionVariant?.shortDescription ||
+    document.getElementById("contentShortDescription")?.value || "Add a short description";
+  const price = optionalNumberFromInput("contentProductPrice");
+  return `<div class="mx-auto max-w-sm rounded-lg bg-gray-800 p-4 shadow">
+    <div class="flex h-40 items-center justify-center overflow-hidden rounded bg-gray-950 text-xs text-gray-400">
+      ${imageUrl
+    ? `<img src="${escapeHTML(imageUrl)}" alt="${escapeHTML(productName)}" class="h-full w-full object-cover">`
+    : "No image available from the selected source"}
+    </div>
+    <h5 class="mt-3 font-semibold text-white">${escapeHTML(productName)}</h5>
+    <p class="mt-1 text-sm text-gray-300">${escapeHTML(description)}</p>
+    ${price !== null ? `<p class="mt-2 font-semibold text-green-300">$${Number(price).toFixed(2)}</p>` : ""}
+  </div>`;
+}
+
+function renderMarketplaceTileControls() {
+  const imageSelect = document.getElementById("contentProductTileImageSource");
+  const descriptionSelect = document.getElementById("contentProductTileDescriptionSource");
+  if (!imageSelect || !descriptionSelect) return;
+  const imageValue = imageSelect.value || imageSelect.dataset.savedValue || "entity";
+  const descriptionValue = descriptionSelect.value || descriptionSelect.dataset.savedValue || "entity";
+  imageSelect.innerHTML = marketplaceTileSourceOptions(imageValue);
+  descriptionSelect.innerHTML = marketplaceTileSourceOptions(descriptionValue);
+  imageSelect.value = [...imageSelect.options].some((option) => option.value === imageValue)
+    ? imageValue : "entity";
+  descriptionSelect.value = [...descriptionSelect.options].some((option) => option.value === descriptionValue)
+    ? descriptionValue : "entity";
+  const preview = document.getElementById("contentProductTilePreview");
+  if (preview) preview.innerHTML = marketplaceTilePreviewMarkup();
+}
+
+function hydrateMarketplaceTileControls(record = {}) {
+  const imageSelect = document.getElementById("contentProductTileImageSource");
+  const descriptionSelect = document.getElementById("contentProductTileDescriptionSource");
+  const imageSource = record.productMarketplaceTileImageSource || record.marketplaceTileImageSource;
+  const imageVariantId = record.productMarketplaceTileImageVariantId || record.marketplaceTileImageVariantId;
+  const descriptionSource = record.productMarketplaceTileDescriptionSource ||
+    record.marketplaceTileDescriptionSource;
+  const descriptionVariantId = record.productMarketplaceTileDescriptionVariantId ||
+    record.marketplaceTileDescriptionVariantId;
+  const imageValue = imageSource === "product-variant" && imageVariantId
+    ? `variant:${imageVariantId}` : "entity";
+  const descriptionValue = descriptionSource === "product-variant" && descriptionVariantId
+    ? `variant:${descriptionVariantId}` : "entity";
+  if (imageSelect) imageSelect.dataset.savedValue = imageValue;
+  if (descriptionSelect) descriptionSelect.dataset.savedValue = descriptionValue;
+}
+
 function marketplaceVariantCardPreview(
   productVariant,
   entityVariant = {},
@@ -3573,16 +3663,15 @@ function marketplaceVariantCardPreview(
     </div>
     <div class="flex flex-col items-end justify-between gap-3 self-stretch">
       <button type="button" data-variant-editor="admin" class="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white">Admin fields</button>
-      <button type="button" data-variant-preview-toggle class="font-medium text-[#c15cff] hover:text-[#d991ff]">${detailMode ? "Shop card…" : "Detail…"}</button>
+      <span class="text-xs font-medium text-[#c15cff]">Product detail</span>
     </div>
   </div>`;
 }
 
-function updateMarketplacePreviewRow(target, detailModeOverride) {
+function updateMarketplacePreviewRow(target) {
   const row = target?.closest?.(".content-product-variant-row");
   const preview = row?.querySelector(".product-variant-card-preview");
   if (!row || !preview) return;
-  const detailMode = detailModeOverride ?? preview.dataset.previewMode === "detail";
   const contentVariantId = row.dataset.contentVariantId || "";
   const entityVariant = entityVariantsFromBuilder()
     .find((variant) => variant.entityVariantId === contentVariantId) || {};
@@ -3599,7 +3688,7 @@ function updateMarketplacePreviewRow(target, detailModeOverride) {
     productVariant,
     entityVariant,
     row === row.parentElement?.querySelector(".content-product-variant-row"),
-    detailMode,
+    true,
   );
 }
 
@@ -4143,6 +4232,7 @@ function clearEditMode({ updateHistory = true, recordType = "" } = {}) {
 function populateNewBuilderFromRoute(params) {
   const recordType = singularRecordType(params.get("entity") || "item");
   clearEditMode({ updateHistory: false, recordType });
+  hydrateMarketplaceTileControls({});
 
   const requestedType = params.get("contentType") || "";
   const requestedStatus = params.get("status") || "";
@@ -4266,6 +4356,7 @@ function populateBuilderFromRecord(record) {
       record.productLinkRole === "ManufacturedFrom" || isProductManufactureBlueprint(),
   }];
   renderEntityVariantRows(hydratedVariants);
+  hydrateMarketplaceTileControls(record);
 
   if (recordType === "item") {
     setCheckboxValue("contentWebsiteVisible", record.websiteVisible || record.requestedWebsiteVisible);
@@ -5937,7 +6028,10 @@ export async function setupContentBuilder() {
   });
   document.getElementById("contentName")?.addEventListener("input", renderSimilarList);
   ["contentName", "contentShortDescription", "contentLongDescription", "contentProductPrice"]
-    .forEach((id) => document.getElementById(id)?.addEventListener("input", refreshMarketplacePreviews));
+    .forEach((id) => document.getElementById(id)?.addEventListener("input", () => {
+      refreshMarketplacePreviews();
+      renderMarketplaceTileControls();
+    }));
   document.getElementById("contentSimilarList")?.addEventListener("click", (event) => {
     const button = event.target.closest(".edit-similar-content-record");
     if (!button) return;
@@ -6118,13 +6212,13 @@ export async function setupContentBuilder() {
     "click",
     addIndependentProductVariant,
   );
+  ["contentProductTileImageSource", "contentProductTileDescriptionSource"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("change", () => {
+      renderMarketplaceTileControls();
+      state.isDirty = true;
+    });
+  });
   document.getElementById("contentProductVariantRows")?.addEventListener("click", (event) => {
-    const previewToggle = event.target.closest("[data-variant-preview-toggle]");
-    if (previewToggle) {
-      const preview = previewToggle.closest(".product-variant-card-preview");
-      updateMarketplacePreviewRow(previewToggle, preview?.dataset.previewMode !== "detail");
-      return;
-    }
     const editorTrigger = event.target.closest("[data-variant-editor]");
     if (editorTrigger) {
       const row = editorTrigger.closest(".content-product-variant-row");
@@ -6226,6 +6320,7 @@ export async function setupContentBuilder() {
   document.getElementById("contentProductVariantRows")?.addEventListener("input", (event) => {
     syncSelectedProductVariantRows();
     updateMarketplacePreviewRow(event.target);
+    renderMarketplaceTileControls();
     state.isDirty = true;
   });
   document.getElementById("contentProductVariantRows")?.addEventListener("change", (event) => {
@@ -6243,6 +6338,7 @@ export async function setupContentBuilder() {
     }
     syncSelectedProductVariantRows();
     updateMarketplacePreviewRow(event.target);
+    renderMarketplaceTileControls();
     renderProductVariantContentLinkRows(productVariantContentLinksFromRows(true));
     state.isDirty = true;
   });

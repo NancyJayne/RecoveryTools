@@ -97,7 +97,7 @@ async function renderFeaturedTools() {
 
       const img = document.createElement("img");
       img.loading = "lazy";
-      img.src = data.image || data.images?.[0] || "/default.jpg";
+      img.src = data.marketplaceTileImage || data.image || data.images?.[0] || "/default.jpg";
       img.alt = data.name || data.title || "Featured product";
       img.className = "mx-auto mb-2 rounded object-cover h-40 w-full";
 
@@ -107,7 +107,7 @@ async function renderFeaturedTools() {
 
       const desc = document.createElement("p");
       desc.className = "text-sm text-gray-400";
-      desc.textContent = data.shortDescription || data.description || "";
+      desc.textContent = data.marketplaceTileShortDescription || data.shortDescription || data.description || "";
 
       const price = document.createElement("p");
       price.className = "text-green-400 font-bold mt-2";
