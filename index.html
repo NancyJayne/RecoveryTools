@@ -1812,6 +1812,13 @@
                     <label class="block text-sm">Tile image source
                       <select id="contentProductTileImageSource" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
                     </label>
+                    <div id="contentCurrentAssetsSection" class="mt-3 rounded border border-gray-800 bg-gray-900/60 p-3">
+                      <h4 class="text-sm font-semibold text-white">Linked source Assets</h4>
+                      <p class="mt-1 text-xs text-gray-400">These belong to the connected entity and are not public unless selected for the Product tile or a Product variant.</p>
+                      <div id="contentCurrentAssetsList" class="mt-2 space-y-2 text-xs text-gray-300">
+                        No linked source Assets.
+                      </div>
+                    </div>
                   </div>
                   <div id="contentProductTileDescriptionSourceField" data-product-context-panel="contentProductTileDescriptionSource" class="mt-3 hidden rounded border border-gray-700 p-3">
                     <label class="block text-sm">Tile short-description source
@@ -1984,12 +1991,6 @@
                   </div>
                   <div id="contentProductUnlockRows" class="mt-3 space-y-2"></div>
                 </section>
-                <div id="contentCurrentAssetsSection" class="mt-3 rounded border border-gray-800 bg-gray-900/60 p-3">
-                  <h4 class="text-sm font-semibold text-white">Current assets</h4>
-                  <div id="contentCurrentAssetsList" class="mt-2 space-y-2 text-xs text-gray-300">
-                    No assets linked.
-                  </div>
-                </div>
                 <div class="mt-5 flex flex-wrap items-center justify-end gap-4">
                   <fieldset class="flex flex-wrap items-center gap-2">
                     <legend class="sr-only">Product status</legend>

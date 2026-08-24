@@ -4287,7 +4287,7 @@ function renderCurrentAssets(record) {
   if (shownInTemplateFields) return;
   const assets = Array.isArray(record?.assets) ? record.assets : [];
   if (!assets.length) {
-    list.textContent = "No assets linked.";
+    list.textContent = "No linked source Assets.";
     return;
   }
   list.innerHTML = assets.map((asset) => `
