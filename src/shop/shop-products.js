@@ -608,23 +608,23 @@ export function showProductDetail(product, options = {}) {
   title.textContent = productName;
   title.className = "text-2xl font-bold mb-2";
 
-  const price = document.createElement("span");
+  const price = document.createElement("div");
   function updatePriceDisplay() {
     finalPrice = getVariantPrice(product, selectedVariant);
-    price.innerHTML =
-      selectedVariant?.onSale
-        ? `<span class="line-through text-gray-500 mr-2">
-             ${asMoney(selectedVariant.retailPriceOverride)}
-           </span><span class="text-green-400 font-bold">
-             ${asMoney(finalPrice)}
-           </span>`
-        : product.onSale && product.salePrice && !selectedVariant?.priceOverride
-          ? `<span class="line-through text-gray-500 mr-2">
-             ${asMoney(product.retailPrice)}
-           </span><span class="text-green-400 font-bold">
-             ${asMoney(finalPrice)}
-           </span>`
-          : asMoney(finalPrice);
+    const affiliatePrice = Number(selectedVariant?.wholesalePrice ?? product.wholesalePrice);
+    const hasAffiliatePrice = Number.isFinite(affiliatePrice) && affiliatePrice > 0;
+    const variantSaleActive = selectedVariant?.retailOnSale === true && Number(selectedVariant.salePrice) >= 0;
+    const productSaleActive = !selectedVariant && product.retailOnSale === true && Number(product.salePrice) >= 0;
+    const retailPrice = Number(selectedVariant?.retailPriceOverride ?? product.retailPrice ?? finalPrice);
+    const salePrice = variantSaleActive ? Number(selectedVariant.salePrice) : Number(product.salePrice);
+
+    const retailLine = variantSaleActive || productSaleActive
+      ? `<span class="line-through text-gray-500 mr-2">${asMoney(retailPrice)}</span>` +
+        `<span class="text-green-400 font-bold">${asMoney(salePrice)}</span>`
+      : `<span class="text-green-400 font-bold">${asMoney(retailPrice)}</span>`;
+    price.innerHTML = `<div>${retailLine}</div>` + (hasAffiliatePrice
+      ? `<div class="mt-1 text-sm font-semibold text-[#9edbd7]">Affiliate ${asMoney(affiliatePrice)}</div>`
+      : "");
   }
   function updateProductImage() {
     img.src = getVariantImage(product, selectedVariant);
@@ -632,7 +632,7 @@ export function showProductDetail(product, options = {}) {
   }
   updateProductImage();
   updatePriceDisplay();
-  price.className = "text-green-400 text-xl font-bold mb-2";
+  price.className = "mb-2 text-xl";
 
 
   const longDesc = document.createElement("p");
