@@ -57,6 +57,21 @@ function slugify(value) {
     .slice(0, 60);
 }
 
+function cleanNewTags(value) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).slice(0, 50).flatMap((tag) => {
+    const name = cleanString(tag?.name).slice(0, 100);
+    const categoryId = cleanString(tag?.categoryId).slice(0, 100);
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) return [];
+    if (!categoryId) {
+      throw new HttpsError("invalid-argument", `Choose a category for the new tag "${name}".`);
+    }
+    seen.add(key);
+    return [{ name, categoryId }];
+  });
+}
+
 function generatedProductSku(productId) {
   const token = slugify(productId).replace(/^(PROD|PRODUCT|ITEM|BLUEPRINT|PLAN)-/, "");
   return `RT-${token || "PRODUCT"}`;
@@ -767,8 +782,22 @@ export const createContentBuilderRecord = onCall(
         throw new HttpsError("invalid-argument", "The selected Product no longer exists. Refresh and try again.");
       }
 
+      const newTags = cleanNewTags(data.newTags);
       await admin.firestore().runTransaction(async (transaction) => {
         transaction.create(ref, doc);
+        newTags.forEach((tag) => {
+          const tagId = `TAG-${slugify(tag.name)}`;
+          transaction.set(db.collection("tags").doc(tagId), {
+            tagId,
+            name: tag.name,
+            categoryId: tag.categoryId,
+            status: "active",
+            contentOrigin: "app",
+            managedByWorkbook: false,
+            createdAt: now,
+            updatedAt: now,
+          }, { merge: true });
+        });
 
         if (recordType === "item" && uploadedAssets.length) {
           uploadedAssets.forEach((asset, index) => {

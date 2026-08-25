@@ -14,6 +14,7 @@ let assetDrawerFile = null;
 let resumeAssetSaveAfterFileSelection = false;
 let adminLinkedVariantBubbleCloseTimer = null;
 let entityStockDrawerSnapshot = [];
+let linkedRecordSelectorContext = null;
 
 let state = {
   options: {
@@ -458,7 +459,8 @@ function tagRowMarkup(value = "") {
   const selectedValue = String(value || "").trim();
   const knownTags = uniqueValues([...knownContentTags(), selectedValue]).filter(Boolean);
   const selectedKey = selectedValue.toLowerCase();
-  const isKnownTag = knownTags.some((tag) => tag.toLowerCase() === selectedKey);
+  const isKnownTag = (state.options.tagOptions || []).some((tag) =>
+    normalizedText(tag.name || tag.id) === selectedKey);
   const customValue = selectedValue && !isKnownTag ? selectedValue : "";
   const options = [
     `<option value="">Choose existing tag</option>`,
@@ -470,7 +472,7 @@ function tagRowMarkup(value = "") {
   ].join("");
 
   return `
-    <div class="content-tag-row grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+    <div class="content-tag-row grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
       <select class="content-tag-select rounded bg-gray-800 px-3 py-2 text-white">
         ${options}
       </select>
@@ -479,6 +481,12 @@ function tagRowMarkup(value = "") {
         placeholder="New tag"
         value="${escapeHTML(customValue)}"
       >
+      <select class="content-tag-new-category rounded bg-gray-800 px-3 py-2 text-white ${customValue ? "" : "hidden"}" aria-label="New tag category">
+        <option value="">Choose tag category</option>
+        ${(state.options.categoryOptions || []).map((category) => `
+          <option value="${escapeHTML(category.id)}">${escapeHTML(categoryDisplayName(category))}</option>
+        `).join("")}
+      </select>
       <button
         type="button"
         class="content-tag-remove rounded border border-gray-700 px-3 py-2 text-xs text-gray-200 hover:bg-gray-800"
@@ -527,10 +535,13 @@ function handleTagRowsChange(event) {
 
   if (event.target.classList.contains("content-tag-select")) {
     const input = row.querySelector(".content-tag-new");
+    const category = row.querySelector(".content-tag-new-category");
     if (input) {
       input.classList.toggle("hidden", event.target.value !== "__new__");
       if (event.target.value !== "__new__") input.value = "";
     }
+    category?.classList.toggle("hidden", event.target.value !== "__new__");
+    if (category && event.target.value !== "__new__") category.value = "";
   }
 
   syncTagInput();
@@ -545,10 +556,15 @@ function handleTagRowsClick(event) {
   if (rows.querySelectorAll(".content-tag-row").length <= 1) {
     const select = row.querySelector(".content-tag-select");
     const input = row.querySelector(".content-tag-new");
+    const category = row.querySelector(".content-tag-new-category");
     if (select) select.value = "";
     if (input) {
       input.value = "";
       input.classList.add("hidden");
+    }
+    if (category) {
+      category.value = "";
+      category.classList.add("hidden");
     }
   } else {
     row.remove();
@@ -2144,23 +2160,46 @@ function linkedTemplateRecordLabel(record) {
 
 function linkedTemplateSelectMarkup(field, key, required = false) {
   const records = linkedTemplateFieldRecords(field);
+  const selectedType = field.linkedTypeFilter || "";
+  const selectedStatus = field.linkedStatusFilter || "";
+  const selectedTags = uniqueValues(Array.isArray(field.linkedTagFilters)
+    ? field.linkedTagFilters : String(field.linkedTagFilters || "").split(","));
   return `
-    <select
-      class="content-template-variable content-template-linked-select min-w-0 flex-1 rounded
-        bg-gray-800 px-3 py-2 text-white"
-      data-field-key="${escapeHTML(key)}"
-      data-field-type="linked"
-      data-repeatable="false"
-      ${required ? "required" : ""}
-    >
-      <option value="">Choose a record</option>
-      ${records.map((record) => `
-        <option value="${escapeHTML(record.id)}">
-          ${escapeHTML(linkedTemplateRecordLabel(record))}
-        </option>
-      `).join("")}
-    </select>
+    <span class="content-template-linked-picker flex min-w-0 flex-1 gap-2">
+      <select
+        class="content-template-variable content-template-linked-select hidden"
+        data-field-key="${escapeHTML(key)}"
+        data-field-name="${escapeHTML(field.name || "Linked content")}"
+        data-field-type="linked"
+        data-linked-table="${escapeHTML(field.linkedTable || "")}"
+        data-linked-type-filter="${escapeHTML(selectedType)}"
+        data-linked-status-filter="${escapeHTML(selectedStatus)}"
+        data-linked-tag-filters="${escapeHTML(selectedTags.join(","))}"
+        data-repeatable="false"
+        ${required ? "required" : ""}
+      >
+        <option value="">Choose a record</option>
+        ${records.map((record) => `
+          <option value="${escapeHTML(record.id)}">
+            ${escapeHTML(linkedTemplateRecordLabel(record))}
+          </option>
+        `).join("")}
+      </select>
+      <button type="button" class="open-content-linked-selector min-w-0 flex-1 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">Choose ${escapeHTML(field.name || "content")}</button>
+    </span>
   `;
+}
+
+function refreshLinkedTemplatePickerLabel(select) {
+  const button = select?.closest(".content-template-linked-picker")
+    ?.querySelector(".open-content-linked-selector");
+  if (!button) return;
+  const record = linkedTemplateFieldRecords({ linkedTable: select.dataset.linkedTable })
+    .find((candidate) => candidate.id === select.value);
+  button.textContent = record
+    ? linkedTemplateRecordLabel(record)
+    : `Choose ${select.dataset.fieldName || "content"}`;
+  button.classList.toggle("text-gray-400", !record);
 }
 
 function linkedTemplateRowMarkup(field, key, required = false) {
@@ -2253,9 +2292,12 @@ function renderTemplateCustomFields(template) {
 
     let control;
     if (fieldType === "linked") {
-      control = repeatable
-        ? renderRepeatableLinkedTemplateField(field, key, name, required)
-        : linkedTemplateSelectMarkup(field, key, required);
+      control = renderRepeatableLinkedTemplateField({
+        ...field,
+        minEntries: field.minEntries ?? (required ? 1 : 0),
+        maxEntries: repeatable ? field.maxEntries : 1,
+        allowUnlimited: repeatable && field.allowUnlimited === true,
+      }, key, name, required);
     } else if (repeatable) {
       control = `
         <textarea
@@ -2293,13 +2335,6 @@ function renderTemplateCustomFields(template) {
       <label class="block">
         <span>${escapeHTML(name)}${required ? " *" : ""}</span>
         ${control}
-        ${fieldType === "linked" && !repeatable && assetTypeForTemplateField(field) ? `
-          <button type="button" class="create-content-template-asset mt-2 rounded border border-[#407471]
-            px-3 py-1 text-xs text-[#9edbd7] hover:bg-[#153b38]"
-            data-field-key="${escapeHTML(key)}"
-            data-field-name="${escapeHTML(name)}"
-            data-asset-type="${escapeHTML(assetTypeForTemplateField(field))}">Add new asset</button>
-        ` : ""}
         ${notes ? `<span class="mt-1 block text-xs text-gray-400">${escapeHTML(notes)}</span>` : ""}
       </label>
     `;
@@ -2385,6 +2420,9 @@ function restoreTemplateFieldValuesInRoot(root, fieldValues = {}) {
     } else if (input.dataset.fieldType === "checkbox") input.checked = value === true;
     else if (input.dataset.repeatable === "true" && Array.isArray(value)) input.value = value.join("\n");
     else input.value = value ?? "";
+    if (input.classList.contains("content-template-linked-select")) {
+      refreshLinkedTemplatePickerLabel(input);
+    }
   });
 }
 
@@ -2452,6 +2490,7 @@ function refreshLinkedTemplateField(field) {
       option.disabled = !!option.value && selected.has(option.value) && option.value !== select.value;
     });
     if (remove) remove.classList.toggle("hidden", rows.length <= Math.max(minimum, 1));
+    refreshLinkedTemplatePickerLabel(select);
   });
 
   const add = field.querySelector(".add-content-template-entry");
@@ -2475,6 +2514,7 @@ function addLinkedTemplateFieldRow(field, value = "", ignoreMaximum = false) {
       option.selected = option.value === value;
     });
     if (value && select.value !== value) select.add(new Option(value, value, true, true));
+    refreshLinkedTemplatePickerLabel(select);
   }
   rows.appendChild(row);
   refreshLinkedTemplateField(field);
@@ -2495,11 +2535,156 @@ function restoreLinkedTemplateField(field, rawValues) {
       select.add(new Option(value, value));
     }
     select.value = value;
+    refreshLinkedTemplatePickerLabel(select);
   });
   refreshLinkedTemplateField(field);
 }
 
+function closeLinkedRecordSelector() {
+  const modal = document.getElementById("contentLinkedRecordSelectorModal");
+  modal?.classList.add("hidden");
+  modal?.classList.remove("flex");
+  modal?.setAttribute("aria-hidden", "true");
+  linkedRecordSelectorContext?.trigger?.focus();
+  linkedRecordSelectorContext = null;
+}
+
+function linkedSelectorRecords(context = linkedRecordSelectorContext) {
+  if (!context?.select) return [];
+  return linkedTemplateFieldRecords({ linkedTable: context.select.dataset.linkedTable });
+}
+
+function renderLinkedRecordSelector() {
+  const context = linkedRecordSelectorContext;
+  if (!context) return;
+  const search = normalizedText(document.getElementById("contentLinkedRecordSearch")?.value);
+  const terms = search.split(/\s+/).filter(Boolean);
+  const secondaryTag = document.getElementById("contentLinkedRecordTagFilter")?.value || "";
+  const secondaryType = document.getElementById("contentLinkedRecordTypeFilter")?.value || "";
+  const fixedType = normalizedText(context.select.dataset.linkedTypeFilter);
+  const fixedStatus = normalizedText(context.select.dataset.linkedStatusFilter);
+  const fixedTags = uniqueValues(String(context.select.dataset.linkedTagFilters || "").split(","))
+    .map(normalizedText);
+  const selectedElsewhere = new Set([...document.querySelectorAll(
+    `.content-template-linked-select[data-field-key="${CSS.escape(context.select.dataset.fieldKey || "")}"]`,
+  )].filter((select) => select !== context.select).map((select) => select.value).filter(Boolean));
+  const records = linkedSelectorRecords(context).filter((record) => {
+    const recordType = normalizedText(record.type || record.assetType);
+    const recordStatus = normalizedText(record.status || "active");
+    const tags = uniqueValues(record.tags || []).map(normalizedText);
+    if (fixedType && recordType !== fixedType) return false;
+    if (fixedStatus && recordStatus !== fixedStatus) return false;
+    if (fixedTags.some((tag) => !tags.includes(tag))) return false;
+    if (secondaryType && recordType !== normalizedText(secondaryType)) return false;
+    if (secondaryTag && !tags.includes(normalizedText(secondaryTag))) return false;
+    const haystack = normalizedText([
+      record.name, record.title, record.id, record.type, record.assetType, ...tags,
+    ].filter(Boolean).join(" "));
+    return terms.every((term) => haystack.includes(term));
+  });
+  const results = document.getElementById("contentLinkedRecordSelectorResults");
+  if (results) {
+    results.innerHTML = records.length ? records.map((record) => {
+      const selected = context.select.value === record.id;
+      const unavailable = selectedElsewhere.has(record.id);
+      const tags = uniqueValues(record.tags || []);
+      return `<button type="button" data-linked-selector-record-id="${escapeHTML(record.id)}"
+        class="w-full rounded border p-3 text-left ${selected ? "border-[#9edbd7] bg-[#153b38]" : "border-gray-700 bg-gray-950/60 hover:border-[#407471]"} ${unavailable ? "cursor-not-allowed opacity-50" : ""}"
+        ${unavailable ? "disabled" : ""}>
+        <span class="flex flex-wrap items-start justify-between gap-2">
+          <span class="font-semibold text-white">${escapeHTML(record.name || record.title || record.id)}</span>
+          <span class="text-xs text-gray-400">${escapeHTML([record.type || record.assetType, record.status].filter(Boolean).join(" · "))}</span>
+        </span>
+        ${record.shortDescription ? `<span class="mt-1 block text-sm text-gray-300">${escapeHTML(record.shortDescription)}</span>` : ""}
+        ${tags.length ? `<span class="mt-2 flex flex-wrap gap-1">${tags.map((tag) => `<span class="rounded bg-gray-800 px-2 py-0.5 text-xs text-gray-300">${escapeHTML(tag)}</span>`).join("")}</span>` : ""}
+      </button>`;
+    }).join("") : `<div class="rounded border border-dashed border-gray-700 p-8 text-center text-sm text-gray-400">No matching content. Adjust the search or create a new record with these filters.</div>`;
+  }
+  const count = document.getElementById("contentLinkedRecordSelectorCount");
+  if (count) count.textContent = `${records.length} matching record${records.length === 1 ? "" : "s"}`;
+}
+
+function openLinkedRecordSelector(trigger) {
+  const picker = trigger.closest(".content-template-linked-picker");
+  const select = picker?.querySelector(".content-template-linked-select");
+  if (!select) return;
+  linkedRecordSelectorContext = { trigger, select };
+  const records = linkedSelectorRecords();
+  const fixedType = select.dataset.linkedTypeFilter || "";
+  const fixedStatus = select.dataset.linkedStatusFilter || "";
+  const fixedTags = uniqueValues(String(select.dataset.linkedTagFilters || "").split(","));
+  const table = select.dataset.linkedTable || "content";
+  const title = document.getElementById("contentLinkedRecordSelectorTitle");
+  if (title) title.textContent = `Choose ${select.dataset.fieldName || table}`;
+  const context = document.getElementById("contentLinkedRecordSelectorContext");
+  if (context) context.textContent = table;
+  const constraint = document.getElementById("contentLinkedRecordSelectorConstraint");
+  if (constraint) constraint.textContent = [
+    fixedType && `Type: ${fixedType}`,
+    fixedStatus && `Status: ${fixedStatus}`,
+    fixedTags.length && `Required tags: ${fixedTags.join(", ")}`,
+  ].filter(Boolean).join(" · ") || "The template has not imposed an additional type, status or tag restriction.";
+  setInputValue("contentLinkedRecordSearch", "");
+  const availableTags = uniqueValues(records.flatMap((record) => record.tags || [])).sort();
+  const tagFilter = document.getElementById("contentLinkedRecordTagFilter");
+  if (tagFilter) tagFilter.innerHTML = `<option value="">All tags</option>${availableTags.map((tag) => `<option value="${escapeHTML(tag)}">${escapeHTML(tag)}</option>`).join("")}`;
+  const availableTypes = uniqueValues(records.map((record) => record.type || record.assetType).filter(Boolean)).sort();
+  const typeFilter = document.getElementById("contentLinkedRecordTypeFilter");
+  if (typeFilter) {
+    const types = fixedType ? [fixedType] : availableTypes;
+    typeFilter.innerHTML = `${fixedType ? "" : "<option value=\"\">All types</option>"}${types.map((type) => `<option value="${escapeHTML(type)}">${escapeHTML(type)}</option>`).join("")}`;
+    typeFilter.disabled = Boolean(fixedType);
+  }
+  const modal = document.getElementById("contentLinkedRecordSelectorModal");
+  modal?.classList.remove("hidden");
+  modal?.classList.add("flex");
+  modal?.setAttribute("aria-hidden", "false");
+  renderLinkedRecordSelector();
+  document.getElementById("contentLinkedRecordSearch")?.focus();
+}
+
+function createFromLinkedRecordSelector() {
+  const context = linkedRecordSelectorContext;
+  if (!context) return;
+  const table = normalizedText(context.select.dataset.linkedTable);
+  if (["asset", "assets", "item asset", "item assets"].includes(table)) {
+    const field = context.select.closest(".content-template-linked-field");
+    const trigger = context.trigger;
+    trigger.dataset.fieldKey = context.select.dataset.fieldKey || "";
+    trigger.dataset.fieldName = context.select.dataset.fieldName || "Asset";
+    trigger.dataset.assetType = field?.dataset.assetType || "Document";
+    closeLinkedRecordSelector();
+    openContentAssetDrawer(trigger);
+    return;
+  }
+  const recordType = { items: "item", blueprints: "blueprint", plans: "plan" }[table];
+  if (!recordType) {
+    showToast(`Create new is not available for ${context.select.dataset.linkedTable || "this field"}.`, "error");
+    return;
+  }
+  const fixedTags = uniqueValues([
+    ...String(context.select.dataset.linkedTagFilters || "").split(","),
+    document.getElementById("contentLinkedRecordTagFilter")?.value || "",
+  ]);
+  const params = new URLSearchParams({ entity: recordType });
+  const type = context.select.dataset.linkedTypeFilter ||
+    document.getElementById("contentLinkedRecordTypeFilter")?.value || "";
+  const status = context.select.dataset.linkedStatusFilter || "draft";
+  const name = document.getElementById("contentLinkedRecordSearch")?.value.trim() || "";
+  if (type) params.set("contentType", type);
+  if (status) params.set("status", status);
+  if (fixedTags.length) params.set("tags", fixedTags.join(","));
+  if (name) params.set("name", name);
+  window.open(`/admin/content/builder?${params.toString()}`, "_blank", "noopener");
+  showToast("The new record opened in another tab. Return here and select Refresh results after saving it.", "success");
+}
+
 function handleTemplateGuidedFieldsClick(event) {
+  const selector = event.target.closest(".open-content-linked-selector");
+  if (selector) {
+    openLinkedRecordSelector(selector);
+    return;
+  }
   const createAsset = event.target.closest(".create-content-template-asset");
   if (createAsset) {
     openContentAssetDrawer(createAsset);
@@ -2508,7 +2693,7 @@ function handleTemplateGuidedFieldsClick(event) {
   const field = event.target.closest(".content-template-linked-field");
   if (!field) return;
   if (event.target.closest(".add-content-template-entry")) {
-    addLinkedTemplateFieldRow(field)?.querySelector("select")?.focus();
+    addLinkedTemplateFieldRow(field)?.querySelector(".open-content-linked-selector")?.focus();
     return;
   }
   const remove = event.target.closest(".remove-content-template-entry");
@@ -4608,15 +4793,26 @@ function renderProductVariantContentLinkRows(links = []) {
         <select class="variant-content-product-variant rounded bg-gray-800 px-2 py-2 text-white">
           <option value=""${link.productVariantId ? "" : " selected"}>Choose Product variant${link.productVariantId ? "" : " — legacy all-variant link"}</option>${productVariantOptions}
         </select>
-        <select class="variant-content-blueprint rounded bg-gray-800 px-2 py-2 text-white">
-          <option value="">Choose Blueprint</option>${blueprintOptions}
-        </select>
+        <span class="content-template-linked-picker flex min-w-0">
+          <select class="variant-content-blueprint content-template-linked-select hidden"
+            data-field-key="product-blueprint-${escapeHTML(link.productVariantId || "all")}"
+            data-field-name="${linkRole === "ManufacturedFrom" ? "Manufacturing Blueprint" : "Workshop operations Blueprint"}"
+            data-linked-table="Blueprints"
+            data-linked-type-filter="${linkRole === "ManufacturedFrom" ? "Product Manufacture" : "Workshop Operations"}"
+            data-linked-status-filter="" data-linked-tag-filters="">
+            <option value="">Choose Blueprint</option>${blueprintOptions}
+          </select>
+          <button type="button" class="open-content-linked-selector min-w-0 flex-1 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">Choose Blueprint</button>
+        </span>
         <select class="variant-content-blueprint-variant rounded bg-gray-800 px-2 py-2 text-white">
           <option value="">Default Blueprint variant</option>${blueprintVariantOptions}
         </select>
         <button type="button" class="remove-product-variant-content-link rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
       </div>`;
   }).join("") || "<p class=\"text-xs text-gray-400\">No manufacturing or Workshop Operations Blueprint selected.</p>";
+  container.querySelectorAll(".content-template-linked-select").forEach(
+    refreshLinkedTemplatePickerLabel,
+  );
   filterVariantOwnedConnections(
     document.getElementById("contentVariantOwnedConnections")?.dataset.activeProductVariantId || "",
   );
@@ -4903,6 +5099,18 @@ function templateRelationshipGroups(entityVariants = []) {
     action: "entity-connections",
     actionLabel: "Edit links",
   }));
+}
+
+function selectedNewTagsFromControls() {
+  const tags = [...document.querySelectorAll("#contentTagRows .content-tag-row")].flatMap((row) => {
+    if (row.querySelector(".content-tag-select")?.value !== "__new__") return [];
+    const name = row.querySelector(".content-tag-new")?.value.trim() || "";
+    const categoryId = row.querySelector(".content-tag-new-category")?.value || "";
+    return name ? [{ name, categoryId }] : [];
+  });
+  const uncategorized = tags.find((tag) => !tag.categoryId);
+  if (uncategorized) throw new Error(`Choose a tag category for "${uncategorized.name}".`);
+  return tags;
 }
 
 function reviewConnectionChips(label, records) {
@@ -5388,7 +5596,11 @@ function populateNewBuilderFromRoute(params) {
   }
   if (params.get("visibility")) setInputValue("contentVisibility", params.get("visibility"));
   if (params.get("category")) setSelectValue("contentTagCategoryFilter", params.get("category"));
-  if (params.get("tag")) renderTagControls([params.get("tag")]);
+  const routeTags = uniqueValues([
+    params.get("tag") || "",
+    ...String(params.get("tags") || "").split(","),
+  ]);
+  if (routeTags.length) renderTagControls(routeTags);
   setCheckboxValue("contentIsShopProduct", params.get("product") === "1");
   setCheckboxValue("contentWebsiteVisible", params.get("websiteVisible") === "1");
   if (recordType === "item") {
@@ -5867,6 +6079,24 @@ function templateFieldRowMarkup(field = {}) {
           </select>
         </label>
         <label class="block">
+          Required linked type
+          <input class="template-field-linked-type-filter mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+            value="${escapeHTML(field.linkedTypeFilter || "")}" placeholder="Example: Product Manufacture">
+        </label>
+        <label class="block">
+          Required linked status
+          <select class="template-field-linked-status-filter mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+            ${["", "active", "draft", "review", "paused", "archived"].map((status) => `
+              <option value="${status}" ${normalizedText(field.linkedStatusFilter) === status ? "selected" : ""}>${status || "Any status"}</option>
+            `).join("")}
+          </select>
+        </label>
+        <label class="block sm:col-span-2">
+          Required tags
+          <input class="template-field-linked-tag-filters mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+            value="${escapeHTML(uniqueValues(Array.isArray(field.linkedTagFilters) ? field.linkedTagFilters : String(field.linkedTagFilters || "").split(",")).join(", "))}" placeholder="Comma-separated tags applied as fixed filters">
+        </label>
+        <label class="block">
           Minimum entries
           <input
             class="template-field-min-entries mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
@@ -5935,6 +6165,11 @@ function templateFieldsFromDrawer(rows, variantId) {
       const key = templateFieldKey(row.querySelector(".template-field-key")?.value || name);
       const fieldType = canonicalTemplateFieldType(row.querySelector(".template-field-type")?.value);
       const linkedTable = row.querySelector(".template-field-linked-table")?.value || "";
+      const linkedTypeFilter = row.querySelector(".template-field-linked-type-filter")?.value.trim() || "";
+      const linkedStatusFilter = row.querySelector(".template-field-linked-status-filter")?.value || "";
+      const linkedTagFilters = uniqueValues(String(
+        row.querySelector(".template-field-linked-tag-filters")?.value || "",
+      ).split(","));
       const minValue = row.querySelector(".template-field-min-entries")?.value || "";
       const maxValue = row.querySelector(".template-field-max-entries")?.value || "";
       const minEntries = minValue === "" ? 0 : Number(minValue);
@@ -5967,6 +6202,9 @@ function templateFieldsFromDrawer(rows, variantId) {
         name,
         fieldType,
         linkedTable,
+        linkedTypeFilter,
+        linkedStatusFilter,
+        linkedTagFilters,
         required,
         repeatable,
         minEntries,
@@ -6581,6 +6819,7 @@ async function formPayload(confirmDuplicate = false) {
     longDescription: document.getElementById("contentLongDescription")?.value || "",
     notes: document.getElementById("contentLongDescription")?.value || "",
     tags: selectedTagsFromControls(),
+    newTags: selectedNewTagsFromControls(),
     websiteVisible: entityVariants.some((variant) => variant.libraryVisible === true),
     isShopProduct: recordType === "item"
       ? primaryBehaviours.isShopProduct === true
@@ -7234,6 +7473,49 @@ export async function setupContentBuilder() {
     "click",
     handleTemplateGuidedFieldsClick,
   );
+  document.getElementById("contentEntityVariantRows")?.addEventListener(
+    "click",
+    handleTemplateGuidedFieldsClick,
+  );
+  document.getElementById("contentLinkedRecordSelectorResults")?.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-linked-selector-record-id]");
+    const select = linkedRecordSelectorContext?.select;
+    if (!option || !select) return;
+    select.value = option.dataset.linkedSelectorRecordId || "";
+    refreshLinkedTemplatePickerLabel(select);
+    const field = select.closest(".content-template-linked-field");
+    if (field) refreshLinkedTemplateField(field);
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    state.isDirty = true;
+    closeLinkedRecordSelector();
+  });
+  ["contentLinkedRecordSearch", "contentLinkedRecordTagFilter", "contentLinkedRecordTypeFilter"]
+    .forEach((id) => document.getElementById(id)?.addEventListener(
+      id === "contentLinkedRecordSearch" ? "input" : "change",
+      renderLinkedRecordSelector,
+    ));
+  document.getElementById("closeContentLinkedRecordSelectorBtn")?.addEventListener(
+    "click", closeLinkedRecordSelector,
+  );
+  document.getElementById("createContentLinkedRecordBtn")?.addEventListener(
+    "click", createFromLinkedRecordSelector,
+  );
+  document.getElementById("refreshContentLinkedRecordSelectorBtn")?.addEventListener("click", async () => {
+    const button = document.getElementById("refreshContentLinkedRecordSelectorBtn");
+    button?.setAttribute("disabled", "");
+    try {
+      const response = await getContentBuilderData();
+      state.options = { ...state.options, ...(response.data?.options || {}) };
+      state.records = { ...state.records, ...(response.data?.records || {}) };
+      renderLinkedRecordSelector();
+      showToast("Selector results refreshed.", "success");
+    } catch (error) {
+      console.error("Failed to refresh linked content selector:", error);
+      showToast(error.message || "Failed to refresh selector results.", "error");
+    } finally {
+      button?.removeAttribute("disabled");
+    }
+  });
   document.getElementById("templateGuidedFields")?.addEventListener("change", (event) => {
     const field = event.target.closest(".content-template-linked-field");
     if (field) refreshLinkedTemplateField(field);
@@ -7508,6 +7790,11 @@ export async function setupContentBuilder() {
     });
   });
   document.getElementById("contentProductDrawer")?.addEventListener("click", (event) => {
+    const linkedSelector = event.target.closest(".open-content-linked-selector");
+    if (linkedSelector) {
+      openLinkedRecordSelector(linkedSelector);
+      return;
+    }
     const closeContext = event.target.closest("[data-close-product-context]");
     if (closeContext) {
       closeContext.closest("[data-product-context-panel]")?.classList.add("hidden");

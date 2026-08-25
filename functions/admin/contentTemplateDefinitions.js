@@ -42,6 +42,11 @@ function normalizedField(doc) {
     name: cleanString(data.name || data.fieldName),
     fieldType: cleanString(data.fieldType),
     linkedTable: cleanString(data.linkedTable),
+    linkedTypeFilter: cleanString(data.linkedTypeFilter),
+    linkedStatusFilter: cleanString(data.linkedStatusFilter),
+    linkedTagFilters: Array.isArray(data.linkedTagFilters)
+      ? data.linkedTagFilters.map(cleanString).filter(Boolean)
+      : [],
     required: data.required === true,
     repeatable: data.repeatable === true,
     minEntries: numberOrNull(data.minEntries),

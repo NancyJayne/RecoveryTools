@@ -247,6 +247,21 @@ function cleanItemComponents(value) {
     .filter((component) => (component.itemId || component.productId) && component.quantity > 0);
 }
 
+function cleanNewTags(value) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).slice(0, 50).flatMap((tag) => {
+    const name = cleanString(tag?.name).slice(0, 100);
+    const categoryId = cleanString(tag?.categoryId).slice(0, 100);
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) return [];
+    if (!categoryId) {
+      throw new HttpsError("invalid-argument", `Choose a category for the new tag "${name}".`);
+    }
+    seen.add(key);
+    return [{ name, categoryId }];
+  });
+}
+
 function cleanTemplateAssetLinks(value) {
   if (!Array.isArray(value)) return [];
   const seen = new Set();
@@ -1284,7 +1299,21 @@ export const updateContentControlRecord = onCall(
         db.collection("productVariantContentLinks").where("productId", "==", relationProductId).get(),
       ])
       : [{ docs: [] }, { docs: [] }];
+    const newTags = cleanNewTags(updates.newTags);
     await db.runTransaction(async (transaction) => {
+      newTags.forEach((tag) => {
+        const tagId = `TAG-${slugify(tag.name)}`;
+        transaction.set(db.collection("tags").doc(tagId), {
+          tagId,
+          name: tag.name,
+          categoryId: tag.categoryId,
+          status: "active",
+          contentOrigin: "app",
+          managedByWorkbook: false,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      });
       if (collection === "items" && updates.createsProduct !== true &&
           updates.inventoryTracked !== undefined) {
         const inventoryRef = db.collection("inventory").doc(`INV-${slugify(recordId)}`);
