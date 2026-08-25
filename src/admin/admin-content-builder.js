@@ -4900,13 +4900,13 @@ function connectionErdNode({
     gray: "border-gray-700 bg-gray-900/80",
   };
   return `<article class="rounded-lg border ${tones[tone] || tones.gray} p-3 shadow-sm">
-    <div class="flex items-start justify-between gap-2">
+    <div class="flex flex-wrap items-start justify-between gap-2">
       <div class="min-w-0">
         <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-400">${escapeHTML(kind)}</div>
-        <h4 class="mt-1 truncate font-semibold text-white">${escapeHTML(title)}</h4>
+        <h4 class="mt-1 break-words text-base font-semibold leading-5 text-white">${escapeHTML(title)}</h4>
       </div>
       ${action ? `<button type="button" data-connection-action="${escapeHTML(action)}"
-        class="shrink-0 rounded border border-gray-600 px-2 py-1 text-[11px] text-[#bce7e4] hover:border-[#407471] hover:bg-[#153b38]">${escapeHTML(actionLabel || "Open")}</button>` : ""}
+        class="max-w-full shrink-0 whitespace-normal rounded border border-gray-600 px-2 py-1 text-left text-[11px] leading-4 text-[#bce7e4] hover:border-[#407471] hover:bg-[#153b38]">${escapeHTML(actionLabel || "Open")}</button>` : ""}
     </div>
     ${summary ? `<p class="mt-2 text-xs leading-5 text-gray-400">${escapeHTML(summary)}</p>` : ""}
     ${body}
@@ -5096,8 +5096,6 @@ function renderBuilderSummaries(record = state.editingRecord) {
 
   if (relationships) {
     const name = document.getElementById("contentName")?.value || record?.name || "Untitled content";
-    const shortDescription = document.getElementById("contentShortDescription")?.value ||
-      record?.shortDescription || "No short description entered.";
     const manufacturingBlueprintId = productRelation.manufacturingBlueprintId ||
       record?.manufacturingBlueprintId || "";
     const manufacturingBlueprint = (state.records.blueprints || [])
@@ -5166,7 +5164,6 @@ function renderBuilderSummaries(record = state.editingRecord) {
     const centre = connectionErdNode({
       kind: `${recordType} · current entity`,
       title: name,
-      summary: shortDescription,
       rows: activeEntityVariants.length ? activeEntityVariants.map((variant) => ({
         label: variant.name || variant.entityVariantId || "Variant",
         meta: variant.status || "active",
@@ -5178,7 +5175,6 @@ function renderBuilderSummaries(record = state.editingRecord) {
     const product = connectionErdNode({
       kind: "Product",
       title: isShopProduct ? name : "No Product connected",
-      summary: isShopProduct ? `${variants.length} exact sellable variant${variants.length === 1 ? "" : "s"}` : "Create a Product from this entity.",
       rows: isShopProduct ? productRows : [],
       body: isShopProduct ? `<div class="mt-3 border-t border-blue-500/30 pt-3">${marketplaceTilePreviewMarkup()}</div>` : "",
       action: "product",
@@ -5189,7 +5185,6 @@ function renderBuilderSummaries(record = state.editingRecord) {
       connectionErdNode({
         kind: "Product inventory",
         title: "Product stock",
-        summary: "Finished sellable Product stock remains separate from Item inventory.",
         rows: stockRows,
         action: "stock",
         actionLabel: "Open stock",
@@ -5198,7 +5193,6 @@ function renderBuilderSummaries(record = state.editingRecord) {
       connectionErdNode({
         kind: "Manufacturing Blueprints",
         title: manufacturingLinks.length || manufacturingBlueprintId ? "Manufacturing connected" : "No manufacturing Blueprint",
-        summary: "How each exact Product variant is made.",
         rows: manufacturingLinks.length ? blueprintRows(manufacturingLinks) : manufacturingBlueprintId
           ? [{ label: manufacturingLabel }] : [],
         action: "blueprint-manufacturing",
@@ -5208,7 +5202,6 @@ function renderBuilderSummaries(record = state.editingRecord) {
       connectionErdNode({
         kind: "Purchase access",
         title: accessGrants.length ? `${accessGrants.length} unlock target${accessGrants.length === 1 ? "" : "s"}` : "No purchase unlocks",
-        summary: "Content unlocked only after an exact Product variant is purchased.",
         rows: accessGrants.map((grant) => ({
           label: `${grant.accessEntityType || "Entity"}: ${grant.accessEntityId || "Not selected"}`,
           meta: variants.find((variant) => variant.variantId === grant.productVariantId)?.name || "",
@@ -5226,14 +5219,13 @@ function renderBuilderSummaries(record = state.editingRecord) {
         tone: "blue",
       }),
     ].join("");
-    const commerce = `${product}<div class="ml-5 space-y-3 border-l-2 border-blue-500/40 pl-4">${productConnections}</div>`;
+    const commerce = `${product}<div class="ml-5 grid grid-cols-2 gap-3 border-l-2 border-blue-500/40 pl-4">${productConnections}</div>`;
     const isWorkshopEntity = normalizedType(
       document.getElementById("contentType")?.value || record?.type,
     ) === "workshop";
     const workshopOperations = isWorkshopEntity ? connectionErdNode({
       kind: "Workshop operations",
       title: operationsLinks.length ? `${operationsLinks.length} operations connection${operationsLinks.length === 1 ? "" : "s"}` : "No Workshop operations",
-      summary: "Instructor-only directions for conducting this Workshop and delivering its participant materials.",
       rows: blueprintRows(operationsLinks),
       action: "blueprint-operations",
       actionLabel: operationsLinks.length ? "Edit connection" : "Connect Blueprint",
@@ -5263,7 +5255,6 @@ function renderBuilderSummaries(record = state.editingRecord) {
     const library = connectionErdNode({
       kind: "Library connection",
       title: libraryRows.length ? `${libraryRows.length} selected variant${libraryRows.length === 1 ? "" : "s"}` : "No variants selected",
-      summary: "Select exact entity variants now for display when the future Library area is released.",
       rows: libraryRows,
       action: "library",
       actionLabel: libraryRows.length ? "Edit selection" : "Select variants",
@@ -5271,10 +5262,7 @@ function renderBuilderSummaries(record = state.editingRecord) {
     });
     const entityStock = currentRecordType() === "item" ? connectionErdNode({
       kind: "Entity stock",
-      title: entityStockRows.length ? "Template-enabled Item inventory" : "Entity stock not enabled",
-      summary: entityStockRows.length
-        ? "Stock belongs only to these exact Item variants."
-        : "Enable Track entity inventory in the selected Item template to add this connection.",
+      title: entityStockRows.length ? `${name} stock` : `${name} stock not enabled`,
       rows: entityStockRows,
       action: entityStockRows.length ? "entity-stock" : "",
       actionLabel: "Edit entity stock",
@@ -5287,7 +5275,7 @@ function renderBuilderSummaries(record = state.editingRecord) {
       : "Library";
 
     relationships.innerHTML = `<div class="overflow-x-auto rounded-xl border border-gray-800 bg-gray-950/60 p-4 md:p-6">
-      <div class="grid min-w-[860px] grid-cols-[minmax(230px,1fr)_minmax(280px,1.15fr)_minmax(230px,1fr)] items-center gap-6">
+      <div class="grid min-w-[1180px] grid-cols-[minmax(430px,1.35fr)_minmax(330px,1fr)_minmax(300px,0.9fr)] items-center gap-6">
         ${connectionErdBranch("Product and purchase relationships", commerce, "left")}
         <section class="relative space-y-3">
           <div class="absolute -left-6 top-1/2 h-px w-6 bg-[#407471]/70"></div>
