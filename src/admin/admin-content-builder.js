@@ -5175,35 +5175,46 @@ function renderBuilderSummaries(record = state.editingRecord) {
       actionLabel: "Edit entity",
       tone: "teal",
     });
-    const commerce = [
+    const product = connectionErdNode({
+      kind: "Product",
+      title: isShopProduct ? name : "No Product connected",
+      summary: isShopProduct ? `${variants.length} exact sellable variant${variants.length === 1 ? "" : "s"}` : "Create a Product from this entity.",
+      rows: isShopProduct ? productRows : [],
+      body: isShopProduct ? `<div class="mt-3 border-t border-blue-500/30 pt-3">${marketplaceTilePreviewMarkup()}</div>` : "",
+      action: "product",
+      actionLabel: isShopProduct ? "Edit Product" : "Create Product",
+      tone: "blue",
+    });
+    const productConnections = [
       connectionErdNode({
-        kind: "Product",
-        title: isShopProduct ? name : "No Product connected",
-        summary: isShopProduct ? `${variants.length} exact sellable variant${variants.length === 1 ? "" : "s"}` : "Create a Product from this entity.",
-        rows: isShopProduct ? productRows : [],
-        body: isShopProduct ? `<div class="mt-3 border-t border-blue-500/30 pt-3">${marketplaceTilePreviewMarkup()}</div>` : "",
-        action: "product",
-        actionLabel: isShopProduct ? "Edit Product" : "Create Product",
-        tone: "blue",
-      }),
-      connectionErdNode({
-        kind: "Entity stock",
-        title: entityStockRows.length ? "Template-enabled Item inventory" : "Entity stock not enabled",
-        summary: entityStockRows.length
-          ? "Stock belongs to these exact Item variants."
-          : "Enable Track entity inventory in the selected Item template to add this connection.",
-        rows: entityStockRows,
-        action: entityStockRows.length ? "entity-stock" : "",
-        actionLabel: "Edit entity stock",
-        tone: "blue",
-      }),
-      connectionErdNode({
-        kind: "Inventory",
+        kind: "Product inventory",
         title: "Product stock",
         summary: "Finished sellable Product stock remains separate from Item inventory.",
         rows: stockRows,
         action: "stock",
         actionLabel: "Open stock",
+        tone: "blue",
+      }),
+      connectionErdNode({
+        kind: "Manufacturing Blueprints",
+        title: manufacturingLinks.length || manufacturingBlueprintId ? "Manufacturing connected" : "No manufacturing Blueprint",
+        summary: "How each exact Product variant is made.",
+        rows: manufacturingLinks.length ? blueprintRows(manufacturingLinks) : manufacturingBlueprintId
+          ? [{ label: manufacturingLabel }] : [],
+        action: "blueprint-manufacturing",
+        actionLabel: manufacturingLinks.length || manufacturingBlueprintId ? "Edit connection" : "Connect Blueprint",
+        tone: "blue",
+      }),
+      connectionErdNode({
+        kind: "Purchase access",
+        title: accessGrants.length ? `${accessGrants.length} unlock target${accessGrants.length === 1 ? "" : "s"}` : "No purchase unlocks",
+        summary: "Content unlocked only after an exact Product variant is purchased.",
+        rows: accessGrants.map((grant) => ({
+          label: `${grant.accessEntityType || "Entity"}: ${grant.accessEntityId || "Not selected"}`,
+          meta: variants.find((variant) => variant.variantId === grant.productVariantId)?.name || "",
+        })),
+        action: "product",
+        actionLabel: "Edit unlocks",
         tone: "blue",
       }),
       connectionErdNode({
@@ -5215,19 +5226,12 @@ function renderBuilderSummaries(record = state.editingRecord) {
         tone: "blue",
       }),
     ].join("");
+    const commerce = `${product}<div class="ml-5 space-y-3 border-l-2 border-blue-500/40 pl-4">${productConnections}</div>`;
     const operations = [
-      connectionErdNode({
-        kind: "Manufacturing Blueprints",
-        title: manufacturingLinks.length || manufacturingBlueprintId ? "Manufacturing connected" : "No manufacturing Blueprint",
-        rows: manufacturingLinks.length ? blueprintRows(manufacturingLinks) : manufacturingBlueprintId
-          ? [{ label: manufacturingLabel }] : [],
-        action: "blueprint-manufacturing",
-        actionLabel: manufacturingLinks.length || manufacturingBlueprintId ? "Edit connection" : "Connect Blueprint",
-        tone: "amber",
-      }),
       connectionErdNode({
         kind: "Workshop operations",
         title: operationsLinks.length ? `${operationsLinks.length} operations connection${operationsLinks.length === 1 ? "" : "s"}` : "No Workshop operations",
+        summary: "Instructor-only directions for conducting this Workshop and delivering its participant materials.",
         rows: blueprintRows(operationsLinks),
         action: "blueprint-operations",
         actionLabel: operationsLinks.length ? "Edit connection" : "Connect Blueprint",
@@ -5251,7 +5255,7 @@ function renderBuilderSummaries(record = state.editingRecord) {
       rows: selectedAssetLabels.map((label) => ({ label })),
       action: "asset",
       actionLabel: "Add Asset",
-      tone: "purple",
+      tone: "teal",
     });
     const libraryRows = entityVariants.filter((variant) => variant.libraryVisible === true)
       .map((variant) => ({ label: variant.name, meta: variant.status || "draft" }));
@@ -5262,30 +5266,31 @@ function renderBuilderSummaries(record = state.editingRecord) {
       rows: libraryRows,
       action: "library",
       actionLabel: libraryRows.length ? "Edit selection" : "Select variants",
-      tone: "purple",
+      tone: "teal",
     });
-    const access = connectionErdNode({
-      kind: "Purchase access",
-      title: accessGrants.length ? `${accessGrants.length} unlock target${accessGrants.length === 1 ? "" : "s"}` : "No purchase unlocks",
-      rows: accessGrants.map((grant) => ({
-        label: `${grant.accessEntityType || "Entity"}: ${grant.accessEntityId || "Not selected"}`,
-        meta: variants.find((variant) => variant.variantId === grant.productVariantId)?.name || "",
-      })),
-      action: "product",
-      actionLabel: "Edit unlocks",
-      tone: "purple",
-    });
+    const entityStock = currentRecordType() === "item" ? connectionErdNode({
+      kind: "Entity stock",
+      title: entityStockRows.length ? "Template-enabled Item inventory" : "Entity stock not enabled",
+      summary: entityStockRows.length
+        ? "Stock belongs only to these exact Item variants."
+        : "Enable Track entity inventory in the selected Item template to add this connection.",
+      rows: entityStockRows,
+      action: entityStockRows.length ? "entity-stock" : "",
+      actionLabel: "Edit entity stock",
+      tone: "teal",
+    }) : "";
+    const entityConnections = [entityStock, media, library].filter(Boolean).join("");
 
     relationships.innerHTML = `<div class="overflow-x-auto rounded-xl border border-gray-800 bg-gray-950/60 p-4 md:p-6">
       <div class="grid min-w-[860px] grid-cols-[minmax(230px,1fr)_minmax(280px,1.15fr)_minmax(230px,1fr)] items-center gap-6">
-        ${connectionErdBranch("Commerce and inventory", commerce, "left")}
+        ${connectionErdBranch("Product and purchase relationships", commerce, "left")}
         <section class="relative space-y-3">
           <div class="absolute -left-6 top-1/2 h-px w-6 bg-[#407471]/70"></div>
           <div class="absolute -right-6 top-1/2 h-px w-6 bg-[#407471]/70"></div>
           ${centre}
-          <div class="grid grid-cols-3 gap-3">${library}${media}${access}</div>
+          <div class="ml-5 space-y-3 border-l-2 border-[#407471]/50 pl-4">${entityConnections}</div>
         </section>
-        ${connectionErdBranch("Operations and reusable records", operations, "right")}
+        ${connectionErdBranch("Workshop delivery and participant material", operations, "right")}
       </div>
     </div>`;
   }
