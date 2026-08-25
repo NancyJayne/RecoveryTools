@@ -5231,14 +5231,14 @@ function renderBuilderSummaries(record = state.editingRecord) {
       document.getElementById("contentType")?.value || record?.type,
     ) === "workshop";
     const workshopOperations = isWorkshopEntity ? connectionErdNode({
-        kind: "Workshop operations",
-        title: operationsLinks.length ? `${operationsLinks.length} operations connection${operationsLinks.length === 1 ? "" : "s"}` : "No Workshop operations",
-        summary: "Instructor-only directions for conducting this Workshop and delivering its participant materials.",
-        rows: blueprintRows(operationsLinks),
-        action: "blueprint-operations",
-        actionLabel: operationsLinks.length ? "Edit connection" : "Connect Blueprint",
-        tone: "amber",
-      }) : "";
+      kind: "Workshop operations",
+      title: operationsLinks.length ? `${operationsLinks.length} operations connection${operationsLinks.length === 1 ? "" : "s"}` : "No Workshop operations",
+      summary: "Instructor-only directions for conducting this Workshop and delivering its participant materials.",
+      rows: blueprintRows(operationsLinks),
+      action: "blueprint-operations",
+      actionLabel: operationsLinks.length ? "Edit connection" : "Connect Blueprint",
+      tone: "amber",
+    }) : "";
     const connectedRecords = connectionErdNode({
       kind: "Connected Items / Plans",
       title: linkedItemIds.length || linkedPlanIds.length ? "Reusable entities connected" : "No reusable entities",
@@ -5248,7 +5248,7 @@ function renderBuilderSummaries(record = state.editingRecord) {
       ],
       action: "entity-connections",
       actionLabel: "Edit links",
-      tone: "amber",
+      tone: "teal",
     });
     const media = connectionErdNode({
       kind: "Assets from main entity",
@@ -5280,11 +5280,11 @@ function renderBuilderSummaries(record = state.editingRecord) {
       actionLabel: "Edit entity stock",
       tone: "teal",
     }) : "";
-    const entityConnections = [entityStock, media].filter(Boolean).join("");
-    const outwardConnections = [library, workshopOperations, connectedRecords].filter(Boolean).join("");
+    const entityConnections = [entityStock, media, connectedRecords].filter(Boolean).join("");
+    const outwardConnections = [library, workshopOperations].filter(Boolean).join("");
     const outwardHeading = isWorkshopEntity
-      ? "Library, Workshop operations and reusable records"
-      : "Library and reusable records";
+      ? "Library and Workshop operations"
+      : "Library";
 
     relationships.innerHTML = `<div class="overflow-x-auto rounded-xl border border-gray-800 bg-gray-950/60 p-4 md:p-6">
       <div class="grid min-w-[860px] grid-cols-[minmax(230px,1fr)_minmax(280px,1.15fr)_minmax(230px,1fr)] items-center gap-6">
