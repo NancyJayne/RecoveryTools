@@ -5227,8 +5227,10 @@ function renderBuilderSummaries(record = state.editingRecord) {
       }),
     ].join("");
     const commerce = `${product}<div class="ml-5 space-y-3 border-l-2 border-blue-500/40 pl-4">${productConnections}</div>`;
-    const operations = [
-      connectionErdNode({
+    const isWorkshopEntity = normalizedType(
+      document.getElementById("contentType")?.value || record?.type,
+    ) === "workshop";
+    const workshopOperations = isWorkshopEntity ? connectionErdNode({
         kind: "Workshop operations",
         title: operationsLinks.length ? `${operationsLinks.length} operations connection${operationsLinks.length === 1 ? "" : "s"}` : "No Workshop operations",
         summary: "Instructor-only directions for conducting this Workshop and delivering its participant materials.",
@@ -5236,26 +5238,25 @@ function renderBuilderSummaries(record = state.editingRecord) {
         action: "blueprint-operations",
         actionLabel: operationsLinks.length ? "Edit connection" : "Connect Blueprint",
         tone: "amber",
-      }),
-      connectionErdNode({
-        kind: "Connected Items / Plans",
-        title: linkedItemIds.length || linkedPlanIds.length ? "Reusable entities connected" : "No reusable entities",
-        rows: [
-          ...linkedRecordRows(linkedItemIds, state.records.items || []),
-          ...linkedRecordRows(linkedPlanIds, state.records.plans || []),
-        ],
-        action: "entity-connections",
-        actionLabel: "Edit links",
-        tone: "amber",
-      }),
-    ].join("");
+      }) : "";
+    const connectedRecords = connectionErdNode({
+      kind: "Connected Items / Plans",
+      title: linkedItemIds.length || linkedPlanIds.length ? "Reusable entities connected" : "No reusable entities",
+      rows: [
+        ...linkedRecordRows(linkedItemIds, state.records.items || []),
+        ...linkedRecordRows(linkedPlanIds, state.records.plans || []),
+      ],
+      action: "entity-connections",
+      actionLabel: "Edit links",
+      tone: "amber",
+    });
     const media = connectionErdNode({
       kind: "Assets from main entity",
       title: selectedAssetLabels.length ? `${selectedAssetLabels.length} linked Asset${selectedAssetLabels.length === 1 ? "" : "s"}` : "No linked Assets",
       rows: selectedAssetLabels.map((label) => ({ label })),
       action: "asset",
       actionLabel: "Add Asset",
-      tone: "teal",
+      tone: "blue",
     });
     const libraryRows = entityVariants.filter((variant) => variant.libraryVisible === true)
       .map((variant) => ({ label: variant.name, meta: variant.status || "draft" }));
@@ -5279,7 +5280,11 @@ function renderBuilderSummaries(record = state.editingRecord) {
       actionLabel: "Edit entity stock",
       tone: "teal",
     }) : "";
-    const entityConnections = [entityStock, media, library].filter(Boolean).join("");
+    const entityConnections = [entityStock, media].filter(Boolean).join("");
+    const outwardConnections = [library, workshopOperations, connectedRecords].filter(Boolean).join("");
+    const outwardHeading = isWorkshopEntity
+      ? "Library, Workshop operations and reusable records"
+      : "Library and reusable records";
 
     relationships.innerHTML = `<div class="overflow-x-auto rounded-xl border border-gray-800 bg-gray-950/60 p-4 md:p-6">
       <div class="grid min-w-[860px] grid-cols-[minmax(230px,1fr)_minmax(280px,1.15fr)_minmax(230px,1fr)] items-center gap-6">
@@ -5290,7 +5295,7 @@ function renderBuilderSummaries(record = state.editingRecord) {
           ${centre}
           <div class="ml-5 space-y-3 border-l-2 border-[#407471]/50 pl-4">${entityConnections}</div>
         </section>
-        ${connectionErdBranch("Workshop delivery and participant material", operations, "right")}
+        ${connectionErdBranch(outwardHeading, outwardConnections, "right")}
       </div>
     </div>`;
   }
