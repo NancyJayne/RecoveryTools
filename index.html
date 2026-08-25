@@ -2131,11 +2131,16 @@
                     <h3 class="font-semibold text-white">Entity relationship diagram</h3>
                     <p class="mt-1 text-xs text-gray-400">The selected entity stays in the centre. Select any connected record or action to inspect, create or edit it.</p>
                   </div>
-                  <div class="flex flex-wrap gap-2 text-[11px] text-gray-300">
-                    <span class="rounded-full border border-[#407471] px-2 py-1">Entity</span>
-                    <span class="rounded-full border border-blue-500/70 px-2 py-1">Commerce</span>
-                    <span class="rounded-full border border-amber-500/70 px-2 py-1">Operations</span>
-                    <span class="rounded-full border border-purple-500/70 px-2 py-1">Content / media</span>
+                  <div class="flex flex-wrap items-center gap-2 text-[11px] text-gray-300">
+                    <span class="mr-1 text-gray-500">Diagram branches:</span>
+                    <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-blue-500/70 px-3 py-1.5">
+                      <input id="contentShowProductErd" type="checkbox" checked class="accent-blue-500">
+                      Product
+                    </label>
+                    <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-violet-500/70 px-3 py-1.5">
+                      <input id="contentShowLibraryErd" type="checkbox" checked class="accent-violet-500">
+                      Library
+                    </label>
                   </div>
                 </div>
                 <div id="contentRelationshipSummary" class="mt-4"></div>

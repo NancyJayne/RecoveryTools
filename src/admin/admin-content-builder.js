@@ -4869,6 +4869,44 @@ function reviewLinkedRecords(value, collection) {
   return uniqueValues(ids).map((id) => reviewRecord(id));
 }
 
+function templateRelationshipGroups(entityVariants = []) {
+  const definitions = state.options.templateDefinitions?.[currentRecordType()] || [];
+  const groups = new Map();
+  entityVariants.forEach((variant) => {
+    const definition = definitions.find((candidate) =>
+      candidate.id === variant.templateVariantId || candidate.templateId === variant.templateId);
+    templateFields(definition).forEach((field, index) => {
+      const collection = {
+        item: "items",
+        items: "items",
+        blueprint: "blueprints",
+        blueprints: "blueprints",
+        plan: "plans",
+        plans: "plans",
+      }[normalizedType(field.linkedTable)];
+      if (!collection) return;
+      const name = field.name || `Linked ${collection}`;
+      const key = templateFieldKey(field.key || field.id || name) || `field_${index + 1}`;
+      const records = reviewLinkedRecords(variant.templateFieldValues?.[key], collection);
+      if (!groups.has(name)) groups.set(name, new Map());
+      records.forEach((record) => {
+        groups.get(name).set(record.id, {
+          recordId: record.id,
+          label: record.name || record.title || record.id,
+          meta: variant.name || record.type || "",
+        });
+      });
+    });
+  });
+  return [...groups.entries()].map(([label, records]) => ({
+    label,
+    rows: [...records.values()],
+    emptyLabel: `No ${label.toLowerCase()} linked`,
+    action: "entity-connections",
+    actionLabel: "Edit links",
+  }));
+}
+
 function reviewConnectionChips(label, records) {
   if (!records.length) return "";
   return `<div>
@@ -4960,6 +4998,24 @@ function connectionErdTable({ eyebrow, title, rows = [], tone = "teal" }) {
           class="rounded border border-gray-500 px-2 py-1 text-xs leading-4 text-[#bce7e4] hover:border-white hover:text-white">${escapeHTML(row.actionLabel || "Open")}</button>` : ""}
       </div>`).join("")}</div>
   </section>`;
+}
+
+function contentErdBranchVisible(branch) {
+  const checkbox = document.getElementById(
+    branch === "library" ? "contentShowLibraryErd" : "contentShowProductErd",
+  );
+  return checkbox?.checked !== false;
+}
+
+function restoreContentErdBranchVisibility() {
+  ["product", "library"].forEach((branch) => {
+    const checkbox = document.getElementById(
+      branch === "library" ? "contentShowLibraryErd" : "contentShowProductErd",
+    );
+    if (!checkbox) return;
+    const stored = localStorage.getItem(`content-erd-show-${branch}`);
+    if (stored !== null) checkbox.checked = stored !== "false";
+  });
 }
 
 function setConnectionDrawerOpen(id, open) {
@@ -5160,12 +5216,16 @@ function renderBuilderSummaries(record = state.editingRecord) {
         .map((item) => item.id)),
     ]);
     const linkedPlanIds = uniqueValues(hiddenRelationshipIds("contentLinkedPlanIds"));
+    const linkedBlueprintIds = uniqueValues([
+      ...hiddenRelationshipIds("contentLinkedBlueprintIds"),
+      ...operationsLinks.map((link) => link.entityId),
+    ]);
     const bundleComponents = variants.flatMap((variant) =>
       (variant.bundleComponents || []).map((component) => ({ ...component, owner: variant.name })));
     const productById = new Map((state.records.products || []).map((product) => [product.id, product]));
     const linkedRecordRows = (ids, records) => ids.map((id) => {
       const linked = records.find((candidate) => candidate.id === id);
-      return { label: linked?.name || id, meta: linked?.type || "" };
+      return { recordId: id, label: linked?.name || id, meta: linked?.type || "" };
     });
     const blueprintRows = (links) => links.map((link) => {
       const blueprint = (state.records.blueprints || []).find((candidate) => candidate.id === link.entityId);
@@ -5199,9 +5259,6 @@ function renderBuilderSummaries(record = state.editingRecord) {
       label: variant.name || variant.entityVariantId || "Item variant",
       meta: `Stock ${Number(variant.stockQty ?? 0)} · Reorder ${Number(variant.reorderLevel ?? 0)}`,
     }));
-    const isWorkshopEntity = normalizedType(
-      document.getElementById("contentType")?.value || record?.type,
-    ) === "workshop";
     const libraryRows = entityVariants.filter((variant) => variant.libraryVisible === true)
       .map((variant) => ({ label: variant.name, meta: variant.status || "draft" }));
     const accessRows = accessGrants.map((grant) => ({
@@ -5210,10 +5267,14 @@ function renderBuilderSummaries(record = state.editingRecord) {
     }));
     const manufacturingRows = manufacturingLinks.length ? blueprintRows(manufacturingLinks) :
       manufacturingBlueprintId ? [{ label: manufacturingLabel }] : [];
+    const templateLinkedGroups = templateRelationshipGroups(entityVariants);
+    const templateLinkedIds = new Set(templateLinkedGroups.flatMap((group) =>
+      group.rows.map((row) => row.recordId).filter(Boolean)));
     const linkedRows = [
       ...linkedRecordRows(linkedItemIds, state.records.items || []),
+      ...linkedRecordRows(linkedBlueprintIds, state.records.blueprints || []),
       ...linkedRecordRows(linkedPlanIds, state.records.plans || []),
-    ];
+    ].filter((row) => !templateLinkedIds.has(row.recordId));
     const productTable = connectionErdTable({
       eyebrow: "Outward connection",
       title: isShopProduct ? "Product" : "Product not connected",
@@ -5230,7 +5291,8 @@ function renderBuilderSummaries(record = state.editingRecord) {
       { label: "Active variants", rows: activeEntityVariants.map((variant) => ({ label: variant.name || variant.entityVariantId || "Variant", meta: variant.status || "active" })), emptyLabel: "No active variants", action: "entity", actionLabel: "Edit entity" },
       ...(currentRecordType() === "item" ? [{ label: `${name} stock`, rows: entityStockRows, emptyLabel: "Entity stock not enabled", action: entityStockRows.length ? "entity-stock" : "", actionLabel: "Edit stock" }] : []),
       { label: "Assets", rows: selectedAssetLabels.map((label) => ({ label })), emptyLabel: "No linked Assets", action: "asset", actionLabel: "Add Asset" },
-      { label: "Linked Items / Plans", rows: linkedRows, emptyLabel: "No linked entities", action: "entity-connections", actionLabel: "Edit links" },
+      ...templateLinkedGroups,
+      { label: "Linked Items / Blueprints / Plans", rows: linkedRows, emptyLabel: "No other linked entities", action: "entity-connections", actionLabel: "Edit links" },
     ];
     const entityTable = connectionErdTable({
       eyebrow: `${recordType} · current entity`,
@@ -5244,21 +5306,27 @@ function renderBuilderSummaries(record = state.editingRecord) {
       tone: "violet",
       rows: [{ label: "Library variants", rows: libraryRows, emptyLabel: "No variants selected", action: "library", actionLabel: libraryRows.length ? "Edit selection" : "Select variants" }],
     });
-    const operationsTable = isWorkshopEntity ? connectionErdTable({
-      eyebrow: "Workshop-only Blueprint connection",
-      title: "Workshop operations",
-      tone: "amber",
-      rows: [{ label: "Operations Blueprints", rows: blueprintRows(operationsLinks), emptyLabel: "No operations Blueprint", action: "blueprint-operations", actionLabel: operationsLinks.length ? "Edit" : "Connect" }],
-    }) : "";
+    const showProductBranch = contentErdBranchVisible("product");
+    const showLibraryBranch = contentErdBranchVisible("library");
+    const visibleBranchCount = Number(showProductBranch) + Number(showLibraryBranch);
+    const desktopGrid = visibleBranchCount === 2
+      ? "2xl:grid-cols-[minmax(0,1.12fr)_minmax(0,1fr)_minmax(0,0.92fr)]"
+      : visibleBranchCount === 1
+        ? "2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+        : "2xl:grid-cols-[minmax(0,44rem)] 2xl:justify-center";
+    const entityDesktopOrder = showProductBranch ? "2xl:order-2" : "2xl:order-1";
+    const connector = visibleBranchCount > 0
+      ? `<div class="pointer-events-none absolute bottom-8 left-1/2 top-8 w-[3px] -translate-x-1/2 bg-gradient-to-b from-[#407471] via-blue-500 to-violet-500 2xl:hidden" aria-hidden="true"></div>
+        <div class="pointer-events-none absolute left-[22%] right-[22%] top-[92px] hidden h-[3px] bg-gradient-to-r from-blue-500 via-[#407471] to-violet-500 2xl:block" aria-hidden="true"></div>`
+      : "";
 
     relationships.innerHTML = `<div class="overflow-hidden rounded-xl border border-gray-800 bg-gray-950/60 p-3 sm:p-4 md:p-6">
       <div class="relative min-w-0">
-        <div class="pointer-events-none absolute bottom-8 left-1/2 top-8 w-[3px] -translate-x-1/2 bg-gradient-to-b from-[#407471] via-blue-500 to-violet-500 2xl:hidden" aria-hidden="true"></div>
-        <div class="pointer-events-none absolute left-[18%] right-[14%] top-[92px] hidden h-[3px] bg-gradient-to-r from-blue-500 via-[#407471] to-violet-500 2xl:block" aria-hidden="true"></div>
-        <div class="relative z-10 grid min-w-0 gap-10 2xl:grid-cols-[minmax(0,1.12fr)_minmax(0,1fr)_minmax(0,0.92fr)] 2xl:items-start 2xl:gap-12">
-          <div class="order-2 min-w-0 2xl:order-1">${productTable}</div>
-          <div class="order-1 min-w-0 2xl:order-2">${entityTable}</div>
-          <div class="order-3 min-w-0 space-y-10 2xl:space-y-16">${libraryTable}${operationsTable}</div>
+        ${connector}
+        <div class="relative z-10 grid min-w-0 gap-10 ${desktopGrid} 2xl:items-start 2xl:gap-12">
+          ${showProductBranch ? `<div class="order-2 min-w-0 2xl:order-1">${productTable}</div>` : ""}
+          <div class="order-1 min-w-0 ${entityDesktopOrder}">${entityTable}</div>
+          ${showLibraryBranch ? `<div class="order-3 min-w-0 2xl:order-3">${libraryTable}</div>` : ""}
         </div>
       </div>
     </div>`;
@@ -7010,6 +7078,16 @@ export async function setupContentBuilder() {
   section.dataset.initialized = "true";
   orderProductDrawerSections();
   initializeContentBuilderWorkspace();
+  restoreContentErdBranchVisibility();
+  ["product", "library"].forEach((branch) => {
+    const checkbox = document.getElementById(
+      branch === "library" ? "contentShowLibraryErd" : "contentShowProductErd",
+    );
+    checkbox?.addEventListener("change", () => {
+      localStorage.setItem(`content-erd-show-${branch}`, String(checkbox.checked));
+      renderBuilderSummaries();
+    });
+  });
 
   setupBuilderStepControls();
   document.getElementById("contentRecordType")?.addEventListener("change", () => {
@@ -7296,7 +7374,11 @@ export async function setupContentBuilder() {
       return;
     }
     if (action === "entity-connections") {
-      showToast("Reusable Item and Plan links are shown in this ERD. Inline add/edit controls are the next ERD stage.", "info");
+      await navigateBuilderStep(2);
+      const target = document.querySelector(".content-template-linked-field") ||
+        document.getElementById("advancedContentFields") ||
+        document.getElementById("contentEntityVariantRows");
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   });
   ["closeContentLibraryConnectionDrawerBtn", "cancelContentLibraryConnectionBtn"]
