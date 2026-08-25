@@ -4310,6 +4310,18 @@ function refreshMarketplacePreviews() {
   });
 }
 
+function normalizedTagName(value) {
+  const rawValue = value && typeof value === "object"
+    ? value.name || value.label || value.tagName || value.id || ""
+    : value;
+  return normalizedText(rawValue).replace(/[-_]+/g, " ").replace(/\s+/g, " ");
+}
+
+function isExternalQualificationItem(item = {}) {
+  return (Array.isArray(item.tags) ? item.tags : [])
+    .some((tag) => normalizedTagName(tag) === "external qualification");
+}
+
 function prerequisiteTargetOptions(entry = {}) {
   const selectedValue = entry.requirementType === "item" || entry.itemId
     ? `item:${entry.itemId}` : entry.productId ? `product:${entry.productId}` : "";
@@ -4317,11 +4329,11 @@ function prerequisiteTargetOptions(entry = {}) {
     const value = `product:${product.id}`;
     return `<option value="${escapeHTML(value)}"${value === selectedValue ? " selected" : ""}>${escapeHTML(product.name || product.id)}</option>`;
   }).join("");
-  const items = (state.records.items || []).map((item) => {
+  const items = (state.records.items || []).filter(isExternalQualificationItem).map((item) => {
     const value = `item:${item.id}`;
     return `<option value="${escapeHTML(value)}"${value === selectedValue ? " selected" : ""}>${escapeHTML(item.name || item.id)}</option>`;
   }).join("");
-  return `<option value="">Choose prerequisite</option><optgroup label="Product variants">${products}</optgroup><optgroup label="Items or external qualifications">${items}</optgroup>`;
+  return `<option value="">Choose prerequisite</option><optgroup label="Product variants">${products}</optgroup><optgroup label="External qualifications">${items}</optgroup>`;
 }
 
 function prerequisiteFromRow(row) {
