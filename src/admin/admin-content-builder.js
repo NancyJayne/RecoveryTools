@@ -1508,6 +1508,16 @@ function renderSelectedProductVariantRows(
               <textarea class="product-variant-inclusions mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
                 rows="2" placeholder="Example: Includes 2 small cups, 2 large cups, box and keychain.">${escapeHTML(productVariant.inclusions || "")}</textarea>
             </label>
+            <div class="rounded border border-gray-700 p-3">
+              <div class="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h5 class="font-semibold text-white">Bundled Products and Workshop sessions</h5>
+                  <p class="mt-1 text-xs text-gray-400">Add every exact Product variant included in this purchase. Stock or tickets are reserved and deducted from those components, so a bundle with components does not use its own stock.</p>
+                </div>
+                <button type="button" class="add-product-bundle-component rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add inclusion</button>
+              </div>
+              <div class="product-bundle-component-rows mt-3 space-y-2">${bundleComponentsMarkup(productVariant.bundleComponents || [])}</div>
+            </div>
           </section>
           <section data-variant-editor-section="price" class="rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Marketplace price</h5>
@@ -1655,16 +1665,6 @@ function renderSelectedProductVariantRows(
               <button type="button" class="add-product-prerequisite rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add prerequisite</button>
             </div>
             <div class="product-prerequisite-rows mt-3 space-y-2">${prerequisiteRowsMarkup(productVariant.prerequisiteProductVariants || [])}</div>
-          </div>
-          <div data-variant-editor-section="bundle" class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
-            <div class="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <h5 class="font-semibold text-white">Bundle inventory and tickets</h5>
-                <p class="mt-1 text-xs text-gray-400">Each bundle sale reserves and deducts these exact underlying Product variants or Workshop sessions. A bundle with components does not use its own stock.</p>
-              </div>
-              <button type="button" class="add-product-bundle-component rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add component</button>
-            </div>
-            <div class="product-bundle-component-rows mt-3 space-y-2">${bundleComponentsMarkup(productVariant.bundleComponents || [])}</div>
           </div>
           <div data-variant-editor-section="visibility" class="variant-editor-actions rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Variant status and save</h5>
@@ -4332,7 +4332,6 @@ function marketplaceVariantCardPreview(
       optionalNumberFromInput("contentProductWholesalePrice") === null;
   const promotionMissing = !(productVariant.promotionAssetIds || []).length;
   const prerequisitesMissing = !(productVariant.prerequisiteProductVariants || []).length;
-  const bundleMissing = !(productVariant.bundleComponents || []).length;
   const blueprintTone = ["Tool", "Workshop"].includes(productType) ? "review" : "optional";
   const unlockTone = ["Course", "Program", "Plan", "Workshop"].includes(productType)
     ? "review" : "optional";
@@ -4401,7 +4400,6 @@ function marketplaceVariantCardPreview(
       <button type="button" data-variant-editor="sale" class="${marketplacePreviewAttention(priceSaleMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Price &amp; sale</button>
       <button type="button" data-variant-editor="promotion" class="${marketplacePreviewAttention(promotionMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white", "optional")}">Promotion videos</button>
       <button type="button" data-variant-editor="prerequisites" class="${marketplacePreviewAttention(prerequisitesMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white", "optional")}">Prerequisites</button>
-      <button type="button" data-variant-editor="bundle" class="${marketplacePreviewAttention(bundleMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white", "optional")}">Bundle</button>
       </div>
     </div>
   </div>`;
@@ -4972,7 +4970,12 @@ function connectionErdTableList(rows = [], emptyLabel = "None connected") {
   return `<ul class="space-y-1">${rows.map((row) => `
     <li class="flex items-start justify-between gap-3 text-sm">
       <span class="min-w-0 break-words text-gray-100">${escapeHTML(row.label || row)}</span>
-      ${row.meta ? `<span class="max-w-[45%] break-words text-right text-xs text-gray-400">${escapeHTML(row.meta)}</span>` : ""}
+      <span class="flex max-w-[55%] flex-wrap items-center justify-end gap-2 text-right">
+        ${row.meta ? `<span class="break-words text-xs text-gray-400">${escapeHTML(row.meta)}</span>` : ""}
+        ${row.action ? `<button type="button" data-connection-action="${escapeHTML(row.action)}"
+          ${row.variantId ? `data-connection-variant-id="${escapeHTML(row.variantId)}"` : ""}
+          class="rounded border border-gray-600 px-2 py-0.5 text-xs text-[#bce7e4] hover:border-white hover:text-white">${escapeHTML(row.actionLabel || "Edit")}</button>` : ""}
+      </span>
     </li>`).join("")}</ul>`;
 }
 
@@ -5208,25 +5211,13 @@ function renderBuilderSummaries(record = state.editingRecord) {
       record?.productVariantContentLinks || [];
     const manufacturingLinks = variantContentLinks.filter((link) =>
       link.linkRole === "ManufacturedFrom");
-    const operationsLinks = variantContentLinks.filter((link) =>
-      link.linkRole === "OperatedWith");
-    const linkedItemIds = uniqueValues([
-      ...hiddenRelationshipIds("contentLinkedItemIds"),
-      ...entityVariants.flatMap((variant) => reviewLinkedRecords(variant.templateFieldValues || {}, "items")
-        .map((item) => item.id)),
-    ]);
-    const linkedPlanIds = uniqueValues(hiddenRelationshipIds("contentLinkedPlanIds"));
-    const linkedBlueprintIds = uniqueValues([
-      ...hiddenRelationshipIds("contentLinkedBlueprintIds"),
-      ...operationsLinks.map((link) => link.entityId),
-    ]);
     const bundleComponents = variants.flatMap((variant) =>
-      (variant.bundleComponents || []).map((component) => ({ ...component, owner: variant.name })));
+      (variant.bundleComponents || []).map((component) => ({
+        ...component,
+        owner: variant.name,
+        ownerVariantId: variant.variantId,
+      })));
     const productById = new Map((state.records.products || []).map((product) => [product.id, product]));
-    const linkedRecordRows = (ids, records) => ids.map((id) => {
-      const linked = records.find((candidate) => candidate.id === id);
-      return { recordId: id, label: linked?.name || id, meta: linked?.type || "" };
-    });
     const blueprintRows = (links) => links.map((link) => {
       const blueprint = (state.records.blueprints || []).find((candidate) => candidate.id === link.entityId);
       const owner = variants.find((variant) => variant.variantId === link.productVariantId);
@@ -5242,6 +5233,9 @@ function renderBuilderSummaries(record = state.editingRecord) {
       return {
         label: `${component.quantity || 1} × ${product?.name || component.componentProductId}`,
         meta: componentVariant?.name || component.owner || "",
+        action: "bundle",
+        actionLabel: "Edit",
+        variantId: component.ownerVariantId,
       };
     });
     const productRows = variants.map((variant) => ({
@@ -5252,6 +5246,9 @@ function renderBuilderSummaries(record = state.editingRecord) {
       ? variants.map((variant) => ({
         label: variant.name || variant.variantId || "Product variant",
         meta: `Stock ${Number(variant.stock ?? 0)}`,
+        action: "stock",
+        actionLabel: "Edit stock",
+        variantId: variant.variantId,
       }))
       : [{ label: "No exact Product variants", meta: "Stock 0" }];
     const entityStockRows = entityVariants.filter((variant) =>
@@ -5268,23 +5265,16 @@ function renderBuilderSummaries(record = state.editingRecord) {
     const manufacturingRows = manufacturingLinks.length ? blueprintRows(manufacturingLinks) :
       manufacturingBlueprintId ? [{ label: manufacturingLabel }] : [];
     const templateLinkedGroups = templateRelationshipGroups(entityVariants);
-    const templateLinkedIds = new Set(templateLinkedGroups.flatMap((group) =>
-      group.rows.map((row) => row.recordId).filter(Boolean)));
-    const linkedRows = [
-      ...linkedRecordRows(linkedItemIds, state.records.items || []),
-      ...linkedRecordRows(linkedBlueprintIds, state.records.blueprints || []),
-      ...linkedRecordRows(linkedPlanIds, state.records.plans || []),
-    ].filter((row) => !templateLinkedIds.has(row.recordId));
     const productTable = connectionErdTable({
       eyebrow: "Outward connection",
       title: isShopProduct ? "Product" : "Product not connected",
       tone: "blue",
       rows: [
         { label: "Product variants", rows: productRows, emptyLabel: "No Product variants", action: "product", actionLabel: isShopProduct ? "Edit Product" : "Create Product" },
-        { label: "Product stock", rows: stockRows, emptyLabel: "No Product stock", action: "stock", actionLabel: "Open stock" },
+        { label: "Product stock", rows: stockRows, emptyLabel: "No Product stock" },
         { label: "Manufacturing Blueprints", rows: manufacturingRows, emptyLabel: "No manufacturing Blueprint", action: "blueprint-manufacturing", actionLabel: manufacturingRows.length ? "Edit" : "Connect" },
         { label: "Purchase access", rows: accessRows, emptyLabel: "No purchase unlocks", action: "product", actionLabel: "Edit unlocks" },
-        { label: "Bundle components", rows: bundleRows, emptyLabel: "No bundle components", action: "product", actionLabel: bundleRows.length ? "Edit bundle" : "Add bundle" },
+        { label: "Bundle components", rows: bundleRows, emptyLabel: "No bundle components", action: bundleRows.length ? "" : "bundle", actionLabel: "Add bundle" },
       ],
     });
     const entityTableRows = [
@@ -5292,7 +5282,6 @@ function renderBuilderSummaries(record = state.editingRecord) {
       ...(currentRecordType() === "item" ? [{ label: `${name} stock`, rows: entityStockRows, emptyLabel: "Entity stock not enabled", action: entityStockRows.length ? "entity-stock" : "", actionLabel: "Edit stock" }] : []),
       { label: "Assets", rows: selectedAssetLabels.map((label) => ({ label })), emptyLabel: "No linked Assets", action: "asset", actionLabel: "Add Asset" },
       ...templateLinkedGroups,
-      { label: "Linked Items / Blueprints / Plans", rows: linkedRows, emptyLabel: "No other linked entities", action: "entity-connections", actionLabel: "Edit links" },
     ];
     const entityTable = connectionErdTable({
       eyebrow: `${recordType} · current entity`,
@@ -7355,16 +7344,31 @@ export async function setupContentBuilder() {
       return;
     }
     if (action === "stock") {
-      const searchValue = state.editingRecord?.id || document.getElementById("contentId")?.value || "";
-      history.pushState({}, "", "/admin/products");
-      window.dispatchEvent(new PopStateEvent("popstate"));
-      document.querySelector("[data-product-manager-tool=\"inventory\"]")?.click();
-      const search = document.getElementById("inventoryStocktakeSearch");
-      if (search) {
-        search.value = searchValue;
-        search.dispatchEvent(new Event("input", { bubbles: true }));
-        search.focus();
-      }
+      setCheckboxValue("contentIsShopProduct", true);
+      openContentProductDrawer();
+      const variantId = button.dataset.connectionVariantId || "";
+      const escapedVariantId = typeof CSS !== "undefined" && CSS.escape
+        ? CSS.escape(variantId)
+        : variantId.replace(/["\\]/g, "\\$&");
+      const row = variantId
+        ? document.querySelector(`.content-product-variant-row[data-product-variant-id="${escapedVariantId}"]`)
+        : document.querySelector(".content-product-variant-row");
+      row?.querySelector("[data-variant-editor=\"fulfilment\"]")?.click();
+      row?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    if (action === "bundle") {
+      setCheckboxValue("contentIsShopProduct", true);
+      openContentProductDrawer();
+      const variantId = button.dataset.connectionVariantId || currentProductVariants()[0]?.variantId || "";
+      const escapedVariantId = typeof CSS !== "undefined" && CSS.escape
+        ? CSS.escape(variantId)
+        : variantId.replace(/["\\]/g, "\\$&");
+      const row = variantId
+        ? document.querySelector(`.content-product-variant-row[data-product-variant-id="${escapedVariantId}"]`)
+        : document.querySelector(".content-product-variant-row");
+      row?.querySelector("[data-variant-editor=\"description\"]")?.click();
+      row?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
     if (["blueprint-manufacturing", "blueprint-operations"].includes(action)) {
@@ -7854,7 +7858,6 @@ export async function setupContentBuilder() {
         sale: "Price and sale",
         promotion: "Promotion videos",
         prerequisites: "Purchase prerequisites",
-        bundle: "Bundle inventory and tickets",
       };
       const heading = panel.querySelector(".variant-editor-heading-title");
       if (heading) heading.textContent = sectionTitles[section] || "Product variant details";
