@@ -13,6 +13,7 @@ let assetDrawerField = null;
 let assetDrawerFile = null;
 let resumeAssetSaveAfterFileSelection = false;
 let adminLinkedVariantBubbleCloseTimer = null;
+let entityStockDrawerSnapshot = [];
 
 let state = {
   options: {
@@ -812,8 +813,9 @@ function variantStockMarkup(variant, defaults) {
     variant.purchaseUrl || selectedSupplier?.orderingUrl || selectedSupplier?.website,
   );
   return `
-    <section class="mt-3 rounded border border-gray-700 bg-gray-950/50 p-3">
-      <h5 class="font-medium text-white">Item stock</h5>
+    <section class="variant-item-stock-fields mt-3 rounded border border-gray-700 bg-gray-950/50 p-3"
+      data-entity-variant-id="${escapeHTML(variant.entityVariantId || "")}">
+      <h5 class="font-medium text-white">Item stock · ${escapeHTML(variant.name || variant.entityVariantId || "Variant")}</h5>
       <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label class="block text-xs text-gray-300">Quantity on hand
           <input class="variant-stock-qty mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(variant.stockQty ?? "")}">
@@ -4961,50 +4963,46 @@ function openEntityStockDrawer() {
   }
   const container = document.getElementById("contentEntityStockDrawerRows");
   if (!container) return;
-  const variants = entityVariantsFromBuilder().filter((variant) =>
-    variant.behaviourDefaults?.inventoryTracked === true);
-  const suppliers = state.options.supplierOptions || [];
-  container.innerHTML = variants.map((variant) => `
-    <section class="erd-entity-stock-row rounded border border-[#407471]/70 bg-gray-900/70 p-4"
-      data-entity-variant-id="${escapeHTML(variant.entityVariantId)}">
-      <h4 class="font-semibold text-white">${escapeHTML(variant.name)}</h4>
-      <div class="mt-3 grid gap-3 sm:grid-cols-2">
-        <label class="text-sm">Quantity on hand<input class="erd-stock-qty input mt-1 w-full" type="number" min="0" step="1" value="${escapeHTML(variant.stockQty ?? "")}"></label>
-        <label class="text-sm">Reorder level<input class="erd-reorder-level input mt-1 w-full" type="number" min="0" step="1" value="${escapeHTML(variant.reorderLevel ?? "")}"></label>
-        <label class="text-sm">Stock unit<input class="erd-inventory-unit input mt-1 w-full" value="${escapeHTML(variant.inventoryUnit || "")}" placeholder="pieces, boxes, rolls"></label>
-        <label class="text-sm">Storage location<input class="erd-inventory-location input mt-1 w-full" value="${escapeHTML(variant.inventoryLocation || "")}"></label>
-        <label class="text-sm">Approximate unit cost (AUD)<input class="erd-unit-cost input mt-1 w-full" type="number" min="0" step="0.01" value="${escapeHTML(variant.unitCost ?? "")}"></label>
-        <label class="text-sm">Supplier<select class="erd-supplier-id input mt-1 w-full"><option value="">Choose supplier</option>${suppliers.map((supplier) => `<option value="${escapeHTML(supplier.id)}"${supplier.id === variant.supplierId ? " selected" : ""}>${escapeHTML(supplier.name || supplier.id)}</option>`).join("")}</select></label>
-        <label class="text-sm">Cost reference<input class="erd-cost-reference input mt-1 w-full" value="${escapeHTML(variant.costReference || "")}"></label>
-        <label class="text-sm">Item ordering page<input class="erd-purchase-url input mt-1 w-full" type="url" value="${escapeHTML(variant.purchaseUrl || "")}"></label>
-      </div>
-    </section>`).join("");
+  container.replaceChildren();
+  const sections = [...document.querySelectorAll(
+    ".content-variant-connection-row .variant-item-stock-fields",
+  )];
+  entityStockDrawerSnapshot = sections.flatMap((section) =>
+    [...section.querySelectorAll("input, select, textarea")].map((field) => ({
+      field,
+      value: field.value,
+      checked: field.checked,
+    })));
+  sections.forEach((section) => container.appendChild(section));
   setConnectionDrawerOpen("contentEntityStockDrawer", true);
 }
 
-function applyEntityStockDrawer() {
-  document.querySelectorAll(".erd-entity-stock-row").forEach((stockRow) => {
+function closeEntityStockDrawer({ restoreValues = false } = {}) {
+  if (restoreValues) {
+    entityStockDrawerSnapshot.forEach(({ field, value, checked }) => {
+      field.value = value;
+      if (["checkbox", "radio"].includes(field.type)) field.checked = checked;
+    });
+  }
+  const container = document.getElementById("contentEntityStockDrawerRows");
+  [...(container?.querySelectorAll(".variant-item-stock-fields") || [])].forEach((section) => {
+    const variantId = section.dataset.entityVariantId || "";
+    const escapedVariantId = typeof CSS !== "undefined" && CSS.escape
+      ? CSS.escape(variantId)
+      : variantId.replace(/["\\]/g, "\\$&");
     const connectionRow = document.querySelector(
-      `.content-variant-connection-row[data-entity-variant-id="${CSS.escape(stockRow.dataset.entityVariantId || "")}"]`,
+      `.content-variant-connection-row[data-entity-variant-id="${escapedVariantId}"]`,
     );
-    if (!connectionRow) return;
-    const copy = (source, target) => {
-      const sourceInput = stockRow.querySelector(source);
-      const targetInput = connectionRow.querySelector(target);
-      if (sourceInput && targetInput) targetInput.value = sourceInput.value;
-    };
-    copy(".erd-stock-qty", ".variant-stock-qty");
-    copy(".erd-reorder-level", ".variant-reorder-level");
-    copy(".erd-inventory-unit", ".variant-inventory-unit");
-    copy(".erd-inventory-location", ".variant-inventory-location");
-    copy(".erd-unit-cost", ".variant-unit-cost");
-    copy(".erd-supplier-id", ".variant-supplier-id");
-    copy(".erd-cost-reference", ".variant-cost-reference");
-    copy(".erd-purchase-url", ".variant-purchase-url");
+    connectionRow?.querySelector(":scope > div")?.appendChild(section);
     updateVariantOrderingButton(connectionRow);
   });
-  state.isDirty = true;
+  entityStockDrawerSnapshot = [];
   setConnectionDrawerOpen("contentEntityStockDrawer", false);
+}
+
+function applyEntityStockDrawer() {
+  closeEntityStockDrawer();
+  state.isDirty = true;
   renderBuilderSummaries();
   showToast("Entity stock updated. Save connections when ready.", "success");
 }
@@ -7319,7 +7317,7 @@ export async function setupContentBuilder() {
   );
   ["closeContentEntityStockDrawerBtn", "cancelContentEntityStockBtn"]
     .forEach((id) => document.getElementById(id)?.addEventListener(
-      "click", () => setConnectionDrawerOpen("contentEntityStockDrawer", false),
+      "click", () => closeEntityStockDrawer({ restoreValues: true }),
     ));
   document.getElementById("saveContentEntityStockBtn")?.addEventListener(
     "click", applyEntityStockDrawer,
