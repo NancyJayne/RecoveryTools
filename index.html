@@ -1484,9 +1484,9 @@
         <div id="adminContentBuilderSection" class="admin-tab hidden">
           <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 class="text-2xl font-semibold">Content Builder</h2>
+              <h2 class="text-2xl font-semibold">Content Connections</h2>
               <p class="text-sm text-gray-400">
-                Add reusable items and blueprints, then assemble plans including campaign plans.
+                Select an entity, inspect its relationships, and open the entity editor when details or structure need changing.
               </p>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -1506,11 +1506,36 @@
             </div>
           </div>
 
-          <div id="contentBuilderStepBar" class="mb-4 grid gap-2 text-sm md:grid-cols-4">
+          <section id="contentConnectionsWorkspace" class="rounded-xl border border-gray-700 bg-gray-950/50 p-4 md:p-5">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 class="text-xl font-semibold text-white">Connections</h3>
+                <p class="mt-1 text-sm text-gray-400">Build around the selected entity while keeping its relationships visible.</p>
+              </div>
+              <button id="openContentEntityEditorDrawerBtn" type="button" class="rounded border border-[#407471] px-4 py-2 text-sm text-[#bce7e4] hover:bg-[#153b38]">
+                Edit entity
+              </button>
+            </div>
+            <div id="contentConnectionsMain"></div>
+          </section>
+
+          <section id="contentEntityEditorDrawer" class="fixed inset-0 z-[95] hidden bg-black/55" aria-hidden="true" inert>
+            <div class="flex h-full w-full max-w-5xl flex-col border-r border-gray-700 bg-gray-950 shadow-2xl">
+              <header class="flex items-start justify-between gap-4 border-b border-gray-700 bg-gray-900 px-5 py-4">
+                <div>
+                  <div class="text-xs font-semibold uppercase tracking-[0.18em] text-[#9edbd7]">Entity editor</div>
+                  <h3 id="contentEntityEditorDrawerTitle" class="mt-1 text-xl font-semibold text-white">Create content</h3>
+                  <p class="mt-1 text-xs text-gray-400">Complete Details, Build, and Review without leaving Connections.</p>
+                </div>
+                <button id="closeContentEntityEditorDrawerBtn" type="button" class="rounded border border-gray-600 px-3 py-2 text-sm text-white hover:border-[#407471]">Close</button>
+              </header>
+              <div id="contentEntityEditorDrawerBody" class="flex-1 overflow-y-auto p-5">
+
+          <div id="contentBuilderStepBar" class="mb-4 grid gap-2 text-sm md:grid-cols-3">
             <button type="button" class="builder-step-btn rounded bg-[#407471] px-3 py-2 text-white" data-builder-step="1">1. Details</button>
             <button type="button" class="builder-step-btn rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="2">2. Build</button>
             <button type="button" class="builder-step-btn rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="3">3. Review &amp; save</button>
-            <button type="button" class="builder-step-btn rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="4">4. Connections</button>
+            <button type="button" class="builder-step-btn hidden rounded bg-gray-700 px-3 py-2 text-white hover:bg-[#407471]" data-builder-step="4">Connections</button>
           </div>
 
           <div id="contentBuilderFilterBar" class="mb-4 flex flex-wrap gap-2 text-sm">
@@ -2187,6 +2212,9 @@
                 </button>
               </div>
             </form>
+              </div>
+            </div>
+          </section>
 
             <section
               id="contentBuilderConfirmation"

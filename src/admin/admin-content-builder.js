@@ -1921,6 +1921,47 @@ function panelAllowedForRecordType(panel) {
   return true;
 }
 
+function setContentEntityEditorDrawerOpen(open) {
+  const drawer = document.getElementById("contentEntityEditorDrawer");
+  if (!drawer) return;
+  drawer.classList.toggle("hidden", !open);
+  drawer.setAttribute("aria-hidden", String(!open));
+  drawer.inert = !open;
+  const title = document.getElementById("contentEntityEditorDrawerTitle");
+  if (title) title.textContent = state.editingRecord?.id
+    ? `Edit ${state.editingRecord.name || "entity"}`
+    : "Create new entity";
+}
+
+function updateConnectionsWorkspaceAvailability() {
+  const host = document.getElementById("contentConnectionsMain");
+  if (!host) return;
+  let empty = document.getElementById("contentConnectionsEmptyState");
+  if (!empty) {
+    empty = document.createElement("div");
+    empty.id = "contentConnectionsEmptyState";
+    empty.className = "rounded border border-dashed border-gray-700 p-8 text-center text-sm text-gray-400";
+    empty.textContent = "Create and save the entity to begin adding connections.";
+    host.prepend(empty);
+  }
+  empty.classList.toggle("hidden", Boolean(state.editingRecord?.id));
+  host.querySelectorAll(".builder-step-panel[data-builder-panel=\"4\"]").forEach((panel) => {
+    panel.classList.toggle("hidden", !state.editingRecord?.id || !panelAllowedForRecordType(panel));
+  });
+  const button = document.getElementById("openContentEntityEditorDrawerBtn");
+  if (button) button.textContent = state.editingRecord?.id ? "Edit entity" : "Create entity";
+}
+
+function initializeContentBuilderWorkspace() {
+  const host = document.getElementById("contentConnectionsMain");
+  if (!host || host.dataset.initialized === "true") return;
+  host.dataset.initialized = "true";
+  document.querySelectorAll(".builder-step-panel[data-builder-panel=\"4\"]").forEach((panel) => {
+    host.appendChild(panel);
+  });
+  updateConnectionsWorkspaceAvailability();
+}
+
 function showBuilderStep(step = state.currentStep) {
   const nextStep = Math.max(1, Math.min(Number(step || 1), 4));
   state.currentStep = nextStep;
@@ -1936,6 +1977,10 @@ function showBuilderStep(step = state.currentStep) {
 
   document.querySelectorAll(".builder-step-panel").forEach((panel) => {
     const panelStep = Number(panel.dataset.builderPanel || 1);
+    if (panelStep === 4) {
+      panel.classList.toggle("hidden", !state.editingRecord?.id || !panelAllowedForRecordType(panel));
+      return;
+    }
     panel.classList.toggle("hidden", panelStep !== nextStep || !panelAllowedForRecordType(panel));
   });
   if (nextStep >= 3) renderBuilderSummaries();
@@ -1944,6 +1989,7 @@ function showBuilderStep(step = state.currentStep) {
   const nextBtn = document.getElementById("builderNextStepBtn");
   if (backBtn) backBtn.disabled = nextStep === 1;
   if (nextBtn) nextBtn.classList.toggle("hidden", nextStep === 4);
+  updateConnectionsWorkspaceAvailability();
 }
 
 function setupBuilderStepControls() {
@@ -1998,6 +2044,7 @@ async function navigateBuilderStep(targetStep) {
     showBuilderStep(3);
     return;
   }
+  setContentEntityEditorDrawerOpen(nextStep < 4);
   showBuilderStep(nextStep);
 }
 
@@ -5311,6 +5358,7 @@ function populateNewBuilderFromRoute(params) {
   renderSimilarList();
   renderBuilderSummaries();
   showBuilderStep(1);
+  setContentEntityEditorDrawerOpen(true);
 }
 
 function populateBuilderFromRecord(record) {
@@ -5540,11 +5588,12 @@ function populateBuilderFromRecord(record) {
 
   renderRelationshipPickers();
 
-  state.currentStep = 2;
+  state.currentStep = 4;
   state.isDirty = false;
   updateEditBanner();
   renderBuilderSummaries(record);
-  showBuilderStep(3);
+  showBuilderStep(4);
+  setContentEntityEditorDrawerOpen(false);
   renderSimilarList();
 }
 
@@ -5562,6 +5611,8 @@ function applyBuilderRoute() {
   const recordType = params.get("type") || "";
   if (!recordId || !recordType) {
     clearEditMode({ updateHistory: false });
+    showBuilderStep(4);
+    setContentEntityEditorDrawerOpen(false);
     return;
   }
 
@@ -6673,18 +6724,16 @@ function confirmationCopy(action) {
 
 function showSaveConfirmation({ action, payload, recordId, record }) {
   const confirmation = document.getElementById("contentBuilderConfirmation");
-  if (!confirmation) return;
-
   const copy = confirmationCopy(action);
   const name = record?.name || payload.name || recordId;
-  confirmation.classList.remove("hidden");
-  confirmation.classList.add("flex");
-  document.getElementById("contentBuilderConfirmationTitle").textContent = copy.title;
-  document.getElementById("contentBuilderConfirmationMessage").textContent = copy.message;
-  document.getElementById("contentBuilderConfirmationMeta").textContent =
-    [name, recordId].filter(Boolean).join(" • ");
-
-  document.getElementById("contentBuilderAddConnectionsBtn")?.focus();
+  confirmation?.classList.add("hidden");
+  confirmation?.classList.remove("flex");
+  renderBuilderSummaries(record);
+  showBuilderStep(4);
+  setContentEntityEditorDrawerOpen(false);
+  updateConnectionsWorkspaceAvailability();
+  showToast(`${copy.title}: ${name}`, "success");
+  document.getElementById("openContentEntityEditorDrawerBtn")?.focus();
 }
 
 async function savePayload(payload, action = "save") {
@@ -6965,6 +7014,7 @@ export async function setupContentBuilder() {
   if (!section || section.dataset.initialized === "true") return;
   section.dataset.initialized = "true";
   orderProductDrawerSections();
+  initializeContentBuilderWorkspace();
 
   setupBuilderStepControls();
   document.getElementById("contentRecordType")?.addEventListener("change", () => {
@@ -6975,7 +7025,19 @@ export async function setupContentBuilder() {
     }
     updateFormForRecordType();
   });
-  document.getElementById("newContentBuilderRecordBtn")?.addEventListener("click", clearEditMode);
+  document.getElementById("newContentBuilderRecordBtn")?.addEventListener("click", () => {
+    clearEditMode();
+    showBuilderStep(1);
+    setContentEntityEditorDrawerOpen(true);
+  });
+  document.getElementById("openContentEntityEditorDrawerBtn")?.addEventListener("click", () => {
+    showBuilderStep(state.editingRecord?.id ? 1 : state.currentStep || 1);
+    setContentEntityEditorDrawerOpen(true);
+  });
+  document.getElementById("closeContentEntityEditorDrawerBtn")?.addEventListener("click", () => {
+    setContentEntityEditorDrawerOpen(false);
+    if (state.editingRecord?.id) showBuilderStep(4);
+  });
   setupBuilderFilters();
   document.getElementById("contentType")?.addEventListener("change", () => {
     const variants = entityVariantsFromBuilder();
@@ -7199,8 +7261,10 @@ export async function setupContentBuilder() {
       return;
     }
     if (["entity", "build"].includes(action)) {
-      await navigateBuilderStep(2);
-      document.getElementById("contentEntityVariantRows")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      await navigateBuilderStep(action === "build" ? 2 : 1);
+      if (action === "build") {
+        document.getElementById("contentEntityVariantRows")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
       return;
     }
     if (action === "asset") {
