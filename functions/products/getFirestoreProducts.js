@@ -550,6 +550,8 @@ function normalizeProduct(
     purchasable,
     comingSoon,
     marketplaceMode,
+    marketplaceAudience: normalizeStatus(data.marketplaceAudience || "public") === "affiliates"
+      ? "affiliates" : "public",
     marketplaceStartsAt,
     marketplaceEndsAt,
     archived: data.archived === true,
@@ -629,6 +631,7 @@ export const getFirestoreProducts = onCall(
           ownedVariants,
           productsById,
         ))
+        .filter((product) => product.marketplaceAudience !== "affiliates" || approvedAffiliate || isAdmin)
         .filter((product) => includeHidden && isAdmin ? true : product.visible !== false)
         .filter((product) => tag ? product.searchTags.includes(tag) : true)
         .sort((a, b) => (a.name || a.title || "").localeCompare(b.name || b.title || ""));

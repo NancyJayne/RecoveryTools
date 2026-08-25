@@ -1776,10 +1776,7 @@
                     <input id="contentProductId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Auto-created if blank">
                     <span id="contentProductIdHelp" class="mt-1 block text-xs text-gray-400">Set once when creating a Product.</span>
                   </label>
-                  <label class="block">
-                    SKU
-                    <input id="contentProductSku" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-                  </label>
+                  <input id="contentProductSku" type="hidden">
                   <label data-product-context-panel="contentProductCategoryId" class="hidden block">
                     Product category
                     <select id="contentProductCategoryId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
@@ -1887,7 +1884,7 @@
                       <button id="addProductVariantContentLinkBtn" type="button" disabled class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7] disabled:cursor-not-allowed disabled:opacity-40">Add another Blueprint</button>
                     </div>
                     <div id="productVariantContentLinkRows" class="mt-3 space-y-2"></div>
-                    <p class="mt-3">Default manufacturing Blueprint: <strong id="contentProductBlueprintLabel">Not connected</strong></p>
+                    <p id="contentProductBlueprintLabel" class="hidden">Not connected</p>
                     <p>Estimated cost: <strong id="contentProductSourceCost">$0.00</strong></p>
                     <p class="mt-1">Approximate gross margin: <strong id="contentProductApproxMargin">Not available</strong></p>
                     <p class="mt-1 text-xs text-gray-400">Cost comes from the Item unit cost or the Blueprint's linked Item recipe.</p>
@@ -1943,6 +1940,14 @@
                         <option value="coming-soon">Coming soon until the start date</option>
                       </select>
                     </label>
+                    <label class="block">
+                      Publish to
+                      <select id="contentProductMarketplaceAudience" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                        <option value="public">Everyone</option>
+                        <option value="affiliates">Approved affiliates only</option>
+                      </select>
+                      <span class="mt-1 block text-xs text-gray-400">Affiliate-only Products are excluded from the public Marketplace and protected again at checkout.</span>
+                    </label>
                     <label class="inline-flex items-center gap-2 self-end rounded border border-gray-700 p-3">
                       <input id="contentProductFeatured" type="checkbox" class="accent-[#407471]">
                       Featured in Marketplace
@@ -1964,10 +1969,18 @@
                     Price and sale
                   </summary>
                   <div class="grid gap-3 border-t border-gray-700 p-4 md:grid-cols-2">
-                    <label class="block md:col-span-2">Regular shop price
+                    <label class="block md:col-span-2">Product price (default inherited by variants)
                       <input id="contentProductPrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                     </label>
-                    <label class="content-product-affiliate-pricing-field hidden block">Affiliate wholesale price
+                    <label class="block md:col-span-2">Australian Tax/GST classification
+                      <select id="contentProductTaxClass" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                        <option value="gst-taxable">GST taxable — price includes 10% GST</option>
+                        <option value="gst-free">GST-free sale</option>
+                        <option value="input-taxed">Input-taxed sale</option>
+                        <option value="out-of-scope">Out of scope / no GST</option>
+                      </select>
+                    </label>
+                    <label class="content-product-affiliate-pricing-field hidden block">Product affiliate price (default inherited by variants)
                       <input id="contentProductWholesalePrice" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                       <span class="mt-1 block text-xs text-gray-400">Only available to approved affiliates.</span>
                     </label>

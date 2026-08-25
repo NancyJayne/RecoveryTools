@@ -312,6 +312,14 @@ function normalizeVariant(value, index, itemId, productId) {
     name,
     colour: cleanString(value.colour),
     size: cleanString(value.size),
+    weight: asNumber(value.weight),
+    weightUnit: ["g", "kg"].includes(cleanString(value.weightUnit).toLowerCase())
+      ? cleanString(value.weightUnit).toLowerCase() : "g",
+    length: asNumber(value.length),
+    width: asNumber(value.width),
+    height: asNumber(value.height),
+    dimensionUnit: ["mm", "cm", "m"].includes(cleanString(value.dimensionUnit).toLowerCase())
+      ? cleanString(value.dimensionUnit).toLowerCase() : "cm",
     sku: cleanString(value.sku),
     priceOverride: (asNumber(value.priceOverride) ?? 0) > 0 ? asNumber(value.priceOverride) : null,
     marketplaceMode: cleanString(value.marketplaceMode || "inherit").toLowerCase(),
@@ -622,6 +630,9 @@ async function updateProductRelation({
   const endsMs = saleEndsAt ? Date.parse(saleEndsAt) : null;
   const onSale = salePrice !== null && (!startsMs || startsMs <= nowMs) && (!endsMs || endsMs > nowMs);
   const effectivePrice = onSale ? salePrice : retailPrice;
+  const taxClass = ["gst-taxable", "gst-free", "input-taxed", "out-of-scope"]
+    .includes(cleanString(relation.taxClass).toLowerCase())
+    ? cleanString(relation.taxClass).toLowerCase() : "gst-taxable";
   const stock = asNumber(relation.stock) ?? asNumber(productData.stock) ?? 0;
   const variants = Array.isArray(relation.variants)
     ? relation.variants
@@ -656,6 +667,8 @@ async function updateProductRelation({
     visible: asBoolean(relation.visible),
     websiteVisible: asBoolean(relation.visible),
     marketplaceMode,
+    marketplaceAudience: cleanString(relation.marketplaceAudience || "public").toLowerCase() === "affiliates"
+      ? "affiliates" : "public",
     marketplaceStartsAt,
     marketplaceEndsAt,
     archived: asBoolean(relation.archived) ||
@@ -700,6 +713,7 @@ async function updateProductRelation({
       .concat([effectivePrice])
       .sort((a, b) => a - b)[0],
     retailPrice,
+    taxClass,
     salePrice,
     wholesalePrice: relation.affiliateAvailable === true ? asNumber(relation.wholesalePrice) : null,
     wholesaleMinQuantity: relation.affiliateAvailable === true
@@ -819,8 +833,9 @@ async function updateProductRelation({
     saleStartsAt,
     saleEndsAt,
     effectiveShopPrice: effectivePrice,
-    gstIncluded: true,
-    gstAmount: Number((effectivePrice / 11).toFixed(2)),
+    taxClass,
+    gstIncluded: taxClass === "gst-taxable",
+    gstAmount: taxClass === "gst-taxable" ? Number((effectivePrice / 11).toFixed(2)) : 0,
     status: "active",
     updatedAt: now,
     createdAt: productData.createdAt || now,
@@ -863,6 +878,14 @@ async function updateProductRelation({
       physicalFulfilment: variant.physicalFulfilment,
       isDefault: index === 0,
       optionSummary: [variant.colour, variant.size].filter(Boolean).join(" / "),
+      colour: variant.colour,
+      size: variant.size,
+      weight: variant.weight,
+      weightUnit: variant.weightUnit,
+      length: variant.length,
+      width: variant.width,
+      height: variant.height,
+      dimensionUnit: variant.dimensionUnit,
       priceOverride: variant.priceOverride,
       marketplaceMode: variant.marketplaceMode,
       marketplaceStartsAt: variant.marketplaceStartsAt,
@@ -912,8 +935,9 @@ async function updateProductRelation({
         saleEndsAt: variant.saleEndsAt,
         onSale: variant.salePrice !== null,
         effectiveShopPrice: variant.priceOverride,
-        gstIncluded: true,
-        gstAmount: Number((variant.priceOverride / 11).toFixed(2)),
+        taxClass,
+        gstIncluded: taxClass === "gst-taxable",
+        gstAmount: taxClass === "gst-taxable" ? Number((variant.priceOverride / 11).toFixed(2)) : 0,
         status: "active",
         updatedAt: now,
         createdAt: now,

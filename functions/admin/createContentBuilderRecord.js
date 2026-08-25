@@ -400,6 +400,14 @@ function normalizeVariant(value, index) {
     name,
     colour: cleanString(value.colour),
     size: cleanString(value.size),
+    weight: asNumber(value.weight),
+    weightUnit: ["g", "kg"].includes(cleanString(value.weightUnit).toLowerCase())
+      ? cleanString(value.weightUnit).toLowerCase() : "g",
+    length: asNumber(value.length),
+    width: asNumber(value.width),
+    height: asNumber(value.height),
+    dimensionUnit: ["mm", "cm", "m"].includes(cleanString(value.dimensionUnit).toLowerCase())
+      ? cleanString(value.dimensionUnit).toLowerCase() : "cm",
     sku: cleanString(value.sku),
     priceOverride: (asNumber(value.priceOverride) ?? 0) > 0 ? asNumber(value.priceOverride) : null,
     salePrice: asNumber(value.salePrice),
@@ -918,6 +926,9 @@ export const createContentBuilderRecord = onCall(
           const retailPrice = asNumber(data.price) ?? 0;
           const salePrice = asNumber(data.salePrice);
           const effectivePrice = salePrice ?? retailPrice;
+          const taxClass = ["gst-taxable", "gst-free", "input-taxed", "out-of-scope"]
+            .includes(cleanString(data.productRelation?.taxClass).toLowerCase())
+            ? cleanString(data.productRelation?.taxClass).toLowerCase() : "gst-taxable";
           // Product variants belong to the Product drawer. `data.variants` is the
           // content entity's Build variants and does not contain Product-only
           // workshop fields such as session time, location, or seat capacity.
@@ -994,6 +1005,9 @@ export const createContentBuilderRecord = onCall(
             }
             transaction.set(productRef, {
               affiliateAvailable: data.productRelation?.affiliateAvailable === true,
+              taxClass,
+              marketplaceAudience: cleanString(data.productRelation?.marketplaceAudience || "public")
+                .toLowerCase() === "affiliates" ? "affiliates" : "public",
               wholesalePrice: data.productRelation?.affiliateAvailable === true
                 ? asNumber(data.productRelation?.wholesalePrice) : null,
               wholesaleMinQuantity: data.productRelation?.affiliateAvailable === true
@@ -1059,6 +1073,14 @@ export const createContentBuilderRecord = onCall(
                 inclusions: variant.inclusions,
                 isDefault: index === 0,
                 optionSummary: [variant.colour, variant.size].filter(Boolean).join(" / "),
+                colour: variant.colour,
+                size: variant.size,
+                weight: variant.weight,
+                weightUnit: variant.weightUnit,
+                length: variant.length,
+                width: variant.width,
+                height: variant.height,
+                dimensionUnit: variant.dimensionUnit,
                 priceOverride: variant.priceOverride,
                 salePrice: variant.salePrice,
                 wholesalePrice: variant.wholesalePrice,
@@ -1104,8 +1126,10 @@ export const createContentBuilderRecord = onCall(
                     ? variant.wholesaleMinQuantity : 1,
                   onSale: variant.salePrice !== null,
                   effectiveShopPrice: variant.priceOverride,
-                  gstIncluded: true,
-                  gstAmount: Number((variant.priceOverride / 11).toFixed(2)),
+                  taxClass,
+                  gstIncluded: taxClass === "gst-taxable",
+                  gstAmount: taxClass === "gst-taxable"
+                    ? Number((variant.priceOverride / 11).toFixed(2)) : 0,
                   status: "active",
                   createdAt: now,
                   updatedAt: now,
@@ -1204,6 +1228,8 @@ export const createContentBuilderRecord = onCall(
             ).toLowerCase(),
             inventoryTracked: data.productRelation?.inventoryTracked === true,
             affiliateAvailable: data.productRelation?.affiliateAvailable === true,
+            marketplaceAudience: cleanString(data.productRelation?.marketplaceAudience || "public")
+              .toLowerCase() === "affiliates" ? "affiliates" : "public",
             manufacturingBlueprintId,
             estimatedUnitCost: asNumber(data.productRelation?.estimatedUnitCost) ?? 0,
             variantContentLinks,
@@ -1233,6 +1259,7 @@ export const createContentBuilderRecord = onCall(
             slug: cleanString(data.slug) || slugify(name).toLowerCase(),
             price: effectivePrice,
             retailPrice,
+            taxClass,
             salePrice,
             wholesalePrice: data.productRelation?.affiliateAvailable === true
               ? asNumber(data.productRelation?.wholesalePrice) : null,
@@ -1303,8 +1330,9 @@ export const createContentBuilderRecord = onCall(
               ? Math.max(asNumber(data.productRelation?.wholesaleMinQuantity) ?? 1, 1) : 1,
             onSale: salePrice !== null,
             effectiveShopPrice: effectivePrice,
-            gstIncluded: true,
-            gstAmount: Number((effectivePrice / 11).toFixed(2)),
+            taxClass,
+            gstIncluded: taxClass === "gst-taxable",
+            gstAmount: taxClass === "gst-taxable" ? Number((effectivePrice / 11).toFixed(2)) : 0,
             status: "active",
             createdAt: now,
             updatedAt: now,
@@ -1365,6 +1393,14 @@ export const createContentBuilderRecord = onCall(
               inclusions: variant.inclusions,
               isDefault: index === 0,
               optionSummary: [variant.colour, variant.size].filter(Boolean).join(" / "),
+              colour: variant.colour,
+              size: variant.size,
+              weight: variant.weight,
+              weightUnit: variant.weightUnit,
+              length: variant.length,
+              width: variant.width,
+              height: variant.height,
+              dimensionUnit: variant.dimensionUnit,
               priceOverride: variant.priceOverride,
               salePrice: variant.salePrice,
               wholesalePrice: variant.wholesalePrice,
@@ -1410,8 +1446,10 @@ export const createContentBuilderRecord = onCall(
                   ? variant.wholesaleMinQuantity : 1,
                 onSale: variant.salePrice !== null,
                 effectiveShopPrice: variant.priceOverride,
-                gstIncluded: true,
-                gstAmount: Number((variant.priceOverride / 11).toFixed(2)),
+                taxClass,
+                gstIncluded: taxClass === "gst-taxable",
+                gstAmount: taxClass === "gst-taxable"
+                  ? Number((variant.priceOverride / 11).toFixed(2)) : 0,
                 status: "active",
                 createdAt: now,
                 updatedAt: now,

@@ -709,6 +709,7 @@ export const getContentBuilderData = onCall(
           visible: product.visible === true || product.websiteVisible === true,
           marketplaceMode: product.marketplaceMode ||
             (product.visible === true || product.websiteVisible === true ? "active" : "hidden"),
+          marketplaceAudience: product.marketplaceAudience || "public",
           marketplaceStartsAt: asIso(product.marketplaceStartsAt) || product.marketplaceStartsAt || "",
           marketplaceEndsAt: asIso(product.marketplaceEndsAt) || product.marketplaceEndsAt || "",
           featured: product.featured === true,
@@ -716,6 +717,7 @@ export const getContentBuilderData = onCall(
           stock: Number(product.stock ?? 0),
           price: Number(product.price ?? product.priceFrom ?? 0),
           retailPrice: Number(product.retailPrice ?? product.price ?? product.priceFrom ?? 0),
+          taxClass: product.taxClass || "gst-taxable",
           salePrice: product.salePrice ?? null,
           wholesalePrice: product.wholesalePrice ?? null,
           wholesaleMinQuantity: Number(product.wholesaleMinQuantity ?? 1),

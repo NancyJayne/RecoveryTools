@@ -338,6 +338,10 @@ const confirmStripePurchaseHandler = async (request) => {
           architecture,
         }),
         sellerUserId: product.sellerUserId || "",
+        taxClass: ["gst-taxable", "gst-free", "input-taxed", "out-of-scope"]
+          .includes(String(product.taxClass || metadata.taxClass || "gst-taxable").toLowerCase())
+          ? String(product.taxClass || metadata.taxClass || "gst-taxable").toLowerCase()
+          : "gst-taxable",
       };
     }),
   );
@@ -346,7 +350,10 @@ const confirmStripePurchaseHandler = async (request) => {
   const subtotal = (session.amount_subtotal || 0) / 100;
   const shipping = (session.total_details?.amount_shipping || 0) / 100;
   const total = (session.amount_total || 0) / 100;
-  const gst = total / 11;
+  const taxableProductTotal = enrichedProducts
+    .filter((item) => item.taxClass === "gst-taxable")
+    .reduce((sum, item) => sum + Number(item.lineTotal || 0), 0);
+  const gst = Number(((taxableProductTotal + shipping) / 11).toFixed(2));
 
   const invoiceNumber = session.id;
   const orderRef = admin.firestore().collection("orders").doc(invoiceNumber);

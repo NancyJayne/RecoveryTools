@@ -290,6 +290,10 @@ async function productSnapshotFromLineItem(lineItem, commissionRates = {}, archi
     inventoryTracked: product.inventoryTracked === true || variant?.inventoryTracked === true || !!inventory,
     inventoryId: inventory?.inventoryId || inventory?.id || "",
     sellerUserId: product.sellerUserId || "",
+    taxClass: ["gst-taxable", "gst-free", "input-taxed", "out-of-scope"]
+      .includes(String(product.taxClass || metadata.taxClass || "gst-taxable").toLowerCase())
+      ? String(product.taxClass || metadata.taxClass || "gst-taxable").toLowerCase()
+      : "gst-taxable",
     product,
   };
 }
@@ -319,7 +323,10 @@ export async function writeCheckoutCompleted({ stripe, session, event }) {
   const shippingAmount = centsToDollars(session.total_details?.amount_shipping);
   const total = centsToDollars(session.amount_total);
   const subtotal = centsToDollars(session.amount_subtotal);
-  const gstAmount = Number((total / 11).toFixed(2));
+  const taxableProductTotal = items
+    .filter((item) => item.taxClass === "gst-taxable")
+    .reduce((sum, item) => sum + Number(item.lineTotal || item.price || 0), 0);
+  const gstAmount = Number(((taxableProductTotal + shippingAmount) / 11).toFixed(2));
   const currency = String(session.currency || "aud").toUpperCase();
   const orderLines = canonicalOrderLines(items, currency);
   const affiliatePickupLocation = items

@@ -630,6 +630,12 @@ function serializeProductVariants(variants = []) {
     name: variant.name || variant.variantName || "",
     colour: variant.colour || "",
     size: variant.size || "",
+    weight: variant.weight ?? null,
+    weightUnit: variant.weightUnit || "g",
+    length: variant.length ?? null,
+    width: variant.width ?? null,
+    height: variant.height ?? null,
+    dimensionUnit: variant.dimensionUnit || "cm",
     sku: variant.sku || "",
     priceOverride: variant.priceOverride ?? null,
     stock: variant.stock ?? variant.stockQuantity ?? 0,
@@ -1377,6 +1383,17 @@ function renderSelectedProductVariantRows(
     summary.textContent = `${productVariants.length} Product variant${productVariants.length === 1 ? "" : "s"}`;
   }
   const affiliateAvailable = document.getElementById("contentProductAvailableToAffiliates")?.checked === true;
+  const productPrice = optionalNumberFromInput("contentProductPrice");
+  const productAffiliatePrice = optionalNumberFromInput("contentProductWholesalePrice");
+  const productShortDescription = document.getElementById("contentShortDescription")?.value || "";
+  const productLongDescription = document.getElementById("contentLongDescription")?.value || "";
+  const productMarketplaceMode = document.getElementById("contentProductMarketplaceMode")?.value || "hidden";
+  const sourceNote = (source, restoreTarget = "") => `
+    <span class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+      <span>${escapeHTML(source)}</span>
+      ${restoreTarget ? `<button type="button" data-restore-variant-field="${escapeHTML(restoreTarget)}"
+        class="text-[#9edbd7] underline decoration-dotted underline-offset-2">Restore inherited value</button>` : ""}
+    </span>`;
   const instructorOptions = (selectedInstructor = "") => {
     const options = [...(state.options.instructorOptions || [])];
     if (selectedInstructor && !options.some((option) =>
@@ -1424,35 +1441,66 @@ function renderSelectedProductVariantRows(
             <div class="md:col-span-2 xl:col-span-4">
               <h5 class="font-semibold text-white">Product variant details</h5>
               <p class="text-xs text-gray-400">Identity and labels for this sellable variant.</p>
+              <div class="mt-3 flex flex-wrap items-end gap-2 rounded border border-gray-700 bg-gray-950/50 p-3">
+                <label class="min-w-52 flex-1 text-xs text-gray-300">Copy settings from another variant
+                  <select class="copy-product-variant-source mt-1 w-full rounded bg-gray-800 px-3 py-2 text-sm text-white">
+                    <option value="">Choose Product variant</option>
+                    ${productVariants.filter((candidate) => candidate.variantId !== productVariant.variantId)
+    .map((candidate) => `<option value="${escapeHTML(candidate.variantId)}">${escapeHTML(candidate.name || candidate.variantId)}</option>`).join("")}
+                  </select>
+                </label>
+                <button type="button" data-copy-product-variant-settings class="rounded border border-[#407471] px-3 py-2 text-xs text-[#9edbd7]">Copy settings</button>
+                <button type="button" data-duplicate-product-variant class="rounded border border-[#407471] px-3 py-2 text-xs text-[#9edbd7]">Duplicate variant</button>
+              </div>
             </div>
             <label class="block text-sm">Selling name
               <input class="product-variant-name mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.name || entityVariant.name || "")}">
+              ${sourceNote(entityVariant.name && normalizedText(productVariant.name) === normalizedText(entityVariant.name) ? "Inherited from Item variant" : productVariant.name ? "Variant override" : "Not configured", "name")}
             </label>
             <label class="block text-sm">Product variant ID
             <input class="product-variant-id mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.variantId || "")}">
             </label>
-            <label class="block text-sm">SKU
+            <label class="block text-sm">Exact variant SKU
             <input class="product-variant-sku mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.sku || "")}" placeholder="Auto-filled if blank">
+            ${sourceNote("Variant override")}
             </label>
-            <label class="block text-sm">Colour
+            <label class="block text-sm">Variant colour
             <input class="product-variant-colour mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.colour || "")}">
+            ${sourceNote(entityVariant.colour && normalizedText(productVariant.colour) === normalizedText(entityVariant.colour) ? "Inherited from Item variant" : productVariant.colour ? "Variant override" : "Not configured", "colour")}
             </label>
-            <label class="block text-sm">Size / weight
+            <label class="block text-sm">Customer size label
             <input class="product-variant-size mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.size || entityVariant.sizeLabel || "")}">
+            ${sourceNote(entityVariant.sizeLabel && normalizedText(productVariant.size) === normalizedText(entityVariant.sizeLabel) ? "Inherited from Item variant" : productVariant.size ? "Variant override" : "Not configured", "size")}
             </label>
+            <label class="block text-sm">Shipping weight
+              <span class="mt-1 flex gap-2"><input class="product-variant-weight min-w-0 flex-1 rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="0.01" value="${escapeHTML(productVariant.weight ?? "")}">
+              <select class="product-variant-weight-unit rounded bg-gray-800 px-3 py-2 text-white">${compactSelectOptions(["g", "kg"], productVariant.weightUnit || "g")}</select></span>
+              ${sourceNote(productVariant.weight !== null && productVariant.weight !== undefined ? "Variant override" : "Inherited from Item variant", "weight")}
+            </label>
+            <div class="rounded border border-gray-700 p-3 text-sm md:col-span-2 xl:col-span-4">
+              <span class="font-medium text-white">Shipping dimensions</span>
+              <div class="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
+                <label>Length<input class="product-variant-length mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="0.01" value="${escapeHTML(productVariant.length ?? "")}"></label>
+                <label>Width<input class="product-variant-width mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="0.01" value="${escapeHTML(productVariant.width ?? "")}"></label>
+                <label>Height<input class="product-variant-height mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="0.01" value="${escapeHTML(productVariant.height ?? "")}"></label>
+                <label>Unit<select class="product-variant-dimension-unit mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">${compactSelectOptions(["mm", "cm", "m"], productVariant.dimensionUnit || "cm")}</select></label>
+              </div>
+            </div>
           </section>
           <section data-variant-editor-section="description" class="grid gap-3 rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
             <div>
               <h5 class="font-semibold text-white">Description overrides</h5>
               <p class="text-xs text-gray-400">Leave these blank to use the main Product descriptions.</p>
             </div>
-            <label class="block text-sm">Short description
+            <label class="block text-sm">Variant short-description override
               <input class="product-variant-short-description mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
                 value="${escapeHTML(productVariant.shortDescription || "")}" placeholder="Use the main Product description">
+              ${sourceNote(productVariant.shortDescription ? "Variant override" : productShortDescription ? "Inherited from Product" : "Not configured", "shortDescription")}
             </label>
-            <label class="block text-sm">Long description
+            <label class="block text-sm">Variant long-description override
               <textarea class="product-variant-long-description mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
                 rows="4" placeholder="Use the main Product description">${escapeHTML(productVariant.longDescription || "")}</textarea>
+              ${sourceNote(productVariant.longDescription ? "Variant override" : productLongDescription ? "Inherited from Product" : "Not configured", "longDescription")}
             </label>
             <label class="block text-sm">Inclusions summary
               <textarea class="product-variant-inclusions mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
@@ -1461,9 +1509,10 @@ function renderSelectedProductVariantRows(
           </section>
           <section data-variant-editor-section="price" class="rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Marketplace price</h5>
-            <label class="mt-3 block text-sm">Regular price override
+            <label class="mt-3 block text-sm">Variant price override
               <input class="product-variant-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
                 type="number" min="0" step="0.01" value="${escapeHTML(productVariant.priceOverride ?? "")}" placeholder="Use main Product price">
+              ${sourceNote(productVariant.priceOverride !== null && productVariant.priceOverride !== undefined ? "Variant override" : productPrice !== null ? "Inherited from Product" : "Not configured", "price")}
             </label>
           </section>
           <section data-variant-editor-section="fulfilment" class="grid gap-3 rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 md:grid-cols-2 xl:col-span-4 xl:grid-cols-4">
@@ -1489,7 +1538,7 @@ function renderSelectedProductVariantRows(
               <option value="digital-download"${productVariant.deliveryMode === "digital-download" ? " selected" : ""}>Digital download</option>
             </select>
           </label>
-          <label class="product-variant-physical-fulfilment-field hidden block text-sm">Physical fulfilment
+          <label class="product-variant-physical-fulfilment-field hidden block text-sm">Variant fulfilment override
             <select class="product-variant-physical-fulfilment mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
               ${compactSelectOptions(
     ["none", "shipping", "pickup", "shipping-or-pickup"],
@@ -1519,12 +1568,13 @@ function renderSelectedProductVariantRows(
               ${instructorOptions(productVariant.instructor || "") ||
                 "<option value=\"\" disabled>No instructors saved</option>"}
             </select>
+            ${sourceNote(productVariant.physicalFulfilment && productVariant.physicalFulfilment !== "inherit" ? "Variant override" : "Inherited from Product", "fulfilment")}
           </label>
           </section>
           <div data-variant-editor-section="visibility" class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Marketplace visibility</h5>
             <div class="mt-3 grid gap-3 md:grid-cols-3">
-              <label class="block text-sm">Marketplace listing
+              <label class="block text-sm">Variant visibility override
                 <select class="product-variant-marketplace-mode mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                   <option value="inherit"${!productVariant.marketplaceMode || productVariant.marketplaceMode === "inherit" ? " selected" : ""}>Use main Product setting</option>
                   <option value="active"${productVariant.marketplaceMode === "active" ? " selected" : ""}>Visible and available now</option>
@@ -1532,7 +1582,7 @@ function renderSelectedProductVariantRows(
                   <option value="coming-soon"${productVariant.marketplaceMode === "coming-soon" ? " selected" : ""}>Coming soon until the start date</option>
                   <option value="hidden"${productVariant.marketplaceMode === "hidden" ? " selected" : ""}>Hidden</option>
                 </select>
-                <span class="mt-1 block text-xs text-gray-400">Inherit uses the main Product schedule.</span>
+                ${sourceNote(productVariant.marketplaceMode && productVariant.marketplaceMode !== "inherit" ? "Variant override" : `Inherited from Product (${productMarketplaceMode})`, "visibility")}
               </label>
               <label class="block text-sm">Start selling
                 <input class="product-variant-marketplace-start mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
@@ -1547,9 +1597,10 @@ function renderSelectedProductVariantRows(
           <div data-variant-editor-section="sale" class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Price and sale</h5>
             <div class="mt-3 grid gap-3 md:grid-cols-2">
-              <label class="product-variant-affiliate-pricing-field ${affiliateAvailable ? "" : "hidden"} block text-sm">Affiliate wholesale price
+              <label class="product-variant-affiliate-pricing-field ${affiliateAvailable ? "" : "hidden"} block text-sm">Variant affiliate-price override
                 <input class="product-variant-wholesale-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
                   type="number" min="0" step="0.01" value="${escapeHTML(productVariant.wholesalePrice ?? "")}">
+                ${sourceNote(productVariant.wholesalePrice !== null && productVariant.wholesalePrice !== undefined ? "Variant override" : productAffiliatePrice !== null ? "Inherited from Product" : "Not configured", "affiliatePrice")}
               </label>
               <label class="product-variant-affiliate-pricing-field ${affiliateAvailable ? "" : "hidden"} block text-sm">Wholesale minimum quantity
                 <input class="product-variant-wholesale-min-quantity mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
@@ -1658,6 +1709,12 @@ function syncSelectedProductVariantRows() {
       name: row.querySelector(".product-variant-name")?.value.trim() || "Variant",
       colour: row.querySelector(".product-variant-colour")?.value.trim() || "",
       size: row.querySelector(".product-variant-size")?.value.trim() || "",
+      weight: optionalNumberFromElement(row.querySelector(".product-variant-weight")),
+      weightUnit: row.querySelector(".product-variant-weight-unit")?.value || "g",
+      length: optionalNumberFromElement(row.querySelector(".product-variant-length")),
+      width: optionalNumberFromElement(row.querySelector(".product-variant-width")),
+      height: optionalNumberFromElement(row.querySelector(".product-variant-height")),
+      dimensionUnit: row.querySelector(".product-variant-dimension-unit")?.value || "cm",
       sku: row.querySelector(".product-variant-sku")?.value.trim() || "",
       priceOverride: optionalNumberFromElement(row.querySelector(".product-variant-price")),
       marketplaceMode: row.querySelector(".product-variant-marketplace-mode")?.value || "inherit",
@@ -3212,6 +3269,7 @@ function productRelationPayload() {
     stock: inventoryTracked ? totalVariantStock : null,
     visible: ["active", "coming-soon"].includes(marketplaceMode),
     marketplaceMode,
+    marketplaceAudience: document.getElementById("contentProductMarketplaceAudience")?.value || "public",
     marketplaceStartsAt: isoFromDatetimeLocal(marketplaceStartsAt),
     marketplaceEndsAt: isoFromDatetimeLocal(marketplaceEndsAt),
     marketplaceTileImageSource: tileImageValue.startsWith("variant:") ? "product-variant" : "entity",
@@ -3222,6 +3280,7 @@ function productRelationPayload() {
     marketplaceTileDescriptionVariantId: tileDescriptionValue.startsWith("variant:")
       ? tileDescriptionValue.slice("variant:".length) : "",
     retailPrice: optionalNumberFromInput("contentProductPrice"),
+    taxClass: document.getElementById("contentProductTaxClass")?.value || "gst-taxable",
     salePrice: optionalNumberFromInput("contentProductSalePrice"),
     wholesalePrice: affiliateAvailable ? wholesalePrice : null,
     wholesaleMinQuantity: affiliateAvailable
@@ -3369,9 +3428,11 @@ function chooseExistingProduct(productId) {
     "contentProductMarketplaceMode",
     product.marketplaceMode || (product.visible ? "active" : "hidden"),
   );
+  setSelectValue("contentProductMarketplaceAudience", product.marketplaceAudience || "public");
   setInputValue("contentProductMarketplaceStartsAt", datetimeLocalValue(product.marketplaceStartsAt));
   setInputValue("contentProductMarketplaceEndsAt", datetimeLocalValue(product.marketplaceEndsAt));
   setInputValue("contentProductPrice", product.retailPrice ?? product.price ?? "");
+  setSelectValue("contentProductTaxClass", product.taxClass || "gst-taxable");
   setInputValue("contentProductSalePrice", product.salePrice ?? "");
   setInputValue("contentProductWholesalePrice", product.wholesalePrice ?? "");
   setInputValue("contentProductWholesaleMinQuantity", product.wholesaleMinQuantity ?? 1);
@@ -3418,6 +3479,8 @@ function chooseNewProduct() {
     "contentProductRequiresInstructor"].forEach((id) => setCheckboxValue(id, false));
   setSelectValue("contentProductShopStatus", "draft");
   setSelectValue("contentProductMarketplaceMode", "hidden");
+  setSelectValue("contentProductMarketplaceAudience", "public");
+  setSelectValue("contentProductTaxClass", "gst-taxable");
   ["contentProductMarketplaceStartsAt", "contentProductMarketplaceEndsAt", "contentProductPrice",
     "contentProductSalePrice", "contentProductWholesalePrice", "contentProductWholesaleMinQuantity",
     "contentProductSaleStartsAt", "contentProductSaleEndsAt"]
@@ -3749,6 +3812,7 @@ function marketplaceTilePreviewMarkup() {
   const featured = document.getElementById("contentProductFeatured")?.checked === true;
   const archived = document.getElementById("contentProductArchived")?.checked === true;
   const marketplaceMode = document.getElementById("contentProductMarketplaceMode")?.value || "hidden";
+  const marketplaceAudience = document.getElementById("contentProductMarketplaceAudience")?.value || "public";
   const shopStatus = document.getElementById("contentProductShopStatus")?.value || "draft";
   const inventoryTracked = document.getElementById("contentProductInventoryTracked")?.checked === true;
   const allProductVariants = currentProductVariants();
@@ -3824,6 +3888,7 @@ function marketplaceTilePreviewMarkup() {
       <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Product setup</p>
       <div class="flex flex-wrap gap-2 text-xs">
         <button type="button" data-product-status-controls class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">Status: ${escapeHTML(currentProductEditorStatus())}</button>
+        <button type="button" data-product-editor-target="contentProductMarketplaceAudience" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">Audience: ${marketplaceAudience === "affiliates" ? "Approved affiliates only" : "Everyone"}</button>
         <button type="button" data-product-editor-target="contentProductFeatured" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">${featured ? "★ Featured" : "☆ Not featured"}</button>
         <button type="button" data-product-editor-target="contentProductCategoryId" class="${marketplacePreviewAttention(!category, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">Filter: ${escapeHTML(categoryLabel)}</button>
         <button type="button" data-product-editor-target="contentProductDeliveryType" class="${marketplacePreviewAttention(!deliveryType, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">Delivery: ${escapeHTML(deliveryType || "Set delivery")}</button>
@@ -3862,6 +3927,37 @@ function setProductEditorStatus(nextStatus) {
   renderMarketplaceTileControls();
   refreshMarketplacePreviews();
   state.isDirty = true;
+}
+
+const COPYABLE_PRODUCT_VARIANT_FIELDS = [
+  "priceOverride", "wholesalePrice", "wholesaleMinQuantity", "salePrice", "saleStartsAt",
+  "saleEndsAt", "deliveryMode", "physicalFulfilment", "marketplaceMode",
+  "marketplaceStartsAt", "marketplaceEndsAt", "shortDescription", "longDescription",
+  "inclusions", "primaryAssetId", "promotionAssetIds",
+];
+
+function copyProductVariantSettings(sourceVariant, targetVariant) {
+  const copied = { ...targetVariant };
+  COPYABLE_PRODUCT_VARIANT_FIELDS.forEach((field) => {
+    const value = sourceVariant?.[field];
+    copied[field] = Array.isArray(value) ? [...value] : value ?? null;
+  });
+  return copied;
+}
+
+function copyVariantOwnedConnections(sourceVariantId, targetVariantId) {
+  const links = productVariantContentLinksFromRows(true);
+  const grants = productUnlocksFromRows(true);
+  const copiedLinks = links.filter((link) => link.productVariantId !== targetVariantId);
+  links.filter((link) => link.productVariantId === sourceVariantId).forEach((link) => {
+    copiedLinks.push({ ...link, productVariantId: targetVariantId });
+  });
+  const copiedGrants = grants.filter((grant) => grant.productVariantId !== targetVariantId);
+  grants.filter((grant) => grant.productVariantId === sourceVariantId).forEach((grant) => {
+    copiedGrants.push({ ...grant, productVariantId: targetVariantId });
+  });
+  renderProductVariantContentLinkRows(copiedLinks);
+  renderProductUnlockRows(copiedGrants);
 }
 
 function renderMarketplaceTileControls() {
@@ -7009,7 +7105,7 @@ export async function setupContentBuilder() {
     const trigger = event.target.closest("[data-product-editor-target]");
     if (trigger) focusProductEditorTarget(trigger.dataset.productEditorTarget);
   });
-  ["contentProductMarketplaceMode", "contentProductShopStatus"].forEach((id) => {
+  ["contentProductMarketplaceMode", "contentProductMarketplaceAudience", "contentProductShopStatus"].forEach((id) => {
     document.getElementById(id)?.addEventListener("change", () => {
       renderMarketplaceTileControls();
       refreshMarketplacePreviews();
@@ -7050,6 +7146,95 @@ export async function setupContentBuilder() {
     if (trigger && !trigger.contains(event.relatedTarget)) closeAdminLinkedVariantBubbleSoon();
   });
   document.getElementById("contentProductVariantRows")?.addEventListener("click", (event) => {
+    const copySettings = event.target.closest("[data-copy-product-variant-settings]");
+    if (copySettings) {
+      syncSelectedProductVariantRows();
+      const row = copySettings.closest(".content-product-variant-row");
+      const targetVariantId = row?.dataset.productVariantId || "";
+      const sourceVariantId = row?.querySelector(".copy-product-variant-source")?.value || "";
+      const variants = currentProductVariants();
+      const source = variants.find((variant) => variant.variantId === sourceVariantId);
+      const targetIndex = variants.findIndex((variant) => variant.variantId === targetVariantId);
+      if (!source || targetIndex < 0) {
+        showToast("Choose another Product variant to copy.", "error");
+        return;
+      }
+      variants[targetIndex] = copyProductVariantSettings(source, variants[targetIndex]);
+      copyVariantOwnedConnections(sourceVariantId, targetVariantId);
+      setInputValue("contentProductVariants", serializeProductVariants(variants));
+      renderSelectedProductVariantRows(variants);
+      state.isDirty = true;
+      showToast("Variant price, fulfilment, visibility, descriptions, Blueprints, unlocks and promotion media copied.", "success");
+      return;
+    }
+    const duplicateVariant = event.target.closest("[data-duplicate-product-variant]");
+    if (duplicateVariant) {
+      syncSelectedProductVariantRows();
+      const sourceVariantId = duplicateVariant.closest(".content-product-variant-row")
+        ?.dataset.productVariantId || "";
+      const variants = currentProductVariants();
+      const source = variants.find((variant) => variant.variantId === sourceVariantId);
+      if (!source) return;
+      const duplicateId = generatedProductVariantId(`COPY-${Date.now()}`);
+      const duplicate = {
+        ...structuredClone(source),
+        variantId: duplicateId,
+        contentVariantId: "",
+        name: `${source.name || "Product variant"} copy`,
+        sku: "",
+        stock: 0,
+        status: "draft",
+        marketplaceMode: "hidden",
+      };
+      variants.push(duplicate);
+      copyVariantOwnedConnections(sourceVariantId, duplicateId);
+      setInputValue("contentProductVariants", serializeProductVariants(variants));
+      renderSelectedProductVariantRows(variants);
+      document.querySelector(`.content-product-variant-row[data-product-variant-id="${CSS.escape(duplicateId)}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      state.isDirty = true;
+      showToast("Variant duplicated as a safe hidden draft with zero stock and a new exact-variant ID.", "success");
+      return;
+    }
+    const restoreField = event.target.closest("[data-restore-variant-field]");
+    if (restoreField) {
+      const row = restoreField.closest(".content-product-variant-row");
+      const field = restoreField.dataset.restoreVariantField;
+      const selectors = {
+        name: ".product-variant-name",
+        colour: ".product-variant-colour",
+        size: ".product-variant-size",
+        weight: ".product-variant-weight",
+        shortDescription: ".product-variant-short-description",
+        longDescription: ".product-variant-long-description",
+        price: ".product-variant-price",
+        affiliatePrice: ".product-variant-wholesale-price",
+        fulfilment: ".product-variant-physical-fulfilment",
+        visibility: ".product-variant-marketplace-mode",
+      };
+      const input = row?.querySelector(selectors[field] || "[data-no-variant-field]");
+      if (!row || !input) return;
+      if (["name", "colour", "size"].includes(field)) {
+        const contentVariantId = row.dataset.contentVariantId || "";
+        const entityVariant = entityVariantsFromBuilder().find((variant) =>
+          variant.entityVariantId === contentVariantId) || {};
+        input.value = field === "name" ? entityVariant.name || "" :
+          field === "size" ? entityVariant.sizeLabel || "" : entityVariant.colour || "";
+      } else if (field === "visibility") {
+        input.value = "inherit";
+        row.querySelector(".product-variant-marketplace-start").value = "";
+        row.querySelector(".product-variant-marketplace-end").value = "";
+      } else if (field === "fulfilment") {
+        input.value = "none";
+      } else {
+        input.value = "";
+      }
+      updateMarketplacePreviewRow(input);
+      syncSelectedProductVariantRows();
+      state.isDirty = true;
+      showToast("Inherited value restored. Save Product details when finished.", "success");
+      return;
+    }
     const linkedVariantPreview = event.target.closest(".open-admin-linked-variant-bubble");
     if (linkedVariantPreview) {
       showAdminLinkedVariantBubble(linkedVariantPreview, true);

@@ -408,6 +408,13 @@ const createCheckoutSessionHandler = async (request) => {
       if (!doc.exists) throw new HttpsError("not-found", `Product not found: ${productIds[i]}`);
 
       const data = doc.data();
+      const marketplaceAudience = cleanString(data.marketplaceAudience || "public").toLowerCase();
+      if (marketplaceAudience === "affiliates" && !approvedAffiliate) {
+        throw new HttpsError(
+          "permission-denied",
+          `${data.name || doc.id} is available to approved affiliates only.`,
+        );
+      }
       const shopStatus = cleanString(data.shopStatus).toLowerCase();
       if (data.archived === true || shopStatus === "archived" ||
           !data.marketplaceMode && data.visible === false) {
@@ -561,6 +568,9 @@ const createCheckoutSessionHandler = async (request) => {
         accessGrants,
         bundleInventoryItems,
         prerequisiteProductVariants: variant?.prerequisiteProductVariants || [],
+        taxClass: ["gst-taxable", "gst-free", "input-taxed", "out-of-scope"]
+          .includes(cleanString(data.taxClass).toLowerCase())
+          ? cleanString(data.taxClass).toLowerCase() : "gst-taxable",
         price,
         pricingTier: Number(wholesalePrice) > 0 ? "affiliate-wholesale" : "retail",
         quantity,
@@ -602,6 +612,7 @@ const createCheckoutSessionHandler = async (request) => {
             ...pickupLocationMetadata(item.pickupLocation),
             unlocksAccess: item.unlocksAccess ? "true" : "false",
             pricingTier: item.pricingTier || "retail",
+            taxClass: item.taxClass || "gst-taxable",
           },
         },
       },

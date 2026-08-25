@@ -154,6 +154,16 @@ function normalizedVariant(variant, sourceCollection) {
     name: variant.variantName || variant.name || variant.optionSummary || "",
     colour: variant.colour || "",
     size: variant.size || "",
+    weight: variant.weight === null || variant.weight === undefined || variant.weight === ""
+      ? null : Number(variant.weight),
+    weightUnit: variant.weightUnit || "g",
+    length: variant.length === null || variant.length === undefined || variant.length === ""
+      ? null : Number(variant.length),
+    width: variant.width === null || variant.width === undefined || variant.width === ""
+      ? null : Number(variant.width),
+    height: variant.height === null || variant.height === undefined || variant.height === ""
+      ? null : Number(variant.height),
+    dimensionUnit: variant.dimensionUnit || "cm",
     sku: variant.sku || "",
     priceOverride: Number.isFinite(numericPriceOverride) && numericPriceOverride > 0
       ? numericPriceOverride
