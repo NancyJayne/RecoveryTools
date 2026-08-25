@@ -15,6 +15,9 @@ let resumeAssetSaveAfterFileSelection = false;
 let adminLinkedVariantBubbleCloseTimer = null;
 let entityStockDrawerSnapshot = [];
 let linkedRecordSelectorContext = null;
+let contentBuilderCreationStack = [];
+
+const CONTENT_BUILDER_STACK_KEY = "recovery-tools-content-builder-creation-stack";
 
 let state = {
   options: {
@@ -1937,6 +1940,44 @@ function panelAllowedForRecordType(panel) {
   return true;
 }
 
+function persistContentBuilderCreationStack() {
+  try {
+    if (contentBuilderCreationStack.length) {
+      sessionStorage.setItem(
+        CONTENT_BUILDER_STACK_KEY,
+        JSON.stringify(contentBuilderCreationStack),
+      );
+    } else {
+      sessionStorage.removeItem(CONTENT_BUILDER_STACK_KEY);
+    }
+  } catch (error) {
+    console.warn("Could not persist the nested Content Builder stack:", error);
+  }
+}
+
+function restorePersistedContentBuilderCreationStack() {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(CONTENT_BUILDER_STACK_KEY) || "[]");
+    contentBuilderCreationStack = Array.isArray(stored) ? stored : [];
+  } catch {
+    contentBuilderCreationStack = [];
+    sessionStorage.removeItem(CONTENT_BUILDER_STACK_KEY);
+  }
+}
+
+function updateContentBuilderCreationBreadcrumb() {
+  const breadcrumb = document.getElementById("contentEntityCreationBreadcrumb");
+  const returnButton = document.getElementById("returnToParentEntityBtn");
+  const labels = contentBuilderCreationStack.map((entry) => entry.parentName || "Parent");
+  const current = document.getElementById("contentName")?.value ||
+    `New ${currentRecordType()}`;
+  if (breadcrumb) {
+    breadcrumb.textContent = [...labels, current].join(" → ");
+    breadcrumb.classList.toggle("hidden", !contentBuilderCreationStack.length);
+  }
+  returnButton?.classList.toggle("hidden", !contentBuilderCreationStack.length);
+}
+
 function setContentEntityEditorDrawerOpen(open) {
   const drawer = document.getElementById("contentEntityEditorDrawer");
   if (!drawer) return;
@@ -1947,6 +1988,7 @@ function setContentEntityEditorDrawerOpen(open) {
   if (title) title.textContent = state.editingRecord?.id
     ? `Edit ${state.editingRecord.name || "entity"}`
     : "Create new entity";
+  updateContentBuilderCreationBreadcrumb();
 }
 
 function updateConnectionsWorkspaceAvailability() {
@@ -2643,7 +2685,101 @@ function openLinkedRecordSelector(trigger) {
   document.getElementById("contentLinkedRecordSearch")?.focus();
 }
 
-function createFromLinkedRecordSelector() {
+function cloneBuilderValue(value) {
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+
+async function captureNestedParentContext(context) {
+  const payload = await formPayload(false, { validate: false });
+  const entityRow = context.select.closest(".content-entity-variant-row");
+  const matchingSelects = [...(entityRow || document).querySelectorAll(
+    `.content-template-linked-select[data-field-key="${CSS.escape(context.select.dataset.fieldKey || "")}"]`,
+  )];
+  const parentEditingRecord = state.editingRecord
+    ? cloneBuilderValue(state.editingRecord) : null;
+  return {
+    parentName: payload.name || parentEditingRecord?.name || `New ${payload.recordType}`,
+    parentRecord: {
+      ...(parentEditingRecord || {}),
+      ...cloneBuilderValue(payload),
+      id: document.getElementById("contentId")?.value || parentEditingRecord?.id || "",
+      recordType: payload.recordType,
+    },
+    parentEditingRecord,
+    parentIsDirty: state.isDirty,
+    parentStep: state.currentStep,
+    parentUrl: `${window.location.pathname}${window.location.search}`,
+    parentScrollTop: document.getElementById("contentEntityEditorDrawerBody")?.scrollTop || 0,
+    parentProductDrawerOpen: !document.getElementById("contentProductDrawer")
+      ?.classList.contains("hidden"),
+    target: {
+      entityVariantId: entityRow?.dataset.entityVariantId || "",
+      fieldKey: context.select.dataset.fieldKey || "",
+      selectionIndex: Math.max(matchingSelects.indexOf(context.select), 0),
+    },
+  };
+}
+
+function restoreNestedParent({ selectedRecord = null, cancelled = false } = {}) {
+  const entry = contentBuilderCreationStack.pop();
+  if (!entry) return false;
+  persistContentBuilderCreationStack();
+  populateBuilderFromRecord(entry.parentRecord);
+  state.editingRecord = entry.parentEditingRecord
+    ? {
+      ...entry.parentEditingRecord,
+      ...entry.parentRecord,
+      id: entry.parentEditingRecord.id,
+      recordType: entry.parentEditingRecord.recordType,
+    }
+    : null;
+  updateEditBanner();
+  updateConnectionsWorkspaceAvailability();
+  state.currentStep = entry.parentStep || 2;
+  showBuilderStep(state.currentStep);
+  setContentEntityEditorDrawerOpen(true);
+  if (entry.parentProductDrawerOpen) openContentProductDrawer();
+  history.replaceState({}, "", entry.parentUrl || "/admin/content/builder");
+
+  const variantRoot = entry.target?.entityVariantId
+    ? document.querySelector(`.content-entity-variant-row[data-entity-variant-id="${CSS.escape(entry.target.entityVariantId)}"]`)
+    : document;
+  const selects = [...(variantRoot || document).querySelectorAll(
+    `.content-template-linked-select[data-field-key="${CSS.escape(entry.target?.fieldKey || "")}"]`,
+  )];
+  const select = selects[entry.target?.selectionIndex || 0] || selects[0];
+  if (select && selectedRecord?.id) {
+    if (![...select.options].some((option) => option.value === selectedRecord.id)) {
+      select.add(new Option(linkedTemplateRecordLabel(selectedRecord), selectedRecord.id));
+    }
+    select.value = selectedRecord.id;
+    refreshLinkedTemplatePickerLabel(select);
+    const field = select.closest(".content-template-linked-field");
+    if (field) refreshLinkedTemplateField(field);
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  state.isDirty = selectedRecord?.id ? true : entry.parentIsDirty === true;
+  renderBuilderSummaries();
+  setTimeout(() => {
+    const body = document.getElementById("contentEntityEditorDrawerBody");
+    if (body) body.scrollTop = entry.parentScrollTop || 0;
+    select?.closest(".content-template-linked-field")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+    select?.closest(".content-template-linked-picker")
+      ?.querySelector(".open-content-linked-selector")?.focus();
+  }, 0);
+  showToast(
+    cancelled
+      ? `Returned to ${entry.parentName}.`
+      : `${selectedRecord?.name || selectedRecord?.id || "New content"} was created and linked to ${entry.parentName}.`,
+    "success",
+  );
+  return true;
+}
+
+async function createFromLinkedRecordSelector() {
   const context = linkedRecordSelectorContext;
   if (!context) return;
   const table = normalizedText(context.select.dataset.linkedTable);
@@ -2666,6 +2802,14 @@ function createFromLinkedRecordSelector() {
     ...String(context.select.dataset.linkedTagFilters || "").split(","),
     document.getElementById("contentLinkedRecordTagFilter")?.value || "",
   ]);
+  let parentContext;
+  try {
+    parentContext = await captureNestedParentContext(context);
+  } catch (error) {
+    console.error("Failed to preserve the parent Content Builder draft:", error);
+    showToast(error.message || "Could not preserve the current entity draft.", "error");
+    return;
+  }
   const params = new URLSearchParams({ entity: recordType });
   const type = context.select.dataset.linkedTypeFilter ||
     document.getElementById("contentLinkedRecordTypeFilter")?.value || "";
@@ -2675,8 +2819,15 @@ function createFromLinkedRecordSelector() {
   if (status) params.set("status", status);
   if (fixedTags.length) params.set("tags", fixedTags.join(","));
   if (name) params.set("name", name);
-  window.open(`/admin/content/builder?${params.toString()}`, "_blank", "noopener");
-  showToast("The new record opened in another tab. Return here and select Refresh results after saving it.", "success");
+  contentBuilderCreationStack.push(parentContext);
+  persistContentBuilderCreationStack();
+  closeLinkedRecordSelector();
+  if (parentContext.parentProductDrawerOpen) closeContentProductDrawer();
+  populateNewBuilderFromRoute(params);
+  history.replaceState({}, "", `/admin/content/builder?${params.toString()}`);
+  showBuilderStep(1);
+  setContentEntityEditorDrawerOpen(true);
+  showToast(`Creating a reusable ${recordType}. Save it to return to ${parentContext.parentName}.`, "success");
 }
 
 function handleTemplateGuidedFieldsClick(event) {
@@ -5101,7 +5252,7 @@ function templateRelationshipGroups(entityVariants = []) {
   }));
 }
 
-function selectedNewTagsFromControls() {
+function selectedNewTagsFromControls(validate = true) {
   const tags = [...document.querySelectorAll("#contentTagRows .content-tag-row")].flatMap((row) => {
     if (row.querySelector(".content-tag-select")?.value !== "__new__") return [];
     const name = row.querySelector(".content-tag-new")?.value.trim() || "";
@@ -5109,7 +5260,9 @@ function selectedNewTagsFromControls() {
     return name ? [{ name, categoryId }] : [];
   });
   const uncategorized = tags.find((tag) => !tag.categoryId);
-  if (uncategorized) throw new Error(`Choose a tag category for "${uncategorized.name}".`);
+  if (validate && uncategorized) {
+    throw new Error(`Choose a tag category for "${uncategorized.name}".`);
+  }
   return tags;
 }
 
@@ -6763,14 +6916,16 @@ function originalTemplateAssetIds() {
   ]);
 }
 
-async function formPayload(confirmDuplicate = false) {
+async function formPayload(confirmDuplicate = false, { validate = true } = {}) {
   const recordType = document.getElementById("contentRecordType")?.value || "item";
   const entityVariants = entityVariantsFromBuilder();
-  if (!entityVariants.length) throw new Error("Add at least one variant before saving.");
+  if (validate && !entityVariants.length) throw new Error("Add at least one variant before saving.");
   entityVariants.forEach((variant, index) => {
     const row = document.querySelectorAll(".content-entity-variant-row")[index];
-    if (!variant.templateVariantId) throw new Error(`Choose a template for ${variant.name}.`);
-    templateFieldValuesFromBuilder({ validate: true, root: row });
+    if (validate && !variant.templateVariantId) {
+      throw new Error(`Choose a template for ${variant.name}.`);
+    }
+    templateFieldValuesFromBuilder({ validate, root: row });
   });
   const primaryVariant = entityVariants[0];
   const blueprintRecipeVariants = recordType === "blueprint"
@@ -6788,11 +6943,11 @@ async function formPayload(confirmDuplicate = false) {
   const primaryBehaviours = primaryVariant.behaviourDefaults || {};
   const templateFieldValues = primaryVariant.templateFieldValues || {};
   const templateId = primaryVariant.templateVariantId || "";
-  if (["item", "blueprint", "plan"].includes(recordType) && !templateId) {
+  if (validate && ["item", "blueprint", "plan"].includes(recordType) && !templateId) {
     throw new Error("Choose or create a template before building this record.");
   }
   const productRelation = productRelationPayload();
-  if (productRelation?.linkRole === "ManufacturedFrom" && !productRelation.existingProductId) {
+  if (validate && productRelation?.linkRole === "ManufacturedFrom" && !productRelation.existingProductId) {
     throw new Error("Choose an existing Product for a manufacturing/cost Blueprint.");
   }
   const warmupBlueprintIds = splitCsv(templateInput("contentWarmupBlueprintIds"));
@@ -6819,7 +6974,7 @@ async function formPayload(confirmDuplicate = false) {
     longDescription: document.getElementById("contentLongDescription")?.value || "",
     notes: document.getElementById("contentLongDescription")?.value || "",
     tags: selectedTagsFromControls(),
-    newTags: selectedNewTagsFromControls(),
+    newTags: selectedNewTagsFromControls(validate),
     websiteVisible: entityVariants.some((variant) => variant.libraryVisible === true),
     isShopProduct: recordType === "item"
       ? primaryBehaviours.isShopProduct === true
@@ -7043,6 +7198,10 @@ async function savePayload(payload, action = "save") {
       state.isDirty = false;
       await loadData();
       const refreshed = findRecord(recordType, recordId);
+      if (contentBuilderCreationStack.length && refreshed) {
+        restoreNestedParent({ selectedRecord: refreshed });
+        return;
+      }
       showSaveConfirmation({ action, payload, recordId, record: refreshed });
       return;
     }
@@ -7069,6 +7228,10 @@ async function savePayload(payload, action = "save") {
         "",
         `/admin/content/builder?type=${encodeURIComponent(recordType)}&id=${encodeURIComponent(recordId)}`,
       );
+    }
+    if (contentBuilderCreationStack.length && savedRecord) {
+      restoreNestedParent({ selectedRecord: savedRecord });
+      return;
     }
     showSaveConfirmation({ action, payload, recordId, record: savedRecord });
   } catch (err) {
@@ -7304,6 +7467,7 @@ export async function setupContentBuilder() {
   const section = document.getElementById("adminContentBuilderSection");
   if (!section || section.dataset.initialized === "true") return;
   section.dataset.initialized = "true";
+  restorePersistedContentBuilderCreationStack();
   orderProductDrawerSections();
   initializeContentBuilderWorkspace();
   restoreContentErdBranchVisibility();
@@ -7338,6 +7502,9 @@ export async function setupContentBuilder() {
   document.getElementById("closeContentEntityEditorDrawerBtn")?.addEventListener("click", () => {
     setContentEntityEditorDrawerOpen(false);
     if (state.editingRecord?.id) showBuilderStep(4);
+  });
+  document.getElementById("returnToParentEntityBtn")?.addEventListener("click", () => {
+    restoreNestedParent({ cancelled: true });
   });
   setupBuilderFilters();
   document.getElementById("contentType")?.addEventListener("change", () => {
@@ -7441,7 +7608,10 @@ export async function setupContentBuilder() {
       !document.getElementById("contentAssetDrawer")?.classList.contains("hidden")
     ) closeContentAssetDrawer();
   });
-  document.getElementById("contentName")?.addEventListener("input", renderSimilarList);
+  document.getElementById("contentName")?.addEventListener("input", () => {
+    renderSimilarList();
+    updateContentBuilderCreationBreadcrumb();
+  });
   ["contentName", "contentShortDescription", "contentLongDescription", "contentProductPrice",
     "contentProductSalePrice"]
     .forEach((id) => document.getElementById(id)?.addEventListener("input", () => {

@@ -1525,9 +1525,13 @@
                 <div>
                   <div class="text-xs font-semibold uppercase tracking-[0.18em] text-[#9edbd7]">Entity editor</div>
                   <h3 id="contentEntityEditorDrawerTitle" class="mt-1 text-xl font-semibold text-white">Create content</h3>
+                  <p id="contentEntityCreationBreadcrumb" class="mt-1 hidden text-xs font-medium text-purple-300"></p>
                   <p class="mt-1 text-xs text-gray-400">Complete Details, Build, and Review without leaving Connections.</p>
                 </div>
-                <button id="closeContentEntityEditorDrawerBtn" type="button" class="rounded border border-gray-600 px-3 py-2 text-sm text-white hover:border-[#407471]">Close</button>
+                <div class="flex flex-wrap justify-end gap-2">
+                  <button id="returnToParentEntityBtn" type="button" class="hidden rounded border border-purple-500 px-3 py-2 text-sm text-purple-200 hover:bg-purple-950/50">Cancel and return</button>
+                  <button id="closeContentEntityEditorDrawerBtn" type="button" class="rounded border border-gray-600 px-3 py-2 text-sm text-white hover:border-[#407471]">Close</button>
+                </div>
               </header>
               <div id="contentEntityEditorDrawerBody" class="flex-1 overflow-y-auto p-5">
 
