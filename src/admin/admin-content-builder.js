@@ -4885,6 +4885,7 @@ function connectionErdNode({
   title = "Not connected",
   summary = "",
   rows = [],
+  body = "",
   action = "",
   actionLabel = "",
   tone = "gray",
@@ -4906,9 +4907,158 @@ function connectionErdNode({
         class="shrink-0 rounded border border-gray-600 px-2 py-1 text-[11px] text-[#bce7e4] hover:border-[#407471] hover:bg-[#153b38]">${escapeHTML(actionLabel || "Open")}</button>` : ""}
     </div>
     ${summary ? `<p class="mt-2 text-xs leading-5 text-gray-400">${escapeHTML(summary)}</p>` : ""}
+    ${body}
     ${rows.length ? `<ul class="mt-2 space-y-1 border-t border-gray-700/70 pt-2 text-xs text-gray-200">${rows.map((row) =>
     `<li class="flex items-start justify-between gap-2"><span class="min-w-0 break-words">${escapeHTML(row.label || row)}</span>${row.meta ? `<span class="shrink-0 text-gray-500">${escapeHTML(row.meta)}</span>` : ""}</li>`).join("")}</ul>` : ""}
   </article>`;
+}
+
+function setConnectionDrawerOpen(id, open) {
+  const drawer = document.getElementById(id);
+  if (!drawer) return;
+  drawer.classList.toggle("hidden", !open);
+  drawer.setAttribute("aria-hidden", String(!open));
+  drawer.inert = !open;
+}
+
+function openLibraryConnectionDrawer() {
+  const container = document.getElementById("contentLibraryConnectionVariantRows");
+  if (!container) return;
+  const variants = entityVariantsFromBuilder();
+  container.innerHTML = variants.map((variant) => `
+    <label class="flex items-start gap-3 rounded border border-gray-700 bg-gray-900/70 p-3">
+      <input type="checkbox" class="erd-library-variant mt-1 accent-[#407471]"
+        data-entity-variant-id="${escapeHTML(variant.entityVariantId)}"${variant.libraryVisible ? " checked" : ""}>
+      <span><strong class="block text-white">${escapeHTML(variant.name)}</strong>
+        <span class="mt-1 block text-xs text-gray-400">${escapeHTML(variant.status || "draft")}</span></span>
+    </label>`).join("") || "<p class=\"text-sm text-gray-400\">Add an entity variant before connecting the Library.</p>";
+  setConnectionDrawerOpen("contentLibraryConnectionDrawer", true);
+}
+
+function applyLibraryConnectionDrawer() {
+  const selected = new Set([...document.querySelectorAll(".erd-library-variant:checked")]
+    .map((input) => input.dataset.entityVariantId));
+  document.querySelectorAll(".content-variant-connection-row").forEach((row) => {
+    const checkbox = row.querySelector(".variant-add-to-library");
+    if (checkbox) checkbox.checked = selected.has(row.dataset.entityVariantId);
+  });
+  setCheckboxValue("contentWebsiteVisible", selected.size > 0);
+  state.isDirty = true;
+  setConnectionDrawerOpen("contentLibraryConnectionDrawer", false);
+  renderBuilderSummaries();
+  showToast(selected.size ? "Library connection updated. Save connections when ready." : "Library connection removed. Save connections when ready.", "success");
+}
+
+function entityStockIsEnabled() {
+  return currentRecordType() === "item" && entityVariantsFromBuilder()
+    .some((variant) => variant.behaviourDefaults?.inventoryTracked === true);
+}
+
+function openEntityStockDrawer() {
+  if (!entityStockIsEnabled()) {
+    showToast("Entity stock appears when the selected Item template enables Track entity inventory.", "info");
+    return;
+  }
+  const container = document.getElementById("contentEntityStockDrawerRows");
+  if (!container) return;
+  const variants = entityVariantsFromBuilder().filter((variant) =>
+    variant.behaviourDefaults?.inventoryTracked === true);
+  const suppliers = state.options.supplierOptions || [];
+  container.innerHTML = variants.map((variant) => `
+    <section class="erd-entity-stock-row rounded border border-[#407471]/70 bg-gray-900/70 p-4"
+      data-entity-variant-id="${escapeHTML(variant.entityVariantId)}">
+      <h4 class="font-semibold text-white">${escapeHTML(variant.name)}</h4>
+      <div class="mt-3 grid gap-3 sm:grid-cols-2">
+        <label class="text-sm">Quantity on hand<input class="erd-stock-qty input mt-1 w-full" type="number" min="0" step="1" value="${escapeHTML(variant.stockQty ?? "")}"></label>
+        <label class="text-sm">Reorder level<input class="erd-reorder-level input mt-1 w-full" type="number" min="0" step="1" value="${escapeHTML(variant.reorderLevel ?? "")}"></label>
+        <label class="text-sm">Stock unit<input class="erd-inventory-unit input mt-1 w-full" value="${escapeHTML(variant.inventoryUnit || "")}" placeholder="pieces, boxes, rolls"></label>
+        <label class="text-sm">Storage location<input class="erd-inventory-location input mt-1 w-full" value="${escapeHTML(variant.inventoryLocation || "")}"></label>
+        <label class="text-sm">Approximate unit cost (AUD)<input class="erd-unit-cost input mt-1 w-full" type="number" min="0" step="0.01" value="${escapeHTML(variant.unitCost ?? "")}"></label>
+        <label class="text-sm">Supplier<select class="erd-supplier-id input mt-1 w-full"><option value="">Choose supplier</option>${suppliers.map((supplier) => `<option value="${escapeHTML(supplier.id)}"${supplier.id === variant.supplierId ? " selected" : ""}>${escapeHTML(supplier.name || supplier.id)}</option>`).join("")}</select></label>
+        <label class="text-sm">Cost reference<input class="erd-cost-reference input mt-1 w-full" value="${escapeHTML(variant.costReference || "")}"></label>
+        <label class="text-sm">Item ordering page<input class="erd-purchase-url input mt-1 w-full" type="url" value="${escapeHTML(variant.purchaseUrl || "")}"></label>
+      </div>
+    </section>`).join("");
+  setConnectionDrawerOpen("contentEntityStockDrawer", true);
+}
+
+function applyEntityStockDrawer() {
+  document.querySelectorAll(".erd-entity-stock-row").forEach((stockRow) => {
+    const connectionRow = document.querySelector(
+      `.content-variant-connection-row[data-entity-variant-id="${CSS.escape(stockRow.dataset.entityVariantId || "")}"]`,
+    );
+    if (!connectionRow) return;
+    const copy = (source, target) => {
+      const sourceInput = stockRow.querySelector(source);
+      const targetInput = connectionRow.querySelector(target);
+      if (sourceInput && targetInput) targetInput.value = sourceInput.value;
+    };
+    copy(".erd-stock-qty", ".variant-stock-qty");
+    copy(".erd-reorder-level", ".variant-reorder-level");
+    copy(".erd-inventory-unit", ".variant-inventory-unit");
+    copy(".erd-inventory-location", ".variant-inventory-location");
+    copy(".erd-unit-cost", ".variant-unit-cost");
+    copy(".erd-supplier-id", ".variant-supplier-id");
+    copy(".erd-cost-reference", ".variant-cost-reference");
+    copy(".erd-purchase-url", ".variant-purchase-url");
+    updateVariantOrderingButton(connectionRow);
+  });
+  state.isDirty = true;
+  setConnectionDrawerOpen("contentEntityStockDrawer", false);
+  renderBuilderSummaries();
+  showToast("Entity stock updated. Save connections when ready.", "success");
+}
+
+function openProductBlueprintConnections(role = "ManufacturedFrom") {
+  const variants = currentProductVariants();
+  if (!variants.length) {
+    showToast("Create at least one exact Product variant before attaching a Blueprint.", "error");
+    return;
+  }
+  setCheckboxValue("contentIsShopProduct", true);
+  openContentProductDrawer();
+  const links = productVariantContentLinksFromRows(true);
+  const existing = links.find((link) => link.linkRole === role) || null;
+  const preferredVariantId = existing?.productVariantId || variants[0].variantId;
+  const escapedVariantId = typeof CSS !== "undefined" && CSS.escape
+    ? CSS.escape(preferredVariantId)
+    : preferredVariantId.replace(/["\\]/g, "\\$&");
+  const row = document.querySelector(
+    `.content-product-variant-row[data-product-variant-id="${escapedVariantId}"]`,
+  ) || document.querySelector(".content-product-variant-row");
+  if (!row) return;
+  document.querySelectorAll(".product-variant-editor-panel").forEach((panel) => {
+    panel.classList.add("hidden");
+    panel.dataset.editorSection = "";
+  });
+  const productVariantId = openVariantOwnedConnections(row, "blueprint");
+  if (!productVariantId) return;
+  const addButton = document.getElementById("addProductVariantContentLinkBtn");
+  if (addButton) {
+    addButton.dataset.productVariantId = productVariantId;
+    addButton.disabled = false;
+  }
+  if (!links.some((link) => link.productVariantId === productVariantId && link.linkRole === role)) {
+    renderProductVariantContentLinkRows([
+      ...links,
+      {
+        productVariantId,
+        entityType: "Blueprint",
+        entityId: "",
+        entityVariantId: "",
+        linkRole: role,
+        status: "active",
+      },
+    ]);
+  }
+  filterVariantOwnedConnections(productVariantId);
+  const section = document.getElementById("productVariantContentLinkRows")?.closest("details");
+  if (section) {
+    section.classList.remove("hidden");
+    section.open = true;
+  }
+  document.getElementById("contentProductUnlockRows")?.closest("section")?.classList.add("hidden");
+  section?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function connectionErdBranch(label, content, side = "left") {
@@ -4963,7 +5113,7 @@ function renderBuilderSummaries(record = state.editingRecord) {
       (isManufacturingBlueprint ? `${name} is the manufacturing Blueprint` : "Not connected");
 
     const activeEntityVariants = entityVariants.filter((variant) =>
-      !["archived", "paused", "inactive"].includes(normalizedText(variant.status || "active")));
+      normalizedText(variant.status || record?.status) === "active");
     const variantContentLinks = productRelation.variantContentLinks ||
       record?.productVariantContentLinks || [];
     const manufacturingLinks = variantContentLinks.filter((link) =>
@@ -5009,15 +5159,20 @@ function renderBuilderSummaries(record = state.editingRecord) {
         label: variant.name || variant.variantId || "Product variant",
         meta: `Stock ${Number(variant.stock ?? 0)}`,
       }))
-      : [{ label: recordType === "item" ? "Item stock" : "Product stock", meta: String(record?.itemStock ?? productRelation.stock ?? 0) }];
+      : [{ label: "No exact Product variants", meta: "Stock 0" }];
+    const entityStockRows = entityVariants.filter((variant) =>
+      variant.behaviourDefaults?.inventoryTracked === true).map((variant) => ({
+      label: variant.name || variant.entityVariantId || "Item variant",
+      meta: `Stock ${Number(variant.stockQty ?? 0)} · Reorder ${Number(variant.reorderLevel ?? 0)}`,
+    }));
     const centre = connectionErdNode({
       kind: `${recordType} · current entity`,
       title: name,
       summary: shortDescription,
-      rows: activeEntityVariants.map((variant) => ({
+      rows: activeEntityVariants.length ? activeEntityVariants.map((variant) => ({
         label: variant.name || variant.entityVariantId || "Variant",
         meta: variant.status || "active",
-      })),
+      })) : [{ label: "No active entity variants", meta: "" }],
       action: "entity",
       actionLabel: "Edit entity",
       tone: "teal",
@@ -5028,14 +5183,26 @@ function renderBuilderSummaries(record = state.editingRecord) {
         title: isShopProduct ? name : "No Product connected",
         summary: isShopProduct ? `${variants.length} exact sellable variant${variants.length === 1 ? "" : "s"}` : "Create a Product from this entity.",
         rows: isShopProduct ? productRows : [],
+        body: isShopProduct ? `<div class="mt-3 border-t border-blue-500/30 pt-3">${marketplaceTilePreviewMarkup()}</div>` : "",
         action: "product",
         actionLabel: isShopProduct ? "Edit Product" : "Create Product",
         tone: "blue",
       }),
       connectionErdNode({
+        kind: "Entity stock",
+        title: entityStockRows.length ? "Template-enabled Item inventory" : "Entity stock not enabled",
+        summary: entityStockRows.length
+          ? "Stock belongs to these exact Item variants."
+          : "Enable Track entity inventory in the selected Item template to add this connection.",
+        rows: entityStockRows,
+        action: entityStockRows.length ? "entity-stock" : "",
+        actionLabel: "Edit entity stock",
+        tone: "blue",
+      }),
+      connectionErdNode({
         kind: "Inventory",
-        title: recordType === "item" ? "Item and Product stock" : "Product stock",
-        summary: "Exact stock records remain separate and authoritative.",
+        title: "Product stock",
+        summary: "Finished sellable Product stock remains separate from Item inventory.",
         rows: stockRows,
         action: "stock",
         actionLabel: "Open stock",
@@ -5056,16 +5223,16 @@ function renderBuilderSummaries(record = state.editingRecord) {
         title: manufacturingLinks.length || manufacturingBlueprintId ? "Manufacturing connected" : "No manufacturing Blueprint",
         rows: manufacturingLinks.length ? blueprintRows(manufacturingLinks) : manufacturingBlueprintId
           ? [{ label: manufacturingLabel }] : [],
-        action: "blueprint",
-        actionLabel: manufacturingLinks.length || manufacturingBlueprintId ? "View Blueprints" : "Create Blueprint",
+        action: "blueprint-manufacturing",
+        actionLabel: manufacturingLinks.length || manufacturingBlueprintId ? "Edit connection" : "Connect Blueprint",
         tone: "amber",
       }),
       connectionErdNode({
         kind: "Workshop operations",
         title: operationsLinks.length ? `${operationsLinks.length} operations connection${operationsLinks.length === 1 ? "" : "s"}` : "No Workshop operations",
         rows: blueprintRows(operationsLinks),
-        action: "blueprint",
-        actionLabel: operationsLinks.length ? "View operations" : "Create operations",
+        action: "blueprint-operations",
+        actionLabel: operationsLinks.length ? "Edit connection" : "Connect Blueprint",
         tone: "amber",
       }),
       connectionErdNode({
@@ -5088,6 +5255,17 @@ function renderBuilderSummaries(record = state.editingRecord) {
       actionLabel: "Add Asset",
       tone: "purple",
     });
+    const libraryRows = entityVariants.filter((variant) => variant.libraryVisible === true)
+      .map((variant) => ({ label: variant.name, meta: variant.status || "draft" }));
+    const library = connectionErdNode({
+      kind: "Library connection",
+      title: libraryRows.length ? `${libraryRows.length} selected variant${libraryRows.length === 1 ? "" : "s"}` : "No variants selected",
+      summary: "Select exact entity variants now for display when the future Library area is released.",
+      rows: libraryRows,
+      action: "library",
+      actionLabel: libraryRows.length ? "Edit selection" : "Select variants",
+      tone: "purple",
+    });
     const access = connectionErdNode({
       kind: "Purchase access",
       title: accessGrants.length ? `${accessGrants.length} unlock target${accessGrants.length === 1 ? "" : "s"}` : "No purchase unlocks",
@@ -5107,7 +5285,7 @@ function renderBuilderSummaries(record = state.editingRecord) {
           <div class="absolute -left-6 top-1/2 h-px w-6 bg-[#407471]/70"></div>
           <div class="absolute -right-6 top-1/2 h-px w-6 bg-[#407471]/70"></div>
           ${centre}
-          <div class="grid grid-cols-2 gap-3">${media}${access}</div>
+          <div class="grid grid-cols-3 gap-3">${library}${media}${access}</div>
         </section>
         ${connectionErdBranch("Operations and reusable records", operations, "right")}
       </div>
@@ -7075,6 +7253,13 @@ export async function setupContentBuilder() {
     saveConnectionsFromPage,
   );
   document.getElementById("contentRelationshipSummary")?.addEventListener("click", async (event) => {
+    const productPreviewTarget = event.target.closest("[data-product-editor-target]");
+    if (productPreviewTarget) {
+      setCheckboxValue("contentIsShopProduct", true);
+      openContentProductDrawer();
+      focusProductEditorTarget(productPreviewTarget.dataset.productEditorTarget);
+      return;
+    }
     const button = event.target.closest("[data-connection-action], [data-connection-edit]");
     if (!button) return;
     const action = button.dataset.connectionAction || button.dataset.connectionEdit || "";
@@ -7094,6 +7279,14 @@ export async function setupContentBuilder() {
       openContentAssetDrawer(button);
       return;
     }
+    if (action === "library") {
+      openLibraryConnectionDrawer();
+      return;
+    }
+    if (action === "entity-stock") {
+      openEntityStockDrawer();
+      return;
+    }
     if (action === "stock") {
       const searchValue = state.editingRecord?.id || document.getElementById("contentId")?.value || "";
       history.pushState({}, "", "/admin/products");
@@ -7107,21 +7300,30 @@ export async function setupContentBuilder() {
       }
       return;
     }
-    if (action === "blueprint") {
-      const relation = productRelationPayload() || {};
-      const existingLink = (relation.variantContentLinks || state.editingRecord?.productVariantContentLinks || [])
-        .find((link) => ["ManufacturedFrom", "OperatedWith"].includes(link.linkRole));
-      const url = existingLink?.entityId
-        ? `/admin/content/builder?type=blueprint&id=${encodeURIComponent(existingLink.entityId)}`
-        : "/admin/content/builder?new=1&type=blueprint";
-      window.open(url, "_blank", "noopener");
-      showToast("Blueprint opened in a new tab so this entity remains in place.", "info");
+    if (["blueprint-manufacturing", "blueprint-operations"].includes(action)) {
+      openProductBlueprintConnections(
+        action === "blueprint-operations" ? "OperatedWith" : "ManufacturedFrom",
+      );
       return;
     }
     if (action === "entity-connections") {
       showToast("Reusable Item and Plan links are shown in this ERD. Inline add/edit controls are the next ERD stage.", "info");
     }
   });
+  ["closeContentLibraryConnectionDrawerBtn", "cancelContentLibraryConnectionBtn"]
+    .forEach((id) => document.getElementById(id)?.addEventListener(
+      "click", () => setConnectionDrawerOpen("contentLibraryConnectionDrawer", false),
+    ));
+  document.getElementById("saveContentLibraryConnectionBtn")?.addEventListener(
+    "click", applyLibraryConnectionDrawer,
+  );
+  ["closeContentEntityStockDrawerBtn", "cancelContentEntityStockBtn"]
+    .forEach((id) => document.getElementById(id)?.addEventListener(
+      "click", () => setConnectionDrawerOpen("contentEntityStockDrawer", false),
+    ));
+  document.getElementById("saveContentEntityStockBtn")?.addEventListener(
+    "click", applyEntityStockDrawer,
+  );
   document.getElementById("contentProductPrice")?.addEventListener("input", updateConnectedProductCostPreview);
   document.getElementById("contentProductDeliveryType")?.addEventListener("change", () => {
     updateProductPhysicalFields();
