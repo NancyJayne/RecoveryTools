@@ -2711,6 +2711,13 @@ async function saveContentAsset(event) {
     };
     state.records.assets = [...state.records.assets.filter((asset) => asset.id !== savedAsset.id), savedAsset];
     selectNewTemplateAsset(savedAsset);
+    if (!assetDrawerField?.key && state.editingRecord) {
+      const currentAssets = Array.isArray(state.editingRecord.assets) ? state.editingRecord.assets : [];
+      state.editingRecord.assets = [
+        ...currentAssets.filter((asset) => (typeof asset === "string" ? asset : asset.assetId || asset.id) !== savedAsset.id),
+        savedAsset,
+      ];
+    }
     state.isDirty = true;
     renderBuilderSummaries();
     showToast("Asset uploaded, saved, and selected.", "success");
@@ -4873,6 +4880,46 @@ function renderDetailedVariantReview(variants) {
   }).join("");
 }
 
+function connectionErdNode({
+  kind = "Connection",
+  title = "Not connected",
+  summary = "",
+  rows = [],
+  action = "",
+  actionLabel = "",
+  tone = "gray",
+} = {}) {
+  const tones = {
+    blue: "border-blue-500/70 bg-blue-950/20",
+    amber: "border-amber-500/70 bg-amber-950/20",
+    purple: "border-purple-500/70 bg-purple-950/20",
+    teal: "border-[#407471] bg-[#153b38]/30",
+    gray: "border-gray-700 bg-gray-900/80",
+  };
+  return `<article class="rounded-lg border ${tones[tone] || tones.gray} p-3 shadow-sm">
+    <div class="flex items-start justify-between gap-2">
+      <div class="min-w-0">
+        <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-400">${escapeHTML(kind)}</div>
+        <h4 class="mt-1 truncate font-semibold text-white">${escapeHTML(title)}</h4>
+      </div>
+      ${action ? `<button type="button" data-connection-action="${escapeHTML(action)}"
+        class="shrink-0 rounded border border-gray-600 px-2 py-1 text-[11px] text-[#bce7e4] hover:border-[#407471] hover:bg-[#153b38]">${escapeHTML(actionLabel || "Open")}</button>` : ""}
+    </div>
+    ${summary ? `<p class="mt-2 text-xs leading-5 text-gray-400">${escapeHTML(summary)}</p>` : ""}
+    ${rows.length ? `<ul class="mt-2 space-y-1 border-t border-gray-700/70 pt-2 text-xs text-gray-200">${rows.map((row) =>
+    `<li class="flex items-start justify-between gap-2"><span class="min-w-0 break-words">${escapeHTML(row.label || row)}</span>${row.meta ? `<span class="shrink-0 text-gray-500">${escapeHTML(row.meta)}</span>` : ""}</li>`).join("")}</ul>` : ""}
+  </article>`;
+}
+
+function connectionErdBranch(label, content, side = "left") {
+  const line = side === "left" ? "lg:border-r lg:pr-6" : "lg:border-l lg:pl-6";
+  return `<section class="relative space-y-3 border-[#407471]/50 ${line}">
+    <div class="absolute top-1/2 hidden h-px w-6 bg-[#407471]/70 lg:block ${side === "left" ? "-right-6" : "-left-6"}"></div>
+    <h4 class="text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">${escapeHTML(label)}</h4>
+    ${content}
+  </section>`;
+}
+
 function renderBuilderSummaries(record = state.editingRecord) {
   const relationships = document.getElementById("contentRelationshipSummary");
   const review = document.getElementById("contentReviewSummary");
@@ -4897,8 +4944,6 @@ function renderBuilderSummaries(record = state.editingRecord) {
     return asset?.name || asset?.assetName || asset?.title || assetId;
   };
   const selectedAssetLabels = selectedAssetIds.map(assetLabel);
-  const assetSummary = selectedAssetLabels.join(", ") || "No linked assets";
-  const libraryVisible = document.getElementById("contentWebsiteVisible")?.checked === true;
   const accessGrants = productRelation.accessGrants || record?.productAccessGrants || [];
 
   if (relationships) {
@@ -4914,64 +4959,159 @@ function renderBuilderSummaries(record = state.editingRecord) {
       entityVariants.some((variant) => variant.manufacturingRecipe === true) ||
       isProductManufactureBlueprint()
     );
-    const productVariantPreview = variants.length
-      ? variants.map((variant, index) => {
-        const variantName = variant.name || variant.variantName || `Variant ${index + 1}`;
-        const variantPrice = variant.overridePrice ?? variant.price ?? price;
-        const status = variant.status || productRelation.shopStatus || "draft";
-        return `<div class="rounded border border-gray-700 bg-gray-950/60 p-3">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <strong class="text-white">${escapeHTML(variantName)}</strong>
-            <span class="rounded bg-gray-800 px-2 py-1 text-xs text-gray-300">${escapeHTML(status)}</span>
-          </div>
-          <div class="mt-2 text-sm text-[#9edbd7]">${escapeHTML(moneyLabel(variantPrice))}</div>
-          <div class="mt-1 text-xs text-gray-400">${escapeHTML(variant.sku || "SKU will be generated")}</div>
-        </div>`;
-      }).join("")
-      : `<div class="rounded border border-gray-700 bg-gray-950/60 p-3 text-sm text-gray-400">Overall Product connection; no Product variants added.</div>`;
-    const libraryVariants = entityVariants.filter((variant) => variant.libraryVisible === true);
     const manufacturingLabel = manufacturingBlueprint?.name || manufacturingBlueprintId ||
       (isManufacturingBlueprint ? `${name} is the manufacturing Blueprint` : "Not connected");
 
-    relationships.innerHTML = `
-      <article class="rounded border border-gray-700 bg-gray-900/60 p-4">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div class="text-xs uppercase tracking-wide text-gray-400">Shop preview</div>
-            <h4 class="mt-1 text-lg font-semibold text-white">${escapeHTML(isShopProduct ? name : "Not connected to a Shop Product")}</h4>
-            ${isShopProduct ? `<p class="mt-1 text-sm text-gray-300">${escapeHTML(shortDescription)}</p>` : ""}
-          </div>
-          <button type="button" data-connection-edit="product" class="rounded bg-[#407471] px-3 py-2 text-sm text-white hover:bg-[#305a56]">
-            ${isShopProduct ? "Edit Product" : "Add Product"}
-          </button>
-        </div>
-        ${isShopProduct ? `<div class="mt-3 grid gap-3 md:grid-cols-2">${productVariantPreview}</div>` : ""}
-      </article>
-      <article class="rounded border border-gray-700 bg-gray-900/60 p-4">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div class="text-xs uppercase tracking-wide text-gray-400">Library preview</div>
-            <h4 class="mt-1 text-lg font-semibold text-white">${escapeHTML(libraryVisible ? name : "Not included in the Library")}</h4>
-            ${libraryVisible ? `<p class="mt-1 text-sm text-gray-300">${escapeHTML(shortDescription)}</p>
-              <p class="mt-2 text-xs text-[#9edbd7]">${escapeHTML(libraryVariants.map((variant) => variant.name).join(", ") || "Overall content")}</p>` : ""}
-          </div>
-          <button type="button" data-connection-edit="build" class="rounded border border-[#407471] px-3 py-2 text-sm text-[#9edbd7] hover:bg-[#153b38]">Edit content</button>
-        </div>
-      </article>
-      <article class="rounded border border-gray-700 bg-gray-900/60 p-4">
-        <div class="text-xs uppercase tracking-wide text-gray-400">Manufacturing connection</div>
-        <div class="mt-1 font-medium text-white">${escapeHTML(manufacturingLabel)}</div>
-        <p class="mt-2 text-xs text-gray-400">${isManufacturingBlueprint
-    ? "This Blueprint can be selected as the Product recipe."
-    : manufacturingBlueprintId
-      ? "This Product uses the linked Blueprint for its recipe and estimated cost."
-      : "No manufacturing Blueprint is connected to this Product."}</p>
-      </article>
-      <article class="rounded border border-gray-700 bg-gray-900/60 p-4">
-        <div class="text-xs uppercase tracking-wide text-gray-400">Assets and access</div>
-        <div class="mt-2 text-sm text-white">${escapeHTML(assetSummary)}</div>
-        <div class="mt-2 text-xs text-gray-400">${escapeHTML(accessGrants.length ? `${accessGrants.length} unlock target${accessGrants.length === 1 ? "" : "s"}` : "No purchase unlocks")}</div>
-      </article>`;
+    const activeEntityVariants = entityVariants.filter((variant) =>
+      !["archived", "paused", "inactive"].includes(normalizedText(variant.status || "active")));
+    const variantContentLinks = productRelation.variantContentLinks ||
+      record?.productVariantContentLinks || [];
+    const manufacturingLinks = variantContentLinks.filter((link) =>
+      link.linkRole === "ManufacturedFrom");
+    const operationsLinks = variantContentLinks.filter((link) =>
+      link.linkRole === "OperatedWith");
+    const linkedItemIds = uniqueValues([
+      ...hiddenRelationshipIds("contentLinkedItemIds"),
+      ...entityVariants.flatMap((variant) => reviewLinkedRecords(variant.templateFieldValues || {}, "items")
+        .map((item) => item.id)),
+    ]);
+    const linkedPlanIds = uniqueValues(hiddenRelationshipIds("contentLinkedPlanIds"));
+    const bundleComponents = variants.flatMap((variant) =>
+      (variant.bundleComponents || []).map((component) => ({ ...component, owner: variant.name })));
+    const productById = new Map((state.records.products || []).map((product) => [product.id, product]));
+    const linkedRecordRows = (ids, records) => ids.map((id) => {
+      const linked = records.find((candidate) => candidate.id === id);
+      return { label: linked?.name || id, meta: linked?.type || "" };
+    });
+    const blueprintRows = (links) => links.map((link) => {
+      const blueprint = (state.records.blueprints || []).find((candidate) => candidate.id === link.entityId);
+      const owner = variants.find((variant) => variant.variantId === link.productVariantId);
+      return {
+        label: blueprint?.name || link.entityId || "Blueprint",
+        meta: owner?.name || link.productVariantId || "",
+      };
+    });
+    const bundleRows = bundleComponents.map((component) => {
+      const product = productById.get(component.componentProductId);
+      const componentVariant = product?.variants?.find((variant) =>
+        variant.variantId === component.componentProductVariantId);
+      return {
+        label: `${component.quantity || 1} × ${product?.name || component.componentProductId}`,
+        meta: componentVariant?.name || component.owner || "",
+      };
+    });
+    const productRows = variants.map((variant) => ({
+      label: variant.name || variant.variantId || "Product variant",
+      meta: `${variant.status || "draft"} · ${moneyLabel(variant.priceOverride ?? price)}`,
+    }));
+    const stockRows = variants.length
+      ? variants.map((variant) => ({
+        label: variant.name || variant.variantId || "Product variant",
+        meta: `Stock ${Number(variant.stock ?? 0)}`,
+      }))
+      : [{ label: recordType === "item" ? "Item stock" : "Product stock", meta: String(record?.itemStock ?? productRelation.stock ?? 0) }];
+    const centre = connectionErdNode({
+      kind: `${recordType} · current entity`,
+      title: name,
+      summary: shortDescription,
+      rows: activeEntityVariants.map((variant) => ({
+        label: variant.name || variant.entityVariantId || "Variant",
+        meta: variant.status || "active",
+      })),
+      action: "entity",
+      actionLabel: "Edit entity",
+      tone: "teal",
+    });
+    const commerce = [
+      connectionErdNode({
+        kind: "Product",
+        title: isShopProduct ? name : "No Product connected",
+        summary: isShopProduct ? `${variants.length} exact sellable variant${variants.length === 1 ? "" : "s"}` : "Create a Product from this entity.",
+        rows: isShopProduct ? productRows : [],
+        action: "product",
+        actionLabel: isShopProduct ? "Edit Product" : "Create Product",
+        tone: "blue",
+      }),
+      connectionErdNode({
+        kind: "Inventory",
+        title: recordType === "item" ? "Item and Product stock" : "Product stock",
+        summary: "Exact stock records remain separate and authoritative.",
+        rows: stockRows,
+        action: "stock",
+        actionLabel: "Open stock",
+        tone: "blue",
+      }),
+      connectionErdNode({
+        kind: "Bundle components",
+        title: bundleRows.length ? `${bundleRows.length} connected component${bundleRows.length === 1 ? "" : "s"}` : "No bundle components",
+        rows: bundleRows,
+        action: "product",
+        actionLabel: bundleRows.length ? "Edit bundle" : "Add bundle",
+        tone: "blue",
+      }),
+    ].join("");
+    const operations = [
+      connectionErdNode({
+        kind: "Manufacturing Blueprints",
+        title: manufacturingLinks.length || manufacturingBlueprintId ? "Manufacturing connected" : "No manufacturing Blueprint",
+        rows: manufacturingLinks.length ? blueprintRows(manufacturingLinks) : manufacturingBlueprintId
+          ? [{ label: manufacturingLabel }] : [],
+        action: "blueprint",
+        actionLabel: manufacturingLinks.length || manufacturingBlueprintId ? "View Blueprints" : "Create Blueprint",
+        tone: "amber",
+      }),
+      connectionErdNode({
+        kind: "Workshop operations",
+        title: operationsLinks.length ? `${operationsLinks.length} operations connection${operationsLinks.length === 1 ? "" : "s"}` : "No Workshop operations",
+        rows: blueprintRows(operationsLinks),
+        action: "blueprint",
+        actionLabel: operationsLinks.length ? "View operations" : "Create operations",
+        tone: "amber",
+      }),
+      connectionErdNode({
+        kind: "Connected Items / Plans",
+        title: linkedItemIds.length || linkedPlanIds.length ? "Reusable entities connected" : "No reusable entities",
+        rows: [
+          ...linkedRecordRows(linkedItemIds, state.records.items || []),
+          ...linkedRecordRows(linkedPlanIds, state.records.plans || []),
+        ],
+        action: "entity-connections",
+        actionLabel: "Edit links",
+        tone: "amber",
+      }),
+    ].join("");
+    const media = connectionErdNode({
+      kind: "Assets from main entity",
+      title: selectedAssetLabels.length ? `${selectedAssetLabels.length} linked Asset${selectedAssetLabels.length === 1 ? "" : "s"}` : "No linked Assets",
+      rows: selectedAssetLabels.map((label) => ({ label })),
+      action: "asset",
+      actionLabel: "Add Asset",
+      tone: "purple",
+    });
+    const access = connectionErdNode({
+      kind: "Purchase access",
+      title: accessGrants.length ? `${accessGrants.length} unlock target${accessGrants.length === 1 ? "" : "s"}` : "No purchase unlocks",
+      rows: accessGrants.map((grant) => ({
+        label: `${grant.accessEntityType || "Entity"}: ${grant.accessEntityId || "Not selected"}`,
+        meta: variants.find((variant) => variant.variantId === grant.productVariantId)?.name || "",
+      })),
+      action: "product",
+      actionLabel: "Edit unlocks",
+      tone: "purple",
+    });
+
+    relationships.innerHTML = `<div class="overflow-x-auto rounded-xl border border-gray-800 bg-gray-950/60 p-4 md:p-6">
+      <div class="grid min-w-[860px] grid-cols-[minmax(230px,1fr)_minmax(280px,1.15fr)_minmax(230px,1fr)] items-center gap-6">
+        ${connectionErdBranch("Commerce and inventory", commerce, "left")}
+        <section class="relative space-y-3">
+          <div class="absolute -left-6 top-1/2 h-px w-6 bg-[#407471]/70"></div>
+          <div class="absolute -right-6 top-1/2 h-px w-6 bg-[#407471]/70"></div>
+          ${centre}
+          <div class="grid grid-cols-2 gap-3">${media}${access}</div>
+        </section>
+        ${connectionErdBranch("Operations and reusable records", operations, "right")}
+      </div>
+    </div>`;
   }
 
   if (review) {
@@ -6935,16 +7075,51 @@ export async function setupContentBuilder() {
     saveConnectionsFromPage,
   );
   document.getElementById("contentRelationshipSummary")?.addEventListener("click", async (event) => {
-    const button = event.target.closest("[data-connection-edit]");
+    const button = event.target.closest("[data-connection-action], [data-connection-edit]");
     if (!button) return;
-    if (button.dataset.connectionEdit === "product") {
+    const action = button.dataset.connectionAction || button.dataset.connectionEdit || "";
+    if (action === "product") {
       setCheckboxValue("contentIsShopProduct", true);
       openContentProductDrawer();
       return;
     }
-    if (button.dataset.connectionEdit === "build") {
+    if (["entity", "build"].includes(action)) {
       await navigateBuilderStep(2);
       document.getElementById("contentEntityVariantRows")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (action === "asset") {
+      button.dataset.fieldName = "Entity Asset";
+      button.dataset.assetType = "Document";
+      openContentAssetDrawer(button);
+      return;
+    }
+    if (action === "stock") {
+      const searchValue = state.editingRecord?.id || document.getElementById("contentId")?.value || "";
+      history.pushState({}, "", "/admin/products");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      document.querySelector("[data-product-manager-tool=\"inventory\"]")?.click();
+      const search = document.getElementById("inventoryStocktakeSearch");
+      if (search) {
+        search.value = searchValue;
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+        search.focus();
+      }
+      return;
+    }
+    if (action === "blueprint") {
+      const relation = productRelationPayload() || {};
+      const existingLink = (relation.variantContentLinks || state.editingRecord?.productVariantContentLinks || [])
+        .find((link) => ["ManufacturedFrom", "OperatedWith"].includes(link.linkRole));
+      const url = existingLink?.entityId
+        ? `/admin/content/builder?type=blueprint&id=${encodeURIComponent(existingLink.entityId)}`
+        : "/admin/content/builder?new=1&type=blueprint";
+      window.open(url, "_blank", "noopener");
+      showToast("Blueprint opened in a new tab so this entity remains in place.", "info");
+      return;
+    }
+    if (action === "entity-connections") {
+      showToast("Reusable Item and Plan links are shown in this ERD. Inline add/edit controls are the next ERD stage.", "info");
     }
   });
   document.getElementById("contentProductPrice")?.addEventListener("input", updateConnectedProductCostPreview);

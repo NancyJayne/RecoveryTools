@@ -2035,13 +2035,13 @@
                 </div>
               </section>
 
-              <section class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="4">
+              <section class="builder-step-panel hidden" hidden aria-hidden="true" data-builder-panel="4">
                 <h3 class="font-semibold text-white">Variant connections</h3>
                 <p class="mt-1 text-xs text-gray-400">Review the behaviours and connection requirements for each variant.</p>
                 <div id="contentVariantConnectionRows" class="mt-3 space-y-3"></div>
               </section>
 
-              <section class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="4">
+              <section class="builder-step-panel hidden" hidden aria-hidden="true" data-builder-panel="4">
                   <h3 class="font-semibold text-white">Product and Library setup</h3>
                   <p class="mt-1 text-xs text-gray-400">
                     Use a variant checkbox when that exact variant should become sellable, or use the Product button
@@ -2100,12 +2100,20 @@
                 </div>
               </div>
 
-              <section id="contentRelationshipReview" class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="4" data-field-group="relationships commerce inventory media access">
-                <h3 class="font-semibold text-white">Connection previews</h3>
-                <p class="mt-1 text-xs text-gray-400">
-                  Check how each variant will appear in the Shop or Library and edit its connection without leaving this record.
-                </p>
-                <div id="contentRelationshipSummary" class="mt-3 space-y-3"></div>
+              <section id="contentRelationshipReview" class="builder-step-panel overflow-hidden rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="4" data-field-group="relationships commerce inventory media access">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 class="font-semibold text-white">Entity relationship diagram</h3>
+                    <p class="mt-1 text-xs text-gray-400">The selected entity stays in the centre. Select any connected record or action to inspect, create or edit it.</p>
+                  </div>
+                  <div class="flex flex-wrap gap-2 text-[11px] text-gray-300">
+                    <span class="rounded-full border border-[#407471] px-2 py-1">Entity</span>
+                    <span class="rounded-full border border-blue-500/70 px-2 py-1">Commerce</span>
+                    <span class="rounded-full border border-amber-500/70 px-2 py-1">Operations</span>
+                    <span class="rounded-full border border-purple-500/70 px-2 py-1">Content / media</span>
+                  </div>
+                </div>
+                <div id="contentRelationshipSummary" class="mt-4"></div>
               </section>
 
               <section class="builder-step-panel flex justify-end rounded border border-gray-700 bg-gray-950/40 p-3" data-builder-panel="4">
