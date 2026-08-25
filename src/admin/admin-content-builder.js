@@ -4882,37 +4882,37 @@ function renderDetailedVariantReview(variants) {
   }).join("");
 }
 
-function connectionErdNode({
-  kind = "Connection",
-  title = "Not connected",
-  summary = "",
-  rows = [],
-  body = "",
-  action = "",
-  actionLabel = "",
-  tone = "gray",
-} = {}) {
+function connectionErdTableList(rows = [], emptyLabel = "None connected") {
+  if (!rows.length) return `<span class="text-sm text-gray-500">${escapeHTML(emptyLabel)}</span>`;
+  return `<ul class="space-y-1">${rows.map((row) => `
+    <li class="flex items-start justify-between gap-3 text-sm">
+      <span class="min-w-0 break-words text-gray-100">${escapeHTML(row.label || row)}</span>
+      ${row.meta ? `<span class="shrink-0 text-right text-xs text-gray-400">${escapeHTML(row.meta)}</span>` : ""}
+    </li>`).join("")}</ul>`;
+}
+
+function connectionErdTable({ eyebrow, title, rows = [], tone = "teal" }) {
   const tones = {
-    blue: "border-blue-500/70 bg-blue-950/20",
-    amber: "border-amber-500/70 bg-amber-950/20",
-    purple: "border-purple-500/70 bg-purple-950/20",
-    teal: "border-[#407471] bg-[#153b38]/30",
-    gray: "border-gray-700 bg-gray-900/80",
+    blue: "border-blue-500 bg-[#07142f]",
+    teal: "border-[#407471] bg-[#081d20]",
+    violet: "border-violet-500 bg-[#17102d]",
+    amber: "border-amber-500 bg-[#241a08]",
   };
-  return `<article class="rounded-lg border ${tones[tone] || tones.gray} p-3 shadow-sm">
-    <div class="flex flex-wrap items-start justify-between gap-2">
-      <div class="min-w-0">
-        <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-400">${escapeHTML(kind)}</div>
-        <h4 class="mt-1 break-words text-base font-semibold leading-5 text-white">${escapeHTML(title)}</h4>
-      </div>
-      ${action ? `<button type="button" data-connection-action="${escapeHTML(action)}"
-        class="max-w-full shrink-0 whitespace-normal rounded border border-gray-600 px-2 py-1 text-left text-[11px] leading-4 text-[#bce7e4] hover:border-[#407471] hover:bg-[#153b38]">${escapeHTML(actionLabel || "Open")}</button>` : ""}
-    </div>
-    ${summary ? `<p class="mt-2 text-xs leading-5 text-gray-400">${escapeHTML(summary)}</p>` : ""}
-    ${body}
-    ${rows.length ? `<ul class="mt-2 space-y-1 border-t border-gray-700/70 pt-2 text-xs text-gray-200">${rows.map((row) =>
-    `<li class="flex items-start justify-between gap-2"><span class="min-w-0 break-words">${escapeHTML(row.label || row)}</span>${row.meta ? `<span class="shrink-0 text-gray-500">${escapeHTML(row.meta)}</span>` : ""}</li>`).join("")}</ul>` : ""}
-  </article>`;
+  return `<section class="relative z-10 overflow-hidden rounded-lg border-2 ${tones[tone] || tones.teal} shadow-xl">
+    <header class="border-b border-current/40 px-4 py-3">
+      <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">${escapeHTML(eyebrow)}</div>
+      <h4 class="mt-1 break-words text-lg font-semibold leading-6 text-white">${escapeHTML(title)}</h4>
+    </header>
+    <div class="divide-y divide-white/10">${rows.map((row) => `
+      <div class="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+        <div class="min-w-0">
+          <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">${escapeHTML(row.label)}</div>
+          ${connectionErdTableList(row.rows || [], row.emptyLabel)}
+        </div>
+        ${row.action ? `<button type="button" data-connection-action="${escapeHTML(row.action)}"
+          class="rounded border border-gray-500 px-2 py-1 text-xs leading-4 text-[#bce7e4] hover:border-white hover:text-white">${escapeHTML(row.actionLabel || "Open")}</button>` : ""}
+      </div>`).join("")}</div>
+  </section>`;
 }
 
 function setConnectionDrawerOpen(id, open) {
@@ -5059,15 +5059,6 @@ function openProductBlueprintConnections(role = "ManufacturedFrom") {
   section?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function connectionErdBranch(label, content, side = "left") {
-  const line = side === "left" ? "lg:border-r lg:pr-6" : "lg:border-l lg:pl-6";
-  return `<section class="relative space-y-3 border-[#407471]/50 ${line}">
-    <div class="absolute top-1/2 hidden h-px w-6 bg-[#407471]/70 lg:block ${side === "left" ? "-right-6" : "-left-6"}"></div>
-    <h4 class="text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">${escapeHTML(label)}</h4>
-    ${content}
-  </section>`;
-}
-
 function renderBuilderSummaries(record = state.editingRecord) {
   const relationships = document.getElementById("contentRelationshipSummary");
   const review = document.getElementById("contentReviewSummary");
@@ -5161,129 +5152,72 @@ function renderBuilderSummaries(record = state.editingRecord) {
       label: variant.name || variant.entityVariantId || "Item variant",
       meta: `Stock ${Number(variant.stockQty ?? 0)} · Reorder ${Number(variant.reorderLevel ?? 0)}`,
     }));
-    const centre = connectionErdNode({
-      kind: `${recordType} · current entity`,
-      title: name,
-      rows: activeEntityVariants.length ? activeEntityVariants.map((variant) => ({
-        label: variant.name || variant.entityVariantId || "Variant",
-        meta: variant.status || "active",
-      })) : [{ label: "No active entity variants", meta: "" }],
-      action: "entity",
-      actionLabel: "Edit entity",
-      tone: "teal",
-    });
-    const product = connectionErdNode({
-      kind: "Product",
-      title: isShopProduct ? name : "No Product connected",
-      rows: isShopProduct ? productRows : [],
-      body: isShopProduct ? `<div class="mt-3 border-t border-blue-500/30 pt-3">${marketplaceTilePreviewMarkup()}</div>` : "",
-      action: "product",
-      actionLabel: isShopProduct ? "Edit Product" : "Create Product",
-      tone: "blue",
-    });
-    const productConnections = [
-      connectionErdNode({
-        kind: "Product inventory",
-        title: "Product stock",
-        rows: stockRows,
-        action: "stock",
-        actionLabel: "Open stock",
-        tone: "blue",
-      }),
-      connectionErdNode({
-        kind: "Manufacturing Blueprints",
-        title: manufacturingLinks.length || manufacturingBlueprintId ? "Manufacturing connected" : "No manufacturing Blueprint",
-        rows: manufacturingLinks.length ? blueprintRows(manufacturingLinks) : manufacturingBlueprintId
-          ? [{ label: manufacturingLabel }] : [],
-        action: "blueprint-manufacturing",
-        actionLabel: manufacturingLinks.length || manufacturingBlueprintId ? "Edit connection" : "Connect Blueprint",
-        tone: "blue",
-      }),
-      connectionErdNode({
-        kind: "Purchase access",
-        title: accessGrants.length ? `${accessGrants.length} unlock target${accessGrants.length === 1 ? "" : "s"}` : "No purchase unlocks",
-        rows: accessGrants.map((grant) => ({
-          label: `${grant.accessEntityType || "Entity"}: ${grant.accessEntityId || "Not selected"}`,
-          meta: variants.find((variant) => variant.variantId === grant.productVariantId)?.name || "",
-        })),
-        action: "product",
-        actionLabel: "Edit unlocks",
-        tone: "blue",
-      }),
-      connectionErdNode({
-        kind: "Bundle components",
-        title: bundleRows.length ? `${bundleRows.length} connected component${bundleRows.length === 1 ? "" : "s"}` : "No bundle components",
-        rows: bundleRows,
-        action: "product",
-        actionLabel: bundleRows.length ? "Edit bundle" : "Add bundle",
-        tone: "blue",
-      }),
-    ].join("");
-    const commerce = `${product}<div class="ml-5 grid grid-cols-2 gap-3 border-l-2 border-blue-500/40 pl-4">${productConnections}</div>`;
     const isWorkshopEntity = normalizedType(
       document.getElementById("contentType")?.value || record?.type,
     ) === "workshop";
-    const workshopOperations = isWorkshopEntity ? connectionErdNode({
-      kind: "Workshop operations",
-      title: operationsLinks.length ? `${operationsLinks.length} operations connection${operationsLinks.length === 1 ? "" : "s"}` : "No Workshop operations",
-      rows: blueprintRows(operationsLinks),
-      action: "blueprint-operations",
-      actionLabel: operationsLinks.length ? "Edit connection" : "Connect Blueprint",
-      tone: "amber",
-    }) : "";
-    const connectedRecords = connectionErdNode({
-      kind: "Connected Items / Plans",
-      title: linkedItemIds.length || linkedPlanIds.length ? "Reusable entities connected" : "No reusable entities",
-      rows: [
-        ...linkedRecordRows(linkedItemIds, state.records.items || []),
-        ...linkedRecordRows(linkedPlanIds, state.records.plans || []),
-      ],
-      action: "entity-connections",
-      actionLabel: "Edit links",
-      tone: "teal",
-    });
-    const media = connectionErdNode({
-      kind: "Assets from main entity",
-      title: selectedAssetLabels.length ? `${selectedAssetLabels.length} linked Asset${selectedAssetLabels.length === 1 ? "" : "s"}` : "No linked Assets",
-      rows: selectedAssetLabels.map((label) => ({ label })),
-      action: "asset",
-      actionLabel: "Add Asset",
-      tone: "blue",
-    });
     const libraryRows = entityVariants.filter((variant) => variant.libraryVisible === true)
       .map((variant) => ({ label: variant.name, meta: variant.status || "draft" }));
-    const library = connectionErdNode({
-      kind: "Library connection",
-      title: libraryRows.length ? `${libraryRows.length} selected variant${libraryRows.length === 1 ? "" : "s"}` : "No variants selected",
-      rows: libraryRows,
-      action: "library",
-      actionLabel: libraryRows.length ? "Edit selection" : "Select variants",
-      tone: "teal",
+    const accessRows = accessGrants.map((grant) => ({
+      label: `${grant.accessEntityType || "Entity"}: ${grant.accessEntityId || "Not selected"}`,
+      meta: variants.find((variant) => variant.variantId === grant.productVariantId)?.name || "",
+    }));
+    const manufacturingRows = manufacturingLinks.length ? blueprintRows(manufacturingLinks) :
+      manufacturingBlueprintId ? [{ label: manufacturingLabel }] : [];
+    const linkedRows = [
+      ...linkedRecordRows(linkedItemIds, state.records.items || []),
+      ...linkedRecordRows(linkedPlanIds, state.records.plans || []),
+    ];
+    const productTable = connectionErdTable({
+      eyebrow: "Outward connection",
+      title: isShopProduct ? "Product" : "Product not connected",
+      tone: "blue",
+      rows: [
+        { label: "Product variants", rows: productRows, emptyLabel: "No Product variants", action: "product", actionLabel: isShopProduct ? "Edit Product" : "Create Product" },
+        { label: "Product stock", rows: stockRows, emptyLabel: "No Product stock", action: "stock", actionLabel: "Open stock" },
+        { label: "Manufacturing Blueprints", rows: manufacturingRows, emptyLabel: "No manufacturing Blueprint", action: "blueprint-manufacturing", actionLabel: manufacturingRows.length ? "Edit" : "Connect" },
+        { label: "Purchase access", rows: accessRows, emptyLabel: "No purchase unlocks", action: "product", actionLabel: "Edit unlocks" },
+        { label: "Bundle components", rows: bundleRows, emptyLabel: "No bundle components", action: "product", actionLabel: bundleRows.length ? "Edit bundle" : "Add bundle" },
+      ],
     });
-    const entityStock = currentRecordType() === "item" ? connectionErdNode({
-      kind: "Entity stock",
-      title: entityStockRows.length ? `${name} stock` : `${name} stock not enabled`,
-      rows: entityStockRows,
-      action: entityStockRows.length ? "entity-stock" : "",
-      actionLabel: "Edit entity stock",
+    const entityTableRows = [
+      { label: "Active variants", rows: activeEntityVariants.map((variant) => ({ label: variant.name || variant.entityVariantId || "Variant", meta: variant.status || "active" })), emptyLabel: "No active variants", action: "entity", actionLabel: "Edit entity" },
+      ...(currentRecordType() === "item" ? [{ label: `${name} stock`, rows: entityStockRows, emptyLabel: "Entity stock not enabled", action: entityStockRows.length ? "entity-stock" : "", actionLabel: "Edit stock" }] : []),
+      { label: "Assets", rows: selectedAssetLabels.map((label) => ({ label })), emptyLabel: "No linked Assets", action: "asset", actionLabel: "Add Asset" },
+      { label: "Linked Items / Plans", rows: linkedRows, emptyLabel: "No linked entities", action: "entity-connections", actionLabel: "Edit links" },
+    ];
+    const entityTable = connectionErdTable({
+      eyebrow: `${recordType} · current entity`,
+      title: name,
       tone: "teal",
+      rows: entityTableRows,
+    });
+    const libraryTable = connectionErdTable({
+      eyebrow: "Outward connection",
+      title: "Library",
+      tone: "violet",
+      rows: [{ label: "Library variants", rows: libraryRows, emptyLabel: "No variants selected", action: "library", actionLabel: libraryRows.length ? "Edit selection" : "Select variants" }],
+    });
+    const operationsTable = isWorkshopEntity ? connectionErdTable({
+      eyebrow: "Workshop-only Blueprint connection",
+      title: "Workshop operations",
+      tone: "amber",
+      rows: [{ label: "Operations Blueprints", rows: blueprintRows(operationsLinks), emptyLabel: "No operations Blueprint", action: "blueprint-operations", actionLabel: operationsLinks.length ? "Edit" : "Connect" }],
     }) : "";
-    const entityConnections = [entityStock, media, connectedRecords].filter(Boolean).join("");
-    const outwardConnections = [library, workshopOperations].filter(Boolean).join("");
-    const outwardHeading = isWorkshopEntity
-      ? "Library and Workshop operations"
-      : "Library";
 
     relationships.innerHTML = `<div class="overflow-x-auto rounded-xl border border-gray-800 bg-gray-950/60 p-4 md:p-6">
-      <div class="grid min-w-[1180px] grid-cols-[minmax(430px,1.35fr)_minmax(330px,1fr)_minmax(300px,0.9fr)] items-center gap-6">
-        ${connectionErdBranch("Product and purchase relationships", commerce, "left")}
-        <section class="relative space-y-3">
-          <div class="absolute -left-6 top-1/2 h-px w-6 bg-[#407471]/70"></div>
-          <div class="absolute -right-6 top-1/2 h-px w-6 bg-[#407471]/70"></div>
-          ${centre}
-          <div class="ml-5 space-y-3 border-l-2 border-[#407471]/50 pl-4">${entityConnections}</div>
-        </section>
-        ${connectionErdBranch(outwardHeading, outwardConnections, "right")}
+      <div class="relative min-h-[620px] min-w-[1180px]">
+        <svg class="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1180 620" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M 390 92 H 462" fill="none" stroke="#3b82f6" stroke-width="3" />
+          <circle cx="426" cy="92" r="5" fill="#07142f" stroke="#3b82f6" stroke-width="2" />
+          <path d="M 778 92 H 850" fill="none" stroke="#8b5cf6" stroke-width="3" />
+          <circle cx="814" cy="92" r="5" fill="#17102d" stroke="#8b5cf6" stroke-width="2" />
+          ${isWorkshopEntity ? `<path d="M 814 92 V 370 H 850" fill="none" stroke="#f59e0b" stroke-width="3" />` : ""}
+        </svg>
+        <div class="relative z-10 grid grid-cols-[390px_316px_330px] items-start gap-x-[72px]">
+          ${productTable}
+          ${entityTable}
+          <div class="space-y-16">${libraryTable}${operationsTable}</div>
+        </div>
       </div>
     </div>`;
   }
