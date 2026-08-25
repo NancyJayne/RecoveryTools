@@ -4934,7 +4934,7 @@ function connectionErdTableList(rows = [], emptyLabel = "None connected") {
   return `<ul class="space-y-1">${rows.map((row) => `
     <li class="flex items-start justify-between gap-3 text-sm">
       <span class="min-w-0 break-words text-gray-100">${escapeHTML(row.label || row)}</span>
-      ${row.meta ? `<span class="shrink-0 text-right text-xs text-gray-400">${escapeHTML(row.meta)}</span>` : ""}
+      ${row.meta ? `<span class="max-w-[45%] break-words text-right text-xs text-gray-400">${escapeHTML(row.meta)}</span>` : ""}
     </li>`).join("")}</ul>`;
 }
 
@@ -4945,9 +4945,9 @@ function connectionErdTable({ eyebrow, title, rows = [], tone = "teal" }) {
     violet: "border-violet-500 bg-[#17102d]",
     amber: "border-amber-500 bg-[#241a08]",
   };
-  return `<section class="relative z-10 overflow-hidden rounded-lg border-2 ${tones[tone] || tones.teal} shadow-xl">
+  return `<section class="relative z-10 min-w-0 max-w-full overflow-hidden rounded-lg border-2 ${tones[tone] || tones.teal} shadow-xl">
     <header class="border-b border-current/40 px-4 py-3">
-      <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">${escapeHTML(eyebrow)}</div>
+      <div class="break-words text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">${escapeHTML(eyebrow)}</div>
       <h4 class="mt-1 break-words text-lg font-semibold leading-6 text-white">${escapeHTML(title)}</h4>
     </header>
     <div class="divide-y divide-white/10">${rows.map((row) => `
@@ -5251,19 +5251,14 @@ function renderBuilderSummaries(record = state.editingRecord) {
       rows: [{ label: "Operations Blueprints", rows: blueprintRows(operationsLinks), emptyLabel: "No operations Blueprint", action: "blueprint-operations", actionLabel: operationsLinks.length ? "Edit" : "Connect" }],
     }) : "";
 
-    relationships.innerHTML = `<div class="overflow-x-auto rounded-xl border border-gray-800 bg-gray-950/60 p-4 md:p-6">
-      <div class="relative min-h-[620px] min-w-[1180px]">
-        <svg class="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1180 620" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M 390 92 H 462" fill="none" stroke="#3b82f6" stroke-width="3" />
-          <circle cx="426" cy="92" r="5" fill="#07142f" stroke="#3b82f6" stroke-width="2" />
-          <path d="M 778 92 H 850" fill="none" stroke="#8b5cf6" stroke-width="3" />
-          <circle cx="814" cy="92" r="5" fill="#17102d" stroke="#8b5cf6" stroke-width="2" />
-          ${isWorkshopEntity ? `<path d="M 814 92 V 370 H 850" fill="none" stroke="#f59e0b" stroke-width="3" />` : ""}
-        </svg>
-        <div class="relative z-10 grid grid-cols-[390px_316px_330px] items-start gap-x-[72px]">
-          ${productTable}
-          ${entityTable}
-          <div class="space-y-16">${libraryTable}${operationsTable}</div>
+    relationships.innerHTML = `<div class="overflow-hidden rounded-xl border border-gray-800 bg-gray-950/60 p-3 sm:p-4 md:p-6">
+      <div class="relative min-w-0">
+        <div class="pointer-events-none absolute bottom-8 left-1/2 top-8 w-[3px] -translate-x-1/2 bg-gradient-to-b from-[#407471] via-blue-500 to-violet-500 2xl:hidden" aria-hidden="true"></div>
+        <div class="pointer-events-none absolute left-[18%] right-[14%] top-[92px] hidden h-[3px] bg-gradient-to-r from-blue-500 via-[#407471] to-violet-500 2xl:block" aria-hidden="true"></div>
+        <div class="relative z-10 grid min-w-0 gap-10 2xl:grid-cols-[minmax(0,1.12fr)_minmax(0,1fr)_minmax(0,0.92fr)] 2xl:items-start 2xl:gap-12">
+          <div class="order-2 min-w-0 2xl:order-1">${productTable}</div>
+          <div class="order-1 min-w-0 2xl:order-2">${entityTable}</div>
+          <div class="order-3 min-w-0 space-y-10 2xl:space-y-16">${libraryTable}${operationsTable}</div>
         </div>
       </div>
     </div>`;
