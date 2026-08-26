@@ -168,9 +168,20 @@ function cleanTemplateFieldValues(value) {
     if (!key) return;
     if (Array.isArray(rawValue)) {
       output[key] = rawValue
-        .map((item) => cleanString(item).slice(0, 2000))
-        .filter(Boolean)
+        .map((item) => item && typeof item === "object" && !Array.isArray(item)
+          ? {
+            entityId: cleanString(item.entityId || item.id).slice(0, 200),
+            entityVariantId: cleanString(item.entityVariantId || item.variantId).slice(0, 200),
+          }
+          : cleanString(item).slice(0, 2000))
+        .filter((item) => typeof item === "string" ? Boolean(item) : Boolean(item.entityId))
         .slice(0, 100);
+    } else if (rawValue && typeof rawValue === "object") {
+      const entityId = cleanString(rawValue.entityId || rawValue.id).slice(0, 200);
+      if (entityId) output[key] = {
+        entityId,
+        entityVariantId: cleanString(rawValue.entityVariantId || rawValue.variantId).slice(0, 200),
+      };
     } else if (typeof rawValue === "boolean") {
       output[key] = rawValue;
     } else if (typeof rawValue === "number" && Number.isFinite(rawValue)) {

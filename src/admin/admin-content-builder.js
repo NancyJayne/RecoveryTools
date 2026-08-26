@@ -449,12 +449,14 @@ function syncRelationshipPicker(kind) {
 
 function knownContentTags() {
   const categoryId = document.getElementById("contentTagCategoryFilter")?.value || "";
+  const search = normalizedText(document.getElementById("contentTagSearch")?.value || "");
   const allRecords = Object.values(state.records || {}).flatMap((records) => records || []);
   return uniqueValues([
     ...(state.options.tagOptions || [])
-      .filter((tag) => !categoryId || tag.categoryId === categoryId)
+      .filter((tag) => (search || !categoryId || tag.categoryId === categoryId) &&
+        (!search || normalizedText(`${tag.name || ""} ${tag.id || ""}`).includes(search)))
       .map((tag) => tag.name || tag.id),
-    ...(!categoryId ? allRecords.flatMap((record) => record.tags || []) : []),
+    ...(!categoryId && !search ? allRecords.flatMap((record) => record.tags || []) : []),
   ])
     .sort((left, right) => left.localeCompare(right));
 }
@@ -475,8 +477,9 @@ function tagRowMarkup(value = "") {
     `<option value="__new__"${customValue ? " selected" : ""}>Add new tag...</option>`,
   ].join("");
 
+  const categoryId = document.getElementById("contentTagCategoryFilter")?.value || "";
   return `
-    <div class="content-tag-row grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+    <div class="content-tag-row grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
       <select class="content-tag-select rounded bg-gray-800 px-3 py-2 text-white">
         ${options}
       </select>
@@ -488,9 +491,10 @@ function tagRowMarkup(value = "") {
       <select class="content-tag-new-category rounded bg-gray-800 px-3 py-2 text-white ${customValue ? "" : "hidden"}" aria-label="New tag category">
         <option value="">Choose tag category</option>
         ${(state.options.categoryOptions || []).map((category) => `
-          <option value="${escapeHTML(category.id)}">${escapeHTML(categoryDisplayName(category))}</option>
+          <option value="${escapeHTML(category.id)}"${category.id === categoryId ? " selected" : ""}>${escapeHTML(categoryDisplayName(category))}</option>
         `).join("")}
       </select>
+      <button type="button" class="content-tag-save-new hidden rounded border border-[#407471] px-3 py-2 text-xs text-[#9edbd7] hover:bg-[#153b38]">Save & select</button>
       <button
         type="button"
         class="content-tag-remove rounded border border-gray-700 px-3 py-2 text-xs text-gray-200 hover:bg-gray-800"
@@ -545,13 +549,54 @@ function handleTagRowsChange(event) {
       if (event.target.value !== "__new__") input.value = "";
     }
     category?.classList.toggle("hidden", event.target.value !== "__new__");
+    row.querySelector(".content-tag-save-new")?.classList.toggle("hidden", event.target.value !== "__new__");
+    if (category && event.target.value === "__new__" && !category.value) {
+      category.value = document.getElementById("contentTagCategoryFilter")?.value || "";
+    }
     if (category && event.target.value !== "__new__") category.value = "";
   }
 
   syncTagInput();
 }
 
+function refreshExistingTagOptions() {
+  document.querySelectorAll("#contentTagRows .content-tag-select").forEach((select) => {
+    const current = select.value;
+    const options = uniqueValues([...knownContentTags(), current]).filter(Boolean);
+    select.innerHTML = `<option value="">Choose existing tag</option>${options.map((tag) =>
+      `<option value="${escapeHTML(tag)}">${escapeHTML(tag)}</option>`).join("")}<option value="__new__">Add new tag...</option>`;
+    select.value = current;
+  });
+}
+
 function handleTagRowsClick(event) {
+  if (event.target.classList.contains("content-tag-save-new")) {
+    const row = event.target.closest(".content-tag-row");
+    const name = row?.querySelector(".content-tag-new")?.value.trim() || "";
+    const categoryId = row?.querySelector(".content-tag-new-category")?.value || "";
+    if (!name || !categoryId) {
+      showToast("Enter a tag name and choose its category.", "error");
+      return;
+    }
+    const existing = (state.options.tagOptions || []).find((tag) =>
+      normalizedText(tag.name || tag.id) === normalizedText(name));
+    const tag = existing || { id: name, name, categoryId };
+    if (!existing) state.options.tagOptions = [...(state.options.tagOptions || []), tag];
+    row.dataset.newTagName = existing ? "" : name;
+    row.dataset.newTagCategoryId = existing ? "" : categoryId;
+    const select = row.querySelector(".content-tag-select");
+    if (select && ![...select.options].some((option) => option.value === (tag.name || tag.id))) {
+      select.add(new Option(tag.name || tag.id, tag.name || tag.id));
+    }
+    if (select) select.value = tag.name || tag.id;
+    row.querySelector(".content-tag-new")?.classList.add("hidden");
+    row.querySelector(".content-tag-new-category")?.classList.add("hidden");
+    event.target.classList.add("hidden");
+    syncTagInput();
+    state.isDirty = true;
+    showToast(existing ? "Existing tag selected." : "Tag selected; it will be created when content is saved.", "success");
+    return;
+  }
   if (!event.target.classList.contains("content-tag-remove")) return;
   const rows = document.getElementById("contentTagRows");
   const row = event.target.closest(".content-tag-row");
@@ -2216,6 +2261,34 @@ function linkedTemplateRecordLabel(record) {
   return `${record?.name || record?.id}${details ? ` (${details})` : ""} | ${record?.id}`;
 }
 
+function supportsExactLinkedVariant(linkedTable) {
+  return ["items", "blueprints", "plans"].includes(normalizedType(linkedTable));
+}
+
+function linkedSelectionEntityId(value) {
+  return value && typeof value === "object"
+    ? String(value.entityId || value.id || "") : String(value || "");
+}
+
+function linkedSelectionVariantId(value) {
+  return value && typeof value === "object"
+    ? String(value.entityVariantId || value.variantId || "") : "";
+}
+
+function refreshLinkedVariantSelect(select, selectedVariantId = "") {
+  const variantSelect = select?.closest(".content-template-linked-picker")
+    ?.querySelector(".content-template-linked-variant");
+  if (!variantSelect) return;
+  const record = linkedTemplateFieldRecords({ linkedTable: select.dataset.linkedTable })
+    .find((candidate) => candidate.id === select.value);
+  const variants = Array.isArray(record?.entityVariants) ? record.entityVariants : [];
+  variantSelect.innerHTML = `<option value="">Any variant / whole entity</option>${variants.map((variant) => `
+    <option value="${escapeHTML(variant.entityVariantId || variant.id)}">${escapeHTML(variant.name || variant.entityVariantId || variant.id)}</option>
+  `).join("")}`;
+  variantSelect.value = selectedVariantId;
+  variantSelect.classList.toggle("hidden", !select.value || !variants.length);
+}
+
 function linkedTemplateSelectMarkup(field, key, required = false) {
   const records = linkedTemplateFieldRecords(field);
   const selectedType = field.linkedTypeFilter || "";
@@ -2223,7 +2296,7 @@ function linkedTemplateSelectMarkup(field, key, required = false) {
   const selectedTags = uniqueValues(Array.isArray(field.linkedTagFilters)
     ? field.linkedTagFilters : String(field.linkedTagFilters || "").split(","));
   return `
-    <span class="content-template-linked-picker flex min-w-0 flex-1 gap-2">
+    <span class="content-template-linked-picker grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
       <select
         class="content-template-variable content-template-linked-select hidden"
         data-field-key="${escapeHTML(key)}"
@@ -2244,6 +2317,11 @@ function linkedTemplateSelectMarkup(field, key, required = false) {
         `).join("")}
       </select>
       <button type="button" class="open-content-linked-selector min-w-0 flex-1 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">Choose ${escapeHTML(field.name || "content")}</button>
+      ${supportsExactLinkedVariant(field.linkedTable) ? `
+        <select class="content-template-linked-variant hidden rounded border border-[#407471] bg-gray-800 px-3 py-2 text-white" aria-label="Choose an exact variant">
+          <option value="">Any variant / whole entity</option>
+        </select>
+      ` : ""}
     </span>
   `;
 }
@@ -2258,6 +2336,8 @@ function refreshLinkedTemplatePickerLabel(select) {
     ? linkedTemplateRecordLabel(record)
     : `Choose ${select.dataset.fieldName || "content"}`;
   button.classList.toggle("text-gray-400", !record);
+  refreshLinkedVariantSelect(select, select.closest(".content-template-linked-picker")
+    ?.querySelector(".content-template-linked-variant")?.value || "");
 }
 
 function linkedTemplateRowMarkup(field, key, required = false) {
@@ -2413,8 +2493,15 @@ function templateFieldValuesFromBuilder({ validate = false, root = document } = 
     const key = templateFieldKey(field.dataset.fieldKey);
     if (!key) return;
     linkedKeys.add(key);
-    const selected = uniqueValues([...field.querySelectorAll(".content-template-linked-select")]
-      .map((input) => input.value));
+    const selected = [...field.querySelectorAll(".content-template-linked-select")]
+      .map((input) => {
+        if (!input.value) return null;
+        const variantId = input.closest(".content-template-linked-picker")
+          ?.querySelector(".content-template-linked-variant")?.value || "";
+        return supportsExactLinkedVariant(input.dataset.linkedTable)
+          ? { entityId: input.value, entityVariantId: variantId }
+          : input.value;
+      }).filter(Boolean);
     const minimum = Number(field.dataset.minEntries || 0);
     const maximum = Number(field.dataset.maxEntries || 0);
     const fieldName = field.dataset.fieldName || key;
@@ -2566,13 +2653,15 @@ function addLinkedTemplateFieldRow(field, value = "", ignoreMaximum = false) {
   ) return null;
   const row = source.cloneNode(true);
   const select = row.querySelector(".content-template-linked-select");
+  const entityId = linkedSelectionEntityId(value);
   if (select) {
     [...select.options].forEach((option) => {
       option.disabled = false;
-      option.selected = option.value === value;
+      option.selected = option.value === entityId;
     });
-    if (value && select.value !== value) select.add(new Option(value, value, true, true));
+    if (entityId && select.value !== entityId) select.add(new Option(entityId, entityId, true, true));
     refreshLinkedTemplatePickerLabel(select);
+    refreshLinkedVariantSelect(select, linkedSelectionVariantId(value));
   }
   rows.appendChild(row);
   refreshLinkedTemplateField(field);
@@ -2580,7 +2669,8 @@ function addLinkedTemplateFieldRow(field, value = "", ignoreMaximum = false) {
 }
 
 function restoreLinkedTemplateField(field, rawValues) {
-  const values = uniqueValues(Array.isArray(rawValues) ? rawValues : [rawValues]);
+  const values = (Array.isArray(rawValues) ? rawValues : [rawValues])
+    .filter((value) => linkedSelectionEntityId(value));
   const minimum = Math.max(Number(field.dataset.minEntries || 0), 0);
   const desiredRows = Math.max(values.length, minimum, 1);
   const rows = field.querySelector(".content-template-linked-rows");
@@ -2589,11 +2679,13 @@ function restoreLinkedTemplateField(field, rawValues) {
   while (rows.children.length > desiredRows) rows.lastElementChild?.remove();
   [...rows.querySelectorAll(".content-template-linked-select")].forEach((select, index) => {
     const value = values[index] || "";
-    if (value && ![...select.options].some((option) => option.value === value)) {
-      select.add(new Option(value, value));
+    const entityId = linkedSelectionEntityId(value);
+    if (entityId && ![...select.options].some((option) => option.value === entityId)) {
+      select.add(new Option(entityId, entityId));
     }
-    select.value = value;
+    select.value = entityId;
     refreshLinkedTemplatePickerLabel(select);
+    refreshLinkedVariantSelect(select, linkedSelectionVariantId(value));
   });
   refreshLinkedTemplateField(field);
 }
@@ -2735,14 +2827,18 @@ async function linkExistingAssetToCurrentContent(asset) {
       fieldKey: "entity-assets",
     }],
   });
-  const existingAssets = Array.isArray(state.editingRecord.assets) ? state.editingRecord.assets : [];
   const assetId = asset.id || asset.assetId;
-  state.editingRecord.assets = [
-    ...existingAssets.filter((value) =>
-      (typeof value === "string" ? value : value.assetId || value.id) !== assetId),
-    asset,
-  ];
   await loadData();
+  const refreshed = findRecord(currentRecordType(), state.editingRecord?.id || "");
+  if (refreshed) state.editingRecord = refreshed;
+  const existingAssets = Array.isArray(state.editingRecord?.assets) ? state.editingRecord.assets : [];
+  if (state.editingRecord) {
+    state.editingRecord.assets = [
+      ...existingAssets.filter((value) =>
+        (typeof value === "string" ? value : value.assetId || value.id) !== assetId),
+      asset,
+    ];
+  }
   renderBuilderSummaries();
   showToast(`${asset.title || asset.assetName || asset.name || "Asset"} linked.`, "success");
 }
@@ -3709,7 +3805,8 @@ function updateSaveWorkflow() {
 
   const messages = [
     "Save keeps this record in its current workflow state. Approve confirms it is ready. " +
-      "Set active makes it available in its configured connections. " +
+      "Set active activates this record and every non-archived variant, then makes it available " +
+      "in its configured connections. " +
       "Pause removes it from active use without deleting it.",
   ];
   if (isProduct) {
@@ -5375,10 +5472,14 @@ function reviewValue(value) {
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (Array.isArray(value)) return value.map(reviewValue).filter(Boolean).join(", ");
   if (typeof value === "object") {
-    const linkedId = value.assetId || value.itemId || value.blueprintId || value.planId || value.id;
+    const linkedId = value.entityId || value.assetId || value.itemId || value.blueprintId ||
+      value.planId || value.id;
     if (linkedId) {
       const linked = reviewRecord(linkedId);
-      return linked ? `${linked.name || linked.title || linked.id} (${linked.id})` : String(linkedId);
+      const variant = (linked?.entityVariants || []).find((candidate) =>
+        (candidate.entityVariantId || candidate.id) === value.entityVariantId);
+      const label = linked ? `${linked.name || linked.title || linked.id} (${linked.id})` : String(linkedId);
+      return variant ? `${label} / ${variant.name || variant.entityVariantId || variant.id}` : label;
     }
     return Object.entries(value)
       .map(([key, entry]) => `${reviewFieldLabel(key)}: ${reviewValue(entry)}`)
@@ -5397,7 +5498,7 @@ function reviewLinkedRecords(value, collection) {
       return;
     }
     if (entry && typeof entry === "object") {
-      Object.values(entry).forEach(visit);
+      visit(entry.entityId || entry.id || "");
       return;
     }
     const record = reviewRecord(entry);
@@ -5447,6 +5548,9 @@ function templateRelationshipGroups(entityVariants = []) {
 
 function selectedNewTagsFromControls(validate = true) {
   const tags = [...document.querySelectorAll("#contentTagRows .content-tag-row")].flatMap((row) => {
+    if (row.dataset.newTagName) {
+      return [{ name: row.dataset.newTagName, categoryId: row.dataset.newTagCategoryId || "" }];
+    }
     if (row.querySelector(".content-tag-select")?.value !== "__new__") return [];
     const name = row.querySelector(".content-tag-new")?.value.trim() || "";
     const categoryId = row.querySelector(".content-tag-new-category")?.value || "";
@@ -7514,8 +7618,10 @@ async function savePayload(payload, action = "save") {
       state.isDirty = false;
       await loadData();
       const refreshed = findRecord(recordType, recordId);
-      if (contentBuilderCreationStack.length && refreshed) {
-        await restoreNestedParent({ selectedRecord: refreshed });
+      if (contentBuilderCreationStack.length) {
+        await restoreNestedParent({
+          selectedRecord: refreshed || { ...state.editingRecord, ...payload, id: recordId, recordType },
+        });
         return;
       }
       showSaveConfirmation({ action, payload, recordId, record: refreshed });
@@ -7545,8 +7651,10 @@ async function savePayload(payload, action = "save") {
         `/admin/content/builder?type=${encodeURIComponent(recordType)}&id=${encodeURIComponent(recordId)}`,
       );
     }
-    if (contentBuilderCreationStack.length && savedRecord) {
-      await restoreNestedParent({ selectedRecord: savedRecord });
+    if (contentBuilderCreationStack.length) {
+      await restoreNestedParent({
+        selectedRecord: savedRecord || { ...payload, id: recordId, recordType },
+      });
       return;
     }
     showSaveConfirmation({ action, payload, recordId, record: savedRecord });
@@ -7586,6 +7694,12 @@ function applySaveAction(payload, action = "save") {
 
   return {
     ...payload,
+    entityVariants: isActive
+      ? (payload.entityVariants || []).map((variant) => ({
+        ...variant,
+        status: variant.status === "archived" ? "archived" : "active",
+      }))
+      : payload.entityVariants,
     status,
     approvalStatus,
     publishRequested: false,
@@ -7952,9 +8066,8 @@ export async function setupContentBuilder() {
   document.getElementById("contentTagRows")?.addEventListener("change", handleTagRowsChange);
   document.getElementById("contentTagRows")?.addEventListener("input", syncTagInput);
   document.getElementById("contentTagRows")?.addEventListener("click", handleTagRowsClick);
-  document.getElementById("contentTagCategoryFilter")?.addEventListener("change", () => {
-    renderTagControls(selectedTagsFromControls());
-  });
+  document.getElementById("contentTagCategoryFilter")?.addEventListener("change", refreshExistingTagOptions);
+  document.getElementById("contentTagSearch")?.addEventListener("input", refreshExistingTagOptions);
   document.getElementById("templateGuidedFields")?.addEventListener(
     "click",
     handleTemplateGuidedFieldsClick,
