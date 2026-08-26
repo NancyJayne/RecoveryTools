@@ -6384,6 +6384,73 @@ function continueToTemplateFields() {
   return true;
 }
 
+function uniqueLinkedTypeOptions(values = []) {
+  const seen = new Set();
+  return values.map((value) => String(value || "").trim()).filter((value) => {
+    const key = normalizedText(value);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).sort((left, right) => left.localeCompare(right));
+}
+
+function linkedTypeOptionsForTable(linkedTable) {
+  const table = normalizedText(linkedTable);
+  if (table === "items") {
+    return uniqueLinkedTypeOptions([
+      ...(state.options.itemTypes || []),
+      ...(state.records.items || []).map((record) => record.itemType || record.type),
+    ]);
+  }
+  if (table === "blueprints") {
+    return uniqueLinkedTypeOptions([
+      ...(state.options.blueprintTypes || []),
+      ...(state.records.blueprints || []).map((record) => record.blueprintType || record.type),
+    ]);
+  }
+  if (table === "plans") {
+    return uniqueLinkedTypeOptions([
+      ...(state.options.planTypes || []),
+      ...(state.records.plans || []).map((record) => record.planType || record.type),
+    ]);
+  }
+  if (["product", "products"].includes(table)) {
+    return uniqueLinkedTypeOptions(
+      (state.records.products || []).map((record) => record.productType || record.type),
+    );
+  }
+  if (["asset", "assets", "item asset", "item assets"].includes(table)) {
+    return uniqueLinkedTypeOptions(
+      (state.records.assets || []).map((record) => record.assetType || record.type),
+    );
+  }
+  return [];
+}
+
+function linkedTypeFilterOptionsMarkup(linkedTable, selectedValue = "") {
+  const options = linkedTypeOptionsForTable(linkedTable);
+  const selected = String(selectedValue || "").trim();
+  if (selected && !options.some((option) => normalizedText(option) === normalizedText(selected))) {
+    options.push(selected);
+  }
+  return `<option value="">Any linked type</option>${options.map((option) => `
+    <option value="${escapeHTML(option)}"${normalizedText(option) === normalizedText(selected) ? " selected" : ""}>
+      ${escapeHTML(option)}
+    </option>
+  `).join("")}`;
+}
+
+function refreshTemplateFieldLinkedTypeOptions(row) {
+  const linkedTable = row?.querySelector(".template-field-linked-table")?.value || "";
+  const select = row?.querySelector(".template-field-linked-type-filter");
+  if (!select) return;
+  const available = linkedTypeOptionsForTable(linkedTable);
+  const selected = available.some((option) => normalizedText(option) === normalizedText(select.value))
+    ? select.value : "";
+  select.innerHTML = linkedTypeFilterOptionsMarkup(linkedTable, selected);
+  select.disabled = available.length === 0;
+}
+
 function templateFieldRowMarkup(field = {}) {
   const fieldType = canonicalTemplateFieldType(field.fieldType);
   const key = templateFieldKey(field.key || field.id || field.name);
@@ -6472,8 +6539,10 @@ function templateFieldRowMarkup(field = {}) {
         </label>
         <label class="block">
           Required linked type
-          <input class="template-field-linked-type-filter mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
-            value="${escapeHTML(field.linkedTypeFilter || "")}" placeholder="Example: Product Manufacture">
+          <select class="template-field-linked-type-filter mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
+            ${linkedTypeOptionsForTable(linkedTable).length || field.linkedTypeFilter ? "" : "disabled"}>
+            ${linkedTypeFilterOptionsMarkup(linkedTable, field.linkedTypeFilter)}
+          </select>
         </label>
         <label class="block">
           Required linked status
@@ -6645,7 +6714,13 @@ function handleTemplateFieldRowsChange(event) {
       "Canva Design Asset": "Assets",
     };
     const linkedTable = row.querySelector(".template-field-linked-table");
-    if (linkedTable) linkedTable.value = linkedDefaults[event.target.value] || "";
+    if (linkedTable) {
+      linkedTable.value = linkedDefaults[event.target.value] || "";
+      refreshTemplateFieldLinkedTypeOptions(row);
+    }
+  }
+  if (event.target.classList.contains("template-field-linked-table")) {
+    refreshTemplateFieldLinkedTypeOptions(row);
   }
 }
 
