@@ -5055,8 +5055,33 @@ function blueprintContentVariantOptions(blueprintId, selectedId = "") {
   const blueprint = (state.records.blueprints || []).find((record) => record.id === blueprintId);
   return (blueprint?.entityVariants || []).map((variant) => {
     const variantId = variant.entityVariantId || variant.id || "";
-    return `<option value="${escapeHTML(variantId)}"${variantId === selectedId ? " selected" : ""}>${escapeHTML(variant.name || variantId)}</option>`;
+    const name = variant.name || variantId;
+    const label = variantId && variantId !== name ? `${name} (${variantId})` : name;
+    return `<option value="${escapeHTML(variantId)}"${variantId === selectedId ? " selected" : ""}>${escapeHTML(label)}</option>`;
   }).join("");
+}
+
+function defaultBlueprintContentVariantLabel(blueprintId) {
+  const blueprint = (state.records.blueprints || []).find((record) => record.id === blueprintId);
+  const variant = (blueprint?.entityVariants || []).find((candidate) => candidate.isDefault === true) ||
+    blueprint?.entityVariants?.[0];
+  return variant?.name ? `Default Blueprint variant — ${variant.name}` : "Default Blueprint variant";
+}
+
+function refreshProductBlueprintConnectionSummary(row) {
+  if (!row) return;
+  const summary = row.querySelector(".product-variant-blueprint-selection");
+  if (!summary) return;
+  const role = row.querySelector(".variant-content-link-role")?.selectedOptions?.[0]?.textContent?.trim() ||
+    "Blueprint";
+  const productVariant = row.querySelector(".variant-content-product-variant")?.selectedOptions?.[0]
+    ?.textContent?.trim() || "Product variant not selected";
+  const blueprintSelect = row.querySelector(".variant-content-blueprint");
+  const blueprint = blueprintSelect?.selectedOptions?.[0]?.textContent?.trim() || "Blueprint not selected";
+  const blueprintVariantSelect = row.querySelector(".variant-content-blueprint-variant");
+  const blueprintVariant = blueprintVariantSelect?.selectedOptions?.[0]?.textContent?.trim() ||
+    "Default Blueprint variant";
+  summary.textContent = `${productVariant} · ${role}: ${blueprint} → ${blueprintVariant}`;
 }
 
 function renderProductVariantContentLinkRows(links = []) {
@@ -5067,10 +5092,16 @@ function renderProductVariantContentLinkRows(links = []) {
   const blueprintLinks = links.filter((link) =>
     ["ManufacturedFrom", "OperatedWith"].includes(link.linkRole));
   const defaultBlueprintId = document.getElementById("contentProductBlueprintId")?.value || "";
-  const rows = [
-    ...(defaultBlueprintId ? [{ productVariantId: "", entityId: defaultBlueprintId }] : []),
-    ...blueprintLinks,
-  ];
+  const rows = blueprintLinks.length || !defaultBlueprintId
+    ? blueprintLinks
+    : productVariants.map((variant) => ({
+      productVariantId: variant.variantId,
+      entityType: "Blueprint",
+      entityId: defaultBlueprintId,
+      entityVariantId: "",
+      linkRole: "ManufacturedFrom",
+      status: "active",
+    }));
   container.innerHTML = rows.map((link) => {
     const productVariantOptions = productVariants.map((variant) => {
       const selected = variant.variantId === link.productVariantId ? " selected" : "";
@@ -5102,14 +5133,18 @@ function renderProductVariantContentLinkRows(links = []) {
           </select>
           <button type="button" class="open-content-linked-selector min-w-0 flex-1 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">Choose Blueprint</button>
         </span>
-        <select class="variant-content-blueprint-variant rounded bg-gray-800 px-2 py-2 text-white">
-          <option value="">Default Blueprint variant</option>${blueprintVariantOptions}
+        <select class="variant-content-blueprint-variant rounded bg-gray-800 px-2 py-2 text-white" aria-label="Exact Blueprint variation">
+          <option value="">${escapeHTML(defaultBlueprintContentVariantLabel(link.entityId))}</option>${blueprintVariantOptions}
         </select>
         <button type="button" class="remove-product-variant-content-link rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
+        <p class="product-variant-blueprint-selection text-sm text-[#9edbd7] md:col-span-2 xl:col-span-5"></p>
       </div>`;
   }).join("") || "<p class=\"text-xs text-gray-400\">No manufacturing or Workshop Operations Blueprint selected.</p>";
   container.querySelectorAll(".content-template-linked-select").forEach(
     refreshLinkedTemplatePickerLabel,
+  );
+  container.querySelectorAll(".product-variant-content-link-row").forEach(
+    refreshProductBlueprintConnectionSummary,
   );
   filterVariantOwnedConnections(
     document.getElementById("contentVariantOwnedConnections")?.dataset.activeProductVariantId || "",
@@ -8133,10 +8168,13 @@ export async function setupContentBuilder() {
       const row = event.target.closest(".product-variant-content-link-row");
       const variantSelect = row?.querySelector(".variant-content-blueprint-variant");
       if (variantSelect) {
-        variantSelect.innerHTML = `<option value="">Default Blueprint variant</option>` +
+        variantSelect.innerHTML = `<option value="">${escapeHTML(defaultBlueprintContentVariantLabel(event.target.value))}</option>` +
           blueprintContentVariantOptions(event.target.value);
       }
     }
+    refreshProductBlueprintConnectionSummary(
+      event.target.closest(".product-variant-content-link-row"),
+    );
     productVariantContentLinksFromRows(true);
     renderProductBlueprintOptions(document.getElementById("contentProductBlueprintId")?.value || "");
     refreshMarketplacePreviews();
