@@ -685,6 +685,14 @@ function normalizedText(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function canonicalAssetType(value) {
+  const types = [
+    "Image", "Video", "Audio", "PDF", "Document", "Illustration", "Presentation",
+    "Canva Design", "Logo", "Icon", "Animation", "Download",
+  ];
+  return types.find((type) => normalizedText(type) === normalizedText(value)) || "Document";
+}
+
 function fillSelect(select, values, fallback = "") {
   if (!select) return;
   const current = select.value;
@@ -2591,11 +2599,13 @@ function restoreLinkedTemplateField(field, rawValues) {
 
 function closeLinkedRecordSelector() {
   const modal = document.getElementById("contentLinkedRecordSelectorModal");
+  const cleanup = linkedRecordSelectorContext?.cleanup;
   modal?.classList.add("hidden");
   modal?.classList.remove("flex");
   modal?.setAttribute("aria-hidden", "true");
   linkedRecordSelectorContext?.trigger?.focus();
   linkedRecordSelectorContext = null;
+  cleanup?.();
 }
 
 function linkedSelectorRecords(context = linkedRecordSelectorContext) {
@@ -2690,6 +2700,72 @@ function openLinkedRecordSelector(trigger) {
   modal?.setAttribute("aria-hidden", "false");
   renderLinkedRecordSelector();
   document.getElementById("contentLinkedRecordSearch")?.focus();
+}
+
+async function linkExistingAssetToCurrentContent(asset) {
+  if (!state.editingRecord?.id) {
+    throw new Error("Save this content before linking an existing Asset from Connections.");
+  }
+  const entityType = currentRecordType().replace(/^./, (character) => character.toUpperCase());
+  await upsertAdminAsset({
+    assetId: asset.id || asset.assetId,
+    assetName: asset.assetName || asset.name || asset.title,
+    assetType: canonicalAssetType(asset.assetType || asset.type),
+    title: asset.title || asset.assetName || asset.name || "Asset",
+    description: asset.description || "",
+    altText: asset.altText || "",
+    notes: asset.notes || "",
+    fileUrl: asset.fileUrl || asset.url || "",
+    storagePath: asset.storagePath || "",
+    originalFilename: asset.originalFilename || "",
+    mimeType: asset.mimeType || "",
+    externalProvider: asset.externalProvider || "",
+    embedUrl: asset.embedUrl || "",
+    sourceType: asset.sourceType || (asset.storagePath ? "upload" : "external"),
+    status: asset.status || "active",
+    approvalStatus: asset.approvalStatus || "draft",
+    visibility: asset.visibility || "private",
+    ownerUserId: asset.ownerUserId || "",
+    renditions: Array.isArray(asset.renditions) ? asset.renditions : [],
+    newLinks: [{
+      entityType,
+      entityId: state.editingRecord.id,
+      assetRole: "Entity Asset",
+      fieldKey: "entity-assets",
+    }],
+  });
+  const existingAssets = Array.isArray(state.editingRecord.assets) ? state.editingRecord.assets : [];
+  const assetId = asset.id || asset.assetId;
+  state.editingRecord.assets = [
+    ...existingAssets.filter((value) =>
+      (typeof value === "string" ? value : value.assetId || value.id) !== assetId),
+    asset,
+  ];
+  await loadData();
+  renderBuilderSummaries();
+  showToast(`${asset.title || asset.assetName || asset.name || "Asset"} linked.`, "success");
+}
+
+function openEntityAssetSelector(button) {
+  const picker = document.createElement("span");
+  picker.className = "content-template-linked-picker hidden";
+  const select = document.createElement("select");
+  select.className = "content-template-linked-select";
+  select.dataset.fieldKey = "entity-assets";
+  select.dataset.fieldName = "Entity Asset";
+  select.dataset.linkedTable = "Assets";
+  select.innerHTML = `<option value="">Choose Asset</option>${(state.records.assets || [])
+    .map((asset) => `<option value="${escapeHTML(asset.id || asset.assetId)}">${escapeHTML(linkedTemplateRecordLabel(asset))}</option>`)
+    .join("")}`;
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  picker.append(select, trigger);
+  button.after(picker);
+  openLinkedRecordSelector(trigger);
+  if (linkedRecordSelectorContext) {
+    linkedRecordSelectorContext.cleanup = () => picker.remove();
+    linkedRecordSelectorContext.onSelect = linkExistingAssetToCurrentContent;
+  }
 }
 
 function cloneBuilderValue(value) {
@@ -2876,8 +2952,13 @@ async function createFromLinkedRecordSelector() {
     return;
   }
   const params = new URLSearchParams({ entity: recordType });
-  const type = context.select.dataset.linkedTypeFilter ||
+  const requestedType = context.select.dataset.linkedTypeFilter ||
     document.getElementById("contentLinkedRecordTypeFilter")?.value || "";
+  const allowedTypes = state.options[typeOptionsKey(recordType)] || [];
+  const alias = recordType === "blueprint" && normalizedText(requestedType) === "workshop"
+    ? "workshop operations" : requestedType;
+  const type = allowedTypes.find((candidate) =>
+    normalizedText(candidate) === normalizedText(alias)) || "";
   const status = context.select.dataset.linkedStatusFilter || "draft";
   const name = document.getElementById("contentLinkedRecordSearch")?.value.trim() || "";
   if (type) params.set("contentType", type);
@@ -3161,7 +3242,7 @@ async function saveContentAsset(event) {
     };
     state.records.assets = [...state.records.assets.filter((asset) => asset.id !== savedAsset.id), savedAsset];
     selectNewTemplateAsset(savedAsset);
-    if (!assetDrawerField?.key && state.editingRecord) {
+    if ((!assetDrawerField?.key || assetDrawerField.key === "entity-assets") && state.editingRecord) {
       const currentAssets = Array.isArray(state.editingRecord.assets) ? state.editingRecord.assets : [];
       state.editingRecord.assets = [
         ...currentAssets.filter((asset) => (typeof asset === "string" ? asset : asset.assetId || asset.id) !== savedAsset.id),
@@ -5753,7 +5834,7 @@ function renderBuilderSummaries(record = state.editingRecord) {
     const entityTableRows = [
       { label: "Active variants", rows: activeEntityVariants.map((variant) => ({ label: variant.name || variant.entityVariantId || "Variant", meta: variant.status || "active" })), emptyLabel: "No active variants", action: "entity", actionLabel: "Edit content" },
       ...(currentRecordType() === "item" ? [{ label: `${name} stock`, rows: entityStockRows, emptyLabel: "Entity stock not enabled", action: entityStockRows.length ? "entity-stock" : "", actionLabel: "Edit stock" }] : []),
-      { label: "Assets", rows: selectedAssetLabels.map((label) => ({ label })), emptyLabel: "No linked Assets", action: "asset", actionLabel: "Add Asset" },
+      { label: "Assets", rows: selectedAssetLabels.map((label) => ({ label })), emptyLabel: "No linked Assets", action: "asset", actionLabel: "Choose Asset" },
       ...templateLinkedGroups,
     ];
     const entityTable = connectionErdTable({
@@ -7761,11 +7842,25 @@ export async function setupContentBuilder() {
     "click",
     handleTemplateGuidedFieldsClick,
   );
-  document.getElementById("contentLinkedRecordSelectorResults")?.addEventListener("click", (event) => {
+  document.getElementById("contentLinkedRecordSelectorResults")?.addEventListener("click", async (event) => {
     const option = event.target.closest("[data-linked-selector-record-id]");
-    const select = linkedRecordSelectorContext?.select;
+    const context = linkedRecordSelectorContext;
+    const select = context?.select;
     if (!option || !select) return;
-    select.value = option.dataset.linkedSelectorRecordId || "";
+    const recordId = option.dataset.linkedSelectorRecordId || "";
+    if (context.onSelect) {
+      const record = linkedSelectorRecords(context).find((candidate) =>
+        (candidate.id || candidate.assetId) === recordId);
+      try {
+        await context.onSelect(record);
+        closeLinkedRecordSelector();
+      } catch (error) {
+        console.error("Failed to link selected record:", error);
+        showToast(error.message || "Failed to link the selected record.", "error");
+      }
+      return;
+    }
+    select.value = recordId;
     refreshLinkedTemplatePickerLabel(select);
     const field = select.closest(".content-template-linked-field");
     if (field) refreshLinkedTemplateField(field);
@@ -7900,9 +7995,7 @@ export async function setupContentBuilder() {
       return;
     }
     if (action === "asset") {
-      button.dataset.fieldName = "Entity Asset";
-      button.dataset.assetType = "Document";
-      openContentAssetDrawer(button);
+      openEntityAssetSelector(button);
       return;
     }
     if (action === "library") {
