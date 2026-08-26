@@ -16,6 +16,7 @@ let adminLinkedVariantBubbleCloseTimer = null;
 let entityStockDrawerSnapshot = [];
 let linkedRecordSelectorContext = null;
 let contentBuilderCreationStack = [];
+let productDrawerReturnFocus = null;
 
 const CONTENT_BUILDER_STACK_KEY = "recovery-tools-content-builder-creation-stack";
 
@@ -4047,7 +4048,11 @@ function chooseNewProduct() {
 function openContentProductDrawer() {
   const drawer = document.getElementById("contentProductDrawer");
   if (!drawer) return;
+  if (!drawer.contains(document.activeElement) && document.activeElement !== document.body) {
+    productDrawerReturnFocus = document.activeElement;
+  }
   if (drawer.parentElement !== document.body) document.body.appendChild(drawer);
+  drawer.inert = false;
   drawer.classList.remove("hidden");
   drawer.setAttribute("aria-hidden", "false");
   updateProductRelationshipControl();
@@ -4097,9 +4102,15 @@ function orderProductDrawerSections() {
 function closeContentProductDrawer() {
   const drawer = document.getElementById("contentProductDrawer");
   if (!drawer) return;
-  if (drawer.contains(document.activeElement)) document.getElementById("contentIsShopProduct")?.focus();
+  if (drawer.contains(document.activeElement)) document.activeElement.blur();
+  drawer.inert = true;
   drawer.classList.add("hidden");
   drawer.setAttribute("aria-hidden", "true");
+  const returnFocusTo = productDrawerReturnFocus;
+  productDrawerReturnFocus = null;
+  if (returnFocusTo?.isConnected) {
+    requestAnimationFrame(() => returnFocusTo.focus({ preventScroll: true }));
+  }
 }
 
 function generatedProductSku() {
