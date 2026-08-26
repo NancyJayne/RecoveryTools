@@ -2732,7 +2732,7 @@ async function captureNestedParentContext(context) {
   };
 }
 
-function restoreNestedParent({ selectedRecord = null, cancelled = false } = {}) {
+async function restoreNestedParent({ selectedRecord = null, cancelled = false } = {}) {
   const entry = contentBuilderCreationStack.pop();
   if (!entry) return false;
   persistContentBuilderCreationStack();
@@ -2794,7 +2794,36 @@ function restoreNestedParent({ selectedRecord = null, cancelled = false } = {}) 
     if (field) refreshLinkedTemplateField(field);
     select.dispatchEvent(new Event("change", { bubbles: true }));
   }
+  let parentAutoSaved = false;
   state.isDirty = selectedRecord?.id ? true : entry.parentIsDirty === true;
+  if (!cancelled && selectedRecord?.id && entry.parentEditingRecord?.id) {
+    try {
+      const parentPayload = await formPayload(false, { validate: false });
+      await updateContentControlRecord({
+        recordType: entry.parentEditingRecord.recordType,
+        recordId: entry.parentEditingRecord.id,
+        updates: parentPayload,
+      });
+      entry.parentRecord = {
+        ...entry.parentRecord,
+        ...cloneBuilderValue(parentPayload),
+        id: entry.parentEditingRecord.id,
+        recordType: entry.parentEditingRecord.recordType,
+      };
+      state.editingRecord = {
+        ...state.editingRecord,
+        ...entry.parentRecord,
+      };
+      state.isDirty = false;
+      parentAutoSaved = true;
+    } catch (error) {
+      console.error("The child record was created, but the parent connection could not be auto-saved:", error);
+      showToast(
+        `${selectedRecord.name || selectedRecord.id} is attached in this draft. Save the parent to persist the connection.`,
+        "error",
+      );
+    }
+  }
   renderBuilderSummaries();
   setTimeout(() => {
     const body = document.getElementById("contentEntityEditorDrawerBody");
@@ -2809,7 +2838,7 @@ function restoreNestedParent({ selectedRecord = null, cancelled = false } = {}) 
   showToast(
     cancelled
       ? `Returned to ${entry.parentName}.`
-      : `${selectedRecord?.name || selectedRecord?.id || "New content"} was created and linked to ${entry.parentName}.`,
+      : `${selectedRecord?.name || selectedRecord?.id || "New content"} was created and linked to ${entry.parentName}${parentAutoSaved ? " and the parent was saved" : ""}.`,
     "success",
   );
   return true;
@@ -7284,7 +7313,7 @@ async function savePayload(payload, action = "save") {
       await loadData();
       const refreshed = findRecord(recordType, recordId);
       if (contentBuilderCreationStack.length && refreshed) {
-        restoreNestedParent({ selectedRecord: refreshed });
+        await restoreNestedParent({ selectedRecord: refreshed });
         return;
       }
       showSaveConfirmation({ action, payload, recordId, record: refreshed });
@@ -7315,7 +7344,7 @@ async function savePayload(payload, action = "save") {
       );
     }
     if (contentBuilderCreationStack.length && savedRecord) {
-      restoreNestedParent({ selectedRecord: savedRecord });
+      await restoreNestedParent({ selectedRecord: savedRecord });
       return;
     }
     showSaveConfirmation({ action, payload, recordId, record: savedRecord });
