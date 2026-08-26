@@ -2011,7 +2011,7 @@ function updateConnectionsWorkspaceAvailability() {
     panel.classList.toggle("hidden", !state.editingRecord?.id || !panelAllowedForRecordType(panel));
   });
   const button = document.getElementById("openContentEntityEditorDrawerBtn");
-  if (button) button.textContent = state.editingRecord?.id ? "Edit entity" : "Create entity";
+  if (button) button.textContent = state.editingRecord?.id ? "Edit content" : "Create content";
 }
 
 function initializeContentBuilderWorkspace() {
@@ -5751,7 +5751,7 @@ function renderBuilderSummaries(record = state.editingRecord) {
       ],
     });
     const entityTableRows = [
-      { label: "Active variants", rows: activeEntityVariants.map((variant) => ({ label: variant.name || variant.entityVariantId || "Variant", meta: variant.status || "active" })), emptyLabel: "No active variants", action: "entity", actionLabel: "Edit entity" },
+      { label: "Active variants", rows: activeEntityVariants.map((variant) => ({ label: variant.name || variant.entityVariantId || "Variant", meta: variant.status || "active" })), emptyLabel: "No active variants", action: "entity", actionLabel: "Edit content" },
       ...(currentRecordType() === "item" ? [{ label: `${name} stock`, rows: entityStockRows, emptyLabel: "Entity stock not enabled", action: entityStockRows.length ? "entity-stock" : "", actionLabel: "Edit stock" }] : []),
       { label: "Assets", rows: selectedAssetLabels.map((label) => ({ label })), emptyLabel: "No linked Assets", action: "asset", actionLabel: "Add Asset" },
       ...templateLinkedGroups,
@@ -7093,7 +7093,7 @@ async function formPayload(confirmDuplicate = false, { validate = true } = {}) {
     isShopProduct: recordType === "item"
       ? primaryBehaviours.isShopProduct === true
       : document.getElementById("contentIsShopProduct")?.checked === true,
-    createsProduct: isShopProductSelected(),
+    createsProduct: Boolean(productRelation),
     soldByRecoveryTools: recordType === "item"
       ? primaryBehaviours.soldByRecoveryTools !== false
       : document.getElementById("contentSoldByRecoveryTools")?.checked !== false,
