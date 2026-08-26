@@ -1537,6 +1537,10 @@ function renderSelectedProductVariantRows(
               </div>
               <div class="product-bundle-component-rows mt-3 space-y-2">${bundleComponentsMarkup(productVariant.bundleComponents || [])}</div>
             </div>
+            <div class="flex justify-end">
+              <button type="button" data-close-variant-section
+                class="rounded border border-[#407471] px-4 py-2 text-[#9edbd7]">Done</button>
+            </div>
           </section>
           <section data-variant-editor-section="price" class="rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Marketplace price</h5>
@@ -7461,7 +7465,7 @@ async function saveConnectionsFromPage() {
 }
 
 async function saveTemplate() {
-  const saveButton = document.querySelector("#contentTemplateForm button[type='submit']");
+  const saveButton = document.getElementById("templateFormSaveBtn");
   if (saveButton?.dataset.saving === "true") return;
   if (saveButton) {
     saveButton.dataset.saving = "true";
@@ -8378,7 +8382,7 @@ export async function setupContentBuilder() {
         `[data-variant-editor-section="${CSS.escape(section)}"]`,
       );
       if (doneFooter) {
-        if (!closingCurrent && section !== "visibility" && activeSection) {
+        if (!closingCurrent && !["visibility", "description"].includes(section) && activeSection) {
           activeSection.appendChild(doneFooter);
           doneFooter.hidden = false;
           doneFooter.classList.remove("hidden");
@@ -8757,6 +8761,7 @@ export async function setupContentBuilder() {
     "click",
     () => showTemplateFormPart(1),
   );
+  document.getElementById("templateFormSaveBtn")?.addEventListener("click", saveTemplate);
   document.getElementById("templateVariantRows")?.addEventListener("input", handleTemplateVariantRowsInput);
   document.getElementById("templateVariantRows")?.addEventListener("change", handleTemplateVariantRowsChange);
   document.getElementById("templateVariantRows")?.addEventListener("click", handleTemplateVariantRowsClick);
