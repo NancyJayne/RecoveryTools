@@ -791,7 +791,7 @@ export function showProductDetail(product, options = {}) {
 
     const replacementInclusions = document.createElement("section");
     replacementInclusions.className = "mb-4";
-    if (!bundleEntries.length && selectedVariant?.inclusions) {
+    if (selectedVariant?.inclusions) {
       const heading = document.createElement("h3");
       heading.className = "mb-2 text-base font-semibold text-white";
       heading.textContent = "Inclusions";

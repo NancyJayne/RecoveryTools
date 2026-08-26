@@ -4676,7 +4676,7 @@ function marketplaceVariantCardPreview(
     productVariant.bundleComponents || [],
     true,
   );
-  const inclusionDetails = !bundleDetails && inclusions
+  const inclusionDetails = inclusions
     ? `<section class="mt-3 text-left text-sm text-gray-300"><h4 class="mb-2 font-semibold text-white">Inclusions</h4><p class="whitespace-pre-line">${escapeHTML(inclusions)}</p></section>`
     : "";
   const prerequisiteDetails = adminLinkedVariantList(
@@ -4705,7 +4705,8 @@ function marketplaceVariantCardPreview(
           class="${marketplacePreviewAttention((price === null || price === undefined) && salePrice === null, "mt-2 w-fit rounded text-left text-xl font-bold text-green-400 hover:text-green-300")}">${salePrice !== null && price !== null && price !== undefined ? `<span class="mr-2 text-gray-500 line-through">$${Number(price).toFixed(2)}</span><span class="font-bold text-green-400">$${Number(salePrice).toFixed(2)}</span>` : price !== null && price !== undefined ? `$${Number(price).toFixed(2)}` : "Set price"}</button>
         <button type="button" data-variant-editor="description" title="Edit description overrides"
           class="${marketplacePreviewAttention(missingDescription, "mt-3 min-h-16 rounded whitespace-pre-line text-left text-sm text-gray-300 hover:text-white")}">${escapeHTML(longDescription || "Set Product long description")}</button>
-        ${bundleDetails || inclusionDetails}
+        ${inclusionDetails}
+        ${bundleDetails}
         ${prerequisiteDetails}
         ${adminPromotionVideoPreview(productVariant)}
         <label class="mt-4 text-left text-sm text-gray-300">Choose option
@@ -5524,6 +5525,51 @@ function openProductBlueprintConnections(role = "ManufacturedFrom") {
   }
   document.getElementById("contentProductUnlockRows")?.closest("section")?.classList.add("hidden");
   section?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const connectionRow = [...document.querySelectorAll(".product-variant-content-link-row")]
+    .find((candidate) =>
+      candidate.querySelector(".variant-content-product-variant")?.value === productVariantId &&
+      candidate.querySelector(".variant-content-link-role")?.value === role);
+  setTimeout(() => connectionRow
+    ?.querySelector(".open-content-linked-selector")?.click(), 0);
+}
+
+function openProductUnlockConnections() {
+  const variants = currentProductVariants();
+  if (!variants.length) {
+    showToast("Create at least one exact Product variant before adding purchase access.", "error");
+    return;
+  }
+  setCheckboxValue("contentIsShopProduct", true);
+  openContentProductDrawer();
+  const grants = productUnlocksFromRows(true);
+  const preferredVariantId = grants[0]?.productVariantId || variants[0].variantId;
+  const escapedVariantId = typeof CSS !== "undefined" && CSS.escape
+    ? CSS.escape(preferredVariantId)
+    : preferredVariantId.replace(/["\\]/g, "\\$&");
+  const row = document.querySelector(
+    `.content-product-variant-row[data-product-variant-id="${escapedVariantId}"]`,
+  ) || document.querySelector(".content-product-variant-row");
+  if (!row) return;
+  document.querySelectorAll(".product-variant-editor-panel").forEach((panel) => {
+    panel.classList.add("hidden");
+    panel.dataset.editorSection = "";
+  });
+  const productVariantId = openVariantOwnedConnections(row, "unlock");
+  if (!productVariantId) return;
+  const addButton = document.getElementById("addContentProductUnlockBtn");
+  if (addButton) {
+    addButton.dataset.productVariantId = productVariantId;
+    addButton.disabled = false;
+  }
+  if (!grants.some((grant) => grant.productVariantId === productVariantId)) {
+    addProductUnlockRow(productVariantId);
+  }
+  filterVariantOwnedConnections(productVariantId);
+  const section = document.getElementById("contentProductUnlockRows")?.closest("section");
+  section?.classList.remove("hidden");
+  const blueprintSection = document.getElementById("productVariantContentLinkRows")?.closest("details");
+  if (blueprintSection) blueprintSection.open = false;
+  section?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderBuilderSummaries(record = state.editingRecord) {
@@ -5537,7 +5583,8 @@ function renderBuilderSummaries(record = state.editingRecord) {
     record?.productEffectiveShopPrice ??
     record?.productPrice ??
     "";
-  const variants = productRelation.variants || record?.variants || [];
+  const variants = productRelation.variants || record?.productVariants ||
+    record?.productRelation?.variants || [];
   const recordType = currentRecordType();
   const entityVariants = entityVariantsFromBuilder();
   const selectedAssetIds = uniqueValues([
@@ -5601,7 +5648,7 @@ function renderBuilderSummaries(record = state.editingRecord) {
     });
     const productRows = variants.map((variant) => ({
       label: variant.name || variant.variantId || "Product variant",
-      meta: `${variant.status || "draft"} · ${moneyLabel(variant.priceOverride ?? price)}`,
+      meta: `${variant.status || "draft"} · ${variant.marketplaceMode || "inherit visibility"} · ${moneyLabel(variant.priceOverride ?? price)}`,
     }));
     const stockRows = variants.length
       ? variants.map((variant) => ({
@@ -5634,7 +5681,7 @@ function renderBuilderSummaries(record = state.editingRecord) {
         { label: "Product variants", rows: productRows, emptyLabel: "No Product variants", action: "product", actionLabel: isShopProduct ? "Edit Product" : "Create Product" },
         { label: "Product stock", rows: stockRows, emptyLabel: "No Product stock" },
         { label: "Manufacturing Blueprints", rows: manufacturingRows, emptyLabel: "No manufacturing Blueprint", action: "blueprint-manufacturing", actionLabel: manufacturingRows.length ? "Edit" : "Connect" },
-        { label: "Purchase access", rows: accessRows, emptyLabel: "No purchase unlocks", action: "product", actionLabel: "Edit unlocks" },
+        { label: "Purchase access", rows: accessRows, emptyLabel: "No purchase unlocks", action: "product-unlocks", actionLabel: "Edit unlocks" },
         { label: "Bundle components", rows: bundleRows, emptyLabel: "No bundle components", action: bundleRows.length ? "" : "bundle", actionLabel: "Add bundle" },
       ],
     });
@@ -7772,6 +7819,10 @@ export async function setupContentBuilder() {
     if (action === "product") {
       setCheckboxValue("contentIsShopProduct", true);
       openContentProductDrawer();
+      return;
+    }
+    if (action === "product-unlocks") {
+      openProductUnlockConnections();
       return;
     }
     if (["entity", "build"].includes(action)) {
