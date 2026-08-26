@@ -2699,6 +2699,7 @@ function cloneBuilderValue(value) {
 async function captureNestedParentContext(context) {
   const payload = await formPayload(false, { validate: false });
   const entityRow = context.select.closest(".content-entity-variant-row");
+  const productBlueprintRow = context.select.closest(".product-variant-content-link-row");
   const matchingSelects = [...(entityRow || document).querySelectorAll(
     `.content-template-linked-select[data-field-key="${CSS.escape(context.select.dataset.fieldKey || "")}"]`,
   )];
@@ -2723,6 +2724,10 @@ async function captureNestedParentContext(context) {
       entityVariantId: entityRow?.dataset.entityVariantId || "",
       fieldKey: context.select.dataset.fieldKey || "",
       selectionIndex: Math.max(matchingSelects.indexOf(context.select), 0),
+      connectionKind: productBlueprintRow ? "product-blueprint" : "template-field",
+      productVariantId:
+        productBlueprintRow?.querySelector(".variant-content-product-variant")?.value || "",
+      linkRole: productBlueprintRow?.querySelector(".variant-content-link-role")?.value || "",
     },
   };
 }
@@ -2754,7 +2759,31 @@ function restoreNestedParent({ selectedRecord = null, cancelled = false } = {}) 
   const selects = [...(variantRoot || document).querySelectorAll(
     `.content-template-linked-select[data-field-key="${CSS.escape(entry.target?.fieldKey || "")}"]`,
   )];
-  const select = selects[entry.target?.selectionIndex || 0] || selects[0];
+  let select = selects[entry.target?.selectionIndex || 0] || selects[0];
+  if (selectedRecord?.id && entry.target?.connectionKind === "product-blueprint") {
+    const links = productVariantContentLinksFromRows(true);
+    const matchingIndex = links.findIndex((link) =>
+      link.productVariantId === entry.target.productVariantId &&
+      link.linkRole === entry.target.linkRole && !link.entityId);
+    const fallbackIndex = links.findIndex((link) =>
+      link.productVariantId === entry.target.productVariantId &&
+      link.linkRole === entry.target.linkRole);
+    const targetIndex = matchingIndex >= 0 ? matchingIndex : fallbackIndex;
+    const connection = {
+      productVariantId: entry.target.productVariantId,
+      entityType: "Blueprint",
+      entityId: selectedRecord.id,
+      entityVariantId: "",
+      linkRole: entry.target.linkRole || "ManufacturedFrom",
+      status: "active",
+    };
+    if (targetIndex >= 0) links[targetIndex] = connection;
+    else links.push(connection);
+    renderProductVariantContentLinkRows(links);
+    select = [...document.querySelectorAll(
+      `.content-template-linked-select[data-field-key="${CSS.escape(entry.target.fieldKey || "")}"]`,
+    )][entry.target.selectionIndex || 0] || null;
+  }
   if (select && selectedRecord?.id) {
     if (![...select.options].some((option) => option.value === selectedRecord.id)) {
       select.add(new Option(linkedTemplateRecordLabel(selectedRecord), selectedRecord.id));
@@ -7000,7 +7029,8 @@ async function formPayload(confirmDuplicate = false, { validate = true } = {}) {
   if (validate && ["item", "blueprint", "plan"].includes(recordType) && !templateId) {
     throw new Error("Choose or create a template before building this record.");
   }
-  const productRelation = productRelationPayload();
+  const creatingNestedReusableRecord = contentBuilderCreationStack.length > 0 && !state.editingRecord;
+  const productRelation = creatingNestedReusableRecord ? null : productRelationPayload();
   if (validate && productRelation?.linkRole === "ManufacturedFrom" &&
       !productRelation.existingProductId && !contentBuilderCreationStack.length) {
     throw new Error("Choose an existing Product for a manufacturing/cost Blueprint.");
@@ -8774,6 +8804,9 @@ export async function setupContentBuilder() {
 
   document.getElementById("contentBuilderForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
+    buildAndSavePayload(false);
+  });
+  document.getElementById("saveContentBuilderBtn")?.addEventListener("click", () => {
     buildAndSavePayload(false);
   });
 
