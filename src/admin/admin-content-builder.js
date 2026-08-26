@@ -2046,7 +2046,10 @@ function showBuilderStep(step = state.currentStep) {
   const backBtn = document.getElementById("builderBackStepBtn");
   const nextBtn = document.getElementById("builderNextStepBtn");
   if (backBtn) backBtn.disabled = nextStep === 1;
-  if (nextBtn) nextBtn.classList.toggle("hidden", nextStep === 4);
+  if (nextBtn) {
+    const unsavedReview = nextStep === 3 && !state.editingRecord?.id;
+    nextBtn.classList.toggle("hidden", nextStep === 4 || unsavedReview);
+  }
   updateConnectionsWorkspaceAvailability();
 }
 
@@ -2218,7 +2221,7 @@ function linkedTemplateSelectMarkup(field, key, required = false) {
         data-linked-status-filter="${escapeHTML(selectedStatus)}"
         data-linked-tag-filters="${escapeHTML(selectedTags.join(","))}"
         data-repeatable="false"
-        ${required ? "required" : ""}
+        data-required="${required ? "true" : "false"}"
       >
         <option value="">Choose a record</option>
         ${records.map((record) => `
@@ -6994,7 +6997,8 @@ async function formPayload(confirmDuplicate = false, { validate = true } = {}) {
     throw new Error("Choose or create a template before building this record.");
   }
   const productRelation = productRelationPayload();
-  if (validate && productRelation?.linkRole === "ManufacturedFrom" && !productRelation.existingProductId) {
+  if (validate && productRelation?.linkRole === "ManufacturedFrom" &&
+      !productRelation.existingProductId && !contentBuilderCreationStack.length) {
     throw new Error("Choose an existing Product for a manufacturing/cost Blueprint.");
   }
   const warmupBlueprintIds = splitCsv(templateInput("contentWarmupBlueprintIds"));
@@ -8419,15 +8423,28 @@ export async function setupContentBuilder() {
     }
     const addBundleComponent = event.target.closest(".add-product-bundle-component");
     if (addBundleComponent) {
-      const rows = addBundleComponent.closest(".content-product-variant-row")
-        ?.querySelector(".product-bundle-component-rows");
-      rows?.querySelector(".product-bundle-empty")?.remove();
-      rows?.insertAdjacentHTML("beforeend", bundleComponentsMarkup([{
+      const sourceRow = addBundleComponent.closest(".content-product-variant-row");
+      const variantId = sourceRow?.querySelector(".product-variant-id")?.value.trim() ||
+        sourceRow?.dataset.productVariantId || "";
+      syncSelectedProductVariantRows();
+      const variants = currentProductVariants();
+      const variant = variants.find((entry) => entry.variantId === variantId);
+      if (!variant) return;
+      variant.bundleComponents = [...(variant.bundleComponents || []), {
         bundleComponentId: `BUNDLE-COMPONENT-${Date.now()}`,
         componentProductId: "",
         componentProductVariantId: "",
         quantity: 1,
-      }]));
+      }];
+      setInputValue("contentProductVariants", serializeProductVariants(variants));
+      renderSelectedProductVariantRows(variants);
+      const refreshedRow = document.querySelector(
+        `.content-product-variant-row[data-product-variant-id="${CSS.escape(variantId)}"]`,
+      );
+      refreshedRow?.querySelector("[data-variant-editor=\"description\"]")?.click();
+      const bundleRows = refreshedRow?.querySelectorAll(".product-bundle-component-row") || [];
+      bundleRows[bundleRows.length - 1]
+        ?.querySelector(".product-bundle-component-product")?.focus();
       state.isDirty = true;
       return;
     }
