@@ -489,11 +489,12 @@ function normalizeProduct(
     };
   }).filter((variant) => variant.visible !== false);
   if (variants.length && !normalizedVariants.length) visible = false;
-  const shortDescription = data.shortDescription || data.description ||
-    linkedContent?.shortDescription || linkedContent?.description || "";
-  const longDescription = data.longDescription ||
-    linkedContent?.longDescription || linkedContent?.notes ||
-    data.description || linkedContent?.description || shortDescription;
+  // Product descriptions are inherited from the primary linked entity. Product-variant
+  // descriptions remain the explicit sellable overrides handled above.
+  const shortDescription = linkedContent?.shortDescription || linkedContent?.description ||
+    data.shortDescription || data.description || "";
+  const longDescription = linkedContent?.longDescription || linkedContent?.notes ||
+    linkedContent?.description || data.longDescription || data.description || shortDescription;
   const tileImageVariant = data.marketplaceTileImageSource === "product-variant"
     ? normalizedVariants.find((variant) =>
       (variant.variantId || variant.id) === data.marketplaceTileImageVariantId)

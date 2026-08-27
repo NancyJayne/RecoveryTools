@@ -667,6 +667,8 @@ async function updateProductRelation({
     : [];
   const legacyProductType = productTypeValue(relation.productType || itemUpdate.type || itemData.type, "tool");
   const canonicalProductType = canonicalProductTypeValue(relation.productType || legacyProductType);
+  const inheritedShortDescription = cleanString(updates.shortDescription);
+  const inheritedLongDescription = cleanString(updates.longDescription);
 
   transaction.set(productRef, {
     productId,
@@ -680,6 +682,9 @@ async function updateProductRelation({
     itemId: collection === "items" ? recordId : "",
     name,
     title: name,
+    description: inheritedShortDescription,
+    shortDescription: inheritedShortDescription,
+    longDescription: inheritedLongDescription,
     type: cleanString(relation.productType) || legacyProductType,
     itemType: itemUpdate.type || itemData.type || itemData.itemType || "",
     itemKind: itemUpdate.itemKind || itemData.itemKind || "",
