@@ -447,13 +447,13 @@ function syncRelationshipPicker(kind) {
   setHiddenRelationshipIds(inputId, ids);
 }
 
-function knownContentTags() {
+function knownContentTags(searchValue = "") {
   const categoryId = document.getElementById("contentTagCategoryFilter")?.value || "";
-  const search = normalizedText(document.getElementById("contentTagSearch")?.value || "");
+  const search = normalizedText(searchValue);
   const allRecords = Object.values(state.records || {}).flatMap((records) => records || []);
   return uniqueValues([
     ...(state.options.tagOptions || [])
-      .filter((tag) => (search || !categoryId || tag.categoryId === categoryId) &&
+      .filter((tag) => (!categoryId || tag.categoryId === categoryId) &&
         (!search || normalizedText(`${tag.name || ""} ${tag.id || ""}`).includes(search)))
       .map((tag) => tag.name || tag.id),
     ...(!categoryId && !search ? allRecords.flatMap((record) => record.tags || []) : []),
@@ -463,26 +463,24 @@ function knownContentTags() {
 
 function tagRowMarkup(value = "") {
   const selectedValue = String(value || "").trim();
-  const knownTags = uniqueValues([...knownContentTags(), selectedValue]).filter(Boolean);
+  const knownTags = uniqueValues([...knownContentTags(selectedValue), selectedValue]).filter(Boolean);
   const selectedKey = selectedValue.toLowerCase();
   const isKnownTag = (state.options.tagOptions || []).some((tag) =>
     normalizedText(tag.name || tag.id) === selectedKey);
   const customValue = selectedValue && !isKnownTag ? selectedValue : "";
-  const options = [
-    `<option value="">Choose existing tag</option>`,
-    ...knownTags.map((tag) => {
-      const selected = isKnownTag && tag.toLowerCase() === selectedKey ? " selected" : "";
-      return `<option value="${escapeHTML(tag)}"${selected}>${escapeHTML(tag)}</option>`;
-    }),
-    `<option value="__new__"${customValue ? " selected" : ""}>Add new tag...</option>`,
-  ].join("");
+  const listId = `content-tag-options-${Math.random().toString(36).slice(2)}`;
+  const options = knownTags.map((tag) =>
+    `<option value="${escapeHTML(tag)}"></option>`).join("");
 
   const categoryId = document.getElementById("contentTagCategoryFilter")?.value || "";
   return `
-    <div class="content-tag-row grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
-      <select class="content-tag-select rounded bg-gray-800 px-3 py-2 text-white">
-        ${options}
-      </select>
+    <div class="content-tag-row grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
+      <div>
+        <input class="content-tag-select w-full rounded bg-gray-800 px-3 py-2 text-white"
+          list="${listId}" value="${escapeHTML(selectedValue)}" placeholder="Search and choose an existing tag" autocomplete="off">
+        <datalist id="${listId}" class="content-tag-options">${options}</datalist>
+      </div>
+      <button type="button" class="content-tag-create rounded border border-[#407471] px-3 py-2 text-xs text-[#9edbd7] hover:bg-[#153b38]">Add new tag</button>
       <input
         class="content-tag-new rounded bg-gray-800 px-3 py-2 text-white ${customValue ? "" : "hidden"}"
         placeholder="New tag"
@@ -509,8 +507,12 @@ function selectedTagsFromControls() {
   const rows = [...document.querySelectorAll("#contentTagRows .content-tag-row")];
   return uniqueValues(rows.map((row) => {
     const selected = row.querySelector(".content-tag-select")?.value || "";
-    if (selected === "__new__") return row.querySelector(".content-tag-new")?.value || "";
-    return selected;
+    if (!row.querySelector(".content-tag-new")?.classList.contains("hidden")) {
+      return row.querySelector(".content-tag-new")?.value || selected;
+    }
+    const existing = (state.options.tagOptions || []).find((tag) =>
+      normalizedText(tag.name || tag.id) === normalizedText(selected));
+    return existing ? existing.name || existing.id : "";
   }));
 }
 
@@ -542,34 +544,51 @@ function handleTagRowsChange(event) {
   if (!row) return;
 
   if (event.target.classList.contains("content-tag-select")) {
-    const input = row.querySelector(".content-tag-new");
-    const category = row.querySelector(".content-tag-new-category");
-    if (input) {
-      input.classList.toggle("hidden", event.target.value !== "__new__");
-      if (event.target.value !== "__new__") input.value = "";
+    const match = (state.options.tagOptions || []).some((tag) =>
+      normalizedText(tag.name || tag.id) === normalizedText(event.target.value));
+    if (match) {
+      row.querySelector(".content-tag-new")?.classList.add("hidden");
+      row.querySelector(".content-tag-new-category")?.classList.add("hidden");
+      row.querySelector(".content-tag-save-new")?.classList.add("hidden");
+      row.dataset.newTagName = "";
+      row.dataset.newTagCategoryId = "";
     }
-    category?.classList.toggle("hidden", event.target.value !== "__new__");
-    row.querySelector(".content-tag-save-new")?.classList.toggle("hidden", event.target.value !== "__new__");
-    if (category && event.target.value === "__new__" && !category.value) {
-      category.value = document.getElementById("contentTagCategoryFilter")?.value || "";
-    }
-    if (category && event.target.value !== "__new__") category.value = "";
   }
 
   syncTagInput();
 }
 
 function refreshExistingTagOptions() {
-  document.querySelectorAll("#contentTagRows .content-tag-select").forEach((select) => {
-    const current = select.value;
-    const options = uniqueValues([...knownContentTags(), current]).filter(Boolean);
-    select.innerHTML = `<option value="">Choose existing tag</option>${options.map((tag) =>
-      `<option value="${escapeHTML(tag)}">${escapeHTML(tag)}</option>`).join("")}<option value="__new__">Add new tag...</option>`;
-    select.value = current;
+  document.querySelectorAll("#contentTagRows .content-tag-select").forEach((input) => {
+    const options = knownContentTags(input.value);
+    const list = input.closest(".content-tag-row")?.querySelector(".content-tag-options");
+    if (list) list.innerHTML = options.map((tag) =>
+      `<option value="${escapeHTML(tag)}"></option>`).join("");
   });
 }
 
+function handleTagRowsInput(event) {
+  if (event.target.classList.contains("content-tag-select")) refreshExistingTagOptions();
+  syncTagInput();
+}
+
 function handleTagRowsClick(event) {
+  if (event.target.classList.contains("content-tag-create")) {
+    const row = event.target.closest(".content-tag-row");
+    const input = row?.querySelector(".content-tag-new");
+    const category = row?.querySelector(".content-tag-new-category");
+    if (input) {
+      input.value = row.querySelector(".content-tag-select")?.value.trim() || input.value;
+      input.classList.remove("hidden");
+      input.focus();
+    }
+    if (category) {
+      category.value = document.getElementById("contentTagCategoryFilter")?.value || category.value;
+      category.classList.remove("hidden");
+    }
+    row?.querySelector(".content-tag-save-new")?.classList.remove("hidden");
+    return;
+  }
   if (event.target.classList.contains("content-tag-save-new")) {
     const row = event.target.closest(".content-tag-row");
     const name = row?.querySelector(".content-tag-new")?.value.trim() || "";
@@ -585,9 +604,6 @@ function handleTagRowsClick(event) {
     row.dataset.newTagName = existing ? "" : name;
     row.dataset.newTagCategoryId = existing ? "" : categoryId;
     const select = row.querySelector(".content-tag-select");
-    if (select && ![...select.options].some((option) => option.value === (tag.name || tag.id))) {
-      select.add(new Option(tag.name || tag.id, tag.name || tag.id));
-    }
     if (select) select.value = tag.name || tag.id;
     row.querySelector(".content-tag-new")?.classList.add("hidden");
     row.querySelector(".content-tag-new-category")?.classList.add("hidden");
@@ -5582,7 +5598,7 @@ function selectedNewTagsFromControls(validate = true) {
     if (row.dataset.newTagName) {
       return [{ name: row.dataset.newTagName, categoryId: row.dataset.newTagCategoryId || "" }];
     }
-    if (row.querySelector(".content-tag-select")?.value !== "__new__") return [];
+    if (row.querySelector(".content-tag-new")?.classList.contains("hidden")) return [];
     const name = row.querySelector(".content-tag-new")?.value.trim() || "";
     const categoryId = row.querySelector(".content-tag-new-category")?.value || "";
     return name ? [{ name, categoryId }] : [];
@@ -8095,10 +8111,9 @@ export async function setupContentBuilder() {
   });
   document.getElementById("addContentTagBtn")?.addEventListener("click", () => addTagRow());
   document.getElementById("contentTagRows")?.addEventListener("change", handleTagRowsChange);
-  document.getElementById("contentTagRows")?.addEventListener("input", syncTagInput);
+  document.getElementById("contentTagRows")?.addEventListener("input", handleTagRowsInput);
   document.getElementById("contentTagRows")?.addEventListener("click", handleTagRowsClick);
   document.getElementById("contentTagCategoryFilter")?.addEventListener("change", refreshExistingTagOptions);
-  document.getElementById("contentTagSearch")?.addEventListener("input", refreshExistingTagOptions);
   document.getElementById("templateGuidedFields")?.addEventListener(
     "click",
     handleTemplateGuidedFieldsClick,
