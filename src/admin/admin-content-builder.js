@@ -463,24 +463,21 @@ function knownContentTags(searchValue = "") {
 
 function tagRowMarkup(value = "") {
   const selectedValue = String(value || "").trim();
-  const knownTags = uniqueValues([...knownContentTags(selectedValue), selectedValue]).filter(Boolean);
   const selectedKey = selectedValue.toLowerCase();
   const isKnownTag = (state.options.tagOptions || []).some((tag) =>
     normalizedText(tag.name || tag.id) === selectedKey);
   const customValue = selectedValue && !isKnownTag ? selectedValue : "";
-  const listId = `content-tag-options-${Math.random().toString(36).slice(2)}`;
-  const options = knownTags.map((tag) =>
-    `<option value="${escapeHTML(tag)}"></option>`).join("");
-
   const categoryId = document.getElementById("contentTagCategoryFilter")?.value || "";
   return `
-    <div class="content-tag-row grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
-      <div>
+    <div class="content-tag-row grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
+      <div class="relative">
         <input class="content-tag-select w-full rounded bg-gray-800 px-3 py-2 text-white"
-          list="${listId}" value="${escapeHTML(selectedValue)}" placeholder="Search and choose an existing tag" autocomplete="off">
-        <datalist id="${listId}" class="content-tag-options">${options}</datalist>
+          value="${escapeHTML(selectedValue)}" placeholder="Search and choose an existing tag"
+          autocomplete="off" role="combobox" aria-expanded="false">
+        <div class="content-tag-options absolute z-30 mt-1 hidden max-h-56 w-full overflow-y-auto rounded border border-gray-700 bg-gray-900 p-1 text-white shadow-xl"></div>
       </div>
-      <button type="button" class="content-tag-create rounded border border-[#407471] px-3 py-2 text-xs text-[#9edbd7] hover:bg-[#153b38]">Add new tag</button>
+      <button type="button" class="content-tag-add-row rounded border border-[#407471] px-3 py-2 text-xs text-[#9edbd7] hover:bg-[#153b38]">Add another tag</button>
+      <button type="button" class="content-tag-create px-2 py-2 text-xs text-gray-300 underline decoration-gray-500 underline-offset-4 hover:text-[#9edbd7]">Add new tag</button>
       <input
         class="content-tag-new rounded bg-gray-800 px-3 py-2 text-white ${customValue ? "" : "hidden"}"
         placeholder="New tag"
@@ -539,6 +536,27 @@ function addTagRow(value = "") {
   syncTagInput();
 }
 
+function renderTagSuggestions(row, open = true) {
+  const input = row?.querySelector(".content-tag-select");
+  const list = row?.querySelector(".content-tag-options");
+  if (!input || !list) return;
+  const options = knownContentTags(input.value);
+  list.innerHTML = options.length
+    ? options.map((tag) => `<button type="button" data-tag-value="${escapeHTML(tag)}"
+        class="content-tag-option block w-full rounded px-3 py-2 text-left text-sm text-white hover:bg-[#153b38] hover:text-[#9edbd7]">${escapeHTML(tag)}</button>`).join("")
+    : `<p class="px-3 py-2 text-sm text-gray-400">No matching tags in this category.</p>`;
+  list.classList.toggle("hidden", !open);
+  input.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function closeTagSuggestions(exceptRow = null) {
+  document.querySelectorAll("#contentTagRows .content-tag-row").forEach((row) => {
+    if (row === exceptRow) return;
+    row.querySelector(".content-tag-options")?.classList.add("hidden");
+    row.querySelector(".content-tag-select")?.setAttribute("aria-expanded", "false");
+  });
+}
+
 function handleTagRowsChange(event) {
   const row = event.target.closest(".content-tag-row");
   if (!row) return;
@@ -559,20 +577,37 @@ function handleTagRowsChange(event) {
 }
 
 function refreshExistingTagOptions() {
-  document.querySelectorAll("#contentTagRows .content-tag-select").forEach((input) => {
-    const options = knownContentTags(input.value);
-    const list = input.closest(".content-tag-row")?.querySelector(".content-tag-options");
-    if (list) list.innerHTML = options.map((tag) =>
-      `<option value="${escapeHTML(tag)}"></option>`).join("");
+  document.querySelectorAll("#contentTagRows .content-tag-row").forEach((row) => {
+    renderTagSuggestions(row, false);
   });
 }
 
 function handleTagRowsInput(event) {
-  if (event.target.classList.contains("content-tag-select")) refreshExistingTagOptions();
+  if (event.target.classList.contains("content-tag-select")) {
+    const row = event.target.closest(".content-tag-row");
+    closeTagSuggestions(row);
+    renderTagSuggestions(row);
+  }
   syncTagInput();
 }
 
 function handleTagRowsClick(event) {
+  const option = event.target.closest(".content-tag-option");
+  if (option) {
+    const row = option.closest(".content-tag-row");
+    const input = row?.querySelector(".content-tag-select");
+    if (input) input.value = option.dataset.tagValue || "";
+    row?.querySelector(".content-tag-options")?.classList.add("hidden");
+    input?.setAttribute("aria-expanded", "false");
+    if (input) handleTagRowsChange({ target: input });
+    state.isDirty = true;
+    return;
+  }
+  if (event.target.classList.contains("content-tag-add-row")) {
+    addTagRow();
+    document.querySelector("#contentTagRows .content-tag-row:last-child .content-tag-select")?.focus();
+    return;
+  }
   if (event.target.classList.contains("content-tag-create")) {
     const row = event.target.closest(".content-tag-row");
     const input = row?.querySelector(".content-tag-new");
@@ -8109,10 +8144,18 @@ export async function setupContentBuilder() {
     populateBuilderFromRecord(record);
     showToast(`Editing ${record.name || record.id} instead.`, "success");
   });
-  document.getElementById("addContentTagBtn")?.addEventListener("click", () => addTagRow());
   document.getElementById("contentTagRows")?.addEventListener("change", handleTagRowsChange);
   document.getElementById("contentTagRows")?.addEventListener("input", handleTagRowsInput);
   document.getElementById("contentTagRows")?.addEventListener("click", handleTagRowsClick);
+  document.getElementById("contentTagRows")?.addEventListener("focusin", (event) => {
+    if (!event.target.classList.contains("content-tag-select")) return;
+    const row = event.target.closest(".content-tag-row");
+    closeTagSuggestions(row);
+    renderTagSuggestions(row);
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".content-tag-row")) closeTagSuggestions();
+  });
   document.getElementById("contentTagCategoryFilter")?.addEventListener("change", refreshExistingTagOptions);
   document.getElementById("templateGuidedFields")?.addEventListener(
     "click",
