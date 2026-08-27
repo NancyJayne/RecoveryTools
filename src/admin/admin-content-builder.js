@@ -477,7 +477,7 @@ function tagRowMarkup(value = "") {
         <div class="content-tag-options absolute z-30 mt-1 hidden max-h-56 w-full overflow-y-auto rounded border border-gray-700 bg-gray-900 p-1 text-white shadow-xl"></div>
       </div>
       <button type="button" class="content-tag-add-row rounded border border-[#407471] px-3 py-2 text-xs text-[#9edbd7] hover:bg-[#153b38]">Add another tag</button>
-      <button type="button" class="content-tag-create px-2 py-2 text-xs text-gray-300 underline decoration-gray-500 underline-offset-4 hover:text-[#9edbd7]">Add new tag</button>
+      <button type="button" class="content-tag-create px-2 py-2 text-xs text-gray-300 underline decoration-gray-500 underline-offset-4 hover:text-[#9edbd7]">Create new tag</button>
       <input
         class="content-tag-new rounded bg-gray-800 px-3 py-2 text-white ${customValue ? "" : "hidden"}"
         placeholder="New tag"
@@ -605,11 +605,12 @@ function handleTagRowsClick(event) {
   }
   if (event.target.classList.contains("content-tag-add-row")) {
     addTagRow();
-    document.querySelector("#contentTagRows .content-tag-row:last-child .content-tag-select")?.focus();
     return;
   }
   if (event.target.classList.contains("content-tag-create")) {
     const row = event.target.closest(".content-tag-row");
+    row?.querySelector(".content-tag-options")?.classList.add("hidden");
+    row?.querySelector(".content-tag-select")?.setAttribute("aria-expanded", "false");
     const input = row?.querySelector(".content-tag-new");
     const category = row?.querySelector(".content-tag-new-category");
     if (input) {
