@@ -761,6 +761,7 @@ function serializeProductVariants(variants = []) {
     stock: variant.stock ?? variant.stockQuantity ?? 0,
     status: variant.status || "active",
     contentVariantId: variant.contentVariantId || "",
+    contentVariantLinkReviewed: variant.contentVariantLinkReviewed === true || Boolean(variant.contentVariantId),
     calendarBookingReference: variant.calendarBookingReference || "",
     seatCapacity: variant.seatCapacity ?? null,
     nearCapacityWarning: variant.nearCapacityWarning ?? null,
@@ -1599,11 +1600,24 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
       const label = variant.name && variant.name !== id ? `${variant.name} (${id})` : variant.name || id;
       return `<option value="${escapeHTML(id)}"${selected}>${escapeHTML(label)}</option>`;
     }).join("");
+    const entityVariantLinkReviewed = productVariant.contentVariantLinkReviewed === true ||
+      Boolean(productVariant.contentVariantId);
+    const entityVariantLinkValue = productVariant.contentVariantId ||
+      (entityVariantLinkReviewed ? "__none__" : "");
     return `
       <div class="content-product-variant-row overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80"
         data-content-variant-id="${escapeHTML(productVariant.contentVariantId || "")}"
         data-product-variant-id="${escapeHTML(productVariant.variantId || "")}">
         <div class="bg-gray-800/90 p-3">
+          <div class="mb-3 flex justify-end">
+            <label class="w-full max-w-sm text-xs font-medium text-gray-200">Connect to Entity Variant
+              <select class="product-variant-content-variant mt-1 w-full rounded border px-3 py-2 text-white ${entityVariantLinkReviewed ? "border-[#407471] bg-gray-950" : "border-purple-500 bg-purple-950/40 ring-1 ring-purple-500"}">
+                <option value=""${entityVariantLinkValue ? "" : " selected"}>Review entity variant connection</option>
+                <option value="__none__"${entityVariantLinkValue === "__none__" ? " selected" : ""}>None</option>
+                ${entityVariantOptions}
+              </select>
+            </label>
+          </div>
           ${marketplaceVariantCardPreview(productVariant, entityVariant, index === 0, true)}
         </div>
         <div class="product-variant-editor-panel hidden grid gap-3 border-t border-gray-700 bg-gray-950/30 p-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1647,13 +1661,6 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
             </label>
             <label class="block text-sm">Product variant ID
             <input class="product-variant-id mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.variantId || "")}">
-            </label>
-            <label class="block text-sm">Linked entity variant <span class="text-xs text-gray-400">(optional)</span>
-              <select class="product-variant-content-variant mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
-                <option value="">No exact entity variant link</option>
-                ${entityVariantOptions}
-              </select>
-              <span class="mt-1 block text-xs text-gray-400">Keeps this sellable variant connected to its reusable source variant without making the link mandatory.</span>
             </label>
             <label class="block text-sm">Exact variant SKU
             <input class="product-variant-sku mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.sku || "")}" placeholder="Auto-filled if blank">
@@ -1900,7 +1907,8 @@ function syncSelectedProductVariantRows() {
   if (!input) return;
   const current = parseProductVariants(input.value);
   const variants = [...document.querySelectorAll(".content-product-variant-row")].map((row, index) => {
-    const contentVariantId = row.querySelector(".product-variant-content-variant")?.value || "";
+    const contentVariantSelection = row.querySelector(".product-variant-content-variant")?.value || "";
+    const contentVariantId = contentVariantSelection === "__none__" ? "" : contentVariantSelection;
     const existingId = row.dataset.productVariantId || "";
     const existing = current.find((variant) =>
       variant.variantId === existingId ||
@@ -1937,6 +1945,7 @@ function syncSelectedProductVariantRows() {
       status: row.dataset.pendingStatus ||
         row.querySelector(".product-variant-status")?.value || "draft",
       contentVariantId,
+      contentVariantLinkReviewed: Boolean(contentVariantSelection),
       shortDescription: row.querySelector(".product-variant-short-description")?.value.trim() || "",
       longDescription: row.querySelector(".product-variant-long-description")?.value.trim() || "",
       inclusions: row.querySelector(".product-variant-inclusions")?.value.trim() || "",
@@ -5240,8 +5249,9 @@ function updateMarketplacePreviewRow(target) {
   const row = target?.closest?.(".content-product-variant-row");
   const preview = row?.querySelector(".product-variant-card-preview");
   if (!row || !preview) return;
-  const contentVariantId = row.querySelector(".product-variant-content-variant")?.value ||
-    row.dataset.contentVariantId || "";
+  const contentVariantSelection = row.querySelector(".product-variant-content-variant")?.value || "";
+  const contentVariantId = contentVariantSelection === "__none__" ? "" :
+    contentVariantSelection || row.dataset.contentVariantId || "";
   const entityVariant = entityVariantsFromBuilder()
     .find((variant) => variant.entityVariantId === contentVariantId) || {};
   const existingProductVariant = currentProductVariants().find((variant) =>
@@ -8848,6 +8858,7 @@ export async function setupContentBuilder() {
         ...structuredClone(source),
         variantId: duplicateId,
         contentVariantId: "",
+        contentVariantLinkReviewed: false,
         name: `${source.name || "Product variant"} copy`,
         sku: "",
         stock: 0,
@@ -9187,6 +9198,15 @@ export async function setupContentBuilder() {
     state.isDirty = true;
   });
   document.getElementById("contentProductVariantRows")?.addEventListener("change", (event) => {
+    if (event.target.classList.contains("product-variant-content-variant")) {
+      const reviewed = Boolean(event.target.value);
+      event.target.classList.toggle("border-purple-500", !reviewed);
+      event.target.classList.toggle("bg-purple-950/40", !reviewed);
+      event.target.classList.toggle("ring-1", !reviewed);
+      event.target.classList.toggle("ring-purple-500", !reviewed);
+      event.target.classList.toggle("border-[#407471]", reviewed);
+      event.target.classList.toggle("bg-gray-950", reviewed);
+    }
     if (event.target.classList.contains("product-prerequisite-item-selector")) {
       const row = event.target.closest(".product-prerequisite-row");
       const target = row?.querySelector(".product-prerequisite-target");

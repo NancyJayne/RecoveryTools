@@ -185,6 +185,7 @@ function normalizedVariant(variant, sourceCollection) {
     inventoryTracked: variant.inventoryTracked === true,
     status: variant.status || "active",
     contentVariantId: variant.contentVariantId || "",
+    contentVariantLinkReviewed: variant.contentVariantLinkReviewed === true || Boolean(variant.contentVariantId),
     deliveryMode: variant.deliveryMode || "",
     physicalFulfilment: variant.physicalFulfilment || "",
     calendarBookingReference: variant.calendarBookingReference || "",
