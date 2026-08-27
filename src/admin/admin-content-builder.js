@@ -2158,6 +2158,7 @@ function restorePersistedContentBuilderCreationStack() {
 function updateContentBuilderCreationBreadcrumb() {
   const breadcrumb = document.getElementById("contentEntityCreationBreadcrumb");
   const returnButton = document.getElementById("returnToParentEntityBtn");
+  const closeButton = document.getElementById("closeContentEntityEditorDrawerBtn");
   const labels = contentBuilderCreationStack.map((entry) => entry.parentName || "Parent");
   const current = document.getElementById("contentName")?.value ||
     `New ${currentRecordType()}`;
@@ -2165,7 +2166,25 @@ function updateContentBuilderCreationBreadcrumb() {
     breadcrumb.textContent = [...labels, current].join(" → ");
     breadcrumb.classList.toggle("hidden", !contentBuilderCreationStack.length);
   }
-  returnButton?.classList.toggle("hidden", !contentBuilderCreationStack.length);
+  // Nested creation has one clear exit: the normal Close control becomes a
+  // one-level Back action. This prevents it from bypassing the saved parent
+  // draft and leaving the child route over an empty Connections workspace.
+  returnButton?.classList.add("hidden");
+  if (closeButton) {
+    const parentName = contentBuilderCreationStack.at(-1)?.parentName || "previous content";
+    closeButton.textContent = contentBuilderCreationStack.length
+      ? `Back to ${parentName}`
+      : "Close";
+  }
+}
+
+async function closeOrReturnFromContentCreator() {
+  if (contentBuilderCreationStack.length) {
+    await restoreNestedParent({ cancelled: true });
+    return;
+  }
+  setContentEntityEditorDrawerOpen(false);
+  if (state.editingRecord?.id) showBuilderStep(4);
 }
 
 function setContentEntityEditorDrawerOpen(open) {
@@ -8202,10 +8221,9 @@ export async function setupContentBuilder() {
     showBuilderStep(state.editingRecord?.id ? 1 : state.currentStep || 1);
     setContentEntityEditorDrawerOpen(true);
   });
-  document.getElementById("closeContentEntityEditorDrawerBtn")?.addEventListener("click", () => {
-    setContentEntityEditorDrawerOpen(false);
-    if (state.editingRecord?.id) showBuilderStep(4);
-  });
+  document.getElementById("closeContentEntityEditorDrawerBtn")?.addEventListener(
+    "click", closeOrReturnFromContentCreator,
+  );
   document.getElementById("returnToParentEntityBtn")?.addEventListener("click", () => {
     restoreNestedParent({ cancelled: true });
   });
