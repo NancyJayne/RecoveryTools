@@ -1545,15 +1545,12 @@ function populateProductVariantsFromEntity() {
   });
 
   input.value = serializeProductVariants(retained);
-  renderSelectedProductVariantRows(retained, selected);
+  renderSelectedProductVariantRows(retained);
   renderProductVariantContentLinkRows(productVariantContentLinksFromRows(true));
   updateProductPhysicalFields();
 }
 
-function renderSelectedProductVariantRows(
-  productVariants = currentProductVariants(),
-  selectedEntityVariants = entityVariantsFromBuilder().filter((variant) => variant.shopEnabled === true),
-) {
+function renderSelectedProductVariantRows(productVariants = currentProductVariants()) {
   const container = document.getElementById("contentProductVariantRows");
   if (!container) return;
   const summary = document.getElementById("contentProductVariantSummary");
@@ -1572,6 +1569,7 @@ function renderSelectedProductVariantRows(
   const productShortDescription = document.getElementById("contentShortDescription")?.value || "";
   const productLongDescription = document.getElementById("contentLongDescription")?.value || "";
   const productMarketplaceMode = document.getElementById("contentProductMarketplaceMode")?.value || "hidden";
+  const availableEntityVariants = entityVariantsFromBuilder();
   const sourceNote = (source, restoreTarget = "") => `
     <span class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
       <span>${escapeHTML(source)}</span>
@@ -1593,8 +1591,14 @@ function renderSelectedProductVariantRows(
     }).join("");
   };
   container.innerHTML = productVariants.map((productVariant, index) => {
-    const entityVariant = selectedEntityVariants.find((variant) =>
+    const entityVariant = availableEntityVariants.find((variant) =>
       variant.entityVariantId === productVariant.contentVariantId) || {};
+    const entityVariantOptions = availableEntityVariants.map((variant) => {
+      const id = variant.entityVariantId || "";
+      const selected = id && id === productVariant.contentVariantId ? " selected" : "";
+      const label = variant.name && variant.name !== id ? `${variant.name} (${id})` : variant.name || id;
+      return `<option value="${escapeHTML(id)}"${selected}>${escapeHTML(label)}</option>`;
+    }).join("");
     return `
       <div class="content-product-variant-row overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80"
         data-content-variant-id="${escapeHTML(productVariant.contentVariantId || "")}"
@@ -1643,6 +1647,13 @@ function renderSelectedProductVariantRows(
             </label>
             <label class="block text-sm">Product variant ID
             <input class="product-variant-id mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.variantId || "")}">
+            </label>
+            <label class="block text-sm">Linked entity variant <span class="text-xs text-gray-400">(optional)</span>
+              <select class="product-variant-content-variant mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                <option value="">No exact entity variant link</option>
+                ${entityVariantOptions}
+              </select>
+              <span class="mt-1 block text-xs text-gray-400">Keeps this sellable variant connected to its reusable source variant without making the link mandatory.</span>
             </label>
             <label class="block text-sm">Exact variant SKU
             <input class="product-variant-sku mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.sku || "")}" placeholder="Auto-filled if blank">
@@ -1889,7 +1900,7 @@ function syncSelectedProductVariantRows() {
   if (!input) return;
   const current = parseProductVariants(input.value);
   const variants = [...document.querySelectorAll(".content-product-variant-row")].map((row, index) => {
-    const contentVariantId = row.dataset.contentVariantId || "";
+    const contentVariantId = row.querySelector(".product-variant-content-variant")?.value || "";
     const existingId = row.dataset.productVariantId || "";
     const existing = current.find((variant) =>
       variant.variantId === existingId ||
@@ -5229,7 +5240,8 @@ function updateMarketplacePreviewRow(target) {
   const row = target?.closest?.(".content-product-variant-row");
   const preview = row?.querySelector(".product-variant-card-preview");
   if (!row || !preview) return;
-  const contentVariantId = row.dataset.contentVariantId || "";
+  const contentVariantId = row.querySelector(".product-variant-content-variant")?.value ||
+    row.dataset.contentVariantId || "";
   const entityVariant = entityVariantsFromBuilder()
     .find((variant) => variant.entityVariantId === contentVariantId) || {};
   const existingProductVariant = currentProductVariants().find((variant) =>
@@ -8871,7 +8883,8 @@ export async function setupContentBuilder() {
       const input = row?.querySelector(selectors[field] || "[data-no-variant-field]");
       if (!row || !input) return;
       if (["name", "colour", "size"].includes(field)) {
-        const contentVariantId = row.dataset.contentVariantId || "";
+        const contentVariantId = row.querySelector(".product-variant-content-variant")?.value ||
+          row.dataset.contentVariantId || "";
         const entityVariant = entityVariantsFromBuilder().find((variant) =>
           variant.entityVariantId === contentVariantId) || {};
         input.value = field === "name" ? entityVariant.name || "" :
