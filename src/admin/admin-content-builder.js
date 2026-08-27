@@ -4464,23 +4464,30 @@ function marketplaceTilePreviewMarkup() {
   const marketplaceAudience = document.getElementById("contentProductMarketplaceAudience")?.value || "public";
   const shopStatus = document.getElementById("contentProductShopStatus")?.value || "draft";
   const inventoryTracked = document.getElementById("contentProductInventoryTracked")?.checked === true;
+  const tracksSeats = document.getElementById("contentProductTracksSeats")?.checked === true;
   const allProductVariants = currentProductVariants();
   const sellableStockVariants = allProductVariants.filter((variant) =>
     variant.status === "active" &&
     ["inherit", "active"].includes(variant.marketplaceMode || "inherit"));
-  const outOfStock = inventoryTracked && sellableStockVariants.length > 0 &&
+  const ticketVariantsWithAvailability = sellableStockVariants.filter((variant) =>
+    variant.ticketsRemaining !== null && variant.ticketsRemaining !== undefined);
+  const workshopSoldOut = tracksSeats && ticketVariantsWithAvailability.length > 0 &&
+    ticketVariantsWithAvailability.every((variant) => Number(variant.ticketsRemaining) <= 0);
+  const outOfStock = !tracksSeats && inventoryTracked && sellableStockVariants.length > 0 &&
     sellableStockVariants.every((variant) => Number(variant.stock ?? 0) <= 0);
   let previewState = archived
     ? { label: "Archived", target: "data-product-editor-target=\"contentProductArchived\"", tone: "red" }
-    : outOfStock
-      ? { label: "Out of Stock", target: "data-product-editor-target=\"contentProductHasPhysicalFulfilment\"", tone: "gray" }
-      : shopStatus === "draft"
-        ? { label: "Draft", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "gray" }
-        : marketplaceMode === "coming-soon"
-          ? { label: "Coming Soon", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "purple" }
-          : ["hidden", "scheduled"].includes(marketplaceMode)
-            ? { label: "Hidden", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "amber" }
-            : null;
+    : workshopSoldOut
+      ? { label: "Sold Out", target: "data-product-editor-target=\"contentProductTracksSeats\"", tone: "gray" }
+      : outOfStock
+        ? { label: "Out of Stock", target: "data-product-editor-target=\"contentProductHasPhysicalFulfilment\"", tone: "gray" }
+        : shopStatus === "draft"
+          ? { label: "Draft", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "gray" }
+          : marketplaceMode === "coming-soon"
+            ? { label: "Coming Soon", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "purple" }
+            : ["hidden", "scheduled"].includes(marketplaceMode)
+              ? { label: "Hidden", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "amber" }
+              : null;
   let active = !archived && marketplaceMode === "active" && shopStatus === "active";
   const fulfilmentLabels = [...new Set(currentProductVariants()
     .map((variant) => variant.physicalFulfilment)
@@ -4870,21 +4877,28 @@ function marketplaceVariantCardPreview(
   const archived = document.getElementById("contentProductArchived")?.checked === true ||
     productVariant.status === "archived";
   const inventoryTracked = document.getElementById("contentProductInventoryTracked")?.checked === true;
-  const outOfStock = inventoryTracked && Number(productVariant.stock ?? 0) <= 0;
+  const tracksSeats = document.getElementById("contentProductTracksSeats")?.checked === true;
+  const hasTicketAvailability = productVariant.ticketsRemaining !== null &&
+    productVariant.ticketsRemaining !== undefined;
+  const workshopSoldOut = tracksSeats && hasTicketAvailability &&
+    Number(productVariant.ticketsRemaining) <= 0;
+  const outOfStock = !tracksSeats && inventoryTracked && Number(productVariant.stock ?? 0) <= 0;
   const variantStatus = productVariant.status || "draft";
   let previewState = archived
     ? { label: "Archived", section: "identity", tone: "red" }
-    : outOfStock
-      ? { label: "Out of Stock", section: "fulfilment", tone: "gray" }
-      : variantStatus === "paused"
-        ? { label: "Paused", section: "lifecycle", tone: "amber" }
-        : variantStatus === "draft"
-          ? { label: "Draft", section: "lifecycle", tone: "gray" }
-          : effectiveMarketplaceMode === "coming-soon"
-            ? { label: "Coming Soon", section: "visibility", tone: "purple" }
-            : ["hidden", "scheduled"].includes(effectiveMarketplaceMode)
-              ? { label: "Hidden", section: "visibility", tone: "amber" }
-              : null;
+    : workshopSoldOut
+      ? { label: "Sold Out", section: "fulfilment", tone: "gray" }
+      : outOfStock
+        ? { label: "Out of Stock", section: "fulfilment", tone: "gray" }
+        : variantStatus === "paused"
+          ? { label: "Paused", section: "lifecycle", tone: "amber" }
+          : variantStatus === "draft"
+            ? { label: "Draft", section: "lifecycle", tone: "gray" }
+            : effectiveMarketplaceMode === "coming-soon"
+              ? { label: "Coming Soon", section: "visibility", tone: "purple" }
+              : ["hidden", "scheduled"].includes(effectiveMarketplaceMode)
+                ? { label: "Hidden", section: "visibility", tone: "amber" }
+                : null;
   let active = !archived && variantStatus === "active" && effectiveMarketplaceMode === "active";
   const deliveryType = document.getElementById("contentProductDeliveryType")?.value || "";
   const productType = marketplacePreviewProductType(deliveryType);

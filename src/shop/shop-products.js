@@ -414,6 +414,15 @@ function productCategory(product) {
   return "tools";
 }
 
+function isWorkshopProduct(product) {
+  return productCategory(product) === "workshops";
+}
+
+function workshopVariantSoldOut(variant) {
+  const remaining = variant?.ticketsRemaining;
+  return remaining !== null && remaining !== undefined && Number(remaining) <= 0;
+}
+
 function categoryLabel(category) {
   return {
     tools: "Tools",
@@ -660,7 +669,7 @@ export function createProductTile(product) {
   wrapper.appendChild(shortDesc);
   wrapper.appendChild(price);
 
-  if (productCategory(product) === "workshops") {
+  if (isWorkshopProduct(product)) {
     const availableSessions = Array.isArray(product.variants)
       ? product.variants.filter((variant) => variant.purchasable !== false && Number(variant.ticketsRemaining) !== 0)
       : [];
@@ -680,10 +689,15 @@ export function createProductTile(product) {
     ? product.variants.reduce((sum, variant) => sum + Number(variant.stock ?? 0), 0)
     : 0;
   const availableStock = product.variants?.length ? variantStock : Number(product.stock ?? 0);
-  if (tracksInventory && availableStock === 0) {
+  const sellableWorkshopVariants = Array.isArray(product.variants)
+    ? product.variants.filter((variant) => variant.purchasable !== false)
+    : [];
+  const workshopSoldOut = isWorkshopProduct(product) && sellableWorkshopVariants.length > 0 &&
+    sellableWorkshopVariants.every(workshopVariantSoldOut);
+  if (workshopSoldOut || !isWorkshopProduct(product) && tracksInventory && availableStock === 0) {
     const overlay = document.createElement("div");
     overlay.className = "absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center rounded";
-    overlay.innerHTML = `<span class="text-white font-semibold text-lg">Out of Stock</span>`;
+    overlay.innerHTML = `<span class="text-white font-semibold text-lg">${workshopSoldOut ? "Sold Out" : "Out of Stock"}</span>`;
     wrapper.appendChild(overlay);
   }
 
@@ -708,7 +722,9 @@ export function showProductDetail(product, options = {}) {
   let selectedVariant = variants.find((variant) =>
     (variant.variantId || variant.id) === requestedVariantId && variant.purchasable !== false,
   ) || variants.find((variant) =>
-    variant.purchasable !== false && Number(variant.stock ?? 0) > 0,
+    variant.purchasable !== false && (isWorkshopProduct(product)
+      ? !workshopVariantSoldOut(variant)
+      : Number(variant.stock ?? 0) > 0),
   ) || variants.find((variant) => variant.purchasable !== false) || variants[0] || null;
   let finalPrice = getVariantPrice(product, selectedVariant);
 
@@ -986,6 +1002,8 @@ export function showProductDetail(product, options = {}) {
 
   function tracksCurrentInventory() {
     if (selectedVariant) {
+      if (isWorkshopProduct(product) && selectedVariant.ticketsRemaining !== null &&
+          selectedVariant.ticketsRemaining !== undefined) return false;
       return selectedVariant.bundleAvailable !== null && selectedVariant.bundleAvailable !== undefined ||
         selectedVariant.inventoryTracked === true || product.inventoryTracked !== false;
     }
@@ -994,8 +1012,7 @@ export function showProductDetail(product, options = {}) {
 
   function updateAddButtonState() {
     const isOutOfStock = tracksCurrentInventory() && currentStock() <= 0;
-    const isWorkshopSoldOut = productCategory(product) === "workshops" &&
-      selectedVariant?.ticketsRemaining !== null && Number(selectedVariant?.ticketsRemaining) === 0;
+    const isWorkshopSoldOut = isWorkshopProduct(product) && workshopVariantSoldOut(selectedVariant);
     const isComingSoon = selectedVariant
       ? selectedVariant.purchasable === false || selectedVariant.comingSoon === true
       : product.purchasable === false || product.comingSoon === true;
@@ -1151,7 +1168,11 @@ export function injectProductSchema(product) {
   const productName = getProductName(product);
   const productImage = getProductImage(product);
   const finalPrice = getProductPrice(product);
-  const isOutOfStock = product.inventoryTracked !== false && product.stock === 0;
+  const workshopVariants = Array.isArray(product.variants)
+    ? product.variants.filter((variant) => variant.purchasable !== false) : [];
+  const isOutOfStock = isWorkshopProduct(product)
+    ? workshopVariants.length > 0 && workshopVariants.every(workshopVariantSoldOut)
+    : product.inventoryTracked !== false && product.stock === 0;
 
   const script = document.createElement("script");
   script.type = "application/ld+json";
