@@ -1719,12 +1719,8 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
             </label>
           </section>
           <section data-variant-editor-section="purchase" class="grid gap-4 rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
-            <div class="md:col-span-2 xl:col-span-4">
-              <h5 class="font-semibold text-white">Purchase setup</h5>
-              <p class="text-xs text-gray-400">Configure what this exact Product variant includes, how its stock or tickets are controlled, and how it is delivered.</p>
-            </div>
-          <div class="grid gap-3 rounded border border-gray-700 p-3 md:grid-cols-2 xl:grid-cols-4">
-            <div class="md:col-span-2 xl:col-span-4">
+          <div class="grid gap-3 rounded border border-gray-700 p-3 sm:grid-cols-2">
+            <div class="sm:col-span-2">
               <h6 class="font-semibold text-white">Inventory or tickets</h6>
               <p class="text-xs text-gray-400">Bundle inclusions can deduct only their exact Product stock or Workshop tickets. Entity stock remains separate.</p>
             </div>
@@ -1740,8 +1736,8 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
             <span class="mt-1 block text-xs text-gray-400">Show “Almost sold out” when this many seats or fewer remain.</span>
           </label>
           </div>
-          <div class="grid gap-3 rounded border border-gray-700 p-3 md:grid-cols-2 xl:grid-cols-4">
-            <div class="md:col-span-2 xl:col-span-4">
+          <div class="grid gap-3 rounded border border-gray-700 p-3 md:grid-cols-2">
+            <div class="md:col-span-2">
               <h6 class="font-semibold text-white">Delivery and booking</h6>
             </div>
           <label class="product-variant-calendar-field hidden block text-sm">Calendar / booking reference
