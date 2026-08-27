@@ -3681,6 +3681,10 @@ function applyTemplateDefaults() {
     if (issuesCertificate) issuesCertificate.checked = defaults.issuesCertificate === true;
     applyTemplateDrivenItemFields(defaults);
   }
+  if (recordType === "plan") {
+    const issuesCertificate = document.getElementById("contentIssuesCertificate");
+    if (issuesCertificate) issuesCertificate.checked = defaults.issuesCertificate === true;
+  }
   renderTemplateGuidedFields();
   const recordValues = state.editingRecord ? templateFieldValuesForRecord(state.editingRecord) : {};
   restoreTemplateGuidedValues({
@@ -7365,6 +7369,10 @@ function updateTemplateManagerTypeOptions() {
     recordType,
   );
   document.getElementById("itemTemplateDefaults")?.classList.toggle("hidden", recordType !== "item");
+  document.getElementById("templateCertificateDefaults")?.classList.toggle(
+    "hidden",
+    !["item", "plan"].includes(recordType),
+  );
   document.querySelectorAll(".template-variant-plan-defaults").forEach((section) => {
     section.classList.toggle("hidden", recordType !== "plan");
   });
@@ -7586,8 +7594,10 @@ function templatePayload() {
     defaults.requiresLocation = document.getElementById("templateRequiresLocation")?.checked === true;
     defaults.requiresInstructor =
       document.getElementById("templateRequiresInstructor")?.checked === true;
-    defaults.issuesCertificate = document.getElementById("templateIssuesCertificate")?.checked === true;
     defaults.stockStatus = defaults.inventoryTracked ? "draft" : "not-tracked";
+  }
+  if (["item", "plan"].includes(recordType)) {
+    defaults.issuesCertificate = document.getElementById("templateIssuesCertificate")?.checked === true;
   }
 
   return {
