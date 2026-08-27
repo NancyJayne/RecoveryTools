@@ -1839,6 +1839,12 @@
                   <label data-product-context-panel="contentProductCategoryId" class="hidden block">
                     Product category
                     <select id="contentProductCategoryId" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"></select>
+                    <span class="mt-1 block text-xs text-gray-400">Categories are shared with content and Tag filtering.</span>
+                    <span id="contentProductCategoryCreate" class="mt-2 hidden gap-2 rounded border border-[#407471] bg-gray-950 p-3">
+                      <input id="contentProductCategoryNewName" class="min-w-0 flex-1 rounded bg-gray-800 px-3 py-2 text-white" placeholder="New category name">
+                      <button id="saveContentProductCategoryBtn" type="button" class="rounded border border-[#407471] px-3 py-2 text-sm text-[#9edbd7] hover:bg-[#153b38]">Save category</button>
+                      <button id="cancelContentProductCategoryBtn" type="button" class="rounded border border-gray-600 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800">Cancel</button>
+                    </span>
                   </label>
                   <label data-product-context-panel="contentProductDeliveryType" class="hidden block">
                     Product delivery

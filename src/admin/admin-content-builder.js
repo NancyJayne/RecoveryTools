@@ -7,6 +7,7 @@ import { showToast } from "../utils/utils.js";
 const getContentBuilderData = httpsCallable(functions, "getContentBuilderData");
 const createContentBuilderRecord = httpsCallable(functions, "createContentBuilderRecord");
 const upsertContentBuilderTemplate = httpsCallable(functions, "upsertContentBuilderTemplate");
+const upsertContentCategory = httpsCallable(functions, "upsertContentCategory");
 const updateContentControlRecord = httpsCallable(functions, "updateContentControlRecord");
 const upsertAdminAsset = httpsCallable(functions, "upsertAdminAsset");
 let assetDrawerField = null;
@@ -827,8 +828,14 @@ function fillCategorySelect(select, includeBlank = false) {
     ...options.map((record) => {
       return `<option value="${escapeHTML(record.id)}">${escapeHTML(record.displayName)}</option>`;
     }),
+    ...(select.id === "contentProductCategoryId"
+      ? ["<option value=\"__create_category__\">＋ Create new category…</option>"]
+      : []),
   ].join("");
   if (options.some((record) => record.id === current)) select.value = current;
+  if (select.id === "contentProductCategoryId" && select.value !== "__create_category__") {
+    select.dataset.previousCategoryId = select.value;
+  }
 }
 
 function fillTagCategoryFilter() {
@@ -915,6 +922,55 @@ function variantBehaviourMarkup(template) {
 function variantTemplateFieldsMarkup(template) {
   if (!template) return "<p class=\"mt-3 text-xs text-gray-400\">Choose a template to display this variant's fields.</p>";
   return renderTemplateCustomFields(template);
+}
+
+function closeProductCategoryCreator({ restoreSelection = true } = {}) {
+  const panel = document.getElementById("contentProductCategoryCreate");
+  const select = document.getElementById("contentProductCategoryId");
+  panel?.classList.add("hidden");
+  panel?.classList.remove("flex");
+  if (restoreSelection && select?.value === "__create_category__") {
+    select.value = select.dataset.previousCategoryId || "";
+  }
+}
+
+async function saveProductCategory() {
+  const input = document.getElementById("contentProductCategoryNewName");
+  const name = input?.value.trim() || "";
+  if (!name) {
+    showToast("Enter a category name.", "error");
+    input?.focus();
+    return;
+  }
+  const button = document.getElementById("saveContentProductCategoryBtn");
+  if (button) button.disabled = true;
+  try {
+    const response = await upsertContentCategory({ name });
+    const category = response.data?.category;
+    if (!category?.id) throw new Error("The category was saved but could not be reloaded.");
+    state.options.categoryOptions = [
+      ...(state.options.categoryOptions || []).filter((option) => option.id !== category.id),
+      category,
+    ];
+    fillCategorySelect(document.getElementById("contentProductCategoryId"), true);
+    fillTagCategoryFilter();
+    document.querySelectorAll(".content-tag-new-category")
+      .forEach((select) => fillCategorySelect(select, true));
+    setSelectValue("contentProductCategoryId", category.id);
+    document.getElementById("contentProductCategoryId").dataset.previousCategoryId = category.id;
+    if (input) input.value = "";
+    closeProductCategoryCreator({ restoreSelection: false });
+    renderMarketplaceTileControls();
+    refreshMarketplacePreviews();
+    state.isDirty = true;
+    showToast(response.data?.created === false
+      ? "Existing category selected."
+      : "Category created and selected.", "success");
+  } catch (error) {
+    showToast(error.message || "Failed to create category.", "error");
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 function defaultTemplateDefinition(recordType = currentRecordType(), typeValue = "") {
@@ -8687,7 +8743,7 @@ export async function setupContentBuilder() {
       state.isDirty = true;
     });
   });
-  ["contentProductWholesalePrice", "contentProductDeliveryType", "contentProductCategoryId",
+  ["contentProductWholesalePrice", "contentProductDeliveryType",
     "contentProductFeatured", "contentProductArchived", "contentProductHasPhysicalFulfilment"]
     .forEach((id) => document.getElementById(id)?.addEventListener("change", () => {
       if (id === "contentProductArchived") {
@@ -8703,11 +8759,36 @@ export async function setupContentBuilder() {
       }
       renderMarketplaceTileControls();
       refreshMarketplacePreviews();
-      if (["contentProductDeliveryType", "contentProductCategoryId"].includes(id)) {
+      if (id === "contentProductDeliveryType") {
         document.getElementById(id)?.closest("[data-product-context-panel]")?.classList.add("hidden");
         returnToProductTilePreview();
       }
     }));
+  document.getElementById("contentProductCategoryId")?.addEventListener("change", (event) => {
+    const select = event.currentTarget;
+    if (select.value === "__create_category__") {
+      const panel = document.getElementById("contentProductCategoryCreate");
+      panel?.classList.remove("hidden");
+      panel?.classList.add("flex");
+      document.getElementById("contentProductCategoryNewName")?.focus();
+      return;
+    }
+    select.dataset.previousCategoryId = select.value;
+    closeProductCategoryCreator({ restoreSelection: false });
+    renderMarketplaceTileControls();
+    refreshMarketplacePreviews();
+    select.closest("[data-product-context-panel]")?.classList.add("hidden");
+    returnToProductTilePreview();
+  });
+  document.getElementById("saveContentProductCategoryBtn")?.addEventListener("click", saveProductCategory);
+  document.getElementById("cancelContentProductCategoryBtn")?.addEventListener(
+    "click", () => closeProductCategoryCreator(),
+  );
+  document.getElementById("contentProductCategoryNewName")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    saveProductCategory();
+  });
   document.getElementById("contentProductWholesalePrice")?.addEventListener(
     "input",
     renderMarketplaceTileControls,

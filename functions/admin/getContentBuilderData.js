@@ -279,8 +279,8 @@ function normalizeItemRecord(doc, related = {}) {
   };
 }
 
-function mergeUnique(left = [], right = []) {
-  return [...new Set([...(left || []), ...(right || [])].filter(Boolean))];
+function mergeUnique(...groups) {
+  return [...new Set(groups.flatMap((group) => group || []).filter(Boolean))];
 }
 
 function addLinkedProducts(records, entityType, productsById, links, architecture) {
@@ -396,13 +396,15 @@ function mergeOptions(
       : CONTENT_BUILDER_OPTIONS.itemTypes)
       .filter((type) => cleanStatus(type) !== "workshop"),
     itemKinds: mergeUnique(CONTENT_BUILDER_OPTIONS.itemKinds, savedOptions.itemKinds),
-    categoryOptions: workbookCategories.length ? workbookCategories : mergeUnique(
+    categoryOptions: mergeUnique(
       CONTENT_BUILDER_OPTIONS.categoryOptions?.map((option) => option.id),
       savedOptions.categoryOptions?.map((option) => option.id),
+      workbookCategories.map((option) => option.id),
     ).map((id) => {
       const allOptions = [
         ...(CONTENT_BUILDER_OPTIONS.categoryOptions || []),
         ...(savedOptions.categoryOptions || []),
+        ...workbookCategories,
       ];
       return allOptions.find((option) => option.id === id) || { id, name: id };
     }),
