@@ -17,6 +17,7 @@ let entityStockDrawerSnapshot = [];
 let linkedRecordSelectorContext = null;
 let contentBuilderCreationStack = [];
 let productDrawerReturnFocus = null;
+let pendingStandaloneProductId = "";
 
 const CONTENT_BUILDER_STACK_KEY = "recovery-tools-content-builder-creation-stack";
 
@@ -4201,6 +4202,87 @@ function chooseNewProduct() {
   updateProductPhysicalFields();
 }
 
+function productEntityCandidates() {
+  return [
+    ["item", state.records.items || []],
+    ["blueprint", state.records.blueprints || []],
+    ["plan", state.records.plans || []],
+  ].flatMap(([recordType, records]) => records.map((record) => ({ ...record, recordType })))
+    .filter((record) => !record.productId && !record.itemProductId && record.archived !== true);
+}
+
+function fillProductEntitySubtypeFilter() {
+  const select = document.getElementById("contentProductEntitySubtypeFilter");
+  if (!select) return;
+  const current = select.value || "all";
+  const area = document.getElementById("contentProductEntityTypeFilter")?.value || "all";
+  const types = uniqueValues(productEntityCandidates()
+    .filter((record) => area === "all" || record.recordType === area)
+    .map((record) => record.type)
+    .filter(Boolean))
+    .sort((left, right) => left.localeCompare(right));
+  select.innerHTML = `<option value="all">All types</option>${types.map((type) =>
+    `<option value="${escapeHTML(normalizedType(type))}">${escapeHTML(type)}</option>`).join("")}`;
+  select.value = [...select.options].some((option) => option.value === current) ? current : "all";
+}
+
+function renderProductEntityChoices() {
+  const list = document.getElementById("contentProductEntityChoiceList");
+  if (!list) return;
+  const query = normalizedText(document.getElementById("contentProductEntitySearch")?.value || "");
+  const area = document.getElementById("contentProductEntityTypeFilter")?.value || "all";
+  const subtype = document.getElementById("contentProductEntitySubtypeFilter")?.value || "all";
+  const records = productEntityCandidates().filter((record) => {
+    if (area !== "all" && record.recordType !== area) return false;
+    if (subtype !== "all" && normalizedType(record.type) !== subtype) return false;
+    const searchable = [record.name, record.id, record.type, record.shortDescription,
+      ...(record.tags || [])].join(" ");
+    return !query || normalizedText(searchable).includes(query);
+  });
+  list.innerHTML = records.length ? records.map((record) => `
+    <button type="button" data-product-entity-type="${escapeHTML(record.recordType)}"
+      data-product-entity-id="${escapeHTML(record.id)}"
+      class="block w-full rounded border border-gray-700 bg-gray-950 p-3 text-left hover:border-[#407471] hover:bg-[#153b38]/30">
+      <span class="block font-semibold text-white">${escapeHTML(record.name || record.id)}</span>
+      <span class="mt-1 block text-xs text-gray-400">${escapeHTML(
+    [record.recordType, record.type, record.id].filter(Boolean).join(" / "),
+  )}</span>
+      ${record.shortDescription ? `<span class="mt-1 block text-xs text-gray-300">${escapeHTML(record.shortDescription)}</span>` : ""}
+    </button>`).join("") : `<p class="rounded border border-gray-800 bg-gray-950/60 p-3 text-sm text-gray-400">No unlinked entities match these filters.</p>`;
+}
+
+function setProductEntityPickerOpen(open) {
+  document.getElementById("contentProductEntityPicker")?.classList.toggle("hidden", !open);
+  const saveButton = document.getElementById("applyContentProductBtn");
+  if (saveButton) saveButton.disabled = open;
+  if (open) {
+    fillProductEntitySubtypeFilter();
+    renderProductEntityChoices();
+  }
+}
+
+function chooseProductEntity(recordType, recordId) {
+  const record = findRecord(recordType, recordId);
+  if (!record) {
+    showToast("That entity could not be loaded. Refresh and try again.", "error");
+    return;
+  }
+  const productId = pendingStandaloneProductId;
+  populateBuilderFromRecord(record);
+  setCheckboxValue("contentIsShopProduct", true);
+  const variants = entityVariantsFromBuilder();
+  if (!productId && variants[0]) {
+    variants[0].shopEnabled = true;
+    renderEntityVariantRows(variants);
+  }
+  if (productId) chooseExistingProduct(productId);
+  else chooseNewProduct();
+  pendingStandaloneProductId = "";
+  setProductEntityPickerOpen(false);
+  updateProductRelationStatus(productId ? { productId } : null);
+  showToast(`${record.name || record.id} connected. Complete the Product and save when ready.`, "success");
+}
+
 function openContentProductDrawer() {
   const drawer = document.getElementById("contentProductDrawer");
   if (!drawer) return;
@@ -4220,7 +4302,11 @@ function openContentProductDrawer() {
   populateProductVariantsFromEntity();
   updateConnectedProductCostPreview();
   updateProductPhysicalFields();
-  document.getElementById("contentProductSearch")?.focus();
+  if (!document.getElementById("contentProductEntityPicker")?.classList.contains("hidden")) {
+    document.getElementById("contentProductEntitySearch")?.focus();
+  } else if (!document.getElementById("contentProductConnectionPicker")?.classList.contains("hidden")) {
+    document.getElementById("contentProductSearch")?.focus();
+  }
 }
 
 export async function openProductDrawerFromAdmin({ productId, entityType, entityId }) {
@@ -4228,9 +4314,20 @@ export async function openProductDrawerFromAdmin({ productId, entityType, entity
   const record = findRecord(entityType, entityId);
   if (!record) throw new Error("The Product's connected content record could not be loaded.");
   populateBuilderFromRecord(record);
+  setProductEntityPickerOpen(false);
   if (productId) chooseExistingProduct(productId);
   else chooseNewProduct();
   state.isDirty = false;
+  openContentProductDrawer();
+}
+
+export async function openNewProductDrawerFromAdmin({ productId = "" } = {}) {
+  await setupContentBuilder();
+  pendingStandaloneProductId = productId;
+  setInputValue("contentProductEntitySearch", "");
+  setSelectValue("contentProductEntityTypeFilter", "all");
+  setSelectValue("contentProductEntitySubtypeFilter", "all");
+  setProductEntityPickerOpen(true);
   openContentProductDrawer();
 }
 
@@ -4262,6 +4359,8 @@ function closeContentProductDrawer() {
   drawer.inert = true;
   drawer.classList.add("hidden");
   drawer.setAttribute("aria-hidden", "true");
+  setProductEntityPickerOpen(false);
+  pendingStandaloneProductId = "";
   const returnFocusTo = productDrawerReturnFocus;
   productDrawerReturnFocus = null;
   if (returnFocusTo?.isConnected) {
@@ -5505,7 +5604,7 @@ function updateProductRelationStatus(record) {
   status.classList.toggle("bg-gray-800", !productId);
   status.classList.toggle("text-gray-300", !productId);
   unlinkButton?.classList.toggle("hidden", !productId);
-  connectionPicker?.classList.toggle("hidden", !!productId);
+  connectionPicker?.classList.toggle("hidden", !!productId || currentRecordType() !== "blueprint");
 }
 
 function renderCurrentAssets(record) {
@@ -5755,15 +5854,18 @@ function contentErdBranchVisible(branch) {
   return checkbox?.checked !== false;
 }
 
-function restoreContentErdBranchVisibility() {
-  ["product", "library"].forEach((branch) => {
-    const checkbox = document.getElementById(
-      branch === "library" ? "contentShowLibraryErd" : "contentShowProductErd",
-    );
-    if (!checkbox) return;
-    const stored = localStorage.getItem(`content-erd-show-${branch}`);
-    if (stored !== null) checkbox.checked = stored !== "false";
-  });
+function setContentErdBranchDefaults(record = null) {
+  const variants = Array.isArray(record?.entityVariants) ? record.entityVariants : [];
+  const hasProduct = !!(record?.productId || record?.itemProductId || record?.createsProduct ||
+    variants.some((variant) => variant.shopEnabled === true));
+  const hasLibrary = !!(record?.websiteVisible || record?.requestedWebsiteVisible ||
+    variants.some((variant) => variant.libraryVisible === true));
+  setCheckboxValue("contentShowProductErd", hasProduct);
+  setCheckboxValue("contentShowLibraryErd", hasLibrary);
+  const productLabel = document.getElementById("contentShowProductErdLabel");
+  const libraryLabel = document.getElementById("contentShowLibraryErdLabel");
+  if (productLabel) productLabel.textContent = hasProduct ? "Product — connected" : "Product — not connected";
+  if (libraryLabel) libraryLabel.textContent = hasLibrary ? "Library — connected" : "Library — not connected";
 }
 
 function setConnectionDrawerOpen(id, open) {
@@ -6211,6 +6313,7 @@ function populateNewBuilderFromRoute(params) {
 function populateBuilderFromRecord(record) {
   const recordType = singularRecordType(record.recordType);
   state.editingRecord = { ...record, recordType };
+  setContentErdBranchDefaults(record);
 
   setSelectValue("contentRecordType", recordType);
   updateFormForRecordType();
@@ -7993,13 +8096,12 @@ export async function setupContentBuilder() {
   restorePersistedContentBuilderCreationStack();
   orderProductDrawerSections();
   initializeContentBuilderWorkspace();
-  restoreContentErdBranchVisibility();
+  setContentErdBranchDefaults();
   ["product", "library"].forEach((branch) => {
     const checkbox = document.getElementById(
       branch === "library" ? "contentShowLibraryErd" : "contentShowProductErd",
     );
     checkbox?.addEventListener("change", () => {
-      localStorage.setItem(`content-erd-show-${branch}`, String(checkbox.checked));
       renderBuilderSummaries();
     });
   });
@@ -8437,6 +8539,22 @@ export async function setupContentBuilder() {
   });
   document.getElementById("contentProductSearch")?.addEventListener("input", (event) => {
     renderProductChoiceList(event.target.value);
+  });
+  document.getElementById("contentProductEntitySearch")?.addEventListener(
+    "input",
+    renderProductEntityChoices,
+  );
+  document.getElementById("contentProductEntityTypeFilter")?.addEventListener("change", () => {
+    fillProductEntitySubtypeFilter();
+    renderProductEntityChoices();
+  });
+  document.getElementById("contentProductEntitySubtypeFilter")?.addEventListener(
+    "change",
+    renderProductEntityChoices,
+  );
+  document.getElementById("contentProductEntityChoiceList")?.addEventListener("click", (event) => {
+    const choice = event.target.closest("[data-product-entity-id]");
+    if (choice) chooseProductEntity(choice.dataset.productEntityType, choice.dataset.productEntityId);
   });
   document.getElementById("contentProductChoiceList")?.addEventListener("click", (event) => {
     const choice = event.target.closest("[data-product-choice]");

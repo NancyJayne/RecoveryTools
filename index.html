@@ -1228,6 +1228,7 @@
     <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
       <p class="text-sm text-gray-400">Archived Products are hidden by default. Refresh to update live Workshop reservations.</p>
       <div class="flex flex-wrap items-center gap-3">
+        <button id="createProductFromEntityBtn" type="button" class="rounded bg-[#407471] px-3 py-2 text-sm font-semibold text-white hover:bg-[#305a56]">Create new Product</button>
         <button id="refreshProductOperationsBtn" type="button" class="rounded border border-gray-600 px-3 py-2 text-sm text-white">Refresh Products</button>
         <label class="inline-flex items-center gap-2 text-sm text-gray-300">
           <input id="showArchivedProductsToggle" type="checkbox" class="accent-[#407471]">
@@ -1748,9 +1749,9 @@
                 <div class="ml-auto h-full w-full max-w-5xl overflow-x-hidden overflow-y-auto border-l border-gray-700 bg-gray-950 p-5 text-sm shadow-2xl">
                 <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h3 class="font-semibold text-white">Shop product relationship</h3>
+                    <h3 class="text-lg font-semibold text-white">Product Creator</h3>
                     <p class="mt-1 text-xs text-gray-400">
-                      Edit this Product and its connection to the current entity.
+                      Build or edit the sellable Product connected to one reusable Item, Blueprint, or Plan.
                     </p>
                   </div>
                   <div class="flex gap-2">
@@ -1765,26 +1766,58 @@
                   </button>
                 </div>
                 <aside id="contentProductHelpPanel" class="mb-4 hidden rounded border border-[#407471]/70 bg-[#0f2b29]/40 p-4 text-sm" aria-live="polite">
-                  <h4 class="font-semibold text-white">Which connection should I use?</h4>
-                  <div class="mt-3 grid gap-3 md:grid-cols-2">
-                    <div class="rounded bg-gray-900/70 p-3">
-                      <strong class="text-white">Customer-facing Item/tool</strong>
-                      <p class="mt-1 text-xs text-gray-300">Connect the Item to the Product as its customer-facing content. Customers can see and purchase the Product when the Item is recommended.</p>
-                    </div>
-                    <div class="rounded bg-gray-900/70 p-3">
-                      <strong class="text-white">Internal manufacturing Blueprint</strong>
-                      <p class="mt-1 text-xs text-gray-300">Open the Blueprint, choose the existing Product, then tick <strong>Use this Blueprint as the Product's manufacturing / cost recipe</strong>. Customers will not see or unlock this Blueprint.</p>
-                    </div>
-                  </div>
-                  <p class="mt-3 text-xs text-gray-400">Quick rule: the Item explains what the customer uses; the Blueprint records what staff need to make it.</p>
+                  <h4 class="font-semibold text-white">How to create a complete Product</h4>
+                  <ol class="mt-3 grid gap-3 md:grid-cols-2">
+                    <li class="rounded bg-gray-900/70 p-3">
+                      <strong class="text-white">1. Confirm the connected entity</strong>
+                      <p class="mt-1 text-xs text-gray-300">Every Product must represent an Item, Blueprint, or Plan. Its name, descriptions, variants, and source Assets can be inherited from that entity.</p>
+                    </li>
+                    <li class="rounded bg-gray-900/70 p-3">
+                      <strong class="text-white">2. Complete Product setup</strong>
+                      <p class="mt-1 text-xs text-gray-300">Choose Product type, Marketplace category, fulfilment, audience, tile presentation, and the overall visibility status.</p>
+                    </li>
+                    <li class="rounded bg-gray-900/70 p-3">
+                      <strong class="text-white">3. Review every sellable variant</strong>
+                      <p class="mt-1 text-xs text-gray-300">Set its price, stock or tickets, descriptions, media, prerequisites, bundles, Blueprints, purchase unlocks, and visibility.</p>
+                    </li>
+                    <li class="rounded bg-gray-900/70 p-3">
+                      <strong class="text-white">4. Check previews, then save</strong>
+                      <p class="mt-1 text-xs text-gray-300">Purple fields still need attention. Status watermarks show what customers can currently see or purchase.</p>
+                    </li>
+                  </ol>
+                  <p class="mt-3 text-xs text-gray-400">Manufacturing Blueprints remain internal Product-variant connections; they are not the customer-facing entity unless deliberately selected as the Product's primary entity.</p>
                 </aside>
+                <section id="contentProductEntityPicker" class="mb-4 hidden rounded border border-[#407471] bg-[#0f2b29]/35 p-4">
+                  <h4 class="font-semibold text-white">Connect an entity before continuing</h4>
+                  <p class="mt-1 text-xs text-gray-300">Search for the Item, Blueprint, or Plan this Product represents. This connection is required.</p>
+                  <div class="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(9rem,12rem)_minmax(10rem,14rem)]">
+                    <label class="block text-xs text-gray-300">Search entities
+                      <input id="contentProductEntitySearch" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" placeholder="Name, ID, type or tag">
+                    </label>
+                    <label class="block text-xs text-gray-300">Entity area
+                      <select id="contentProductEntityTypeFilter" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                        <option value="all">All entity areas</option>
+                        <option value="item">Items</option>
+                        <option value="blueprint">Blueprints</option>
+                        <option value="plan">Plans</option>
+                      </select>
+                    </label>
+                    <label class="block text-xs text-gray-300">Entity type
+                      <select id="contentProductEntitySubtypeFilter" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                        <option value="all">All types</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div id="contentProductEntityChoiceList" class="mt-3 max-h-72 space-y-2 overflow-y-auto"></div>
+                </section>
                 <input id="contentUnlinkProductId" type="hidden">
                 <select id="contentExistingProductId" class="hidden" aria-hidden="true">
                   <option value="">Create a new Product</option>
                 </select>
-                <div id="contentProductConnectionPicker" class="mb-4 rounded border border-gray-700 bg-gray-900/70 p-3">
+                <div id="contentProductConnectionPicker" class="mb-4 hidden rounded border border-gray-700 bg-gray-900/70 p-3">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Existing Product for this manufacturing Blueprint</p>
                   <div class="flex flex-wrap gap-2">
-                    <input id="contentProductSearch" class="min-w-52 flex-1 rounded bg-gray-800 px-3 py-2 text-white" placeholder="Search existing products or variants">
+                    <input id="contentProductSearch" class="mt-2 min-w-52 flex-1 rounded bg-gray-800 px-3 py-2 text-white" placeholder="Search existing Products or variants">
                   </div>
                   <div id="contentProductChoiceList" class="mt-3 max-h-64 space-y-2 overflow-y-auto"></div>
                 </div>
@@ -2135,12 +2168,12 @@
                   <div class="flex flex-wrap items-center gap-2 text-[11px] text-gray-300">
                     <span class="mr-1 text-gray-500">Diagram branches:</span>
                     <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-blue-500/70 px-3 py-1.5">
-                      <input id="contentShowProductErd" type="checkbox" checked class="accent-blue-500">
-                      Product
+                      <input id="contentShowProductErd" type="checkbox" class="accent-blue-500">
+                      <span id="contentShowProductErdLabel">Product — not connected</span>
                     </label>
                     <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-violet-500/70 px-3 py-1.5">
-                      <input id="contentShowLibraryErd" type="checkbox" checked class="accent-violet-500">
-                      Library
+                      <input id="contentShowLibraryErd" type="checkbox" class="accent-violet-500">
+                      <span id="contentShowLibraryErdLabel">Library — not connected</span>
                     </label>
                   </div>
                 </div>
@@ -2426,15 +2459,17 @@
                             Every template has at least one variant. Select a variant to expand it and manage the fields that belong to it.
                           </p>
                         </div>
+                      </div>
+                      <div id="templateVariantRows" class="mt-3 space-y-3"></div>
+                      <div class="mt-3 flex justify-end">
                         <button
                           id="addTemplateVariantBtn"
                           type="button"
-                          class="shrink-0 rounded border border-[#407471] px-3 py-2 text-xs text-white hover:bg-[#407471]/20"
+                          class="rounded border border-[#407471] px-3 py-2 text-xs text-white hover:bg-[#407471]/20"
                         >
                           Add variant
                         </button>
                       </div>
-                      <div id="templateVariantRows" class="mt-3 space-y-3"></div>
                     </section>
                   </div>
 

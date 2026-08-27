@@ -72,6 +72,15 @@ export function setupProductManager() {
     document.getElementById("showArchivedProductsToggle")
       ?.addEventListener("change", () => renderProductManagerList(cachedProducts));
   }
+  document.getElementById("createProductFromEntityBtn")?.addEventListener("click", async () => {
+    try {
+      const { openNewProductDrawerFromAdmin } = await import("./admin-content-builder.js");
+      await openNewProductDrawerFromAdmin();
+    } catch (error) {
+      console.error("Failed to open Product Creator:", error);
+      showToast(error.message || "Product Creator could not be opened.", "error");
+    }
+  });
 
   setupAssetManager();
   setupInventoryOperations();
@@ -1455,7 +1464,14 @@ async function openProductEditor(product) {
   const entityId = product.connectedEntityId;
   const entityType = String(product.connectedEntityType || "").toLowerCase();
   if (!entityId || !["item", "blueprint", "plan"].includes(entityType)) {
-    showToast("Connect this Product to an Item, Blueprint, or Plan before editing it here.", "error");
+    try {
+      const { openNewProductDrawerFromAdmin } = await import("./admin-content-builder.js");
+      await openNewProductDrawerFromAdmin({ productId: product.id || product.productId || "" });
+      showToast("Choose the entity this Product represents before continuing.", "info");
+    } catch (error) {
+      console.error("Failed to connect Product entity:", error);
+      showToast(error.message || "Product Creator could not be opened.", "error");
+    }
     return;
   }
   try {
