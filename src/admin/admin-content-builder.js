@@ -1705,20 +1705,6 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
                 rows="4" placeholder="Use the main Product description">${escapeHTML(productVariant.longDescription || "")}</textarea>
               ${sourceNote(productVariant.longDescription ? "Variant override" : productLongDescription ? "Inherited from Product" : "Not configured", "longDescription")}
             </label>
-            <div class="rounded border border-gray-700 p-3">
-              <div class="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <h5 class="font-semibold text-white">Inclusions</h5>
-                  <p class="mt-1 text-xs text-gray-400">Add linked Products or Workshop sessions, or type an unlinked inclusion. Every entry uses the same quantity-based list.</p>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                  <button type="button" class="add-product-bundle-component rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add linked Product</button>
-                  <button type="button" class="add-product-manual-inclusion rounded border border-gray-600 px-3 py-1 text-xs text-gray-200">Add unlinked inclusion</button>
-                </div>
-              </div>
-              <div class="product-bundle-component-rows mt-3 space-y-2">${bundleComponentsMarkup(productVariant.bundleComponents || [])}</div>
-              <div class="product-manual-inclusion-rows mt-2 space-y-2">${manualInclusionsMarkup(productVariant.manualInclusions, productVariant.inclusions)}</div>
-            </div>
             <div class="flex justify-end">
               <button type="button" data-close-variant-section
                 class="rounded border border-[#407471] px-4 py-2 text-[#9edbd7]">Done</button>
@@ -1732,15 +1718,32 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
               ${sourceNote(productVariant.priceOverride !== null && productVariant.priceOverride !== undefined ? "Variant override" : productPrice !== null ? "Inherited from Product" : "Not configured", "price")}
             </label>
           </section>
-          <section data-variant-editor-section="fulfilment" class="grid gap-3 rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 md:grid-cols-2 xl:col-span-4 xl:grid-cols-4">
+          <section data-variant-editor-section="purchase" class="grid gap-4 rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
             <div class="md:col-span-2 xl:col-span-4">
-              <h5 class="font-semibold text-white">Product variant fulfilment</h5>
-              <p class="text-xs text-gray-400">Stock, delivery, booking and session details for this exact sellable variant.</p>
+              <h5 class="font-semibold text-white">Purchase setup</h5>
+              <p class="text-xs text-gray-400">Configure what this exact Product variant includes, how its stock or tickets are controlled, and how it is delivered.</p>
+            </div>
+          <div class="grid gap-3 rounded border border-gray-700 p-3 md:grid-cols-2 xl:grid-cols-4">
+            <div class="md:col-span-2 xl:col-span-4">
+              <h6 class="font-semibold text-white">Inventory or tickets</h6>
+              <p class="text-xs text-gray-400">Bundle inclusions can deduct only their exact Product stock or Workshop tickets. Entity stock remains separate.</p>
             </div>
           <label class="product-variant-stock-field block text-sm">Product stock
             <input class="product-variant-stock mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.stock ?? 0)}">
             <span class="mt-1 block text-xs text-gray-400">Finished sellable stock. This is separate from the connected Item variant stock.</span>
           </label>
+          <label class="product-variant-seats-field hidden block text-sm">Ticket / seat capacity
+            <input class="product-variant-seat-capacity mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.seatCapacity ?? "")}">
+          </label>
+          <label class="product-variant-seats-field hidden block text-sm">Near capacity warning
+            <input class="product-variant-near-capacity-warning mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.nearCapacityWarning ?? "")}" placeholder="Example: 10">
+            <span class="mt-1 block text-xs text-gray-400">Show “Almost sold out” when this many seats or fewer remain.</span>
+          </label>
+          </div>
+          <div class="grid gap-3 rounded border border-gray-700 p-3 md:grid-cols-2 xl:grid-cols-4">
+            <div class="md:col-span-2 xl:col-span-4">
+              <h6 class="font-semibold text-white">Delivery and booking</h6>
+            </div>
           <label class="product-variant-calendar-field hidden block text-sm">Calendar / booking reference
             <input class="product-variant-calendar-reference mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" value="${escapeHTML(productVariant.calendarBookingReference || "")}" placeholder="Calendar ID, booking link or reference">
           </label>
@@ -1755,20 +1758,13 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
               <option value="digital-download"${productVariant.deliveryMode === "digital-download" ? " selected" : ""}>Digital download</option>
             </select>
           </label>
-          <label class="product-variant-physical-fulfilment-field hidden block text-sm">Variant fulfilment
+          <label class="product-variant-physical-fulfilment-field hidden block text-sm">Physical fulfilment
             <select class="product-variant-physical-fulfilment mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
               ${compactSelectOptions(
     ["none", "shipping", "pickup", "shipping-or-pickup"],
     productVariant.physicalFulfilment || "none",
   )}
             </select>
-          </label>
-          <label class="product-variant-seats-field hidden block text-sm">Ticket / seat capacity
-            <input class="product-variant-seat-capacity mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.seatCapacity ?? "")}">
-          </label>
-          <label class="product-variant-seats-field hidden block text-sm">Near capacity warning
-            <input class="product-variant-near-capacity-warning mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="number" min="0" step="1" value="${escapeHTML(productVariant.nearCapacityWarning ?? "")}" placeholder="Example: 10">
-            <span class="mt-1 block text-xs text-gray-400">Show “Almost sold out” when this many seats or fewer remain.</span>
           </label>
           <label class="product-variant-session-field hidden block text-sm">Session starts
             <input class="product-variant-event-start mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="datetime-local" value="${escapeHTML(productVariant.eventStartAt || "")}">
@@ -1787,6 +1783,21 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
             </select>
             ${sourceNote(productVariant.physicalFulfilment && productVariant.physicalFulfilment !== "inherit" ? "Variant override" : "Inherited from Product", "fulfilment")}
           </label>
+          </div>
+          <div class="rounded border border-gray-700 p-3">
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h6 class="font-semibold text-white">Inclusions</h6>
+                <p class="mt-1 text-xs text-gray-400">Select an exact Product variant when needed, set its quantity, and choose whether that Product stock or Workshop ticket allocation is deducted.</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="add-product-bundle-component rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add linked Product</button>
+                <button type="button" class="add-product-manual-inclusion rounded border border-gray-600 px-3 py-1 text-xs text-gray-200">Add unlinked inclusion</button>
+              </div>
+            </div>
+            <div class="product-bundle-component-rows mt-3 space-y-2">${bundleComponentsMarkup(productVariant.bundleComponents || [])}</div>
+            <div class="product-manual-inclusion-rows mt-2 space-y-2">${manualInclusionsMarkup(productVariant.manualInclusions, productVariant.inclusions)}</div>
+          </div>
           </section>
           <div data-variant-editor-section="visibility" class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Marketplace visibility</h5>
@@ -5039,9 +5050,11 @@ function adminUnifiedInclusions(productVariant, legacyInclusions = "") {
     })).filter((entry) => entry.name);
   if (!linked.length && !manual.length) return "";
   return `<section class="mt-3 text-left text-sm text-gray-300">
-    <h4 class="mb-2 font-semibold text-white">Inclusions</h4>
+    <button type="button" data-variant-editor="purchase"
+      class="mb-2 rounded font-semibold text-white hover:text-[#c15cff]">Inclusions</button>
     <ul class="list-disc space-y-2 pl-5">
-      ${manual.map((entry) => `<li>${escapeHTML(`${Number(entry.quantity || 1)} × ${entry.name}`)}</li>`).join("")}
+      ${manual.map((entry) => `<li><button type="button" data-variant-editor="purchase"
+        class="text-left hover:text-white">${escapeHTML(`${Number(entry.quantity || 1)} × ${entry.name}`)}</button></li>`).join("")}
       ${linked.map((entry) => {
     const detail = adminLinkedProductVariant(entry, true);
     const label = `${Number(detail.quantity || 1)} × ${detail.productName}` +
@@ -5173,9 +5186,9 @@ function marketplaceVariantCardPreview(
   let previewState = archived
     ? { label: "Archived", section: "identity", tone: "red" }
     : workshopSoldOut
-      ? { label: "Sold Out", section: "fulfilment", tone: "gray" }
+      ? { label: "Sold Out", section: "purchase", tone: "gray" }
       : outOfStock
-        ? { label: "Out of Stock", section: "fulfilment", tone: "gray" }
+        ? { label: "Out of Stock", section: "purchase", tone: "gray" }
         : variantStatus === "paused"
           ? { label: "Paused", section: "lifecycle", tone: "amber" }
           : variantStatus === "draft"
@@ -5276,7 +5289,7 @@ function marketplaceVariantCardPreview(
       ${isPrimary ? `<button type="button" data-variant-editor="identity" class="rounded bg-gray-950 px-2 py-1 text-xs font-medium text-[#9edbd7] hover:text-white">Primary</button>` : ""}
       <button type="button" data-variant-editor="visibility" class="rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white">Status: ${escapeHTML(statusLabel)}</button>
       <span class="rounded bg-gray-950 px-2 py-1 text-xs text-gray-300">Type: ${escapeHTML(productType)}</span>
-      <button type="button" data-variant-editor="fulfilment" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">${escapeHTML(fulfilmentMissing ? "Set fulfilment" : fulfilmentSummary)}</button>
+      <button type="button" data-variant-editor="purchase" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">Purchase setup: ${escapeHTML(fulfilmentMissing ? "Review" : fulfilmentSummary)}</button>
       <button type="button" data-product-editor-target="contentProductCategoryId" class="${marketplacePreviewAttention(!category, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">${escapeHTML(categoryLabel || "Set category")}</button>
       <button type="button" data-product-editor-target="contentProductDeliveryType" class="${marketplacePreviewAttention(!deliveryType, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">Delivery: ${escapeHTML(deliveryType || "Set delivery")}</button>
       <button type="button" data-variant-editor="identity" class="${marketplacePreviewAttention(detailsMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Variant details</button>
@@ -8607,7 +8620,7 @@ export async function setupContentBuilder() {
       const row = variantId
         ? document.querySelector(`.content-product-variant-row[data-product-variant-id="${escapedVariantId}"]`)
         : document.querySelector(".content-product-variant-row");
-      row?.querySelector("[data-variant-editor=\"fulfilment\"]")?.click();
+      row?.querySelector("[data-variant-editor=\"purchase\"]")?.click();
       row?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
@@ -8621,7 +8634,7 @@ export async function setupContentBuilder() {
       const row = variantId
         ? document.querySelector(`.content-product-variant-row[data-product-variant-id="${escapedVariantId}"]`)
         : document.querySelector(".content-product-variant-row");
-      row?.querySelector("[data-variant-editor=\"description\"]")?.click();
+      row?.querySelector("[data-variant-editor=\"purchase\"]")?.click();
       row?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
@@ -9158,7 +9171,7 @@ export async function setupContentBuilder() {
         identity: "Product variant details",
         description: "Description overrides",
         price: "Marketplace price",
-        fulfilment: "Product variant fulfilment",
+        purchase: "Purchase setup",
         visibility: "Visibility and status",
         sale: "Price and sale",
         promotion: "Promotion videos",
