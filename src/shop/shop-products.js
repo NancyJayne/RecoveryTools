@@ -192,7 +192,7 @@ function showMarketplaceVariantBubble(entry, pinned = false) {
   if (pinned) close.focus();
 }
 
-function marketplaceLinkedVariantList(title, entries = [], usePreviewBubble = false) {
+function marketplaceLinkedVariantList(title, entries = [], usePreviewBubble = false, showEveryQuantity = false) {
   const section = document.createElement("section");
   section.className = "mb-4 hidden";
   if (!entries.length) return section;
@@ -226,7 +226,7 @@ function marketplaceLinkedVariantList(title, entries = [], usePreviewBubble = fa
       entry.productId || entry.componentProductId;
     const variantName = manualItem ? "" : entry.productVariantName || entry.name ||
       entry.productVariantId || entry.componentProductVariantId;
-    link.textContent = `${quantity > 1 ? `${quantity} × ` : ""}${productName}` +
+    link.textContent = `${showEveryQuantity || quantity > 1 ? `${quantity} × ` : ""}${productName}` +
       `${variantName ? ` — ${variantName}` : ""}`;
     item.appendChild(link);
     if (entry.shortDescription) {
@@ -238,6 +238,32 @@ function marketplaceLinkedVariantList(title, entries = [], usePreviewBubble = fa
   });
   section.append(heading, list);
   section.classList.remove("hidden");
+  return section;
+}
+
+function marketplaceUnifiedInclusions(variant = {}) {
+  const linked = variant.bundleProductVariants || [];
+  const manual = Array.isArray(variant.manualInclusions) && variant.manualInclusions.length
+    ? variant.manualInclusions
+    : String(variant.inclusions || "").split(/\r?\n/).map((name) => ({
+      name: name.replace(/^[-*•]\s*/, "").trim(), quantity: 1,
+    })).filter((entry) => entry.name);
+  const section = marketplaceLinkedVariantList("Inclusions", linked, true, true);
+  if (!linked.length && manual.length) {
+    section.classList.remove("hidden");
+    const heading = document.createElement("h3");
+    heading.className = "mb-2 text-base font-semibold text-white";
+    heading.textContent = "Inclusions";
+    const list = document.createElement("ul");
+    list.className = "list-disc space-y-2 pl-5 text-sm text-gray-300";
+    section.append(heading, list);
+  }
+  const list = section.querySelector("ul");
+  manual.slice().reverse().forEach((entry) => {
+    const item = document.createElement("li");
+    item.textContent = `${Math.max(Number(entry.quantity || 1), 1)} × ${entry.name}`;
+    list?.prepend(item);
+  });
   return section;
 }
 
@@ -797,27 +823,9 @@ export function showProductDetail(product, options = {}) {
   longDesc.className = "whitespace-pre-line text-sm text-gray-300 mb-4";
 
   let inclusions = document.createElement("section");
-  let bundleContents = document.createElement("section");
   let prerequisiteDetails = document.createElement("section");
   function updateIncludedDetails() {
-    const bundleEntries = selectedVariant?.bundleProductVariants || [];
-    const replacementBundle = marketplaceLinkedVariantList("Bundle includes", bundleEntries, true);
-    bundleContents.replaceWith(replacementBundle);
-    bundleContents = replacementBundle;
-
-    const replacementInclusions = document.createElement("section");
-    replacementInclusions.className = "mb-4";
-    if (selectedVariant?.inclusions) {
-      const heading = document.createElement("h3");
-      heading.className = "mb-2 text-base font-semibold text-white";
-      heading.textContent = "Inclusions";
-      const copy = document.createElement("p");
-      copy.className = "whitespace-pre-line text-sm text-gray-300";
-      copy.textContent = selectedVariant.inclusions;
-      replacementInclusions.append(heading, copy);
-    } else {
-      replacementInclusions.classList.add("hidden");
-    }
+    const replacementInclusions = marketplaceUnifiedInclusions(selectedVariant || {});
     inclusions.replaceWith(replacementInclusions);
     inclusions = replacementInclusions;
 
@@ -1065,7 +1073,6 @@ export function showProductDetail(product, options = {}) {
   content.appendChild(price);
   content.appendChild(longDesc);
   content.appendChild(inclusions);
-  content.appendChild(bundleContents);
   content.appendChild(prerequisiteDetails);
   content.appendChild(prerequisiteNotice);
   content.appendChild(featureList);

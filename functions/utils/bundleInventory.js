@@ -41,6 +41,7 @@ export async function resolveBundleInventoryItems(db, {
       throw new HttpsError("failed-precondition", "A Product option included in this bundle is no longer available.");
     }
     const componentQuantity = component.quantity * Math.max(Number(quantity || 1), 1);
+    const deductInventory = component.inventoryAction !== "none";
     return {
       productId: component.componentProductId,
       variantId: componentVariantId,
@@ -49,8 +50,10 @@ export async function resolveBundleInventoryItems(db, {
         product.name || component.componentProductId,
       quantity: componentQuantity,
       quantityPerBundle: component.quantity,
-      inventoryTracked: variant?.inventoryTracked === true || product.inventoryTracked === true,
-      isWorkshop: isWorkshopProduct(product),
+      inventoryTracked: deductInventory &&
+        (variant?.inventoryTracked === true || product.inventoryTracked === true),
+      isWorkshop: deductInventory && isWorkshopProduct(product),
+      inventoryAction: deductInventory ? "deduct" : "none",
       seatCapacity: Math.max(Number(variant?.seatCapacity || product.seatCapacity || 0), 0),
       bundleComponentId: component.bundleComponentId,
     };

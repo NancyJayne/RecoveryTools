@@ -363,6 +363,7 @@ function normalizeVariant(value, index, itemId, productId) {
     shortDescription: cleanString(value.shortDescription),
     longDescription: cleanString(value.longDescription),
     inclusions: cleanString(value.inclusions),
+    manualInclusions: cleanManualInclusions(value.manualInclusions, variantId),
     deliveryMode: cleanString(value.deliveryMode),
     physicalFulfilment: cleanString(value.physicalFulfilment || "none").toLowerCase(),
     calendarBookingReference: cleanString(value.calendarBookingReference),
@@ -417,12 +418,22 @@ function cleanBundleComponents(value, sourceProductVariantId, sourceProductId) {
     componentProductId: cleanString(component?.componentProductId),
     componentProductVariantId: cleanString(component?.componentProductVariantId),
     quantity: Math.max(asNumber(component?.quantity) ?? 1, 1),
+    inventoryAction: component?.inventoryAction === "none" ? "none" : "deduct",
   })).filter((component) => {
     const key = `${component.componentProductId}:${component.componentProductVariantId}`;
     if (!component.componentProductId || component.componentProductId === sourceProductId || seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+function cleanManualInclusions(value, sourceProductVariantId) {
+  return (Array.isArray(value) ? value : []).slice(0, 100).map((entry, index) => ({
+    inclusionId: cleanString(entry?.inclusionId) ||
+      `INCLUSION-${slugify(sourceProductVariantId)}-${index + 1}`,
+    name: cleanString(entry?.name).slice(0, 200),
+    quantity: Math.max(asNumber(entry?.quantity) ?? 1, 1),
+  })).filter((entry) => entry.name);
 }
 
 async function updateProductRelation({
@@ -907,6 +918,7 @@ async function updateProductRelation({
       shortDescription: variant.shortDescription,
       longDescription: variant.longDescription,
       inclusions: variant.inclusions,
+      manualInclusions: variant.manualInclusions,
       deliveryMode: variant.deliveryMode,
       physicalFulfilment: variant.physicalFulfilment,
       isDefault: index === 0,

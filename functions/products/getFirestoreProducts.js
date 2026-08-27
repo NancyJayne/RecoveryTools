@@ -335,6 +335,8 @@ function normalizeProduct(
       : wholesalePrice;
     const instructorId = variant.instructorId || variant.instructor || "";
     const bundleComponents = bundleComponentsForProduct(doc.id, variantId, architecture);
+    const deductedBundleComponents = bundleComponents.filter((component) =>
+      component.inventoryAction !== "none");
     const bundleProductVariants = bundleComponents.map((component) => {
       const componentProduct = productsById.get(component.componentProductId) || {};
       const componentVariants = variantsForProduct(
@@ -396,8 +398,8 @@ function normalizeProduct(
           : null,
       };
     });
-    const bundleAvailable = bundleComponents.length
-      ? Math.min(...bundleComponents.map((component) => {
+    const bundleAvailable = deductedBundleComponents.length
+      ? Math.min(...deductedBundleComponents.map((component) => {
         const componentVariant = (architecture.canonicalVariantsByProductId
           .get(component.componentProductId) || []).find((candidate) =>
           (candidate.productVariantId || candidate.variantId || candidate.id) ===
@@ -421,7 +423,7 @@ function normalizeProduct(
       : null;
     return {
       ...variant,
-      inventoryTracked: bundleComponents.length ? true : variant.inventoryTracked,
+      inventoryTracked: deductedBundleComponents.length ? true : variant.inventoryTracked,
       instructorId,
       instructor: instructorsById.get(instructorId) || variant.instructor || "",
       visible: variantVisible,

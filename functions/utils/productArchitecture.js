@@ -124,6 +124,7 @@ export function bundleComponentsForProduct(productId, variantId, architecture) {
       componentProductId: cleanString(component.componentProductId),
       componentProductVariantId: cleanString(component.componentProductVariantId),
       quantity: Math.max(Number(component.quantity || 1), 1),
+      inventoryAction: component.inventoryAction === "none" ? "none" : "deduct",
     }))
     .filter((component) => {
       const key = `${component.componentProductId}:${component.componentProductVariantId}`;
@@ -200,6 +201,7 @@ function normalizedVariant(variant, sourceCollection) {
     shortDescription: variant.shortDescription || "",
     longDescription: variant.longDescription || "",
     inclusions: variant.inclusions || "",
+    manualInclusions: Array.isArray(variant.manualInclusions) ? variant.manualInclusions : [],
     bundleComponents: Array.isArray(variant.bundleComponents) ? variant.bundleComponents : [],
     primaryAssetId: variant.primaryAssetId || "",
     promotionAssetIds: Array.isArray(variant.promotionAssetIds) ? variant.promotionAssetIds : [],

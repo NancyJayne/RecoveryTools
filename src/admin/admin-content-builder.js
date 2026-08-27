@@ -774,6 +774,7 @@ function serializeProductVariants(variants = []) {
     shortDescription: variant.shortDescription || "",
     longDescription: variant.longDescription || "",
     inclusions: variant.inclusions || "",
+    manualInclusions: Array.isArray(variant.manualInclusions) ? variant.manualInclusions : [],
     primaryAssetId: variant.primaryAssetId || "",
     promotionAssetIds: Array.isArray(variant.promotionAssetIds) ? variant.promotionAssetIds : [],
     prerequisiteProductVariants: Array.isArray(variant.prerequisiteProductVariants)
@@ -1609,7 +1610,8 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
         data-content-variant-id="${escapeHTML(productVariant.contentVariantId || "")}"
         data-product-variant-id="${escapeHTML(productVariant.variantId || "")}">
         <div class="bg-gray-800/90 p-3">
-          <div class="mb-3 flex justify-end">
+          <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <button type="button" data-duplicate-product-variant class="rounded border border-[#407471] px-3 py-2 text-xs text-[#9edbd7]">Duplicate variant</button>
             <label class="w-full max-w-sm text-xs font-medium text-gray-200">Connect to Entity Variant
               <select class="product-variant-content-variant mt-1 w-full rounded border px-3 py-2 text-white ${entityVariantLinkReviewed ? "border-[#407471] bg-gray-950" : "border-purple-500 bg-purple-950/40 ring-1 ring-purple-500"}">
                 <option value=""${entityVariantLinkValue ? "" : " selected"}>Review entity variant connection</option>
@@ -1652,7 +1654,6 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
                   </select>
                 </label>
                 <button type="button" data-copy-product-variant-settings class="rounded border border-[#407471] px-3 py-2 text-xs text-[#9edbd7]">Copy settings</button>
-                <button type="button" data-duplicate-product-variant class="rounded border border-[#407471] px-3 py-2 text-xs text-[#9edbd7]">Duplicate variant</button>
               </div>
             </div>
             <label class="block text-sm">Selling name
@@ -1704,19 +1705,19 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
                 rows="4" placeholder="Use the main Product description">${escapeHTML(productVariant.longDescription || "")}</textarea>
               ${sourceNote(productVariant.longDescription ? "Variant override" : productLongDescription ? "Inherited from Product" : "Not configured", "longDescription")}
             </label>
-            <label class="block text-sm">Inclusions summary
-              <textarea class="product-variant-inclusions mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
-                rows="2" placeholder="Example: Includes 2 small cups, 2 large cups, box and keychain.">${escapeHTML(productVariant.inclusions || "")}</textarea>
-            </label>
             <div class="rounded border border-gray-700 p-3">
               <div class="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <h5 class="font-semibold text-white">Bundled Products and Workshop sessions</h5>
-                  <p class="mt-1 text-xs text-gray-400">Add every exact Product variant included in this purchase. Stock or tickets are reserved and deducted from those components, so a bundle with components does not use its own stock.</p>
+                  <h5 class="font-semibold text-white">Inclusions</h5>
+                  <p class="mt-1 text-xs text-gray-400">Add linked Products or Workshop sessions, or type an unlinked inclusion. Every entry uses the same quantity-based list.</p>
                 </div>
-                <button type="button" class="add-product-bundle-component rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add inclusion</button>
+                <div class="flex flex-wrap gap-2">
+                  <button type="button" class="add-product-bundle-component rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add linked Product</button>
+                  <button type="button" class="add-product-manual-inclusion rounded border border-gray-600 px-3 py-1 text-xs text-gray-200">Add unlinked inclusion</button>
+                </div>
               </div>
               <div class="product-bundle-component-rows mt-3 space-y-2">${bundleComponentsMarkup(productVariant.bundleComponents || [])}</div>
+              <div class="product-manual-inclusion-rows mt-2 space-y-2">${manualInclusionsMarkup(productVariant.manualInclusions, productVariant.inclusions)}</div>
             </div>
             <div class="flex justify-end">
               <button type="button" data-close-variant-section
@@ -1948,7 +1949,16 @@ function syncSelectedProductVariantRows() {
       contentVariantLinkReviewed: Boolean(contentVariantSelection),
       shortDescription: row.querySelector(".product-variant-short-description")?.value.trim() || "",
       longDescription: row.querySelector(".product-variant-long-description")?.value.trim() || "",
-      inclusions: row.querySelector(".product-variant-inclusions")?.value.trim() || "",
+      inclusions: "",
+      manualInclusions: [...row.querySelectorAll(".product-manual-inclusion-row")]
+        .map((inclusionRow, inclusionIndex) => ({
+          inclusionId: inclusionRow.dataset.inclusionId ||
+            `INCLUSION-${existingId || index + 1}-${inclusionIndex + 1}`,
+          name: inclusionRow.querySelector(".product-manual-inclusion-name")?.value.trim() || "",
+          quantity: Math.max(Number(
+            inclusionRow.querySelector(".product-manual-inclusion-quantity")?.value || 1,
+          ), 1),
+        })).filter((entry) => entry.name),
       deliveryMode: row.querySelector(".product-variant-delivery-mode")?.value || "",
       physicalFulfilment: row.querySelector(".product-variant-physical-fulfilment")?.value || "none",
       calendarBookingReference: row.querySelector(".product-variant-calendar-reference")?.value.trim() || "",
@@ -1969,6 +1979,8 @@ function syncSelectedProductVariantRows() {
             componentRow.querySelector(".product-bundle-component-product")?.value || "",
           componentProductVariantId:
             componentRow.querySelector(".product-bundle-component-variant")?.value || "",
+          inventoryAction: componentRow.querySelector(".product-bundle-component-deduct")?.checked
+            ? "deduct" : "none",
           quantity: Math.max(Number(
             componentRow.querySelector(".product-bundle-component-quantity")?.value || 1,
           ), 1),
@@ -5018,6 +5030,30 @@ function adminLinkedVariantList(title, entries = [], bundle = false) {
   </section>`;
 }
 
+function adminUnifiedInclusions(productVariant, legacyInclusions = "") {
+  const linked = productVariant.bundleComponents || [];
+  const manual = Array.isArray(productVariant.manualInclusions) && productVariant.manualInclusions.length
+    ? productVariant.manualInclusions
+    : String(legacyInclusions || "").split(/\r?\n/).map((name) => ({
+      name: name.replace(/^[-*•]\s*/, "").trim(), quantity: 1,
+    })).filter((entry) => entry.name);
+  if (!linked.length && !manual.length) return "";
+  return `<section class="mt-3 text-left text-sm text-gray-300">
+    <h4 class="mb-2 font-semibold text-white">Inclusions</h4>
+    <ul class="list-disc space-y-2 pl-5">
+      ${manual.map((entry) => `<li>${escapeHTML(`${Number(entry.quantity || 1)} × ${entry.name}`)}</li>`).join("")}
+      ${linked.map((entry) => {
+    const detail = adminLinkedProductVariant(entry, true);
+    const label = `${Number(detail.quantity || 1)} × ${detail.productName}` +
+      `${detail.variantName ? ` — ${detail.variantName}` : ""}`;
+    return `<li><button type="button" class="open-admin-linked-variant-bubble font-semibold text-[#9edbd7] hover:underline"
+      data-product-id="${escapeHTML(detail.productId)}" data-product-variant-id="${escapeHTML(detail.productVariantId)}">${escapeHTML(label)}</button>` +
+      `${detail.shortDescription ? ` — ${escapeHTML(detail.shortDescription)}` : ""}</li>`;
+  }).join("")}
+    </ul>
+  </section>`;
+}
+
 function closeAdminLinkedVariantBubbleSoon() {
   clearTimeout(adminLinkedVariantBubbleCloseTimer);
   adminLinkedVariantBubbleCloseTimer = setTimeout(() => {
@@ -5193,14 +5229,7 @@ function marketplaceVariantCardPreview(
   const blueprintTone = ["Tool", "Workshop"].includes(productType) ? "review" : "optional";
   const unlockTone = ["Course", "Program", "Plan", "Workshop"].includes(productType)
     ? "review" : "optional";
-  const bundleDetails = adminLinkedVariantList(
-    "Bundle includes",
-    productVariant.bundleComponents || [],
-    true,
-  );
-  const inclusionDetails = inclusions
-    ? `<section class="mt-3 text-left text-sm text-gray-300"><h4 class="mb-2 font-semibold text-white">Inclusions</h4><p class="whitespace-pre-line">${escapeHTML(inclusions)}</p></section>`
-    : "";
+  const inclusionDetails = adminUnifiedInclusions(productVariant, inclusions);
   const prerequisiteDetails = adminLinkedVariantList(
     "Prerequisites",
     productVariant.prerequisiteProductVariants || [],
@@ -5228,7 +5257,6 @@ function marketplaceVariantCardPreview(
         <button type="button" data-variant-editor="description" title="Edit description overrides"
           class="${marketplacePreviewAttention(missingDescription, "mt-3 min-h-16 rounded whitespace-pre-line text-left text-sm text-gray-300 hover:text-white")}">${escapeHTML(longDescription || "Set Product long description")}</button>
         ${inclusionDetails}
-        ${bundleDetails}
         ${prerequisiteDetails}
         ${adminPromotionVideoPreview(productVariant)}
         <label class="mt-4 text-left text-sm text-gray-300">Choose option
@@ -5283,7 +5311,13 @@ function updateMarketplacePreviewRow(target) {
     sku: row.querySelector(".product-variant-sku")?.value || "",
     shortDescription: row.querySelector(".product-variant-short-description")?.value || "",
     longDescription: row.querySelector(".product-variant-long-description")?.value || "",
-    inclusions: row.querySelector(".product-variant-inclusions")?.value || "",
+    inclusions: "",
+    manualInclusions: [...row.querySelectorAll(".product-manual-inclusion-row")].map((inclusionRow) => ({
+      name: inclusionRow.querySelector(".product-manual-inclusion-name")?.value.trim() || "",
+      quantity: Math.max(Number(
+        inclusionRow.querySelector(".product-manual-inclusion-quantity")?.value || 1,
+      ), 1),
+    })).filter((entry) => entry.name),
     priceOverride: optionalNumberFromElement(row.querySelector(".product-variant-price")),
     salePrice: optionalNumberFromElement(row.querySelector(".product-variant-sale-price")),
     wholesalePrice: optionalNumberFromElement(row.querySelector(".product-variant-wholesale-price")),
@@ -5301,6 +5335,8 @@ function updateMarketplacePreviewRow(target) {
         componentProductId: componentRow.querySelector(".product-bundle-component-product")?.value || "",
         componentProductVariantId:
           componentRow.querySelector(".product-bundle-component-variant")?.value || "",
+        inventoryAction: componentRow.querySelector(".product-bundle-component-deduct")?.checked
+          ? "deduct" : "none",
         quantity: Math.max(Number(
           componentRow.querySelector(".product-bundle-component-quantity")?.value || 1,
         ), 1),
@@ -5401,7 +5437,7 @@ function bundleVariantOptions(productId, selectedVariantId = "") {
 
 function bundleComponentsMarkup(components = []) {
   return components.map((component, index) => `
-    <div class="product-bundle-component-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_1fr_7rem_auto]"
+    <div class="product-bundle-component-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_1fr_7rem_auto_auto]"
       data-bundle-component-id="${escapeHTML(component.bundleComponentId || `BUNDLE-COMPONENT-${index + 1}`)}">
       <select class="product-bundle-component-product rounded bg-gray-800 px-2 py-2 text-white">
         <option value="">Choose underlying Product</option>
@@ -5413,8 +5449,31 @@ function bundleComponentsMarkup(components = []) {
       </select>
       <input class="product-bundle-component-quantity rounded bg-gray-800 px-2 py-2 text-white"
         type="number" min="1" step="1" value="${escapeHTML(component.quantity ?? 1)}" aria-label="Quantity per bundle">
+      <label class="flex items-center gap-2 rounded border border-gray-700 px-2 py-1 text-xs text-gray-200">
+        <input class="product-bundle-component-deduct accent-[#407471]" type="checkbox"
+          ${component.inventoryAction === "none" ? "" : "checked"}> Deduct stock/tickets
+      </label>
       <button type="button" class="remove-product-bundle-component rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
-    </div>`).join("") || "<p class=\"product-bundle-empty text-xs text-gray-400\">No underlying Products. This variant uses its own stock or seat capacity.</p>";
+    </div>`).join("") || "<p class=\"product-bundle-empty text-xs text-gray-400\">No linked Product inclusions.</p>";
+}
+
+function manualInclusionsMarkup(inclusions = [], legacyInclusions = "") {
+  const entries = Array.isArray(inclusions) && inclusions.length
+    ? inclusions
+    : String(legacyInclusions || "").split(/\r?\n/).map((name, index) => ({
+      inclusionId: `LEGACY-INCLUSION-${index + 1}`,
+      name: name.replace(/^[-*•]\s*/, "").trim(),
+      quantity: 1,
+    })).filter((entry) => entry.name);
+  return entries.map((entry, index) => `
+    <div class="product-manual-inclusion-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_7rem_auto]"
+      data-inclusion-id="${escapeHTML(entry.inclusionId || `INCLUSION-${index + 1}`)}">
+      <input class="product-manual-inclusion-name rounded bg-gray-800 px-2 py-2 text-white"
+        value="${escapeHTML(entry.name || "")}" placeholder="Inclusion name">
+      <input class="product-manual-inclusion-quantity rounded bg-gray-800 px-2 py-2 text-white"
+        type="number" min="1" step="1" value="${escapeHTML(entry.quantity ?? 1)}" aria-label="Inclusion quantity">
+      <button type="button" class="remove-product-manual-inclusion rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
+    </div>`).join("") || "<p class=\"product-manual-inclusion-empty text-xs text-gray-400\">No unlinked inclusions.</p>";
 }
 
 function productVariantContentLinksFromRows(includeIncomplete = false) {
@@ -9184,6 +9243,7 @@ export async function setupContentBuilder() {
         componentProductId: "",
         componentProductVariantId: "",
         quantity: 1,
+        inventoryAction: "deduct",
       }];
       setInputValue("contentProductVariants", serializeProductVariants(variants));
       renderSelectedProductVariantRows(variants);
@@ -9197,12 +9257,37 @@ export async function setupContentBuilder() {
       state.isDirty = true;
       return;
     }
+    const addManualInclusion = event.target.closest(".add-product-manual-inclusion");
+    if (addManualInclusion) {
+      const sourceRow = addManualInclusion.closest(".content-product-variant-row");
+      const rows = sourceRow?.querySelector(".product-manual-inclusion-rows");
+      rows?.querySelector(".product-manual-inclusion-empty")?.remove();
+      rows?.insertAdjacentHTML("beforeend", manualInclusionsMarkup([{
+        inclusionId: `INCLUSION-${Date.now()}`,
+        name: "",
+        quantity: 1,
+      }]));
+      rows?.lastElementChild?.querySelector(".product-manual-inclusion-name")?.focus();
+      state.isDirty = true;
+      return;
+    }
     const removeBundleComponent = event.target.closest(".remove-product-bundle-component");
     if (removeBundleComponent) {
       const rows = removeBundleComponent.closest(".product-bundle-component-rows");
       removeBundleComponent.closest(".product-bundle-component-row")?.remove();
       if (rows && !rows.querySelector(".product-bundle-component-row")) {
         rows.innerHTML = bundleComponentsMarkup([]);
+      }
+      syncSelectedProductVariantRows();
+      state.isDirty = true;
+      return;
+    }
+    const removeManualInclusion = event.target.closest(".remove-product-manual-inclusion");
+    if (removeManualInclusion) {
+      const rows = removeManualInclusion.closest(".product-manual-inclusion-rows");
+      removeManualInclusion.closest(".product-manual-inclusion-row")?.remove();
+      if (rows && !rows.querySelector(".product-manual-inclusion-row")) {
+        rows.innerHTML = manualInclusionsMarkup([]);
       }
       syncSelectedProductVariantRows();
       state.isDirty = true;

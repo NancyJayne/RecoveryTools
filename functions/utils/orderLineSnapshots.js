@@ -40,6 +40,7 @@ export function canonicalOrderLine(item, index, currency = "AUD") {
     quantityPerBundle: Math.max(Number(component.quantityPerBundle || 1), 1),
     inventoryTracked: component.inventoryTracked === true,
     isWorkshop: component.isWorkshop === true,
+    inventoryAction: component.inventoryAction === "none" ? "none" : "deduct",
     seatCapacity: Math.max(Number(component.seatCapacity || 0), 0),
   })).filter((component) => component.productId);
 
