@@ -1627,7 +1627,7 @@ function renderSelectedProductVariantRows(
               <option value="digital-download"${productVariant.deliveryMode === "digital-download" ? " selected" : ""}>Digital download</option>
             </select>
           </label>
-          <label class="product-variant-physical-fulfilment-field hidden block text-sm">Variant fulfilment override
+          <label class="product-variant-physical-fulfilment-field hidden block text-sm">Variant fulfilment
             <select class="product-variant-physical-fulfilment mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
               ${compactSelectOptions(
     ["none", "shipping", "pickup", "shipping-or-pickup"],
@@ -1739,7 +1739,10 @@ function renderSelectedProductVariantRows(
                 <h5 class="font-semibold text-white">Purchase prerequisites</h5>
                 <p class="mt-1 text-xs text-gray-400">Choose an exact Product variant for automatic purchase/access checks, or an Item such as an external qualification for future manual verification.</p>
               </div>
-              <button type="button" class="add-product-prerequisite rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add prerequisite</button>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="choose-external-qualification rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Choose or create external qualification</button>
+                <button type="button" class="add-product-prerequisite rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add prerequisite</button>
+              </div>
             </div>
             <div class="product-prerequisite-rows mt-3 space-y-2">${prerequisiteRowsMarkup(productVariant.prerequisiteProductVariants || [])}</div>
           </div>
@@ -4914,7 +4917,8 @@ function marketplaceVariantCardPreview(
     .some((unlockRow) =>
       unlockRow.querySelector(".content-product-unlock-variant")?.value === variantId &&
       unlockRow.querySelector(".content-product-unlock-target")?.value);
-  const visibilityMissing = !productVariant.marketplaceMode;
+  const visibilityMissing = !["inherit", "active", "scheduled", "coming-soon", "hidden"]
+    .includes(productVariant.marketplaceMode || "inherit");
   const priceSaleMissing = price === null && salePrice === null &&
     (productVariant.wholesalePrice === null || productVariant.wholesalePrice === undefined) ||
     affiliateAvailable &&
@@ -5074,7 +5078,9 @@ function prerequisiteTargetOptions(entry = {}) {
     const value = `item:${item.id}`;
     return `<option value="${escapeHTML(value)}"${value === selectedValue ? " selected" : ""}>${escapeHTML(item.name || item.id)}</option>`;
   }).join("");
-  return `<option value="">Choose prerequisite</option><optgroup label="Product variants">${products}</optgroup><optgroup label="External qualifications">${items}</optgroup>`;
+  const pending = selectedValue === "item:__pending__"
+    ? `<option value="item:__pending__" selected>Creating external qualification...</option>` : "";
+  return `<option value="">Choose prerequisite</option>${pending}<optgroup label="Product variants">${products}</optgroup><optgroup label="External qualifications">${items}</optgroup>`;
 }
 
 function prerequisiteFromRow(row) {
@@ -5093,7 +5099,10 @@ function prerequisiteFromRow(row) {
 function prerequisiteRowsMarkup(prerequisites = []) {
   return prerequisites.map((entry) => {
     const itemRequirement = entry.requirementType === "item" || entry.itemId;
-    return `<div class="product-prerequisite-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_1fr_auto]">
+    const itemOptions = (state.records.items || []).filter(isExternalQualificationItem)
+      .map((item) => `<option value="${escapeHTML(item.id)}"${item.id === entry.itemId ? " selected" : ""}>${escapeHTML(item.name || item.id)}</option>`)
+      .join("");
+    return `<div class="product-prerequisite-row grid min-w-0 gap-2 rounded border border-gray-700 p-2 sm:grid-cols-2">
       <select class="product-prerequisite-target rounded bg-gray-800 px-2 py-2 text-white">
         ${prerequisiteTargetOptions(entry)}
       </select>
@@ -5101,7 +5110,16 @@ function prerequisiteRowsMarkup(prerequisites = []) {
         <option value="">${itemRequirement ? "Manual verification will be added later" : "Choose required variant"}</option>
         ${itemRequirement ? "" : bundleVariantOptions(entry.productId, entry.productVariantId)}
       </select>
-      <button type="button" class="remove-product-prerequisite rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
+      <span class="content-template-linked-picker hidden">
+        <select class="product-prerequisite-item-selector content-template-linked-select"
+          data-field-key="external-qualification" data-field-name="External qualification"
+          data-linked-table="Items" data-linked-type-filter="" data-linked-status-filter=""
+          data-linked-tag-filters="External qualification">
+          <option value="">Choose external qualification</option>${itemOptions}
+        </select>
+        <button type="button" class="open-content-linked-selector">Choose external qualification</button>
+      </span>
+      <button type="button" class="remove-product-prerequisite justify-self-start rounded border border-red-700 px-3 py-1 text-red-200 sm:col-span-2">Remove</button>
     </div>`;
   }).join("") || "<p class=\"product-prerequisite-empty text-xs text-gray-400\">No prerequisites.</p>";
 }
@@ -5222,12 +5240,12 @@ function renderProductVariantContentLinkRows(links = []) {
     const linkRole = link.linkRole || "ManufacturedFrom";
     const blueprintVariantOptions = blueprintContentVariantOptions(link.entityId, link.entityVariantId);
     return `
-      <div class="product-variant-content-link-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-2 xl:grid-cols-[11rem_1fr_1.5fr_1fr_auto]">
-        <select class="variant-content-link-role rounded bg-gray-800 px-2 py-2 text-white">
+      <div class="product-variant-content-link-row grid min-w-0 gap-2 overflow-hidden rounded border border-gray-700 p-2 sm:grid-cols-2">
+        <select class="variant-content-link-role min-w-0 rounded bg-gray-800 px-2 py-2 text-white">
           <option value="ManufacturedFrom"${linkRole === "ManufacturedFrom" ? " selected" : ""}>Manufacturing recipe</option>
           <option value="OperatedWith"${linkRole === "OperatedWith" ? " selected" : ""}>Workshop operations</option>
         </select>
-        <select class="variant-content-product-variant rounded bg-gray-800 px-2 py-2 text-white">
+        <select class="variant-content-product-variant min-w-0 rounded bg-gray-800 px-2 py-2 text-white">
           <option value=""${link.productVariantId ? "" : " selected"}>Choose Product variant${link.productVariantId ? "" : " — legacy all-variant link"}</option>${productVariantOptions}
         </select>
         <span class="content-template-linked-picker flex min-w-0">
@@ -5241,11 +5259,11 @@ function renderProductVariantContentLinkRows(links = []) {
           </select>
           <button type="button" class="open-content-linked-selector min-w-0 flex-1 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">Choose Blueprint</button>
         </span>
-        <select class="variant-content-blueprint-variant rounded bg-gray-800 px-2 py-2 text-white" aria-label="Exact Blueprint variation">
+        <select class="variant-content-blueprint-variant min-w-0 rounded bg-gray-800 px-2 py-2 text-white" aria-label="Exact Blueprint variation">
           <option value="">${escapeHTML(defaultBlueprintContentVariantLabel(link.entityId))}</option>${blueprintVariantOptions}
         </select>
-        <button type="button" class="remove-product-variant-content-link rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
-        <p class="product-variant-blueprint-selection text-sm text-[#9edbd7] md:col-span-2 xl:col-span-5"></p>
+        <button type="button" class="remove-product-variant-content-link justify-self-start rounded border border-red-700 px-3 py-1 text-red-200 sm:col-span-2">Remove</button>
+        <p class="product-variant-blueprint-selection min-w-0 break-words text-sm text-[#9edbd7] sm:col-span-2"></p>
       </div>`;
   }).join("") || "<p class=\"text-xs text-gray-400\">No manufacturing or Workshop Operations Blueprint selected.</p>";
   container.querySelectorAll(".content-template-linked-select").forEach(
@@ -5314,13 +5332,12 @@ function renderProductUnlockRows(grants = []) {
         return `<option value="${escapeHTML(variantId)}"${selected}>${escapeHTML(label)}</option>`;
       }).join("");
     return `
-      <div class="content-product-unlock-row grid gap-2 rounded border border-gray-700 p-2
-        md:grid-cols-2 xl:grid-cols-[12rem_9rem_1fr_1fr_9rem_7rem_13rem_auto]">
-        <select class="content-product-unlock-variant rounded bg-gray-800 px-2 py-2 text-white">
+      <div class="content-product-unlock-row grid min-w-0 gap-2 overflow-hidden rounded border border-gray-700 p-2 sm:grid-cols-2">
+        <select class="content-product-unlock-variant min-w-0 rounded bg-gray-800 px-2 py-2 text-white">
           <option value=""${grant.productVariantId ? "" : " selected"}>Choose Product variant${grant.productVariantId ? "" : " — legacy all-variant unlock"}</option>
           ${variantOptions}
         </select>
-        <select class="content-product-unlock-type rounded bg-gray-800 px-2 py-2 text-white"
+        <select class="content-product-unlock-type min-w-0 rounded bg-gray-800 px-2 py-2 text-white"
           data-row-index="${index}">
           ${typeOptions}
         </select>
@@ -5333,10 +5350,10 @@ function renderProductUnlockRows(grants = []) {
           <option value="">${targetVariantOptions ? "All content variants" : "No content variants"}</option>
           ${targetVariantOptions}
         </select>
-        <select class="content-product-unlock-duration-type rounded bg-gray-800 px-2 py-2 text-white">
+        <select class="content-product-unlock-duration-type min-w-0 rounded bg-gray-800 px-2 py-2 text-white">
           ${compactSelectOptions(["permanent", "days", "weeks", "months", "years"], grant.durationType || "permanent")}
         </select>
-        <input class="content-product-unlock-duration-value rounded bg-gray-800 px-2 py-2 text-white"
+        <input class="content-product-unlock-duration-value min-w-0 rounded bg-gray-800 px-2 py-2 text-white"
           type="number" min="1" step="1" value="${escapeHTML(grant.durationValue ?? "")}"
           placeholder="Duration">
         <label class="text-xs text-gray-400">Or expires on
@@ -5344,7 +5361,7 @@ function renderProductUnlockRows(grants = []) {
             type="datetime-local" value="${escapeHTML(grant.endsAt || "")}">
         </label>
         <button type="button"
-          class="remove-content-product-unlock rounded border border-red-700 px-3 py-1 text-red-200">
+          class="remove-content-product-unlock justify-self-start rounded border border-red-700 px-3 py-1 text-red-200 sm:col-span-2">
           Remove
         </button>
       </div>
@@ -8806,6 +8823,21 @@ export async function setupContentBuilder() {
       rows?.insertAdjacentHTML("beforeend", prerequisiteRowsMarkup([{ productId: "", productVariantId: "" }]));
       return;
     }
+    const chooseExternalQualification = event.target.closest(".choose-external-qualification");
+    if (chooseExternalQualification) {
+      const productRow = chooseExternalQualification.closest(".content-product-variant-row");
+      const rows = productRow?.querySelector(".product-prerequisite-rows");
+      rows?.querySelector(".product-prerequisite-empty")?.remove();
+      rows?.insertAdjacentHTML("beforeend", prerequisiteRowsMarkup([{
+        requirementType: "item",
+        itemId: "__pending__",
+      }]));
+      const prerequisiteRow = rows?.lastElementChild;
+      const selectorTrigger = prerequisiteRow?.querySelector(".open-content-linked-selector");
+      syncSelectedProductVariantRows();
+      if (selectorTrigger) openLinkedRecordSelector(selectorTrigger);
+      return;
+    }
     const removePrerequisite = event.target.closest(".remove-product-prerequisite");
     if (removePrerequisite) {
       const rows = removePrerequisite.closest(".product-prerequisite-rows");
@@ -8860,6 +8892,24 @@ export async function setupContentBuilder() {
     state.isDirty = true;
   });
   document.getElementById("contentProductVariantRows")?.addEventListener("change", (event) => {
+    if (event.target.classList.contains("product-prerequisite-item-selector")) {
+      const row = event.target.closest(".product-prerequisite-row");
+      const target = row?.querySelector(".product-prerequisite-target");
+      const itemId = event.target.value || "";
+      if (target && itemId) {
+        const value = `item:${itemId}`;
+        const item = (state.records.items || []).find((candidate) => candidate.id === itemId);
+        if (![...target.options].some((option) => option.value === value)) {
+          target.add(new Option(item?.name || itemId, value));
+        }
+        target.value = value;
+        const variant = row.querySelector(".product-prerequisite-variant");
+        if (variant) {
+          variant.disabled = true;
+          variant.innerHTML = "<option value=\"\">Manual verification will be added later</option>";
+        }
+      }
+    }
     if (event.target.classList.contains("product-prerequisite-target")) {
       const row = event.target.closest(".product-prerequisite-row");
       const variant = row?.querySelector(".product-prerequisite-variant");

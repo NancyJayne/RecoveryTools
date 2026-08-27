@@ -1752,7 +1752,7 @@
               </div>
 
               <section id="contentProductDrawer" class="fixed inset-0 z-[110] hidden bg-black/55" aria-hidden="true">
-                <div class="ml-auto h-full w-full max-w-3xl overflow-y-auto border-l border-gray-700 bg-gray-950 p-5 text-sm shadow-2xl">
+                <div class="ml-auto h-full w-full max-w-5xl overflow-x-hidden overflow-y-auto border-l border-gray-700 bg-gray-950 p-5 text-sm shadow-2xl">
                 <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 class="font-semibold text-white">Shop product relationship</h3>
@@ -1887,7 +1887,7 @@
                     <div class="mt-4 flex justify-end">
                       <button id="addContentProductVariantBtn" type="button" class="rounded border border-[#407471] px-3 py-2 text-sm text-[#9edbd7]">Add Product variant</button>
                     </div>
-                    <div id="contentVariantOwnedConnections" class="mt-4 hidden space-y-4 rounded border border-[#407471] bg-gray-950/40 p-3">
+                    <div id="contentVariantOwnedConnections" class="mt-4 hidden w-full min-w-0 max-w-full space-y-4 overflow-hidden rounded border border-[#407471] bg-gray-950/40 p-3">
                       <div>
                         <div>
                           <h5 class="font-semibold text-white">Selected variant connections</h5>
@@ -1916,7 +1916,7 @@
                       </div>
                       <button id="addProductVariantContentLinkBtn" type="button" disabled class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7] disabled:cursor-not-allowed disabled:opacity-40">Add another Blueprint</button>
                     </div>
-                    <div id="productVariantContentLinkRows" class="mt-3 space-y-2"></div>
+                    <div id="productVariantContentLinkRows" class="mt-3 min-w-0 max-w-full space-y-2 overflow-hidden"></div>
                     <p id="contentProductBlueprintLabel" class="hidden">Not connected</p>
                     <p>Estimated cost: <strong id="contentProductSourceCost">$0.00</strong></p>
                     <p class="mt-1">Approximate gross margin: <strong id="contentProductApproxMargin">Not available</strong></p>
@@ -2041,7 +2041,7 @@
                     </div>
                     <button id="addContentProductUnlockBtn" type="button" disabled class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7] hover:bg-[#153b38] disabled:cursor-not-allowed disabled:opacity-40">Add another unlock</button>
                   </div>
-                  <div id="contentProductUnlockRows" class="mt-3 space-y-2"></div>
+                  <div id="contentProductUnlockRows" class="mt-3 min-w-0 max-w-full space-y-2 overflow-hidden"></div>
                 </section>
                 <div class="mt-5 flex flex-wrap items-center justify-end gap-4">
                   <fieldset class="flex flex-wrap items-center gap-2">
@@ -2502,7 +2502,7 @@
                 </div>
               </section>
 
-              <section id="contentAssetDrawer" class="fixed inset-0 z-[110] hidden bg-black/50" aria-hidden="true" inert>
+              <section id="contentAssetDrawer" class="fixed inset-0 z-[160] hidden bg-black/50" aria-hidden="true" inert>
                 <div class="ml-auto flex h-full w-full max-w-xl flex-col bg-gray-950 shadow-2xl">
                   <div class="flex items-start justify-between gap-3 border-b border-gray-700 p-4">
                     <div><h3 class="text-lg font-semibold">Add new asset</h3><p id="contentAssetDrawerContext" class="mt-1 text-xs text-gray-400"></p></div>
