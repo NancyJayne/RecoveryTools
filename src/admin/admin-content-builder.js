@@ -2214,6 +2214,7 @@ async function closeOrReturnFromContentCreator() {
 function setContentEntityEditorDrawerOpen(open) {
   const drawer = document.getElementById("contentEntityEditorDrawer");
   if (!drawer) return;
+  if (open && drawer.parentElement !== document.body) document.body.appendChild(drawer);
   drawer.classList.toggle("hidden", !open);
   drawer.setAttribute("aria-hidden", String(!open));
   drawer.inert = !open;
