@@ -3181,7 +3181,7 @@ async function restoreNestedParent({ selectedRecord = null, cancelled = false } 
   showToast(
     cancelled
       ? `Returned to ${entry.parentName}.`
-      : `${selectedRecord?.name || selectedRecord?.id || "New content"} was created and linked to ${entry.parentName}${parentAutoSaved ? " and the parent was saved" : ""}.`,
+      : `${selectedRecord?.name || selectedRecord?.id || "Content"} was linked to ${entry.parentName}${parentAutoSaved ? " and the parent was saved" : ""}.`,
     "success",
   );
   return true;
@@ -3831,6 +3831,14 @@ function renderRecordPill(record) {
 function renderSimilarRecord(record) {
   const typeStatus = [record.type || "No type", record.status || ""].filter(Boolean).join(" | ");
   const recordType = singularRecordType(record.recordType || currentRecordType());
+  const useExistingAction = contentBuilderCreationStack.length
+    ? `<button type="button"
+        class="use-similar-content-record shrink-0 rounded border border-[#407471] px-3 py-2 text-xs font-medium text-[#9edbd7] hover:bg-[#407471]/20"
+        data-record-type="${escapeHTML(recordType)}"
+        data-record-id="${escapeHTML(record.id)}">
+        Use existing
+      </button>`
+    : "";
   return `
     <div class="flex flex-wrap items-center justify-between gap-3 rounded border border-yellow-700/70 bg-yellow-950/20 p-3">
       <div class="min-w-0">
@@ -3838,12 +3846,15 @@ function renderSimilarRecord(record) {
         <div class="mt-1 break-all text-xs text-gray-400">${escapeHTML(record.id)}</div>
         <div class="mt-1 text-xs text-gray-400">${escapeHTML(typeStatus)}</div>
       </div>
-      <button type="button"
-        class="edit-similar-content-record shrink-0 rounded bg-[#407471] px-3 py-2 text-xs font-medium text-white hover:bg-[#305a56]"
-        data-record-type="${escapeHTML(recordType)}"
-        data-record-id="${escapeHTML(record.id)}">
-        Edit instead
-      </button>
+      <div class="flex flex-wrap gap-2">
+        ${useExistingAction}
+        <button type="button"
+          class="edit-similar-content-record shrink-0 rounded bg-[#407471] px-3 py-2 text-xs font-medium text-white hover:bg-[#305a56]"
+          data-record-type="${escapeHTML(recordType)}"
+          data-record-id="${escapeHTML(record.id)}">
+          ${contentBuilderCreationStack.length ? "Edit and link" : "Edit instead"}
+        </button>
+      </div>
     </div>`;
 }
 
@@ -8407,8 +8418,10 @@ export async function setupContentBuilder() {
       refreshMarketplacePreviews();
       renderMarketplaceTileControls();
     }));
-  document.getElementById("contentSimilarList")?.addEventListener("click", (event) => {
-    const button = event.target.closest(".edit-similar-content-record");
+  document.getElementById("contentSimilarList")?.addEventListener("click", async (event) => {
+    const button = event.target.closest(
+      ".edit-similar-content-record, .use-similar-content-record",
+    );
     if (!button) return;
     const recordType = button.dataset.recordType || currentRecordType();
     const recordId = button.dataset.recordId || "";
@@ -8417,9 +8430,21 @@ export async function setupContentBuilder() {
       showToast("That similar record could not be loaded. Refresh and try again.", "error");
       return;
     }
-    history.pushState({}, "", `/admin/content/builder?type=${encodeURIComponent(recordType)}&id=${encodeURIComponent(recordId)}`);
+    if (button.classList.contains("use-similar-content-record")) {
+      await restoreNestedParent({ selectedRecord: record });
+      return;
+    }
+    history.replaceState({}, "", `/admin/content/builder?type=${encodeURIComponent(recordType)}&id=${encodeURIComponent(recordId)}`);
     populateBuilderFromRecord(record);
-    showToast(`Editing ${record.name || record.id} instead.`, "success");
+    showBuilderStep(1);
+    setContentEntityEditorDrawerOpen(true);
+    state.isDirty = false;
+    showToast(
+      contentBuilderCreationStack.length
+        ? `Editing ${record.name || record.id}. Save it to link it and return to the previous work.`
+        : `Editing ${record.name || record.id} instead.`,
+      "success",
+    );
   });
   document.getElementById("contentTagRows")?.addEventListener("change", handleTagRowsChange);
   document.getElementById("contentTagRows")?.addEventListener("input", handleTagRowsInput);
