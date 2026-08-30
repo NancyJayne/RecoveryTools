@@ -1900,6 +1900,9 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
         </div>
       </div>`;
   }).join("");
+  container.querySelectorAll(
+    ".product-prerequisite-product-selector, .product-prerequisite-item-selector",
+  ).forEach(refreshLinkedTemplatePickerLabel);
   syncProductArchivedFromVariants(productVariants);
   const connections = document.getElementById("contentVariantOwnedConnections");
   if (connections && !productVariants.some((variant) =>
@@ -3050,6 +3053,7 @@ async function captureNestedParentContext(context) {
   const payload = await formPayload(false, { validate: false });
   const entityRow = context.select.closest(".content-entity-variant-row");
   const productBlueprintRow = context.select.closest(".product-variant-content-link-row");
+  const productPrerequisiteRow = context.select.closest(".product-prerequisite-row");
   const matchingSelects = [...(entityRow || document).querySelectorAll(
     `.content-template-linked-select[data-field-key="${CSS.escape(context.select.dataset.fieldKey || "")}"]`,
   )];
@@ -3074,10 +3078,16 @@ async function captureNestedParentContext(context) {
       entityVariantId: entityRow?.dataset.entityVariantId || "",
       fieldKey: context.select.dataset.fieldKey || "",
       selectionIndex: Math.max(matchingSelects.indexOf(context.select), 0),
-      connectionKind: productBlueprintRow ? "product-blueprint" : "template-field",
+      connectionKind: productBlueprintRow
+        ? "product-blueprint"
+        : productPrerequisiteRow ? "product-prerequisite" : "template-field",
       productVariantId:
-        productBlueprintRow?.querySelector(".variant-content-product-variant")?.value || "",
+        productBlueprintRow?.querySelector(".variant-content-product-variant")?.value ||
+        productPrerequisiteRow?.closest(".content-product-variant-row")
+          ?.querySelector(".product-variant-id")?.value || "",
       linkRole: productBlueprintRow?.querySelector(".variant-content-link-role")?.value || "",
+      prerequisiteKind: normalizedText(context.select.dataset.linkedTable) === "products"
+        ? "product" : "item",
     },
   };
 }
@@ -3133,6 +3143,20 @@ async function restoreNestedParent({ selectedRecord = null, cancelled = false } 
     select = [...document.querySelectorAll(
       `.content-template-linked-select[data-field-key="${CSS.escape(entry.target.fieldKey || "")}"]`,
     )][entry.target.selectionIndex || 0] || null;
+  }
+  if (selectedRecord?.id && entry.target?.connectionKind === "product-prerequisite" && !select) {
+    const productRow = [...document.querySelectorAll(".content-product-variant-row")].find((row) =>
+      (row.querySelector(".product-variant-id")?.value || row.dataset.productVariantId || "") ===
+        entry.target.productVariantId);
+    const rows = productRow?.querySelector(".product-prerequisite-rows");
+    rows?.querySelector(".product-prerequisite-empty")?.remove();
+    rows?.insertAdjacentHTML("beforeend", prerequisiteRowsMarkup([entry.target.prerequisiteKind === "item"
+      ? { requirementType: "item", itemId: selectedRecord.id }
+      : { requirementType: "product-variant", productId: selectedRecord.id, productVariantId: "" }]));
+    select = rows?.lastElementChild?.querySelector(entry.target.prerequisiteKind === "item"
+      ? ".product-prerequisite-item-selector"
+      : ".product-prerequisite-product-selector") || null;
+    refreshLinkedTemplatePickerLabel(select);
   }
   if (select && selectedRecord?.id) {
     if (![...select.options].some((option) => option.value === selectedRecord.id)) {
@@ -3208,6 +3232,28 @@ async function createFromLinkedRecordSelector() {
     openContentAssetDrawer(trigger);
     return;
   }
+  if (["product", "products"].includes(table)) {
+    let parentContext;
+    try {
+      parentContext = await captureNestedParentContext(context);
+    } catch (error) {
+      console.error("Failed to preserve the parent Product prerequisite:", error);
+      showToast(error.message || "Could not preserve the current Product draft.", "error");
+      return;
+    }
+    contentBuilderCreationStack.push(parentContext);
+    persistContentBuilderCreationStack();
+    closeLinkedRecordSelector();
+    if (parentContext.parentProductDrawerOpen) closeContentProductDrawer();
+    pendingStandaloneProductId = "";
+    setInputValue("contentProductEntitySearch", "");
+    setSelectValue("contentProductEntityTypeFilter", "all");
+    setSelectValue("contentProductEntitySubtypeFilter", "all");
+    setProductEntityPickerOpen(true);
+    openContentProductDrawer();
+    showToast("Choose the Item, Blueprint, or Plan for the new prerequisite Product.", "success");
+    return;
+  }
   const recordType = { items: "item", blueprints: "blueprint", plans: "plan" }[table];
   if (!recordType) {
     showToast(`Create new is not available for ${context.select.dataset.linkedTable || "this field"}.`, "error");
@@ -3258,8 +3304,13 @@ async function editSelectedLinkedRecord(button) {
     return;
   }
   const table = normalizedText(select.dataset.linkedTable);
-  const recordType = { items: "item", blueprints: "blueprint", plans: "plan" }[table];
-  const record = recordType ? findRecord(recordType, select.value) : null;
+  const recordType = {
+    item: "item", items: "item", blueprint: "blueprint", blueprints: "blueprint",
+    plan: "plan", plans: "plan", product: "product", products: "product",
+  }[table];
+  const record = recordType === "product"
+    ? (state.records.products || []).find((product) => product.id === select.value)
+    : recordType ? findRecord(recordType, select.value) : null;
   if (!recordType || !record) {
     showToast("The selected content could not be loaded for editing.", "error");
     return;
@@ -3275,6 +3326,24 @@ async function editSelectedLinkedRecord(button) {
   contentBuilderCreationStack.push(parentContext);
   persistContentBuilderCreationStack();
   if (parentContext.parentProductDrawerOpen) closeContentProductDrawer();
+  if (recordType === "product") {
+    const entity = contentRecordForProduct(record);
+    if (!entity) {
+      contentBuilderCreationStack.pop();
+      persistContentBuilderCreationStack();
+      showToast("This Product has no connected Item, Blueprint, or Plan to edit from.", "error");
+      return;
+    }
+    populateBuilderFromRecord(entity);
+    chooseExistingProduct(record.id);
+    openContentProductDrawer();
+    state.isDirty = false;
+    showToast(
+      `Editing ${record.name || record.id}. Save to return to ${parentContext.parentName} with this prerequisite preserved.`,
+      "success",
+    );
+    return;
+  }
   history.replaceState(
     {},
     "",
@@ -4635,6 +4704,22 @@ function productUnlockOptions(entityType) {
   return state.records[key] || [];
 }
 
+function contentRecordForProduct(product = {}) {
+  const productId = product.id || product.productId || "";
+  const directType = singularRecordType(
+    product.entityType || product.contentEntityType || product.sourceEntityType || "",
+  );
+  const directId = product.entityId || product.contentEntityId || product.sourceEntityId || "";
+  const direct = directType && directId ? findRecord(directType, directId) : null;
+  if (direct) return direct;
+  return ["item", "blueprint", "plan"].flatMap((recordType) =>
+    (state.records[recordCollectionName(recordType)] || []).map((record) => ({
+      ...record,
+      recordType,
+    }))).find((record) =>
+    [record.productId, record.itemProductId].filter(Boolean).includes(productId));
+}
+
 function productUnlockTargetVariants(entityType, entityId) {
   const target = productUnlockOptions(entityType).find((record) => record.id === entityId);
   return Array.isArray(target?.entityVariants) ? target.entityVariants : [];
@@ -5453,9 +5538,8 @@ function prerequisiteTargetOptions(entry = {}) {
 }
 
 function prerequisiteFromRow(row) {
-  const [requirementType, targetId] = String(
-    row.querySelector(".product-prerequisite-target")?.value || "",
-  ).split(":");
+  const requirementType = row.querySelector(".product-prerequisite-kind")?.value || "product";
+  const targetId = row.querySelector(".product-prerequisite-target")?.value || "";
   if (requirementType === "item" && targetId) {
     return { requirementType: "item", itemId: targetId };
   }
@@ -5466,28 +5550,46 @@ function prerequisiteFromRow(row) {
 }
 
 function prerequisiteRowsMarkup(prerequisites = []) {
-  return prerequisites.map((entry) => {
+  return prerequisites.map((entry, index) => {
     const itemRequirement = entry.requirementType === "item" || entry.itemId;
+    const productOptions = (state.records.products || [])
+      .map((product) => `<option value="${escapeHTML(product.id)}"${product.id === entry.productId ? " selected" : ""}>${escapeHTML(product.name || product.id)}</option>`)
+      .join("");
     const itemOptions = (state.records.items || []).filter(isExternalQualificationItem)
       .map((item) => `<option value="${escapeHTML(item.id)}"${item.id === entry.itemId ? " selected" : ""}>${escapeHTML(item.name || item.id)}</option>`)
       .join("");
     return `<div class="product-prerequisite-row grid min-w-0 gap-2 rounded border border-gray-700 p-2 sm:grid-cols-2">
-      <select class="product-prerequisite-target rounded bg-gray-800 px-2 py-2 text-white">
-        ${prerequisiteTargetOptions(entry)}
+      <select class="product-prerequisite-kind rounded bg-gray-800 px-2 py-2 text-white">
+        <option value="product"${itemRequirement ? "" : " selected"}>Product variant prerequisite</option>
+        <option value="item"${itemRequirement ? " selected" : ""}>External qualification</option>
       </select>
-      <select class="product-prerequisite-variant rounded bg-gray-800 px-2 py-2 text-white"${itemRequirement ? " disabled" : ""}>
-        <option value="">${itemRequirement ? "Manual verification will be added later" : "Choose required variant"}</option>
-        ${itemRequirement ? "" : bundleVariantOptions(entry.productId, entry.productVariantId)}
+      <select class="product-prerequisite-target hidden">
+        <option value="${escapeHTML(itemRequirement ? entry.itemId || "" : entry.productId || "")}" selected></option>
       </select>
-      <span class="content-template-linked-picker hidden">
-        <select class="product-prerequisite-item-selector content-template-linked-select"
-          data-field-key="external-qualification" data-field-name="External qualification"
+      <span class="content-template-linked-picker product-prerequisite-product-picker grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]${itemRequirement ? " hidden" : ""}">
+        <select class="product-prerequisite-product-selector content-template-linked-select hidden"
+          data-field-key="product-prerequisite-product-${index}" data-field-name="Prerequisite Product"
+          data-linked-table="Products" data-linked-type-filter="" data-linked-status-filter=""
+          data-linked-tag-filters="">
+          <option value="">Choose prerequisite Product</option>${productOptions}
+        </select>
+        <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">Choose prerequisite Product</button>
+        <button type="button" class="edit-selected-linked-record rounded border border-gray-600 px-3 py-2 text-xs text-gray-200" disabled>Edit selected</button>
+      </span>
+      <span class="content-template-linked-picker product-prerequisite-item-picker grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]${itemRequirement ? "" : " hidden"}">
+        <select class="product-prerequisite-item-selector content-template-linked-select hidden"
+          data-field-key="product-prerequisite-item-${index}" data-field-name="External qualification"
           data-linked-table="Items" data-linked-type-filter="" data-linked-status-filter=""
           data-linked-tag-filters="External qualification">
           <option value="">Choose external qualification</option>${itemOptions}
         </select>
-        <button type="button" class="open-content-linked-selector">Choose external qualification</button>
+        <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">Choose external qualification</button>
+        <button type="button" class="edit-selected-linked-record rounded border border-gray-600 px-3 py-2 text-xs text-gray-200" disabled>Edit selected</button>
       </span>
+      <select class="product-prerequisite-variant rounded bg-gray-800 px-2 py-2 text-white"${itemRequirement ? " disabled" : ""}>
+        <option value="">${itemRequirement ? "Manual verification will be added later" : "Choose required variant"}</option>
+        ${itemRequirement ? "" : bundleVariantOptions(entry.productId, entry.productVariantId)}
+      </select>
       <button type="button" class="remove-product-prerequisite justify-self-start rounded border border-red-700 px-3 py-1 text-red-200 sm:col-span-2">Remove</button>
     </div>`;
   }).join("") || "<p class=\"product-prerequisite-empty text-xs text-gray-400\">No prerequisites.</p>";
@@ -8217,6 +8319,16 @@ async function saveProductDetailsFromDrawer() {
     state.isDirty = false;
     closeContentProductDrawer();
     await loadData();
+    if (savedProductId && contentBuilderCreationStack.at(-1)?.target?.connectionKind ===
+        "product-prerequisite") {
+      const savedProduct = (state.records.products || []).find((product) =>
+        product.id === savedProductId);
+      await restoreNestedParent({
+        selectedRecord: savedProduct || { id: savedProductId, name: savedProductId },
+      });
+      window.dispatchEvent(new CustomEvent("admin-product-saved"));
+      return;
+    }
     if (savedProductId && (state.records.products || []).some((product) => product.id === savedProductId)) {
       chooseExistingProduct(savedProductId);
     }
@@ -8906,20 +9018,6 @@ export async function setupContentBuilder() {
     returnToProductTilePreview();
   });
   document.getElementById("contentProductDrawer")?.addEventListener("change", (event) => {
-    if (event.target.classList.contains("product-prerequisite-item-selector")) {
-      const prerequisiteRow = event.target.closest(".product-prerequisite-row");
-      const target = prerequisiteRow?.querySelector(".product-prerequisite-target");
-      const variant = prerequisiteRow?.querySelector(".product-prerequisite-variant");
-      if (target) target.value = event.target.value ? `item:${event.target.value}` : "";
-      if (variant) {
-        variant.innerHTML = "<option value=\"\">Manual verification will be added later</option>";
-        variant.disabled = true;
-      }
-      syncSelectedProductVariantRows();
-      refreshMarketplacePreviews();
-      state.isDirty = true;
-      return;
-    }
     const statusCheckbox = event.target.closest(".content-product-status-checkbox");
     if (!statusCheckbox) return;
     const currentStatus = currentProductEditorStatus();
@@ -9322,7 +9420,15 @@ export async function setupContentBuilder() {
     if (addPrerequisite) {
       const rows = addPrerequisite.closest(".content-product-variant-row")?.querySelector(".product-prerequisite-rows");
       rows?.querySelector(".product-prerequisite-empty")?.remove();
-      rows?.insertAdjacentHTML("beforeend", prerequisiteRowsMarkup([{ productId: "", productVariantId: "" }]));
+      rows?.insertAdjacentHTML("beforeend", prerequisiteRowsMarkup([{
+        requirementType: "product-variant",
+        productId: "",
+        productVariantId: "",
+      }]));
+      const selectorTrigger = rows?.lastElementChild?.querySelector(
+        ".product-prerequisite-product-picker .open-content-linked-selector",
+      );
+      if (selectorTrigger) openLinkedRecordSelector(selectorTrigger);
       return;
     }
     const chooseExternalQualification = event.target.closest(".choose-external-qualification");
@@ -9335,7 +9441,9 @@ export async function setupContentBuilder() {
         itemId: "__pending__",
       }]));
       const prerequisiteRow = rows?.lastElementChild;
-      const selectorTrigger = prerequisiteRow?.querySelector(".open-content-linked-selector");
+      const selectorTrigger = prerequisiteRow?.querySelector(
+        ".product-prerequisite-item-picker .open-content-linked-selector",
+      );
       if (selectorTrigger) openLinkedRecordSelector(selectorTrigger);
       return;
     }
@@ -9428,33 +9536,62 @@ export async function setupContentBuilder() {
       event.target.classList.toggle("border-[#407471]", reviewed);
       event.target.classList.toggle("bg-gray-950", reviewed);
     }
-    if (event.target.classList.contains("product-prerequisite-item-selector")) {
+    if (event.target.classList.contains("product-prerequisite-kind")) {
       const row = event.target.closest(".product-prerequisite-row");
       const target = row?.querySelector(".product-prerequisite-target");
-      const itemId = event.target.value || "";
-      if (target && itemId) {
-        const value = `item:${itemId}`;
-        const item = (state.records.items || []).find((candidate) => candidate.id === itemId);
-        if (![...target.options].some((option) => option.value === value)) {
-          target.add(new Option(item?.name || itemId, value));
-        }
-        target.value = value;
-        const variant = row.querySelector(".product-prerequisite-variant");
-        if (variant) {
-          variant.disabled = true;
-          variant.innerHTML = "<option value=\"\">Manual verification will be added later</option>";
-        }
-      }
-    }
-    if (event.target.classList.contains("product-prerequisite-target")) {
-      const row = event.target.closest(".product-prerequisite-row");
+      const isItem = event.target.value === "item";
+      const productPicker = row?.querySelector(".product-prerequisite-product-picker");
+      const itemPicker = row?.querySelector(".product-prerequisite-item-picker");
+      const productSelect = row?.querySelector(".product-prerequisite-product-selector");
+      const itemSelect = row?.querySelector(".product-prerequisite-item-selector");
       const variant = row?.querySelector(".product-prerequisite-variant");
-      const [requirementType, targetId] = event.target.value.split(":");
+      if (target) target.value = "";
+      if (productSelect) productSelect.value = "";
+      if (itemSelect) itemSelect.value = "";
+      refreshLinkedTemplatePickerLabel(productSelect);
+      refreshLinkedTemplatePickerLabel(itemSelect);
+      productPicker?.classList.toggle("hidden", isItem);
+      itemPicker?.classList.toggle("hidden", !isItem);
       if (variant) {
-        variant.disabled = requirementType === "item";
-        variant.innerHTML = requirementType === "item"
+        variant.disabled = isItem;
+        variant.innerHTML = isItem
           ? "<option value=\"\">Manual verification will be added later</option>"
-          : `<option value="">Choose required variant</option>${bundleVariantOptions(targetId)}`;
+          : "<option value=\"\">Choose required variant</option>";
+      }
+      const trigger = (isItem ? itemPicker : productPicker)
+        ?.querySelector(".open-content-linked-selector");
+      setTimeout(() => trigger?.click(), 0);
+    }
+    if (event.target.classList.contains("product-prerequisite-product-selector") ||
+        event.target.classList.contains("product-prerequisite-item-selector")) {
+      const row = event.target.closest(".product-prerequisite-row");
+      const isItem = event.target.classList.contains("product-prerequisite-item-selector");
+      const target = row?.querySelector(".product-prerequisite-target");
+      const kind = row?.querySelector(".product-prerequisite-kind");
+      const variant = row?.querySelector(".product-prerequisite-variant");
+      const other = row?.querySelector(isItem
+        ? ".product-prerequisite-product-selector"
+        : ".product-prerequisite-item-selector");
+      if (kind) kind.value = isItem ? "item" : "product";
+      if (target) {
+        if (![...target.options].some((option) => option.value === event.target.value)) {
+          target.add(new Option(event.target.value, event.target.value));
+        }
+        target.value = event.target.value || "";
+      }
+      if (other) {
+        other.value = "";
+        refreshLinkedTemplatePickerLabel(other);
+      }
+      row?.querySelector(".product-prerequisite-product-picker")
+        ?.classList.toggle("hidden", isItem);
+      row?.querySelector(".product-prerequisite-item-picker")
+        ?.classList.toggle("hidden", !isItem);
+      if (variant) {
+        variant.disabled = isItem;
+        variant.innerHTML = isItem
+          ? "<option value=\"\">Manual verification will be added later</option>"
+          : `<option value="">Choose required variant</option>${bundleVariantOptions(event.target.value)}`;
       }
     }
     if (event.target.classList.contains("product-bundle-component-product")) {
