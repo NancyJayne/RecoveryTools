@@ -2940,7 +2940,8 @@ function renderLinkedRecordSelector() {
 
 function openLinkedRecordSelector(trigger) {
   const picker = trigger.closest(".content-template-linked-picker");
-  const select = picker?.querySelector(".content-template-linked-select");
+  const selectorTarget = trigger.dataset.linkedSelectorTarget || ".content-template-linked-select";
+  const select = picker?.querySelector(selectorTarget);
   if (!select) {
     console.error("Could not open the content selector because its linked select was not found.", trigger);
     showToast("Could not open this selector. Close and reopen the Product Creator, then try again.", "error");
@@ -5615,7 +5616,8 @@ function prerequisiteRowsMarkup(prerequisites = [], sourceVariantId = "") {
           data-linked-tag-filters="">
           <option value="">Choose prerequisite Product</option>${productOptions}
         </select>
-        <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">Choose prerequisite Product</button>
+        <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700"
+          data-linked-selector-target=".product-prerequisite-product-selector">Choose prerequisite Product</button>
         <button type="button" class="edit-selected-linked-record rounded border border-gray-600 px-3 py-2 text-xs text-gray-200" disabled>Edit selected</button>
       </span>
       <span class="content-template-linked-picker product-prerequisite-item-picker grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]${itemRequirement ? "" : " hidden"}">
@@ -5625,7 +5627,8 @@ function prerequisiteRowsMarkup(prerequisites = [], sourceVariantId = "") {
           data-linked-tag-filters="External qualification">
           <option value="">Choose external qualification</option>${itemOptions}
         </select>
-        <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">Choose external qualification</button>
+        <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700"
+          data-linked-selector-target=".product-prerequisite-item-selector">Choose external qualification</button>
         <button type="button" class="edit-selected-linked-record rounded border border-gray-600 px-3 py-2 text-xs text-gray-200" disabled>Edit selected</button>
       </span>
       <select class="product-prerequisite-variant rounded bg-gray-800 px-2 py-2 text-white"${itemRequirement ? " disabled" : ""}>
