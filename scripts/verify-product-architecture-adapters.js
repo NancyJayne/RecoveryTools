@@ -76,6 +76,7 @@ assert.deepEqual(bundleComponentsForProduct("PROD-1", "PV-1", architecture), [{
   componentProductId: "PROD-2",
   componentProductVariantId: "PV-2",
   quantity: 2,
+  inventoryAction: "deduct",
 }]);
 
 assert.equal(inventoryForProduct("PROD-1", "", architecture)?.id, "INV-PROD-1");
