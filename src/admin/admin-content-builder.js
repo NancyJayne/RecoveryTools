@@ -2497,7 +2497,8 @@ function linkedTemplateSelectMarkup(field, key, required = false) {
 }
 
 function refreshLinkedTemplatePickerLabel(select) {
-  const button = select?.closest(".content-template-linked-picker")
+  const picker = select?.closest(".content-template-linked-picker");
+  const button = picker
     ?.querySelector(".open-content-linked-selector");
   if (!button) return;
   const record = linkedTemplateFieldRecords({ linkedTable: select.dataset.linkedTable })
@@ -2506,7 +2507,13 @@ function refreshLinkedTemplatePickerLabel(select) {
     ? linkedTemplateRecordLabel(record)
     : `Choose ${select.dataset.fieldName || "content"}`;
   button.classList.toggle("text-gray-400", !record);
-  refreshLinkedVariantSelect(select, select.closest(".content-template-linked-picker")
+  const editButton = picker?.querySelector(".edit-selected-linked-record");
+  if (editButton) {
+    editButton.disabled = !record;
+    editButton.classList.toggle("opacity-50", !record);
+    editButton.classList.toggle("cursor-not-allowed", !record);
+  }
+  refreshLinkedVariantSelect(select, picker
     ?.querySelector(".content-template-linked-variant")?.value || "");
 }
 
@@ -3241,6 +3248,46 @@ async function createFromLinkedRecordSelector() {
   showBuilderStep(1);
   setContentEntityEditorDrawerOpen(true);
   showToast(`Creating a reusable ${recordType}. Save it to return to ${parentContext.parentName}.`, "success");
+}
+
+async function editSelectedLinkedRecord(button) {
+  const picker = button.closest(".content-template-linked-picker");
+  const select = picker?.querySelector(".content-template-linked-select");
+  if (!select?.value) {
+    showToast("Choose content before selecting Edit.", "error");
+    return;
+  }
+  const table = normalizedText(select.dataset.linkedTable);
+  const recordType = { items: "item", blueprints: "blueprint", plans: "plan" }[table];
+  const record = recordType ? findRecord(recordType, select.value) : null;
+  if (!recordType || !record) {
+    showToast("The selected content could not be loaded for editing.", "error");
+    return;
+  }
+  let parentContext;
+  try {
+    parentContext = await captureNestedParentContext({ select, trigger: button });
+  } catch (error) {
+    console.error("Failed to preserve the parent before editing linked content:", error);
+    showToast(error.message || "Could not preserve the current Product draft.", "error");
+    return;
+  }
+  contentBuilderCreationStack.push(parentContext);
+  persistContentBuilderCreationStack();
+  if (parentContext.parentProductDrawerOpen) closeContentProductDrawer();
+  history.replaceState(
+    {},
+    "",
+    `/admin/content/builder?type=${encodeURIComponent(recordType)}&id=${encodeURIComponent(record.id)}`,
+  );
+  populateBuilderFromRecord(record);
+  showBuilderStep(1);
+  setContentEntityEditorDrawerOpen(true);
+  state.isDirty = false;
+  showToast(
+    `Editing ${record.name || record.id}. Save to return to ${parentContext.parentName} with this connection preserved.`,
+    "success",
+  );
 }
 
 function handleTemplateGuidedFieldsClick(event) {
@@ -5593,7 +5640,7 @@ function renderProductVariantContentLinkRows(links = []) {
         <select class="variant-content-product-variant min-w-0 rounded bg-gray-800 px-2 py-2 text-white">
           <option value=""${link.productVariantId ? "" : " selected"}>Choose Product variant${link.productVariantId ? "" : " — legacy all-variant link"}</option>${productVariantOptions}
         </select>
-        <span class="content-template-linked-picker flex min-w-0">
+        <span class="content-template-linked-picker grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           <select class="variant-content-blueprint content-template-linked-select hidden"
             data-field-key="product-blueprint-${escapeHTML(link.productVariantId || "all")}"
             data-field-name="${linkRole === "ManufacturedFrom" ? "Manufacturing Blueprint" : "Workshop operations Blueprint"}"
@@ -5603,6 +5650,7 @@ function renderProductVariantContentLinkRows(links = []) {
             <option value="">Choose Blueprint</option>${blueprintOptions}
           </select>
           <button type="button" class="open-content-linked-selector min-w-0 flex-1 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">Choose Blueprint</button>
+          <button type="button" class="edit-selected-linked-record rounded border border-gray-600 px-3 py-2 text-xs text-gray-200" disabled>Edit selected</button>
         </span>
         <select class="variant-content-blueprint-variant min-w-0 rounded bg-gray-800 px-2 py-2 text-white" aria-label="Exact Blueprint variation">
           <option value="">${escapeHTML(defaultBlueprintContentVariantLabel(link.entityId))}</option>${blueprintVariantOptions}
@@ -5688,10 +5736,18 @@ function renderProductUnlockRows(grants = []) {
           data-row-index="${index}">
           ${typeOptions}
         </select>
-        <select class="content-product-unlock-target min-w-0 rounded bg-gray-800 px-2 py-2 text-white">
-          <option value="">Choose content to unlock</option>
-          ${targetOptions}
-        </select>
+        <span class="content-template-linked-picker grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <select class="content-product-unlock-target content-template-linked-select hidden"
+            data-field-key="product-unlock-${escapeHTML(grant.productVariantId || "all")}-${index}"
+            data-field-name="${escapeHTML(`${entityType} to unlock`)}"
+            data-field-type="linked" data-linked-table="${escapeHTML(`${entityType}s`)}"
+            data-linked-type-filter="" data-linked-status-filter="" data-linked-tag-filters="">
+            <option value="">Choose content to unlock</option>
+            ${targetOptions}
+          </select>
+          <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">Choose content to unlock</button>
+          <button type="button" class="edit-selected-linked-record rounded border border-gray-600 px-3 py-2 text-xs text-gray-200" disabled>Edit selected</button>
+        </span>
         <select class="content-product-unlock-target-variant min-w-0 rounded bg-gray-800 px-2 py-2 text-white"
           ${targetVariantOptions ? "" : "disabled"}>
           <option value="">${targetVariantOptions ? "All content variants" : "No content variants"}</option>
@@ -5719,6 +5775,9 @@ function renderProductUnlockRows(grants = []) {
       </div>
     `;
   }).join("") || "<p class=\"text-xs text-gray-400\">No additional content unlocks selected.</p>";
+  container.querySelectorAll(".content-product-unlock-target").forEach(
+    refreshLinkedTemplatePickerLabel,
+  );
   filterVariantOwnedConnections(
     document.getElementById("contentVariantOwnedConnections")?.dataset.activeProductVariantId || "",
   );
@@ -8822,6 +8881,11 @@ export async function setupContentBuilder() {
     });
   });
   document.getElementById("contentProductDrawer")?.addEventListener("click", (event) => {
+    const editLinkedRecord = event.target.closest(".edit-selected-linked-record");
+    if (editLinkedRecord) {
+      editSelectedLinkedRecord(editLinkedRecord);
+      return;
+    }
     const linkedSelector = event.target.closest(".open-content-linked-selector");
     if (linkedSelector) {
       openLinkedRecordSelector(linkedSelector);
