@@ -1718,7 +1718,7 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
               ${sourceNote(productVariant.priceOverride !== null && productVariant.priceOverride !== undefined ? "Variant override" : productPrice !== null ? "Inherited from Product" : "Not configured", "price")}
             </label>
           </section>
-          <section data-variant-editor-section="purchase" class="grid gap-4 rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
+          <section data-variant-editor-section="purchase" class="flex min-w-0 flex-col gap-4 rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
           <div class="grid gap-3 rounded border border-gray-700 p-3 sm:grid-cols-2">
             <div class="sm:col-span-2">
               <h6 class="font-semibold text-white">Inventory or tickets</h6>
@@ -5446,23 +5446,23 @@ function bundleVariantOptions(productId, selectedVariantId = "") {
 
 function bundleComponentsMarkup(components = []) {
   return components.map((component, index) => `
-    <div class="product-bundle-component-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_1fr_7rem_auto_auto]"
+    <div class="product-bundle-component-row grid min-w-0 gap-2 rounded border border-gray-700 p-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_6rem_minmax(10rem,auto)_auto]"
       data-bundle-component-id="${escapeHTML(component.bundleComponentId || `BUNDLE-COMPONENT-${index + 1}`)}">
-      <select class="product-bundle-component-product rounded bg-gray-800 px-2 py-2 text-white">
+      <select class="product-bundle-component-product min-w-0 w-full rounded bg-gray-800 px-2 py-2 text-white">
         <option value="">Choose underlying Product</option>
         ${bundleProductOptions(component.componentProductId)}
       </select>
-      <select class="product-bundle-component-variant rounded bg-gray-800 px-2 py-2 text-white">
+      <select class="product-bundle-component-variant min-w-0 w-full rounded bg-gray-800 px-2 py-2 text-white">
         <option value="">Use Product-level stock</option>
         ${bundleVariantOptions(component.componentProductId, component.componentProductVariantId)}
       </select>
-      <input class="product-bundle-component-quantity rounded bg-gray-800 px-2 py-2 text-white"
+      <input class="product-bundle-component-quantity min-w-0 w-full rounded bg-gray-800 px-2 py-2 text-white"
         type="number" min="1" step="1" value="${escapeHTML(component.quantity ?? 1)}" aria-label="Quantity per bundle">
-      <label class="flex items-center gap-2 rounded border border-gray-700 px-2 py-1 text-xs text-gray-200">
+      <label class="flex min-w-0 items-center gap-2 rounded border border-gray-700 px-2 py-1 text-xs text-gray-200">
         <input class="product-bundle-component-deduct accent-[#407471]" type="checkbox"
           ${component.inventoryAction === "none" ? "" : "checked"}> Deduct stock/tickets
       </label>
-      <button type="button" class="remove-product-bundle-component rounded border border-red-700 px-3 py-1 text-red-200">Remove</button>
+      <button type="button" class="remove-product-bundle-component rounded border border-red-700 px-3 py-1 text-red-200 sm:justify-self-start xl:justify-self-auto">Remove</button>
     </div>`).join("") || "<p class=\"product-bundle-empty text-xs text-gray-400\">No linked Product inclusions.</p>";
 }
 
@@ -9259,7 +9259,7 @@ export async function setupContentBuilder() {
       const refreshedRow = document.querySelector(
         `.content-product-variant-row[data-product-variant-id="${CSS.escape(variantId)}"]`,
       );
-      refreshedRow?.querySelector("[data-variant-editor=\"description\"]")?.click();
+      refreshedRow?.querySelector("[data-variant-editor=\"purchase\"]")?.click();
       const bundleRows = refreshedRow?.querySelectorAll(".product-bundle-component-row") || [];
       bundleRows[bundleRows.length - 1]
         ?.querySelector(".product-bundle-component-product")?.focus();
