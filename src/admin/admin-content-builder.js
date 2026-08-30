@@ -2972,6 +2972,7 @@ function openLinkedRecordSelector(trigger) {
     typeFilter.disabled = Boolean(fixedType);
   }
   const modal = document.getElementById("contentLinkedRecordSelectorModal");
+  if (modal?.parentElement !== document.body) document.body.appendChild(modal);
   modal?.classList.remove("hidden");
   modal?.classList.add("flex");
   modal?.setAttribute("aria-hidden", "false");
