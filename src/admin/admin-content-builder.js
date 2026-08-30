@@ -3439,6 +3439,7 @@ function openContentAssetDrawer(button) {
   helpButton?.setAttribute("aria-expanded", "false");
   if (helpButton) helpButton.textContent = "Help";
   const drawer = document.getElementById("contentAssetDrawer");
+  if (drawer?.parentElement !== document.body) document.body.appendChild(drawer);
   if (drawer) drawer.inert = false;
   drawer?.classList.remove("hidden");
   drawer?.setAttribute("aria-hidden", "false");
