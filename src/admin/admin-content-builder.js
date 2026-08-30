@@ -2939,7 +2939,11 @@ function renderLinkedRecordSelector() {
 function openLinkedRecordSelector(trigger) {
   const picker = trigger.closest(".content-template-linked-picker");
   const select = picker?.querySelector(".content-template-linked-select");
-  if (!select) return;
+  if (!select) {
+    console.error("Could not open the content selector because its linked select was not found.", trigger);
+    showToast("Could not open this selector. Close and reopen the Product Creator, then try again.", "error");
+    return false;
+  }
   linkedRecordSelectorContext = { trigger, select };
   const records = linkedSelectorRecords();
   const fixedType = select.dataset.linkedTypeFilter || "";
@@ -2973,6 +2977,7 @@ function openLinkedRecordSelector(trigger) {
   modal?.setAttribute("aria-hidden", "false");
   renderLinkedRecordSelector();
   document.getElementById("contentLinkedRecordSearch")?.focus();
+  return true;
 }
 
 async function linkExistingAssetToCurrentContent(asset) {
@@ -9118,6 +9123,18 @@ export async function setupContentBuilder() {
     if (trigger && !trigger.contains(event.relatedTarget)) closeAdminLinkedVariantBubbleSoon();
   });
   document.getElementById("contentProductVariantRows")?.addEventListener("click", (event) => {
+    const editLinkedRecord = event.target.closest(".edit-selected-linked-record");
+    if (editLinkedRecord) {
+      event.stopPropagation();
+      editSelectedLinkedRecord(editLinkedRecord);
+      return;
+    }
+    const linkedSelector = event.target.closest(".open-content-linked-selector");
+    if (linkedSelector) {
+      event.stopPropagation();
+      openLinkedRecordSelector(linkedSelector);
+      return;
+    }
     const copySettings = event.target.closest("[data-copy-product-variant-settings]");
     if (copySettings) {
       syncSelectedProductVariantRows();
