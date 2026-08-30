@@ -1879,7 +1879,7 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
                 <button type="button" class="add-product-prerequisite rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add prerequisite</button>
               </div>
             </div>
-            <div class="product-prerequisite-rows mt-3 space-y-2">${prerequisiteRowsMarkup(productVariant.prerequisiteProductVariants || [])}</div>
+            <div class="product-prerequisite-rows mt-3 space-y-2">${prerequisiteRowsMarkup(productVariant.prerequisiteProductVariants || [], variantId)}</div>
           </div>
           <div data-variant-editor-section="visibility" class="variant-editor-actions rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Variant status and save</h5>
@@ -1999,8 +1999,10 @@ function syncSelectedProductVariantRows() {
       promotionAssetIds: [...(row.querySelector(".product-variant-promotion-assets")?.selectedOptions || [])]
         .map((option) => option.value).filter(Boolean),
       prerequisiteProductVariants: [...row.querySelectorAll(".product-prerequisite-row")]
-        .map(prerequisiteFromRow).filter((entry) =>
-          entry && (entry.requirementType === "item" || entry.productVariantId !== existingId)),
+        .map(prerequisiteFromRow).filter((entry) => entry && !isSelfProductPrerequisite(
+          entry,
+          existingId,
+        )),
     };
   });
   input.value = serializeProductVariants(variants);
@@ -3158,7 +3160,8 @@ async function restoreNestedParent({ selectedRecord = null, cancelled = false } 
     rows?.querySelector(".product-prerequisite-empty")?.remove();
     rows?.insertAdjacentHTML("beforeend", prerequisiteRowsMarkup([entry.target.prerequisiteKind === "item"
       ? { requirementType: "item", itemId: selectedRecord.id }
-      : { requirementType: "product-variant", productId: selectedRecord.id, productVariantId: "" }]));
+      : { requirementType: "product-variant", productId: selectedRecord.id, productVariantId: "" }],
+    entry.target.productVariantId));
     select = rows?.lastElementChild?.querySelector(entry.target.prerequisiteKind === "item"
       ? ".product-prerequisite-item-selector"
       : ".product-prerequisite-product-selector") || null;
@@ -5487,7 +5490,10 @@ function updateMarketplacePreviewRow(target) {
     promotionAssetIds: [...(row.querySelector(".product-variant-promotion-assets")?.selectedOptions || [])]
       .map((option) => option.value).filter(Boolean),
     prerequisiteProductVariants: [...row.querySelectorAll(".product-prerequisite-row")]
-      .map(prerequisiteFromRow).filter(Boolean),
+      .map(prerequisiteFromRow).filter((entry) => entry && !isSelfProductPrerequisite(
+        entry,
+        row.querySelector(".product-variant-id")?.value || row.dataset.productVariantId || "",
+      )),
     bundleComponents: [...row.querySelectorAll(".product-bundle-component-row")]
       .map((componentRow) => ({
         componentProductId: componentRow.querySelector(".product-bundle-component-product")?.value || "",
@@ -5555,7 +5561,32 @@ function prerequisiteFromRow(row) {
     : null;
 }
 
-function prerequisiteRowsMarkup(prerequisites = []) {
+function currentProductId() {
+  return document.getElementById("contentProductId")?.value ||
+    document.getElementById("contentExistingProductId")?.value ||
+    state.editingRecord?.productId || "";
+}
+
+function isSelfProductPrerequisite(entry = {}, sourceVariantId = "") {
+  return entry.requirementType !== "item" &&
+    Boolean(currentProductId()) && entry.productId === currentProductId() &&
+    entry.productVariantId === sourceVariantId;
+}
+
+function prerequisiteVariantOptions(productId, selectedVariantId = "", sourceVariantId = "") {
+  const product = (state.records.products || []).find((candidate) => candidate.id === productId);
+  const excludesCurrentVariant = Boolean(productId) && productId === currentProductId();
+  return (product?.variants || []).filter((variant) => {
+    const variantId = variant.variantId || variant.id;
+    return !excludesCurrentVariant || variantId !== sourceVariantId;
+  }).map((variant) => {
+    const variantId = variant.variantId || variant.id;
+    const selected = variantId === selectedVariantId ? " selected" : "";
+    return `<option value="${escapeHTML(variantId)}"${selected}>${escapeHTML(variant.name || variantId)}</option>`;
+  }).join("");
+}
+
+function prerequisiteRowsMarkup(prerequisites = [], sourceVariantId = "") {
   return prerequisites.map((entry, index) => {
     const itemRequirement = entry.requirementType === "item" || entry.itemId;
     const productOptions = (state.records.products || [])
@@ -5564,6 +5595,11 @@ function prerequisiteRowsMarkup(prerequisites = []) {
     const itemOptions = (state.records.items || []).filter(isExternalQualificationItem)
       .map((item) => `<option value="${escapeHTML(item.id)}"${item.id === entry.itemId ? " selected" : ""}>${escapeHTML(item.name || item.id)}</option>`)
       .join("");
+    const variantOptions = itemRequirement ? "" : prerequisiteVariantOptions(
+      entry.productId,
+      entry.productVariantId,
+      sourceVariantId,
+    );
     return `<div class="product-prerequisite-row grid min-w-0 gap-2 rounded border border-gray-700 p-2 sm:grid-cols-2">
       <select class="product-prerequisite-kind rounded bg-gray-800 px-2 py-2 text-white">
         <option value="product"${itemRequirement ? "" : " selected"}>Product variant prerequisite</option>
@@ -5594,7 +5630,7 @@ function prerequisiteRowsMarkup(prerequisites = []) {
       </span>
       <select class="product-prerequisite-variant rounded bg-gray-800 px-2 py-2 text-white"${itemRequirement ? " disabled" : ""}>
         <option value="">${itemRequirement ? "Manual verification will be added later" : "Choose required variant"}</option>
-        ${itemRequirement ? "" : bundleVariantOptions(entry.productId, entry.productVariantId)}
+        ${variantOptions}
       </select>
       <button type="button" class="remove-product-prerequisite justify-self-start rounded border border-red-700 px-3 py-1 text-red-200 sm:col-span-2">Remove</button>
     </div>`;
@@ -9436,13 +9472,16 @@ export async function setupContentBuilder() {
     }
     const addPrerequisite = event.target.closest(".add-product-prerequisite");
     if (addPrerequisite) {
-      const rows = addPrerequisite.closest(".content-product-variant-row")?.querySelector(".product-prerequisite-rows");
+      const productRow = addPrerequisite.closest(".content-product-variant-row");
+      const rows = productRow?.querySelector(".product-prerequisite-rows");
+      const sourceVariantId = productRow?.querySelector(".product-variant-id")?.value ||
+        productRow?.dataset.productVariantId || "";
       rows?.querySelector(".product-prerequisite-empty")?.remove();
       rows?.insertAdjacentHTML("beforeend", prerequisiteRowsMarkup([{
         requirementType: "product-variant",
         productId: "",
         productVariantId: "",
-      }]));
+      }], sourceVariantId));
       const selectorTrigger = rows?.lastElementChild?.querySelector(
         ".product-prerequisite-product-picker .open-content-linked-selector",
       );
@@ -9453,11 +9492,13 @@ export async function setupContentBuilder() {
     if (chooseExternalQualification) {
       const productRow = chooseExternalQualification.closest(".content-product-variant-row");
       const rows = productRow?.querySelector(".product-prerequisite-rows");
+      const sourceVariantId = productRow?.querySelector(".product-variant-id")?.value ||
+        productRow?.dataset.productVariantId || "";
       rows?.querySelector(".product-prerequisite-empty")?.remove();
       rows?.insertAdjacentHTML("beforeend", prerequisiteRowsMarkup([{
         requirementType: "item",
         itemId: "__pending__",
-      }]));
+      }], sourceVariantId));
       const prerequisiteRow = rows?.lastElementChild;
       const selectorTrigger = prerequisiteRow?.querySelector(
         ".product-prerequisite-item-picker .open-content-linked-selector",
@@ -9606,10 +9647,16 @@ export async function setupContentBuilder() {
       row?.querySelector(".product-prerequisite-item-picker")
         ?.classList.toggle("hidden", !isItem);
       if (variant) {
+        const sourceVariantId = row?.closest(".content-product-variant-row")
+          ?.querySelector(".product-variant-id")?.value || "";
         variant.disabled = isItem;
         variant.innerHTML = isItem
           ? "<option value=\"\">Manual verification will be added later</option>"
-          : `<option value="">Choose required variant</option>${bundleVariantOptions(event.target.value)}`;
+          : `<option value="">Choose required variant</option>${prerequisiteVariantOptions(
+            event.target.value,
+            "",
+            sourceVariantId,
+          )}`;
       }
     }
     if (event.target.classList.contains("product-bundle-component-product")) {

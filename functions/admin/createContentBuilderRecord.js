@@ -415,7 +415,7 @@ function assetTypeFromUrl(url = "") {
   return "document";
 }
 
-function normalizeVariant(value, index) {
+function normalizeVariant(value, index, sourceProductId = "") {
   if (!value || typeof value !== "object") return null;
   const name = cleanString(value.name) ||
     [cleanString(value.colour), cleanString(value.size)].filter(Boolean).join(" / ") ||
@@ -463,11 +463,15 @@ function normalizeVariant(value, index) {
     primaryAssetId: cleanString(value.primaryAssetId),
     promotionAssetIds: [...new Set((Array.isArray(value.promotionAssetIds) ? value.promotionAssetIds : [])
       .map(cleanString).filter(Boolean))].slice(0, 20),
-    prerequisiteProductVariants: cleanPrerequisites(value.prerequisiteProductVariants, variantId),
+    prerequisiteProductVariants: cleanPrerequisites(
+      value.prerequisiteProductVariants,
+      sourceProductId,
+      variantId,
+    ),
   };
 }
 
-function cleanPrerequisites(value, sourceVariantId) {
+function cleanPrerequisites(value, sourceProductId, sourceVariantId) {
   const seen = new Set();
   return (Array.isArray(value) ? value : []).map((entry) => {
     const requirementType = cleanString(entry?.requirementType) === "item" || entry?.itemId
@@ -484,7 +488,9 @@ function cleanPrerequisites(value, sourceVariantId) {
       ? `item:${entry.itemId}` : `product:${entry.productId}:${entry.productVariantId}`;
     const complete = entry.requirementType === "item"
       ? entry.itemId : entry.productId && entry.productVariantId;
-    if (!complete || entry.productVariantId === sourceVariantId || seen.has(key)) return false;
+    if (!complete ||
+        entry.productId === sourceProductId && entry.productVariantId === sourceVariantId ||
+        seen.has(key)) return false;
     seen.add(key);
     return true;
   }).slice(0, 20);
@@ -988,7 +994,7 @@ export const createContentBuilderRecord = onCall(
           const variants = (Array.isArray(data.productRelation?.variants)
             ? data.productRelation.variants
             : [])
-            .map(normalizeVariant)
+            .map((variant, index) => normalizeVariant(variant, index, productId))
             .filter(Boolean);
           const accessTargets = cleanAccessGrants(data.productRelation?.accessGrants);
           if (linkRole === "Unlocks" && ["Item", "Blueprint", "Plan"].includes(linkedEntityType) &&
