@@ -5523,16 +5523,8 @@ function refreshMarketplacePreviews() {
   });
 }
 
-function normalizedTagName(value) {
-  const rawValue = value && typeof value === "object"
-    ? value.name || value.label || value.tagName || value.id || ""
-    : value;
-  return normalizedText(rawValue).replace(/[-_]+/g, " ").replace(/\s+/g, " ");
-}
-
-function isExternalQualificationItem(item = {}) {
-  return (Array.isArray(item.tags) ? item.tags : [])
-    .some((tag) => normalizedTagName(tag) === "external qualification");
+function isQualificationItem(item = {}) {
+  return normalizedType(item.itemType || item.type) === "qualification";
 }
 
 function prerequisiteTargetOptions(entry = {}) {
@@ -5542,7 +5534,7 @@ function prerequisiteTargetOptions(entry = {}) {
     const value = `product:${product.id}`;
     return `<option value="${escapeHTML(value)}"${value === selectedValue ? " selected" : ""}>${escapeHTML(product.name || product.id)}</option>`;
   }).join("");
-  const items = (state.records.items || []).filter(isExternalQualificationItem).map((item) => {
+  const items = (state.records.items || []).filter(isQualificationItem).map((item) => {
     const value = `item:${item.id}`;
     return `<option value="${escapeHTML(value)}"${value === selectedValue ? " selected" : ""}>${escapeHTML(item.name || item.id)}</option>`;
   }).join("");
@@ -5594,7 +5586,7 @@ function prerequisiteRowsMarkup(prerequisites = [], sourceVariantId = "") {
     const productOptions = (state.records.products || [])
       .map((product) => `<option value="${escapeHTML(product.id)}"${product.id === entry.productId ? " selected" : ""}>${escapeHTML(product.name || product.id)}</option>`)
       .join("");
-    const itemOptions = (state.records.items || []).filter(isExternalQualificationItem)
+    const itemOptions = (state.records.items || []).filter(isQualificationItem)
       .map((item) => `<option value="${escapeHTML(item.id)}"${item.id === entry.itemId ? " selected" : ""}>${escapeHTML(item.name || item.id)}</option>`)
       .join("");
     const variantOptions = itemRequirement ? "" : prerequisiteVariantOptions(
@@ -5624,8 +5616,8 @@ function prerequisiteRowsMarkup(prerequisites = [], sourceVariantId = "") {
       <span class="content-template-linked-picker product-prerequisite-item-picker grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]${itemRequirement ? "" : " hidden"}">
         <select class="product-prerequisite-item-selector content-template-linked-select hidden"
           data-field-key="product-prerequisite-item-${index}" data-field-name="External qualification"
-          data-linked-table="Items" data-linked-type-filter="" data-linked-status-filter=""
-          data-linked-tag-filters="External qualification">
+          data-linked-table="Items" data-linked-type-filter="Qualification" data-linked-status-filter=""
+          data-linked-tag-filters="">
           <option value="">Choose external qualification</option>${itemOptions}
         </select>
         <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700"

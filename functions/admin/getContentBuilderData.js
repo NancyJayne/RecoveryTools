@@ -391,9 +391,11 @@ function mergeOptions(
   return {
     ...CONTENT_BUILDER_OPTIONS,
     ...savedOptions,
-    itemTypes: (workbookTypes.item?.length
-      ? mergeUnique([], workbookTypes.item)
-      : CONTENT_BUILDER_OPTIONS.itemTypes)
+    itemTypes: mergeUnique(
+      CONTENT_BUILDER_OPTIONS.itemTypes,
+      workbookTypes.item || [],
+      savedOptions.itemTypes || [],
+    )
       .filter((type) => cleanStatus(type) !== "workshop"),
     itemKinds: mergeUnique(CONTENT_BUILDER_OPTIONS.itemKinds, savedOptions.itemKinds),
     categoryOptions: mergeUnique(

@@ -382,9 +382,10 @@ async function contentOptions(db) {
   return {
     ...CONTENT_BUILDER_OPTIONS,
     ...saved,
-    itemTypes: (workbookTypes.item.length
-      ? mergeUnique([], workbookTypes.item)
-      : CONTENT_BUILDER_OPTIONS.itemTypes)
+    itemTypes: mergeUnique(
+      mergeUnique(CONTENT_BUILDER_OPTIONS.itemTypes, workbookTypes.item),
+      saved.itemTypes,
+    )
       .filter((type) => cleanString(type).toLowerCase() !== "workshop"),
     itemKinds: mergeUnique(CONTENT_BUILDER_OPTIONS.itemKinds, saved.itemKinds),
     blueprintTypes: mergeUnique(

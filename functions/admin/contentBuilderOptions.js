@@ -37,6 +37,7 @@ export const CONTENT_BUILDER_OPTIONS = {
     "policy",
     "event",
     "outcome measure",
+    "qualification",
   ],
   itemKinds: [
     "Shop Product",
