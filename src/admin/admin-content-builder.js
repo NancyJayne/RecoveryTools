@@ -8906,6 +8906,20 @@ export async function setupContentBuilder() {
     returnToProductTilePreview();
   });
   document.getElementById("contentProductDrawer")?.addEventListener("change", (event) => {
+    if (event.target.classList.contains("product-prerequisite-item-selector")) {
+      const prerequisiteRow = event.target.closest(".product-prerequisite-row");
+      const target = prerequisiteRow?.querySelector(".product-prerequisite-target");
+      const variant = prerequisiteRow?.querySelector(".product-prerequisite-variant");
+      if (target) target.value = event.target.value ? `item:${event.target.value}` : "";
+      if (variant) {
+        variant.innerHTML = "<option value=\"\">Manual verification will be added later</option>";
+        variant.disabled = true;
+      }
+      syncSelectedProductVariantRows();
+      refreshMarketplacePreviews();
+      state.isDirty = true;
+      return;
+    }
     const statusCheckbox = event.target.closest(".content-product-status-checkbox");
     if (!statusCheckbox) return;
     const currentStatus = currentProductEditorStatus();
@@ -9322,7 +9336,6 @@ export async function setupContentBuilder() {
       }]));
       const prerequisiteRow = rows?.lastElementChild;
       const selectorTrigger = prerequisiteRow?.querySelector(".open-content-linked-selector");
-      syncSelectedProductVariantRows();
       if (selectorTrigger) openLinkedRecordSelector(selectorTrigger);
       return;
     }
