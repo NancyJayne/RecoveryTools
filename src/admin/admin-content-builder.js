@@ -1879,7 +1879,7 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
                 <button type="button" class="add-product-prerequisite rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add prerequisite</button>
               </div>
             </div>
-            <div class="product-prerequisite-rows mt-3 space-y-2">${prerequisiteRowsMarkup(productVariant.prerequisiteProductVariants || [], variantId)}</div>
+            <div class="product-prerequisite-rows mt-3 space-y-2">${prerequisiteRowsMarkup(productVariant.prerequisiteProductVariants || [], productVariant.variantId || "")}</div>
           </div>
           <div data-variant-editor-section="visibility" class="variant-editor-actions rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Variant status and save</h5>
