@@ -5676,6 +5676,8 @@ function renderProductUnlockRows(grants = []) {
         const label = variant.name || variant.variantName || variantId;
         return `<option value="${escapeHTML(variantId)}"${selected}>${escapeHTML(label)}</option>`;
       }).join("");
+    const durationType = ["days", "weeks", "months", "years"].includes(grant.durationType)
+      ? grant.durationType : "";
     return `
       <div class="content-product-unlock-row grid min-w-0 gap-2 overflow-hidden rounded border border-gray-700 p-2 sm:grid-cols-2">
         <select class="content-product-unlock-variant min-w-0 rounded bg-gray-800 px-2 py-2 text-white">
@@ -5695,12 +5697,17 @@ function renderProductUnlockRows(grants = []) {
           <option value="">${targetVariantOptions ? "All content variants" : "No content variants"}</option>
           ${targetVariantOptions}
         </select>
-        <select class="content-product-unlock-duration-type min-w-0 rounded bg-gray-800 px-2 py-2 text-white">
-          ${compactSelectOptions(["permanent", "days", "weeks", "months", "years"], grant.durationType || "permanent")}
-        </select>
-        <input class="content-product-unlock-duration-value min-w-0 rounded bg-gray-800 px-2 py-2 text-white"
-          type="number" min="1" step="1" value="${escapeHTML(grant.durationValue ?? "")}"
-          placeholder="Duration">
+        <label class="min-w-0 text-xs text-gray-400">Access duration
+          <select class="content-product-unlock-duration-type mt-1 w-full min-w-0 rounded bg-gray-800 px-2 py-2 text-white">
+            <option value=""${durationType ? "" : " selected"}>Leave blank — permanent access</option>
+            ${compactSelectOptions(["days", "weeks", "months", "years"], durationType)}
+          </select>
+        </label>
+        <label class="min-w-0 text-xs text-gray-400">Duration amount
+          <input class="content-product-unlock-duration-value mt-1 w-full min-w-0 rounded bg-gray-800 px-2 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
+            type="number" min="1" step="1" value="${escapeHTML(durationType ? grant.durationValue ?? "" : "")}"
+            placeholder="${durationType ? `Number of ${escapeHTML(durationType)}` : "Select a duration first"}"${durationType ? "" : " disabled"}>
+        </label>
         <label class="text-xs text-gray-400">Or expires on
           <input class="content-product-unlock-ends-at mt-1 w-full rounded bg-gray-800 px-2 py-2 text-white"
             type="datetime-local" value="${escapeHTML(grant.endsAt || "")}">
@@ -9556,6 +9563,19 @@ export async function setupContentBuilder() {
       );
       state.isDirty = true;
       refreshMarketplacePreviews();
+      return;
+    }
+    if (event.target.classList.contains("content-product-unlock-duration-type")) {
+      const row = event.target.closest(".content-product-unlock-row");
+      const amount = row?.querySelector(".content-product-unlock-duration-value");
+      const durationType = event.target.value || "";
+      if (amount) {
+        amount.disabled = !durationType;
+        amount.placeholder = durationType ? `Number of ${durationType}` : "Select a duration first";
+        if (!durationType) amount.value = "";
+        else amount.focus();
+      }
+      state.isDirty = true;
       return;
     }
     if (!event.target.classList.contains("content-product-unlock-type") &&
