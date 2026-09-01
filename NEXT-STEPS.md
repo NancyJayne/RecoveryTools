@@ -128,6 +128,8 @@ This is the agreed order for the next major modules. Each area uses a focused `c
 
 Sell and safely operate Workshop tickets before waiting for the complete automated instructor-payment system.
 
+- [x] Correct the Firebase Storage bucket for the next combined Workshop Hosting deployment. The deployed August 31 bundle still targets the nonexistent legacy `recovery-tools.appspot.com` bucket, causing production Asset uploads to fail their preflight with HTTP 404; the correct `recovery-tools.firebasestorage.app` bucket passed an upload-style CORS preflight on September 1. Local `.env` and `.env.live-backup` now use the correct bucket, `.env.production` carries the public production value, and both Hosting workflows no longer override it with the obsolete GitHub secret. Restart `npm run dev` before retesting locally; production remains unchanged until the later Hosting deployment.
+
 - [x] Remove Workshop from the Item type choices and keep it under Plans. New Workshop Items are rejected server-side even if a stale client submits one; active workbook/entity-type settings cannot reintroduce the choice, while existing legacy Workshop Items remain editable until deliberately migrated. `npm run verify:workshop-boundary:emulator` passed against the merged release candidate on August 27. Include this Functions change in the next normal V2 deployment rather than deploying it separately.
 
 - [ ] Release public Workshop discovery, session details, capacity/remaining places, Product-variant selection, Stripe purchase, booking confirmation, attendee records, customer Profile access, cancellation/refund handling, and mobile presentation.
