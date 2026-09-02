@@ -1356,7 +1356,11 @@ function entityVariantsFromBuilder() {
   return [...document.querySelectorAll(".content-entity-variant-row")].map((row, index) => {
     const name = row.querySelector(".content-entity-variant-name")?.value.trim() || `Variant ${index + 1}`;
     const variantId = row.dataset.entityVariantId || entityVariantId(name, index);
-    const actionRow = document.querySelector(`.content-variant-action-row[data-entity-variant-id="${CSS.escape(variantId)}"]`);
+    const actionRow = document.querySelector(
+      `.content-variant-review-row[data-entity-variant-id="${CSS.escape(variantId)}"]`,
+    ) || document.querySelector(
+      `.content-variant-action-row[data-entity-variant-id="${CSS.escape(variantId)}"]`,
+    );
     const connectionRow = document.querySelector(`.content-variant-connection-row[data-entity-variant-id="${CSS.escape(variantId)}"]`);
     const templateVariantId = row.querySelector(".content-entity-variant-template")?.value || "";
     const definition = templateDefinitions(currentRecordType(), document.getElementById("contentType")?.value)
@@ -4150,10 +4154,8 @@ function updateSaveWorkflow() {
   if (!note) return;
 
   const messages = [
-    "Save keeps this record in its current workflow state. Approve confirms it is ready. " +
-      "Set active activates this record and every non-archived variant, then makes it available " +
-      "in its configured connections. " +
-      "Pause removes it from active use without deleting it.",
+    "On Review, choose the status of each variant and the separate main entity status, then save them together. " +
+      "Changing the main entity status does not silently replace the statuses selected for its variants.",
   ];
   if (isProduct) {
     messages.push(
@@ -6195,17 +6197,23 @@ function renderDetailedVariantReview(variants) {
     const linkedBlueprints = reviewLinkedRecords(values, "blueprints");
     const linkedPlans = reviewLinkedRecords(values, "plans");
     const linkedAssets = reviewLinkedRecords(values, "assets");
-    return `<details class="overflow-hidden rounded border border-gray-700 bg-gray-900/60" ${index === 0 ? "open" : ""}>
-      <summary class="cursor-pointer bg-gray-800/80 p-4">
+    return `<details class="content-variant-review-row relative overflow-hidden rounded border border-gray-700 bg-gray-900/60" ${index === 0 ? "open" : ""} data-entity-variant-id="${escapeHTML(variant.entityVariantId)}">
+      <summary class="cursor-pointer bg-gray-800/80 p-4 sm:pr-48">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h4 class="font-semibold text-white">${escapeHTML(variant.name || `Variant ${index + 1}`)}</h4>
             <p class="mt-1 text-xs text-gray-400">${escapeHTML(definition ? templateOptionLabel(definition) : "No template selected")}</p>
           </div>
-          <span class="rounded-full bg-gray-950 px-3 py-1 text-xs text-gray-300">${escapeHTML(variant.status || "draft")}</span>
         </div>
       </summary>
+      <label class="block border-y border-gray-700 bg-gray-800/50 p-3 text-xs text-gray-300 sm:absolute sm:right-3 sm:top-3 sm:z-10 sm:border-0 sm:bg-transparent sm:p-0">Variant status
+        <select class="content-entity-variant-status ml-2 rounded-full border border-gray-600 bg-gray-950 px-3 py-1 text-xs text-white">
+          ${compactSelectOptions(["draft", "review", "active", "paused", "archived"], variant.status || "draft")}
+        </select>
+      </label>
       <div class="space-y-5 p-4">
+        <input class="content-entity-variant-active-at" type="hidden" value="${escapeHTML(variant.scheduledActiveAt || "")}">
+        <input class="content-entity-variant-pause-at" type="hidden" value="${escapeHTML(variant.scheduledPauseAt || "")}">
         ${fields.length ? `<dl class="grid gap-x-6 gap-y-4 md:grid-cols-2">${fields.map((field) => `
           <div class="border-b border-gray-800 pb-3">
             <dt class="text-xs font-medium uppercase tracking-wide text-gray-500">${escapeHTML(reviewFieldLabel(field.key))}</dt>
@@ -6223,6 +6231,8 @@ function renderDetailedVariantReview(variants) {
       </div>
     </details>`;
   }).join("");
+  const entityStatus = document.getElementById("contentReviewEntityStatus");
+  if (entityStatus) entityStatus.value = document.getElementById("contentStatus")?.value || "draft";
 }
 
 function connectionErdTableList(rows = [], emptyLabel = "None connected") {
@@ -8334,6 +8344,13 @@ function applySaveAction(payload, action = "save") {
 async function buildAndSavePayload(confirmDuplicate = false, action = "save") {
   try {
     const payload = await formPayload(confirmDuplicate);
+    if (action === "save") {
+      const reviewStatus = document.getElementById("contentReviewEntityStatus")?.value;
+      if (reviewStatus) payload.status = reviewStatus;
+      if (reviewStatus === "active") payload.approvalStatus = "approved";
+      else if (reviewStatus === "review") payload.approvalStatus = "awaiting-approval";
+      else payload.approvalStatus = state.editingRecord?.approvalStatus || "draft";
+    }
     await savePayload(applySaveAction(payload, action), action);
   } catch (err) {
     console.error("Failed to prepare content record:", err);
@@ -10011,6 +10028,13 @@ export async function setupContentBuilder() {
   });
   document.getElementById("saveContentBuilderBtn")?.addEventListener("click", () => {
     buildAndSavePayload(false);
+  });
+  document.getElementById("contentReviewEntityStatus")?.addEventListener("change", (event) => {
+    setInputValue("contentStatus", event.target.value || "draft");
+    state.isDirty = true;
+  });
+  document.getElementById("contentVariantReviewRows")?.addEventListener("click", (event) => {
+    if (event.target.closest(".content-entity-variant-status")) event.stopPropagation();
   });
 
   document.getElementById("saveContinueContentBtn")?.addEventListener("click", () => {

@@ -2197,44 +2197,42 @@
               <section id="contentReviewPublishPanel" class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="3">
                 <h3 class="font-semibold text-white">Review entity</h3>
                 <p class="mt-1 text-xs text-gray-400">
-                  Check the content and shop-product state before saving.
+                  Check the content, choose each variant's status, then choose the status for the main entity and save.
                 </p>
                 <div id="contentReviewSummary" class="mt-3"></div>
                 <div id="contentVariantReviewRows" class="mt-4 space-y-3"></div>
-              </section>
-
-              <section class="builder-step-panel rounded border border-gray-700 bg-gray-950/40 p-3 text-sm" data-builder-panel="3">
-                <h3 class="font-semibold text-white">Save and lifecycle actions</h3>
-                <p class="mt-1 text-xs text-gray-400">Choose the state this entity should have after saving.</p>
-              <div id="contentVariantActionRows" class="mt-3 space-y-3"></div>
-              <div class="hidden" aria-hidden="true">
+                <div id="contentVariantActionRows" class="hidden" aria-hidden="true"></div>
+                <div class="hidden" aria-hidden="true">
                 <label class="block">Set active at
                   <input id="contentScheduledActiveAt" type="datetime-local" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                 </label>
                 <label class="block">Pause at
                   <input id="contentScheduledPauseAt" type="datetime-local" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
                 </label>
-              </div>
-              <div class="mt-3 flex flex-wrap gap-3">
-                <button id="saveContentBuilderBtn" type="button" class="rounded bg-[#407471] px-4 py-2 text-white hover:bg-[#305a56]">
-                  Save
-                </button>
-                <button id="approveContentBuilderBtn" type="button" class="rounded bg-purple-700 px-4 py-2 text-white hover:bg-purple-600">
-                  Approve
-                </button>
-                <button id="saveContinueContentBtn" type="button" class="rounded bg-blue-700 px-4 py-2 text-white hover:bg-blue-600">
-                  Set active
-                </button>
-                <button id="pauseContentBuilderBtn" type="button" class="rounded bg-gray-700 px-4 py-2 text-white hover:bg-gray-600">
-                  Pause
-                </button>
-                <button id="archiveContentBuilderBtn" type="button" class="rounded bg-gray-800 px-4 py-2 text-white hover:bg-gray-700">
-                  Archive
-                </button>
-                <button id="confirmDuplicateContentBtn" type="button" class="hidden rounded bg-yellow-600 px-4 py-2 text-white hover:bg-yellow-700">
-                  Save anyway
-                </button>
-              </div>
+                </div>
+                <div class="mt-5 rounded border border-[#407471] bg-[#081d20] p-4">
+                  <div class="flex flex-wrap items-end justify-between gap-4">
+                    <label class="min-w-56 flex-1 text-sm text-white">
+                      Main entity status
+                      <select id="contentReviewEntityStatus" class="mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">
+                        <option value="draft">Draft</option>
+                        <option value="review">Review</option>
+                        <option value="active">Active</option>
+                        <option value="paused">Paused</option>
+                        <option value="archived">Archived</option>
+                      </select>
+                    </label>
+                    <button id="saveContentBuilderBtn" type="button" class="rounded bg-[#407471] px-5 py-2 text-white hover:bg-[#305a56]">
+                      Save entity and variants
+                    </button>
+                    <button id="confirmDuplicateContentBtn" type="button" class="hidden rounded bg-yellow-600 px-4 py-2 text-white hover:bg-yellow-700">
+                      Save anyway
+                    </button>
+                  </div>
+                  <p class="mt-2 text-xs text-gray-300">
+                    Main entity status applies to the whole Item, Blueprint, or Plan. Each variant keeps the status selected on its review card.
+                  </p>
+                </div>
               </section>
               <div
                 id="contentSaveWorkflowNote"
