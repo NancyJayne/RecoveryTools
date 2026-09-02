@@ -1199,8 +1199,9 @@ function recipeComponentUnitCost(itemId, itemVariantId = "") {
 
 function blueprintVariantRecipeMarkup(variant) {
   if (currentRecordType() !== "blueprint") return "";
-  const workshopOperations = normalizedType(document.getElementById("contentType")?.value) ===
-    "workshop operations";
+  const blueprintType = normalizedType(document.getElementById("contentType")?.value);
+  if (!["product manufacture", "workshop operations"].includes(blueprintType)) return "";
+  const workshopOperations = blueprintType === "workshop operations";
   const components = Array.isArray(variant.linkedItemComponents) ? variant.linkedItemComponents : [];
   const rows = components.map((component, index) => {
     const sourceType = component.productId ? "Product" : "Item";
@@ -2179,6 +2180,12 @@ function restorePersistedContentBuilderCreationStack() {
   }
 }
 
+function resetContentBuilderCreationStack() {
+  contentBuilderCreationStack = [];
+  persistContentBuilderCreationStack();
+  updateContentBuilderCreationBreadcrumb();
+}
+
 function updateContentBuilderCreationBreadcrumb() {
   const breadcrumb = document.getElementById("contentEntityCreationBreadcrumb");
   const returnButton = document.getElementById("returnToParentEntityBtn");
@@ -2900,7 +2907,11 @@ function renderLinkedRecordSelector() {
   const fixedStatus = normalizedText(context.select.dataset.linkedStatusFilter);
   const fixedTags = uniqueValues(String(context.select.dataset.linkedTagFilters || "").split(","))
     .map(normalizedText);
-  const selectedElsewhere = new Set([...document.querySelectorAll(
+  // Reusing one record in the same template field on another entity variant is
+  // valid (for example, one Dress code Item for every Workshop variant). Only
+  // prevent the same record being selected twice inside this exact field.
+  const selectionScope = context.select.closest(".content-template-linked-field") || document;
+  const selectedElsewhere = new Set([...selectionScope.querySelectorAll(
     `.content-template-linked-select[data-field-key="${CSS.escape(context.select.dataset.fieldKey || "")}"]`,
   )].filter((select) => select !== context.select).map((select) => select.value).filter(Boolean));
   const records = linkedSelectorRecords(context).filter((record) => {
@@ -2923,16 +2934,38 @@ function renderLinkedRecordSelector() {
       const selected = context.select.value === record.id;
       const unavailable = selectedElsewhere.has(record.id);
       const tags = uniqueValues(record.tags || []);
-      return `<button type="button" data-linked-selector-record-id="${escapeHTML(record.id)}"
-        class="w-full rounded border p-3 text-left ${selected ? "border-[#9edbd7] bg-[#153b38]" : "border-gray-700 bg-gray-950/60 hover:border-[#407471]"} ${unavailable ? "cursor-not-allowed opacity-50" : ""}"
-        ${unavailable ? "disabled" : ""}>
-        <span class="flex flex-wrap items-start justify-between gap-2">
-          <span class="font-semibold text-white">${escapeHTML(record.name || record.title || record.id)}</span>
-          <span class="text-xs text-gray-400">${escapeHTML([record.type || record.assetType, record.status].filter(Boolean).join(" · "))}</span>
-        </span>
-        ${record.shortDescription ? `<span class="mt-1 block text-sm text-gray-300">${escapeHTML(record.shortDescription)}</span>` : ""}
-        ${tags.length ? `<span class="mt-2 flex flex-wrap gap-1">${tags.map((tag) => `<span class="rounded bg-gray-800 px-2 py-0.5 text-xs text-gray-300">${escapeHTML(tag)}</span>`).join("")}</span>` : ""}
-      </button>`;
+      const variants = Array.isArray(record.entityVariants) ? record.entityVariants : [];
+      const recordAssets = Array.isArray(record.assets) ? record.assets : [];
+      const imageAsset = recordAssets.find((asset) => {
+        const type = normalizedText(asset?.assetType || asset?.type);
+        return type === "image" || /\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(asset?.fileUrl || asset?.url || "");
+      });
+      const primaryAssetId = variants.find((variant) => variant.primaryAssetId)?.primaryAssetId ||
+        record.primaryAssetId || "";
+      const primaryAsset = (state.records.assets || []).find((asset) =>
+        (asset.id || asset.assetId) === primaryAssetId);
+      const imageUrl = imageAsset?.fileUrl || imageAsset?.url || primaryAsset?.fileUrl ||
+        primaryAsset?.url || record.imageUrl || record.image || "";
+      const table = normalizedText(context.select.dataset.linkedTable);
+      const editable = !["asset", "assets", "item asset", "item assets"].includes(table);
+      return `<article class="w-full overflow-hidden rounded border p-3 ${selected ? "border-[#9edbd7] bg-[#153b38]" : "border-gray-700 bg-gray-950/60"} ${unavailable ? "opacity-50" : ""}">
+        <div class="flex min-w-0 gap-3">
+          ${imageUrl ? `<img src="${escapeHTML(imageUrl)}" alt="" class="h-20 w-20 shrink-0 rounded border border-gray-700 object-cover">` : ""}
+          <div class="min-w-0 flex-1">
+            <span class="flex flex-wrap items-start justify-between gap-2">
+              <span class="font-semibold text-white">${escapeHTML(record.name || record.title || record.id)}</span>
+              <span class="text-xs text-gray-400">${escapeHTML([record.type || record.assetType, record.status].filter(Boolean).join(" · "))}</span>
+            </span>
+            ${record.shortDescription ? `<p class="mt-1 text-sm text-gray-300">${escapeHTML(record.shortDescription)}</p>` : ""}
+            ${variants.length ? `<div class="mt-2 flex flex-wrap gap-1">${variants.map((variant) => `<span class="rounded border border-gray-700 bg-gray-900 px-2 py-0.5 text-xs text-gray-300">${escapeHTML(variant.name || variant.entityVariantId || "Variant")} · ${escapeHTML(variant.status || "draft")}</span>`).join("")}</div>` : ""}
+            ${tags.length ? `<div class="mt-2 flex flex-wrap gap-1">${tags.map((tag) => `<span class="rounded bg-gray-800 px-2 py-0.5 text-xs text-gray-300">${escapeHTML(tag)}</span>`).join("")}</div>` : ""}
+          </div>
+        </div>
+        <div class="mt-3 flex flex-wrap justify-end gap-2">
+          ${editable ? `<button type="button" data-linked-selector-edit-record-id="${escapeHTML(record.id)}" class="rounded border border-gray-600 px-3 py-1 text-xs text-gray-200 hover:border-[#407471] hover:text-white">Edit</button>` : ""}
+          <button type="button" data-linked-selector-record-id="${escapeHTML(record.id)}" class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7] hover:bg-[#407471]/20" ${unavailable ? "disabled" : ""}>${selected ? "Selected" : "Choose"}</button>
+        </div>
+      </article>`;
     }).join("") : `<div class="rounded border border-dashed border-gray-700 p-8 text-center text-sm text-gray-400">No matching content. Adjust the search or create a new record with these filters.</div>`;
   }
   const count = document.getElementById("contentLinkedRecordSelectorCount");
@@ -8487,6 +8520,7 @@ export async function setupContentBuilder() {
   if (!section || section.dataset.initialized === "true") return;
   section.dataset.initialized = "true";
   restorePersistedContentBuilderCreationStack();
+  window.addEventListener("content-builder-root-reset", resetContentBuilderCreationStack);
   orderProductDrawerSections();
   initializeContentBuilderWorkspace();
   setContentErdBranchDefaults();
@@ -8685,6 +8719,18 @@ export async function setupContentBuilder() {
     handleTemplateGuidedFieldsClick,
   );
   document.getElementById("contentLinkedRecordSelectorResults")?.addEventListener("click", async (event) => {
+    const editOption = event.target.closest("[data-linked-selector-edit-record-id]");
+    if (editOption) {
+      const context = linkedRecordSelectorContext;
+      if (!context?.select || !context.trigger) return;
+      context.select.value = editOption.dataset.linkedSelectorEditRecordId || "";
+      refreshLinkedTemplatePickerLabel(context.select);
+      context.select.dispatchEvent(new Event("change", { bubbles: true }));
+      const trigger = context.trigger;
+      closeLinkedRecordSelector();
+      await editSelectedLinkedRecord(trigger);
+      return;
+    }
     const option = event.target.closest("[data-linked-selector-record-id]");
     const context = linkedRecordSelectorContext;
     const select = context?.select;
