@@ -6112,44 +6112,6 @@ function reviewLinkedRecords(value, collection) {
   return uniqueValues(ids).map((id) => reviewRecord(id));
 }
 
-function templateRelationshipGroups(entityVariants = []) {
-  const definitions = state.options.templateDefinitions?.[currentRecordType()] || [];
-  const groups = new Map();
-  entityVariants.forEach((variant) => {
-    const definition = definitions.find((candidate) =>
-      candidate.id === variant.templateVariantId || candidate.templateId === variant.templateId);
-    templateFields(definition).forEach((field, index) => {
-      const collection = {
-        item: "items",
-        items: "items",
-        blueprint: "blueprints",
-        blueprints: "blueprints",
-        plan: "plans",
-        plans: "plans",
-      }[normalizedType(field.linkedTable)];
-      if (!collection) return;
-      const name = field.name || `Linked ${collection}`;
-      const key = templateFieldKey(field.key || field.id || name) || `field_${index + 1}`;
-      const records = reviewLinkedRecords(variant.templateFieldValues?.[key], collection);
-      if (!groups.has(name)) groups.set(name, new Map());
-      records.forEach((record) => {
-        groups.get(name).set(record.id, {
-          recordId: record.id,
-          label: record.name || record.title || record.id,
-          meta: variant.name || record.type || "",
-        });
-      });
-    });
-  });
-  return [...groups.entries()].map(([label, records]) => ({
-    label,
-    rows: [...records.values()],
-    emptyLabel: `No ${label.toLowerCase()} linked`,
-    action: "entity-connections",
-    actionLabel: "Edit links",
-  }));
-}
-
 function selectedNewTagsFromControls(validate = true) {
   const tags = [...document.querySelectorAll("#contentTagRows .content-tag-row")].flatMap((row) => {
     if (row.dataset.newTagName) {
@@ -6270,6 +6232,111 @@ function connectionErdTable({ eyebrow, title, rows = [], tone = "teal" }) {
         ${row.action ? `<button type="button" data-connection-action="${escapeHTML(row.action)}"
           class="rounded border border-gray-500 px-2 py-1 text-xs leading-4 text-[#bce7e4] hover:border-white hover:text-white">${escapeHTML(row.actionLabel || "Open")}</button>` : ""}
       </div>`).join("")}</div>
+  </section>`;
+}
+
+function connectionErdVariantColumns({ title, recordType, variants = [], record = null }) {
+  const definitions = state.options.templateDefinitions?.[recordType] || [];
+  const mainAssetIds = uniqueValues((Array.isArray(record?.assets) ? record.assets : [])
+    .map((asset) => typeof asset === "string" ? asset : asset.assetId || asset.id));
+  const assetRecord = (assetId) => (state.records.assets || [])
+    .find((candidate) => candidate.id === assetId);
+  const assetName = (assetId) => {
+    const asset = assetRecord(assetId);
+    return asset?.name || asset?.assetName || asset?.title || assetId;
+  };
+  const assetMarkup = (assetId) => {
+    const asset = assetRecord(assetId);
+    const url = asset?.fileUrl || asset?.url || asset?.imageUrl || "";
+    const image = normalizedText(asset?.assetType || asset?.type) === "image" ||
+      /\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(url);
+    return `<li class="flex items-center gap-2 text-sm text-gray-100">
+      ${image && url ? `<img src="${escapeHTML(url)}" alt="" class="h-10 w-10 shrink-0 rounded border border-gray-700 object-cover">` : ""}
+      <span class="min-w-0 break-words">${escapeHTML(assetName(assetId))}</span>
+    </li>`;
+  };
+  const columns = variants.map((variant, index) => {
+    const definition = definitions.find((candidate) =>
+      candidate.id === variant.templateVariantId || candidate.templateId === variant.templateId);
+    const fieldRows = templateFields(definition).map((field, fieldIndex) => {
+      const name = field.name || `Field ${fieldIndex + 1}`;
+      const key = templateFieldKey(field.key || field.id || name) || `field_${fieldIndex + 1}`;
+      const value = variant.templateFieldValues?.[key];
+      const linkedCollection = {
+        item: "items", items: "items", blueprint: "blueprints", blueprints: "blueprints",
+        plan: "plans", plans: "plans", asset: "assets", assets: "assets",
+        "item asset": "assets", "item assets": "assets",
+      }[normalizedType(field.linkedTable)];
+      const collection = linkedCollection || (assetTypeForTemplateField(field) ? "assets" : "");
+      const records = collection ? reviewLinkedRecords(value, collection) : [];
+      const values = records.length
+        ? records.map((linked) => linked.name || linked.title || linked.id)
+        : reviewValue(value) ? [reviewValue(value)] : [];
+      return {
+        name,
+        values,
+        linked: Boolean(collection),
+        isAssetField: collection === "assets",
+        assetIds: collection === "assets" ? records.map((linked) => linked.id) : [],
+      };
+    });
+    const variantAssetIds = uniqueValues(templateAssetLinksForVariant(variant)
+      .map((link) => link.assetId));
+    const namedAssetIds = new Set(fieldRows.flatMap((field) => field.assetIds));
+    const otherAssetIds = variantAssetIds.filter((assetId) => !namedAssetIds.has(assetId));
+    const hasNamedAssetField = fieldRows.some((field) => field.isAssetField);
+    const stockEnabled = recordType === "item" &&
+      variant.behaviourDefaults?.inventoryTracked === true;
+    return `<article class="min-w-[17rem] flex-1 overflow-hidden rounded border border-[#407471]/70 bg-gray-950/45">
+      <header class="border-b border-[#407471]/40 bg-[#153b38]/45 p-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h5 class="break-words font-semibold text-white">${escapeHTML(variant.name || `Variant ${index + 1}`)}</h5>
+            <p class="mt-1 break-words text-xs text-gray-400">${escapeHTML(definition ? templateOptionLabel(definition) : "No template")}</p>
+          </div>
+          <span class="shrink-0 rounded-full bg-gray-900 px-2 py-1 text-[10px] text-gray-300">${escapeHTML(variant.status || "draft")}</span>
+        </div>
+        <button type="button" data-connection-action="entity"
+          class="mt-3 rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white hover:text-white">Edit variant</button>
+      </header>
+      <div class="divide-y divide-white/10">
+        ${stockEnabled ? `<section class="p-3">
+          <div class="flex items-start justify-between gap-2">
+            <div><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">${escapeHTML(title)} stock</div>
+              <p class="mt-1 text-sm text-gray-100">Stock ${Number(variant.stockQty ?? 0)} · Reorder ${Number(variant.reorderLevel ?? 0)}</p></div>
+            <button type="button" data-connection-action="entity-stock" class="rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white">Edit</button>
+          </div>
+        </section>` : ""}
+        ${otherAssetIds.length || !hasNamedAssetField ? `<section class="p-3">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0"><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">${hasNamedAssetField ? "Other Assets" : "Assets"}</div>
+              ${otherAssetIds.length ? `<ul class="mt-2 space-y-2">${otherAssetIds.map(assetMarkup).join("")}</ul>` : `<span class="text-sm text-gray-500">No variant Assets</span>`}</div>
+            <button type="button" data-connection-action="asset" class="rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white">Choose</button>
+          </div>
+        </section>` : ""}
+        ${fieldRows.map((field) => `<section class="p-3">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0"><div class="break-words text-xs font-semibold uppercase tracking-wide text-gray-400">${escapeHTML(field.name)}</div>
+              ${field.assetIds.length ? `<ul class="mt-2 space-y-2">${field.assetIds.map(assetMarkup).join("")}</ul>` : connectionErdTableList(field.values.map((value) => ({ label: value })), "Not set")}</div>
+            ${field.linked ? `<button type="button" data-connection-action="${field.isAssetField ? "asset" : "entity-connections"}" class="rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white">${field.isAssetField ? "Choose" : "Edit"}</button>` : ""}
+          </div>
+        </section>`).join("")}
+      </div>
+    </article>`;
+  }).join("");
+  return `<section class="relative z-10 min-w-0 max-w-full overflow-hidden rounded-lg border-2 border-[#407471] bg-[#081d20] shadow-xl">
+    <header class="border-b border-[#407471]/40 px-4 py-3">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div><div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">${escapeHTML(recordType)} · current entity</div>
+          <h4 class="mt-1 break-words text-lg font-semibold leading-6 text-white">${escapeHTML(title)}</h4></div>
+        <button type="button" data-connection-action="entity" class="rounded border border-gray-500 px-3 py-1 text-xs text-[#bce7e4] hover:border-white">Edit content</button>
+      </div>
+      ${mainAssetIds.length ? `<div class="mt-3"><div class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Overall entity Assets</div>
+        <ul class="mt-2 flex flex-wrap gap-3">${mainAssetIds.map(assetMarkup).join("")}</ul></div>` : ""}
+    </header>
+    <div class="overflow-x-auto p-3">
+      <div class="flex min-w-full gap-3">${columns || `<p class="p-4 text-sm text-gray-400">No entity variants added.</p>`}</div>
+    </div>
   </section>`;
 }
 
@@ -6498,16 +6565,6 @@ function renderBuilderSummaries(record = state.editingRecord) {
     record?.productRelation?.variants || [];
   const recordType = currentRecordType();
   const entityVariants = entityVariantsFromBuilder();
-  const selectedAssetIds = uniqueValues([
-    ...entityVariants.flatMap((variant) => templateAssetLinksForVariant(variant)).map((link) => link.assetId),
-    ...(Array.isArray(record?.assets) ? record.assets : [])
-      .map((asset) => typeof asset === "string" ? asset : asset.assetId || asset.id),
-  ]);
-  const assetLabel = (assetId) => {
-    const asset = (state.records.assets || []).find((candidate) => candidate.id === assetId);
-    return asset?.name || asset?.assetName || asset?.title || assetId;
-  };
-  const selectedAssetLabels = selectedAssetIds.map(assetLabel);
   const accessGrants = productRelation.accessGrants || record?.productAccessGrants || [];
 
   if (relationships) {
@@ -6524,8 +6581,6 @@ function renderBuilderSummaries(record = state.editingRecord) {
     const manufacturingLabel = manufacturingBlueprint?.name || manufacturingBlueprintId ||
       (isManufacturingBlueprint ? `${name} is the manufacturing Blueprint` : "Not connected");
 
-    const activeEntityVariants = entityVariants.filter((variant) =>
-      normalizedText(variant.status || record?.status) === "active");
     const variantContentLinks = productRelation.variantContentLinks ||
       record?.productVariantContentLinks || [];
     const manufacturingLinks = variantContentLinks.filter((link) =>
@@ -6570,11 +6625,6 @@ function renderBuilderSummaries(record = state.editingRecord) {
         variantId: variant.variantId,
       }))
       : [{ label: "No exact Product variants", meta: "Stock 0" }];
-    const entityStockRows = entityVariants.filter((variant) =>
-      variant.behaviourDefaults?.inventoryTracked === true).map((variant) => ({
-      label: variant.name || variant.entityVariantId || "Item variant",
-      meta: `Stock ${Number(variant.stockQty ?? 0)} · Reorder ${Number(variant.reorderLevel ?? 0)}`,
-    }));
     const libraryRows = entityVariants.filter((variant) => variant.libraryVisible === true)
       .map((variant) => ({ label: variant.name, meta: variant.status || "draft" }));
     const accessRows = accessGrants.map((grant) => ({
@@ -6583,7 +6633,6 @@ function renderBuilderSummaries(record = state.editingRecord) {
     }));
     const manufacturingRows = manufacturingLinks.length ? blueprintRows(manufacturingLinks) :
       manufacturingBlueprintId ? [{ label: manufacturingLabel }] : [];
-    const templateLinkedGroups = templateRelationshipGroups(entityVariants);
     const productTable = connectionErdTable({
       eyebrow: "Outward connection",
       title: isShopProduct ? "Product" : "Product not connected",
@@ -6596,17 +6645,11 @@ function renderBuilderSummaries(record = state.editingRecord) {
         { label: "Bundle components", rows: bundleRows, emptyLabel: "No bundle components", action: bundleRows.length ? "" : "bundle", actionLabel: "Add bundle" },
       ],
     });
-    const entityTableRows = [
-      { label: "Active variants", rows: activeEntityVariants.map((variant) => ({ label: variant.name || variant.entityVariantId || "Variant", meta: variant.status || "active" })), emptyLabel: "No active variants", action: "entity", actionLabel: "Edit content" },
-      ...(currentRecordType() === "item" ? [{ label: `${name} stock`, rows: entityStockRows, emptyLabel: "Entity stock not enabled", action: entityStockRows.length ? "entity-stock" : "", actionLabel: "Edit stock" }] : []),
-      { label: "Assets", rows: selectedAssetLabels.map((label) => ({ label })), emptyLabel: "No linked Assets", action: "asset", actionLabel: "Choose Asset" },
-      ...templateLinkedGroups,
-    ];
-    const entityTable = connectionErdTable({
-      eyebrow: `${recordType} · current entity`,
+    const entityTable = connectionErdVariantColumns({
       title: name,
-      tone: "teal",
-      rows: entityTableRows,
+      recordType,
+      variants: entityVariants,
+      record,
     });
     const libraryTable = connectionErdTable({
       eyebrow: "Outward connection",
