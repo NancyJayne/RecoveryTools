@@ -453,6 +453,7 @@ function normalizeVariant(value, index, sourceProductId = "") {
     manualInclusions: cleanManualInclusions(value.manualInclusions, variantId),
     deliveryMode: cleanString(value.deliveryMode),
     physicalFulfilment: cleanString(value.physicalFulfilment || "none").toLowerCase(),
+    purchaseSetupReviewed: value.purchaseSetupReviewed === true,
     calendarBookingReference: cleanString(value.calendarBookingReference),
     seatCapacity: asNumber(value.seatCapacity),
     nearCapacityWarning: asNumber(value.nearCapacityWarning),
@@ -1065,6 +1066,7 @@ export const createContentBuilderRecord = onCall(
             }
             transaction.set(productRef, {
               affiliateAvailable: data.productRelation?.affiliateAvailable === true,
+              fulfilmentReviewed: data.productRelation?.fulfilmentReviewed === true,
               taxClass,
               marketplaceAudience: cleanString(data.productRelation?.marketplaceAudience || "public")
                 .toLowerCase() === "affiliates" ? "affiliates" : "public",
@@ -1155,6 +1157,7 @@ export const createContentBuilderRecord = onCall(
                 inventoryTracked: data.productRelation?.inventoryTracked === true,
                 deliveryMode: variant.deliveryMode,
                 physicalFulfilment: variant.physicalFulfilment,
+                purchaseSetupReviewed: variant.purchaseSetupReviewed,
                 stockQuantity: variant.stockQty,
                 stockStatus: variant.stockQty > 0 ? "in-stock" : "out-of-stock",
                 calendarBookingReference: variant.calendarBookingReference,
@@ -1288,6 +1291,7 @@ export const createContentBuilderRecord = onCall(
               data.productRelation?.physicalFulfilment ||
                 (data.productRelation?.requiresShipping ? "shipping" : "none"),
             ).toLowerCase(),
+            fulfilmentReviewed: data.productRelation?.fulfilmentReviewed === true,
             inventoryTracked: data.productRelation?.inventoryTracked === true,
             affiliateAvailable: data.productRelation?.affiliateAvailable === true,
             marketplaceAudience: cleanString(data.productRelation?.marketplaceAudience || "public")
@@ -1428,6 +1432,7 @@ export const createContentBuilderRecord = onCall(
               manualInclusions: variant.manualInclusions,
               deliveryMode: variant.deliveryMode,
               physicalFulfilment: variant.physicalFulfilment,
+              purchaseSetupReviewed: variant.purchaseSetupReviewed,
               stock: variant.stockQty,
               calendarBookingReference: variant.calendarBookingReference,
               seatCapacity: variant.seatCapacity,
@@ -1478,6 +1483,7 @@ export const createContentBuilderRecord = onCall(
               inventoryTracked: data.productRelation?.inventoryTracked === true,
               deliveryMode: variant.deliveryMode,
               physicalFulfilment: variant.physicalFulfilment,
+              purchaseSetupReviewed: variant.purchaseSetupReviewed,
               stockQuantity: variant.stockQty,
               stockStatus: variant.stockQty > 0 ? "in-stock" : "out-of-stock",
               calendarBookingReference: variant.calendarBookingReference,

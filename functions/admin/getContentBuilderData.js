@@ -195,6 +195,7 @@ function normalizeItemRecord(doc, related = {}) {
     productMarketplaceTileDescriptionVariantId: product?.marketplaceTileDescriptionVariantId || "",
     productRequiresShipping: product?.requiresShipping === true,
     productInventoryTracked: product?.inventoryTracked === true,
+    productFulfilmentReviewed: product?.fulfilmentReviewed === true,
     productAffiliateAvailable: product?.affiliateAvailable === true ||
       product?.affiliateAvailable === undefined && Number(product?.wholesalePrice) > 0,
     productWholesalePrice: product?.wholesalePrice ?? activePrice?.wholesalePrice ?? null,
@@ -327,6 +328,7 @@ function addLinkedProducts(records, entityType, productsById, links, architectur
       productPhysicalFulfilment: product.physicalFulfilment ||
         (product.requiresShipping === true ? "shipping" : "none"),
       productInventoryTracked: product.inventoryTracked === true,
+      productFulfilmentReviewed: product.fulfilmentReviewed === true,
       productAffiliateAvailable: product.affiliateAvailable === true ||
         product.affiliateAvailable === undefined && Number(product.wholesalePrice) > 0,
       productWholesalePrice: product.wholesalePrice ?? activePrice?.wholesalePrice ?? null,
@@ -731,6 +733,7 @@ export const getContentBuilderData = onCall(
           physicalFulfilment: product.physicalFulfilment ||
             (product.requiresShipping === true ? "shipping" : "none"),
           inventoryTracked: product.inventoryTracked === true,
+          fulfilmentReviewed: product.fulfilmentReviewed === true,
           requiresCalendar: product.requiresCalendar === true,
           requiresSessionTime: product.requiresSessionTime === true,
           tracksSeats: product.tracksSeats === true,

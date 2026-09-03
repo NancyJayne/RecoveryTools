@@ -366,6 +366,7 @@ function normalizeVariant(value, index, itemId, productId) {
     manualInclusions: cleanManualInclusions(value.manualInclusions, variantId),
     deliveryMode: cleanString(value.deliveryMode),
     physicalFulfilment: cleanString(value.physicalFulfilment || "none").toLowerCase(),
+    purchaseSetupReviewed: value.purchaseSetupReviewed === true,
     calendarBookingReference: cleanString(value.calendarBookingReference),
     seatCapacity: asNumber(value.seatCapacity),
     nearCapacityWarning: asNumber(value.nearCapacityWarning),
@@ -729,6 +730,7 @@ async function updateProductRelation({
     physicalFulfilment: cleanString(
       relation.physicalFulfilment || (asBoolean(relation.requiresShipping) ? "shipping" : "none"),
     ).toLowerCase(),
+    fulfilmentReviewed: relation.fulfilmentReviewed === true,
     inventoryTracked: asBoolean(relation.inventoryTracked),
     affiliateAvailable: relation.affiliateAvailable === true,
     manufacturingBlueprintId,
@@ -921,6 +923,7 @@ async function updateProductRelation({
       manualInclusions: variant.manualInclusions,
       deliveryMode: variant.deliveryMode,
       physicalFulfilment: variant.physicalFulfilment,
+      purchaseSetupReviewed: variant.purchaseSetupReviewed,
       isDefault: index === 0,
       optionSummary: [variant.colour, variant.size].filter(Boolean).join(" / "),
       colour: variant.colour,

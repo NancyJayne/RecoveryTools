@@ -1613,7 +1613,8 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
     return `
       <div class="content-product-variant-row overflow-hidden rounded-lg border border-gray-600 border-l-4 border-l-[#407471] bg-gray-900/80"
         data-content-variant-id="${escapeHTML(productVariant.contentVariantId || "")}"
-        data-product-variant-id="${escapeHTML(productVariant.variantId || "")}">
+        data-product-variant-id="${escapeHTML(productVariant.variantId || "")}"
+        data-purchase-setup-reviewed="${productVariant.purchaseSetupReviewed === true}">
         <div class="bg-gray-800/90 p-3">
           <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
             <button type="button" data-duplicate-product-variant class="rounded border border-[#407471] px-3 py-2 text-xs text-[#9edbd7]">Duplicate variant</button>
@@ -2008,6 +2009,7 @@ function syncSelectedProductVariantRows() {
           entry,
           existingId,
         )),
+      purchaseSetupReviewed: row.dataset.purchaseSetupReviewed === "true",
     };
   });
   input.value = serializeProductVariants(variants);
@@ -3133,6 +3135,42 @@ function cloneBuilderValue(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }
 
+function productRelationRecordSnapshot(relation = null) {
+  if (!relation) return {};
+  return {
+    productId: relation.productId || relation.existingProductId || "",
+    productSku: relation.sku || "",
+    productCategoryId: relation.productCategoryId || "",
+    productType: relation.productType || "",
+    productPhysicalFulfilment: relation.physicalFulfilment || "none",
+    productRequiresShipping: relation.requiresShipping === true,
+    productInventoryTracked: relation.inventoryTracked === true,
+    productAffiliateAvailable: relation.affiliateAvailable === true,
+    productWholesalePrice: relation.wholesalePrice ?? null,
+    productWholesaleMinQuantity: relation.wholesaleMinQuantity ?? 1,
+    productRequiresCalendar: relation.requiresCalendar === true,
+    productRequiresSessionTime: relation.requiresSessionTime === true,
+    productTracksSeats: relation.tracksSeats === true,
+    productRequiresLocation: relation.requiresLocation === true,
+    productRequiresInstructor: relation.requiresInstructor === true,
+    productShopStatus: relation.shopStatus || "draft",
+    productEffectiveShopPrice: relation.effectiveShopPrice ?? relation.retailPrice ?? null,
+    productStock: relation.stock ?? null,
+    productVisible: relation.visible === true,
+    productFeatured: relation.featured === true,
+    productArchived: relation.archived === true,
+    productFulfilmentReviewed: relation.fulfilmentReviewed === true,
+    productMarketplaceTileImageSource: relation.marketplaceTileImageSource || "entity",
+    productMarketplaceTileImageVariantId: relation.marketplaceTileImageVariantId || "",
+    productMarketplaceTileDescriptionSource: relation.marketplaceTileDescriptionSource || "entity",
+    productMarketplaceTileDescriptionVariantId: relation.marketplaceTileDescriptionVariantId || "",
+    productVariantContentLinks: cloneBuilderValue(relation.variantContentLinks || []),
+    productAccessGrants: cloneBuilderValue(relation.accessGrants || []),
+    manufacturingBlueprintId: relation.manufacturingBlueprintId || "",
+    variants: cloneBuilderValue(relation.variants || []),
+  };
+}
+
 async function captureNestedParentContext(context) {
   const payload = await formPayload(false, { validate: false });
   const entityRow = context.select.closest(".content-entity-variant-row");
@@ -3148,6 +3186,7 @@ async function captureNestedParentContext(context) {
     parentRecord: {
       ...(parentEditingRecord || {}),
       ...cloneBuilderValue(payload),
+      ...productRelationRecordSnapshot(payload.productRelation),
       id: document.getElementById("contentId")?.value || parentEditingRecord?.id || "",
       recordType: payload.recordType,
     },
@@ -4307,6 +4346,8 @@ function productRelationPayload() {
     wholesaleMinQuantity: affiliateAvailable
       ? optionalNumberFromInput("contentProductWholesaleMinQuantity") || 1 : 1,
     affiliateAvailable,
+    fulfilmentReviewed: document.getElementById("contentProductFulfilmentSection")
+      ?.dataset.reviewed === "true",
     saleStartsAt: isoFromDatetimeLocal(saleStartsAt),
     saleEndsAt: isoFromDatetimeLocal(saleEndsAt),
     featured: document.getElementById("contentProductFeatured")?.checked === true,
@@ -4465,6 +4506,10 @@ function chooseExistingProduct(productId) {
     .filter((link) => !["ManufacturedFrom", "OperatedWith"].includes(link.linkRole));
   setInputValue("contentProductVariants", serializeProductVariants(product.variants || []));
   hydrateMarketplaceTileControls(product);
+  const fulfilmentSection = document.getElementById("contentProductFulfilmentSection");
+  if (fulfilmentSection) {
+    fulfilmentSection.dataset.reviewed = String(product.fulfilmentReviewed === true);
+  }
   populateProductVariantsFromEntity();
   renderProductBlueprintOptions(product.manufacturingBlueprintId || "");
   renderProductVariantContentLinkRows(product.variantContentLinks || []);
@@ -4516,6 +4561,8 @@ function chooseNewProduct() {
   setCheckboxValue("contentProductArchived", false);
   setInputValue("contentProductVariants", "");
   hydrateMarketplaceTileControls({});
+  const fulfilmentSection = document.getElementById("contentProductFulfilmentSection");
+  if (fulfilmentSection) fulfilmentSection.dataset.reviewed = "false";
   state.retainedProductVariantContentLinks = [];
   populateProductVariantsFromEntity();
   renderProductVariantContentLinkRows([]);
@@ -4994,6 +5041,8 @@ function marketplaceTilePreviewMarkup() {
       ? "Physical fulfilment enabled" : "No physical fulfilment";
   const fulfilmentMissing = !deliveryType ||
     ["Physical", "Hybrid"].includes(deliveryType) && physicalFulfilment === "No physical fulfilment";
+  const fulfilmentReviewed = document.getElementById("contentProductFulfilmentSection")
+    ?.dataset.reviewed === "true";
   const fulfilmentSelections = [
     document.getElementById("contentProductInventoryTracked")?.checked ? "Track inventory" : "",
     affiliateAvailable ? "Affiliate sales" : "",
@@ -5044,7 +5093,7 @@ function marketplaceTilePreviewMarkup() {
         <button type="button" data-product-editor-target="contentProductFeatured" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">${featured ? "★ Featured" : "☆ Not featured"}</button>
         <button type="button" data-product-editor-target="contentProductCategoryId" class="${marketplacePreviewAttention(!category, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">Filter: ${escapeHTML(categoryLabel)}</button>
         <button type="button" data-product-editor-target="contentProductDeliveryType" class="${marketplacePreviewAttention(!deliveryType, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">Delivery: ${escapeHTML(deliveryType || "Set delivery")}</button>
-        <button type="button" data-product-editor-target="contentProductHasPhysicalFulfilment" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-left text-gray-200 hover:text-white")}">Product fulfilment: ${escapeHTML(fulfilmentSelections.join(", ") || "Select")}</button>
+        <button type="button" data-product-editor-target="contentProductHasPhysicalFulfilment" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-left text-gray-200 hover:text-white", fulfilmentReviewed ? "optional" : "required")}">Product fulfilment: ${escapeHTML(fulfilmentSelections.join(", ") || "Select")}</button>
       </div>
     </div>
   </div>`;
@@ -5435,6 +5484,7 @@ function marketplaceVariantCardPreview(
     productVariant.physicalFulfilment !== "none";
   const fulfilmentMissing = !deliveryType ||
     ["Physical", "Hybrid"].includes(deliveryType) && !hasVariantPhysicalFulfilment;
+  const purchaseSetupReviewed = productVariant.purchaseSetupReviewed === true;
   const missingDescription = !(longDescription || description);
   const requiredFieldsComplete = !!url && !!(defaults.name || variantName) && !missingDescription &&
     (price !== null && price !== undefined || salePrice !== null) && !!category &&
@@ -5512,7 +5562,7 @@ function marketplaceVariantCardPreview(
       ${isPrimary ? `<button type="button" data-variant-editor="identity" class="rounded bg-gray-950 px-2 py-1 text-xs font-medium text-[#9edbd7] hover:text-white">Primary</button>` : ""}
       <button type="button" data-variant-editor="visibility" class="rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white">Status: ${escapeHTML(statusLabel)}</button>
       <span class="rounded bg-gray-950 px-2 py-1 text-xs text-gray-300">Type: ${escapeHTML(productType)}</span>
-      <button type="button" data-variant-editor="purchase" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">Purchase setup: ${escapeHTML(fulfilmentMissing ? "Review" : fulfilmentSummary)}</button>
+      <button type="button" data-variant-editor="purchase" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white", purchaseSetupReviewed ? "optional" : "required")}">Purchase setup: ${escapeHTML(fulfilmentMissing ? "Review" : fulfilmentSummary)}</button>
       <button type="button" data-product-editor-target="contentProductCategoryId" class="${marketplacePreviewAttention(!category, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">${escapeHTML(categoryLabel || "Set category")}</button>
       <button type="button" data-product-editor-target="contentProductDeliveryType" class="${marketplacePreviewAttention(!deliveryType, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">Delivery: ${escapeHTML(deliveryType || "Set delivery")}</button>
       <button type="button" data-variant-editor="identity" class="${marketplacePreviewAttention(detailsMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Variant details</button>
@@ -7012,6 +7062,13 @@ function populateBuilderFromRecord(record) {
   }];
   renderEntityVariantRows(hydratedVariants);
   hydrateMarketplaceTileControls(record);
+  const productRelation = record.productRelation || {};
+  const fulfilmentSection = document.getElementById("contentProductFulfilmentSection");
+  if (fulfilmentSection) {
+    fulfilmentSection.dataset.reviewed = String(
+      record.productFulfilmentReviewed === true || productRelation.fulfilmentReviewed === true,
+    );
+  }
 
   if (recordType === "item") {
     setCheckboxValue("contentWebsiteVisible", record.websiteVisible || record.requestedWebsiteVisible);
@@ -7138,6 +7195,18 @@ function populateBuilderFromRecord(record) {
     renderProductVariantContentLinkRows(record.productVariantContentLinks || []);
     renderProductUnlockRows(record.productAccessGrants || []);
     updateProductRelationStatus(record);
+  }
+
+  const savedProduct = record.productRelation || {};
+  if (record.productRelation) {
+    setSelectValue("contentProductMarketplaceMode", savedProduct.marketplaceMode || "hidden");
+    setSelectValue("contentProductMarketplaceAudience", savedProduct.marketplaceAudience || "public");
+    setInputValue("contentProductMarketplaceStartsAt", datetimeLocalValue(savedProduct.marketplaceStartsAt));
+    setInputValue("contentProductMarketplaceEndsAt", datetimeLocalValue(savedProduct.marketplaceEndsAt));
+    setSelectValue("contentProductTaxClass", savedProduct.taxClass || "gst-taxable");
+    setInputValue("contentProductSalePrice", savedProduct.salePrice ?? "");
+    setInputValue("contentProductSaleStartsAt", datetimeLocalValue(savedProduct.saleStartsAt));
+    setInputValue("contentProductSaleEndsAt", datetimeLocalValue(savedProduct.saleEndsAt));
   }
 
   // Rebuild the visible ProductVariant controls from the hydrated canonical
@@ -9340,6 +9409,7 @@ export async function setupContentBuilder() {
     if (!closeButton) return;
     const section = closeButton.closest("details");
     if (!section) return;
+    if (section.id === "contentProductFulfilmentSection") section.dataset.reviewed = "true";
     section.open = false;
     if (section.hasAttribute("data-product-preview-section")) section.classList.add("hidden");
     returnToProductTilePreview();
@@ -9606,6 +9676,10 @@ export async function setupContentBuilder() {
     const closeSection = event.target.closest("[data-close-variant-section]");
     if (closeSection) {
       const row = closeSection.closest(".content-product-variant-row");
+      const panel = closeSection.closest(".product-variant-editor-panel");
+      if (panel?.dataset.editorSection === "purchase" && row) {
+        row.dataset.purchaseSetupReviewed = "true";
+      }
       closeVariantEditorAndReturn(row);
       state.isDirty = true;
       return;

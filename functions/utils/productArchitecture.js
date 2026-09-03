@@ -189,6 +189,7 @@ function normalizedVariant(variant, sourceCollection) {
     contentVariantLinkReviewed: variant.contentVariantLinkReviewed === true || Boolean(variant.contentVariantId),
     deliveryMode: variant.deliveryMode || "",
     physicalFulfilment: variant.physicalFulfilment || "",
+    purchaseSetupReviewed: variant.purchaseSetupReviewed === true,
     calendarBookingReference: variant.calendarBookingReference || "",
     seatCapacity: Number.isFinite(Number(variant.seatCapacity)) ? Number(variant.seatCapacity) : null,
     nearCapacityWarning: Number.isFinite(Number(variant.nearCapacityWarning))
