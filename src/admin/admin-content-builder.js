@@ -2354,6 +2354,25 @@ async function navigateBuilderStep(targetStep) {
   showBuilderStep(nextStep);
 }
 
+async function openEntityVariantEditor(variantId, fieldKey = "") {
+  await navigateBuilderStep(2);
+  if (!variantId) return;
+  const row = document.querySelector(
+    `.content-entity-variant-row[data-entity-variant-id="${CSS.escape(variantId)}"]`,
+  );
+  if (!row) return;
+  document.querySelectorAll(".content-entity-variant-row").forEach((candidate) => {
+    candidate.open = candidate === row;
+  });
+  const field = fieldKey
+    ? row.querySelector(`.content-template-linked-field[data-field-key="${CSS.escape(fieldKey)}"]`)
+    : null;
+  const target = field || row;
+  target.scrollIntoView({ behavior: "smooth", block: "center" });
+  (field?.querySelector(".open-content-linked-selector") ||
+    row.querySelector("input, select, textarea, button"))?.focus({ preventScroll: true });
+}
+
 function templateInput(id) {
   return document.getElementById(id)?.value || "";
 }
@@ -6273,6 +6292,7 @@ function connectionErdVariantColumns({ title, recordType, variants = [], record 
         ? records.map((linked) => linked.name || linked.title || linked.id)
         : reviewValue(value) ? [reviewValue(value)] : [];
       return {
+        key,
         name,
         values,
         linked: Boolean(collection),
@@ -6297,6 +6317,7 @@ function connectionErdVariantColumns({ title, recordType, variants = [], record 
           <span class="shrink-0 rounded-full bg-gray-900 px-2 py-1 text-[10px] text-gray-300">${escapeHTML(variant.status || "draft")}</span>
         </div>
         <button type="button" data-connection-action="entity"
+          data-connection-entity-variant-id="${escapeHTML(variant.entityVariantId)}"
           class="mt-3 rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white hover:text-white">Edit variant</button>
       </header>
       <div class="divide-y divide-white/10">
@@ -6304,21 +6325,28 @@ function connectionErdVariantColumns({ title, recordType, variants = [], record 
           <div class="flex items-start justify-between gap-2">
             <div><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">${escapeHTML(title)} stock</div>
               <p class="mt-1 text-sm text-gray-100">Stock ${Number(variant.stockQty ?? 0)} · Reorder ${Number(variant.reorderLevel ?? 0)}</p></div>
-            <button type="button" data-connection-action="entity-stock" class="rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white">Edit</button>
+            <button type="button" data-connection-action="entity-stock"
+              data-connection-entity-variant-id="${escapeHTML(variant.entityVariantId)}"
+              class="rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white">Edit</button>
           </div>
         </section>` : ""}
         ${otherAssetIds.length || !hasNamedAssetField ? `<section class="p-3">
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0"><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">${hasNamedAssetField ? "Other Assets" : "Assets"}</div>
               ${otherAssetIds.length ? `<ul class="mt-2 space-y-2">${otherAssetIds.map(assetMarkup).join("")}</ul>` : `<span class="text-sm text-gray-500">No variant Assets</span>`}</div>
-            <button type="button" data-connection-action="asset" class="rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white">Choose</button>
+            <button type="button" data-connection-action="asset"
+              data-connection-entity-variant-id="${escapeHTML(variant.entityVariantId)}"
+              class="rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white">Choose</button>
           </div>
         </section>` : ""}
         ${fieldRows.map((field) => `<section class="p-3">
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0"><div class="break-words text-xs font-semibold uppercase tracking-wide text-gray-400">${escapeHTML(field.name)}</div>
               ${field.assetIds.length ? `<ul class="mt-2 space-y-2">${field.assetIds.map(assetMarkup).join("")}</ul>` : connectionErdTableList(field.values.map((value) => ({ label: value })), "Not set")}</div>
-            ${field.linked ? `<button type="button" data-connection-action="${field.isAssetField ? "asset" : "entity-connections"}" class="rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white">${field.isAssetField ? "Choose" : "Edit"}</button>` : ""}
+            ${field.linked ? `<button type="button" data-connection-action="entity-field"
+              data-connection-entity-variant-id="${escapeHTML(variant.entityVariantId)}"
+              data-connection-field-key="${escapeHTML(field.key)}"
+              class="rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white">${field.isAssetField ? "Choose" : "Edit"}</button>` : ""}
           </div>
         </section>`).join("")}
       </div>
@@ -6337,6 +6365,81 @@ function connectionErdVariantColumns({ title, recordType, variants = [], record 
     <div class="overflow-x-auto p-3">
       <div class="flex min-w-full gap-3">${columns || `<p class="p-4 text-sm text-gray-400">No entity variants added.</p>`}</div>
     </div>
+  </section>`;
+}
+
+function connectionErdProductVariantColumns({
+  title,
+  variants = [],
+  price = "",
+  blueprintLinks = [],
+  accessGrants = [],
+  bundleComponents = [],
+}) {
+  const blueprintName = (id) => (state.records.blueprints || [])
+    .find((blueprint) => blueprint.id === id)?.name || id || "Blueprint";
+  const productById = new Map((state.records.products || []).map((product) => [product.id, product]));
+  const columns = variants.map((variant, index) => {
+    const variantId = variant.variantId || "";
+    const links = blueprintLinks.filter((link) => link.productVariantId === variantId);
+    const grants = accessGrants.filter((grant) => grant.productVariantId === variantId);
+    const components = bundleComponents.filter((component) => component.ownerVariantId === variantId);
+    const variantPrice = variant.priceOverride ?? price;
+    return `<article class="min-w-[17rem] flex-1 overflow-hidden rounded border border-blue-500/70 bg-gray-950/45">
+      <header class="border-b border-blue-500/40 bg-blue-950/40 p-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0"><h5 class="break-words font-semibold text-white">${escapeHTML(variant.name || `Product variant ${index + 1}`)}</h5>
+            <p class="mt-1 text-xs text-gray-400">${escapeHTML(variant.marketplaceMode || "Inherit visibility")} · ${escapeHTML(moneyLabel(variantPrice))}</p></div>
+          <span class="shrink-0 rounded-full bg-gray-900 px-2 py-1 text-[10px] text-gray-300">${escapeHTML(variant.status || "draft")}</span>
+        </div>
+        <button type="button" data-connection-action="product-variant"
+          data-connection-variant-id="${escapeHTML(variantId)}" data-connection-product-section="identity"
+          class="mt-3 rounded border border-gray-600 px-2 py-1 text-xs text-blue-200 hover:border-white hover:text-white">Edit Product variant</button>
+      </header>
+      <div class="divide-y divide-white/10">
+        <section class="p-3"><div class="flex items-start justify-between gap-2">
+          <div><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">Product stock</div>
+            <p class="mt-1 text-sm text-gray-100">Stock ${Number(variant.stock ?? 0)}</p></div>
+          <button type="button" data-connection-action="stock" data-connection-variant-id="${escapeHTML(variantId)}"
+            class="rounded border border-gray-600 px-2 py-1 text-xs text-blue-200 hover:border-white">Edit</button>
+        </div></section>
+        <section class="p-3"><div class="flex items-start justify-between gap-2">
+          <div class="min-w-0"><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">Manufacturing Blueprints</div>
+            ${connectionErdTableList(links.map((link) => ({ label: blueprintName(link.entityId) })), "No manufacturing Blueprint")}</div>
+          <button type="button" data-connection-action="blueprint-manufacturing" data-connection-variant-id="${escapeHTML(variantId)}"
+            class="rounded border border-gray-600 px-2 py-1 text-xs text-blue-200 hover:border-white">${links.length ? "Edit" : "Connect"}</button>
+        </div></section>
+        <section class="p-3"><div class="flex items-start justify-between gap-2">
+          <div class="min-w-0"><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">Purchase access</div>
+            ${connectionErdTableList(grants.map((grant) => ({ label: `${grant.accessEntityType || "Entity"}: ${grant.accessEntityId || "Not selected"}` })), "No purchase unlocks")}</div>
+          <button type="button" data-connection-action="product-unlocks" data-connection-variant-id="${escapeHTML(variantId)}"
+            class="rounded border border-gray-600 px-2 py-1 text-xs text-blue-200 hover:border-white">Edit</button>
+        </div></section>
+        <section class="p-3"><div class="flex items-start justify-between gap-2">
+          <div class="min-w-0"><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">Bundle components</div>
+            ${connectionErdTableList(components.map((component) => {
+    const product = productById.get(component.componentProductId);
+    const included = product?.variants?.find((candidate) =>
+      candidate.variantId === component.componentProductVariantId);
+    return { label: `${component.quantity || 1} × ${product?.name || component.componentProductId}`, meta: included?.name || "" };
+  }), "No bundle components")}</div>
+          <button type="button" data-connection-action="bundle" data-connection-variant-id="${escapeHTML(variantId)}"
+            class="rounded border border-gray-600 px-2 py-1 text-xs text-blue-200 hover:border-white">${components.length ? "Edit" : "Add"}</button>
+        </div></section>
+      </div>
+    </article>`;
+  }).join("");
+  return `<section class="relative z-10 min-w-0 max-w-full overflow-hidden rounded-lg border-2 border-blue-500 bg-[#07142f] shadow-xl">
+    <header class="border-b border-blue-500/40 px-4 py-3">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div><div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">Outward connection</div>
+          <h4 class="mt-1 break-words text-lg font-semibold leading-6 text-white">${escapeHTML(title)}</h4></div>
+        <button type="button" data-connection-action="product" class="rounded border border-gray-500 px-3 py-1 text-xs text-blue-200 hover:border-white">Edit Product</button>
+      </div>
+    </header>
+    <div class="overflow-x-auto p-3"><div class="flex min-w-full gap-3">
+      ${columns || `<p class="p-4 text-sm text-gray-400">No Product variants added.</p>`}
+    </div></div>
   </section>`;
 }
 
@@ -6402,7 +6505,7 @@ function entityStockIsEnabled() {
     .some((variant) => variant.behaviourDefaults?.inventoryTracked === true);
 }
 
-function openEntityStockDrawer() {
+function openEntityStockDrawer(preferredVariantId = "") {
   if (!entityStockIsEnabled()) {
     showToast("Entity stock appears when the selected Item template enables Track entity inventory.", "info");
     return;
@@ -6410,9 +6513,12 @@ function openEntityStockDrawer() {
   const container = document.getElementById("contentEntityStockDrawerRows");
   if (!container) return;
   container.replaceChildren();
-  const sections = [...document.querySelectorAll(
+  const allSections = [...document.querySelectorAll(
     ".content-variant-connection-row .variant-item-stock-fields",
   )];
+  const sections = preferredVariantId
+    ? allSections.filter((section) => section.dataset.entityVariantId === preferredVariantId)
+    : allSections;
   entityStockDrawerSnapshot = sections.flatMap((section) =>
     [...section.querySelectorAll("input, select, textarea")].map((field) => ({
       field,
@@ -6453,7 +6559,22 @@ function applyEntityStockDrawer() {
   showToast("Entity stock updated. Save connections when ready.", "success");
 }
 
-function openProductBlueprintConnections(role = "ManufacturedFrom") {
+function productVariantRow(variantId = "") {
+  if (!variantId) return document.querySelector(".content-product-variant-row");
+  return document.querySelector(
+    `.content-product-variant-row[data-product-variant-id="${CSS.escape(variantId)}"]`,
+  );
+}
+
+function openProductVariantEditor(variantId = "", section = "identity") {
+  setCheckboxValue("contentIsShopProduct", true);
+  openContentProductDrawer();
+  const row = productVariantRow(variantId);
+  row?.querySelector(`[data-variant-editor="${CSS.escape(section)}"]`)?.click();
+  row?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function openProductBlueprintConnections(role = "ManufacturedFrom", requestedVariantId = "") {
   const variants = currentProductVariants();
   if (!variants.length) {
     showToast("Create at least one exact Product variant before attaching a Blueprint.", "error");
@@ -6463,7 +6584,7 @@ function openProductBlueprintConnections(role = "ManufacturedFrom") {
   openContentProductDrawer();
   const links = productVariantContentLinksFromRows(true);
   const existing = links.find((link) => link.linkRole === role) || null;
-  const preferredVariantId = existing?.productVariantId || variants[0].variantId;
+  const preferredVariantId = requestedVariantId || existing?.productVariantId || variants[0].variantId;
   const escapedVariantId = typeof CSS !== "undefined" && CSS.escape
     ? CSS.escape(preferredVariantId)
     : preferredVariantId.replace(/["\\]/g, "\\$&");
@@ -6511,7 +6632,7 @@ function openProductBlueprintConnections(role = "ManufacturedFrom") {
     ?.querySelector(".open-content-linked-selector")?.click(), 0);
 }
 
-function openProductUnlockConnections() {
+function openProductUnlockConnections(requestedVariantId = "") {
   const variants = currentProductVariants();
   if (!variants.length) {
     showToast("Create at least one exact Product variant before adding purchase access.", "error");
@@ -6520,7 +6641,7 @@ function openProductUnlockConnections() {
   setCheckboxValue("contentIsShopProduct", true);
   openContentProductDrawer();
   const grants = productUnlocksFromRows(true);
-  const preferredVariantId = grants[0]?.productVariantId || variants[0].variantId;
+  const preferredVariantId = requestedVariantId || grants[0]?.productVariantId || variants[0].variantId;
   const escapedVariantId = typeof CSS !== "undefined" && CSS.escape
     ? CSS.escape(preferredVariantId)
     : preferredVariantId.replace(/["\\]/g, "\\$&");
@@ -6569,18 +6690,6 @@ function renderBuilderSummaries(record = state.editingRecord) {
 
   if (relationships) {
     const name = document.getElementById("contentName")?.value || record?.name || "Untitled content";
-    const manufacturingBlueprintId = productRelation.manufacturingBlueprintId ||
-      record?.manufacturingBlueprintId || "";
-    const manufacturingBlueprint = (state.records.blueprints || [])
-      .find((candidate) => candidate.id === manufacturingBlueprintId);
-    const isManufacturingBlueprint = recordType === "blueprint" && (
-      productRelation.linkRole === "ManufacturedFrom" ||
-      entityVariants.some((variant) => variant.manufacturingRecipe === true) ||
-      isProductManufactureBlueprint()
-    );
-    const manufacturingLabel = manufacturingBlueprint?.name || manufacturingBlueprintId ||
-      (isManufacturingBlueprint ? `${name} is the manufacturing Blueprint` : "Not connected");
-
     const variantContentLinks = productRelation.variantContentLinks ||
       record?.productVariantContentLinks || [];
     const manufacturingLinks = variantContentLinks.filter((link) =>
@@ -6591,59 +6700,15 @@ function renderBuilderSummaries(record = state.editingRecord) {
         owner: variant.name,
         ownerVariantId: variant.variantId,
       })));
-    const productById = new Map((state.records.products || []).map((product) => [product.id, product]));
-    const blueprintRows = (links) => links.map((link) => {
-      const blueprint = (state.records.blueprints || []).find((candidate) => candidate.id === link.entityId);
-      const owner = variants.find((variant) => variant.variantId === link.productVariantId);
-      return {
-        label: blueprint?.name || link.entityId || "Blueprint",
-        meta: owner?.name || link.productVariantId || "",
-      };
-    });
-    const bundleRows = bundleComponents.map((component) => {
-      const product = productById.get(component.componentProductId);
-      const componentVariant = product?.variants?.find((variant) =>
-        variant.variantId === component.componentProductVariantId);
-      return {
-        label: `${component.quantity || 1} × ${product?.name || component.componentProductId}`,
-        meta: componentVariant?.name || component.owner || "",
-        action: "bundle",
-        actionLabel: "Edit",
-        variantId: component.ownerVariantId,
-      };
-    });
-    const productRows = variants.map((variant) => ({
-      label: variant.name || variant.variantId || "Product variant",
-      meta: `${variant.status || "draft"} · ${variant.marketplaceMode || "inherit visibility"} · ${moneyLabel(variant.priceOverride ?? price)}`,
-    }));
-    const stockRows = variants.length
-      ? variants.map((variant) => ({
-        label: variant.name || variant.variantId || "Product variant",
-        meta: `Stock ${Number(variant.stock ?? 0)}`,
-        action: "stock",
-        actionLabel: "Edit stock",
-        variantId: variant.variantId,
-      }))
-      : [{ label: "No exact Product variants", meta: "Stock 0" }];
     const libraryRows = entityVariants.filter((variant) => variant.libraryVisible === true)
       .map((variant) => ({ label: variant.name, meta: variant.status || "draft" }));
-    const accessRows = accessGrants.map((grant) => ({
-      label: `${grant.accessEntityType || "Entity"}: ${grant.accessEntityId || "Not selected"}`,
-      meta: variants.find((variant) => variant.variantId === grant.productVariantId)?.name || "",
-    }));
-    const manufacturingRows = manufacturingLinks.length ? blueprintRows(manufacturingLinks) :
-      manufacturingBlueprintId ? [{ label: manufacturingLabel }] : [];
-    const productTable = connectionErdTable({
-      eyebrow: "Outward connection",
+    const productTable = connectionErdProductVariantColumns({
       title: isShopProduct ? "Product" : "Product not connected",
-      tone: "blue",
-      rows: [
-        { label: "Product variants", rows: productRows, emptyLabel: "No Product variants", action: "product", actionLabel: isShopProduct ? "Edit Product" : "Create Product" },
-        { label: "Product stock", rows: stockRows, emptyLabel: "No Product stock" },
-        { label: "Manufacturing Blueprints", rows: manufacturingRows, emptyLabel: "No manufacturing Blueprint", action: "blueprint-manufacturing", actionLabel: manufacturingRows.length ? "Edit" : "Connect" },
-        { label: "Purchase access", rows: accessRows, emptyLabel: "No purchase unlocks", action: "product-unlocks", actionLabel: "Edit unlocks" },
-        { label: "Bundle components", rows: bundleRows, emptyLabel: "No bundle components", action: bundleRows.length ? "" : "bundle", actionLabel: "Add bundle" },
-      ],
+      variants,
+      price,
+      blueprintLinks: manufacturingLinks,
+      accessGrants,
+      bundleComponents,
     });
     const entityTable = connectionErdVariantColumns({
       title: name,
@@ -8931,11 +8996,23 @@ export async function setupContentBuilder() {
       openContentProductDrawer();
       return;
     }
+    if (action === "product-variant") {
+      openProductVariantEditor(
+        button.dataset.connectionVariantId || "",
+        button.dataset.connectionProductSection || "identity",
+      );
+      return;
+    }
     if (action === "product-unlocks") {
-      openProductUnlockConnections();
+      openProductUnlockConnections(button.dataset.connectionVariantId || "");
       return;
     }
     if (["entity", "build"].includes(action)) {
+      const entityVariantId = button.dataset.connectionEntityVariantId || "";
+      if (entityVariantId) {
+        await openEntityVariantEditor(entityVariantId);
+        return;
+      }
       await navigateBuilderStep(action === "build" ? 2 : 1);
       if (action === "build") {
         document.getElementById("contentEntityVariantRows")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -8951,7 +9028,7 @@ export async function setupContentBuilder() {
       return;
     }
     if (action === "entity-stock") {
-      openEntityStockDrawer();
+      openEntityStockDrawer(button.dataset.connectionEntityVariantId || "");
       return;
     }
     if (action === "stock") {
@@ -8985,6 +9062,14 @@ export async function setupContentBuilder() {
     if (["blueprint-manufacturing", "blueprint-operations"].includes(action)) {
       openProductBlueprintConnections(
         action === "blueprint-operations" ? "OperatedWith" : "ManufacturedFrom",
+        button.dataset.connectionVariantId || "",
+      );
+      return;
+    }
+    if (action === "entity-field") {
+      await openEntityVariantEditor(
+        button.dataset.connectionEntityVariantId || "",
+        button.dataset.connectionFieldKey || "",
       );
       return;
     }
