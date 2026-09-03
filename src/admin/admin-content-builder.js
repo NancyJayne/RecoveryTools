@@ -4557,6 +4557,10 @@ function chooseExistingProduct(productId) {
 }
 
 function chooseNewProduct() {
+  // Reaching this action means the admin has explicitly chosen to create a Product.
+  // Keep the underlying relationship enabled even when the source entity/template
+  // did not previously mark itself as a shop Product.
+  setCheckboxValue("contentIsShopProduct", true);
   const linkedProductId = document.getElementById("contentProductId")?.value || state.editingRecord?.productId || "";
   if (linkedProductId) setInputValue("contentUnlinkProductId", linkedProductId);
   setSelectValue("contentExistingProductId", "");
