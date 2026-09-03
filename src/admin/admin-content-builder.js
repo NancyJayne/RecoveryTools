@@ -2360,8 +2360,11 @@ function setupBuilderStepControls() {
     });
   }
 
-  document.getElementById("contentBuilderForm")?.addEventListener("input", () => {
+  document.getElementById("contentBuilderForm")?.addEventListener("input", (event) => {
     state.isDirty = true;
+    if (event.target.closest("#contentReviewEntityStatus, .content-entity-variant-status")) {
+      return;
+    }
     renderBuilderSummaries();
   });
 
@@ -6967,7 +6970,7 @@ function renderBuilderSummaries(record = state.editingRecord) {
               <h3 class="mt-1 text-2xl font-semibold text-white">${escapeHTML(name)}</h3>
               <div class="mt-2 text-sm text-gray-300">${escapeHTML(type)}</div>
             </div>
-            <span class="rounded-full border border-gray-600 bg-gray-950 px-4 py-2 text-sm font-medium text-white">${escapeHTML(status)}</span>
+            <span class="rounded-full border px-4 py-2 text-sm font-medium ${lifecycleStatusClasses(status)}">${escapeHTML(status)}</span>
           </div>
           <div class="mt-4 flex flex-wrap gap-2">${tags.length
     ? tags.map((tag) => `<span class="rounded-full bg-[#153b38] px-3 py-1 text-xs text-[#bce7e4]">${escapeHTML(tag)}</span>`).join("")
