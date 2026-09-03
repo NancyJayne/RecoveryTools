@@ -6389,6 +6389,7 @@ function connectionErdProductVariantColumns({
   variants = [],
   price = "",
   blueprintLinks = [],
+  operationsLinks = [],
   accessGrants = [],
   bundleComponents = [],
 }) {
@@ -6398,6 +6399,7 @@ function connectionErdProductVariantColumns({
   const columns = variants.map((variant, index) => {
     const variantId = variant.variantId || "";
     const links = blueprintLinks.filter((link) => link.productVariantId === variantId);
+    const workshopOperations = operationsLinks.filter((link) => link.productVariantId === variantId);
     const grants = accessGrants.filter((grant) => grant.productVariantId === variantId);
     const components = bundleComponents.filter((component) => component.ownerVariantId === variantId);
     const variantPrice = variant.priceOverride ?? price;
@@ -6425,6 +6427,12 @@ function connectionErdProductVariantColumns({
           <button type="button" data-connection-action="blueprint-manufacturing" data-connection-variant-id="${escapeHTML(variantId)}"
             class="rounded border border-gray-600 px-2 py-1 text-xs text-blue-200 hover:border-white">${links.length ? "Edit" : "Connect"}</button>
         </div></section>
+        ${operationsLinks.length ? `<section class="p-3"><div class="flex items-start justify-between gap-2">
+          <div class="min-w-0"><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">Workshop Operations</div>
+            ${connectionErdTableList(workshopOperations.map((link) => ({ label: blueprintName(link.entityId) })), "No Workshop Operations Blueprint")}</div>
+          <button type="button" data-connection-action="blueprint-operations" data-connection-variant-id="${escapeHTML(variantId)}"
+            class="rounded border border-gray-600 px-2 py-1 text-xs text-blue-200 hover:border-white">${workshopOperations.length ? "Edit" : "Connect"}</button>
+        </div></section>` : ""}
         <section class="p-3"><div class="flex items-start justify-between gap-2">
           <div class="min-w-0"><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">Purchase access</div>
             ${connectionErdTableList(grants.map((grant) => ({ label: `${grant.accessEntityType || "Entity"}: ${grant.accessEntityId || "Not selected"}` })), "No purchase unlocks")}</div>
@@ -6729,6 +6737,8 @@ function renderBuilderSummaries(record = state.editingRecord) {
       candidate.linkRole === link.linkRole));
     let manufacturingLinks = variantContentLinks.filter((link) =>
       link.linkRole === "ManufacturedFrom");
+    const operationsLinks = variantContentLinks.filter((link) =>
+      link.linkRole === "OperatedWith");
     const legacyManufacturingBlueprintId = productRelation.manufacturingBlueprintId ||
       record?.manufacturingBlueprintId || record?.productRelation?.manufacturingBlueprintId || "";
     if (!manufacturingLinks.length && legacyManufacturingBlueprintId) {
@@ -6754,6 +6764,7 @@ function renderBuilderSummaries(record = state.editingRecord) {
       variants,
       price,
       blueprintLinks: manufacturingLinks,
+      operationsLinks,
       accessGrants,
       bundleComponents,
     });
