@@ -1115,7 +1115,7 @@ function renderVariantStepRows(variants) {
       <div class="p-3">
       <div class="mt-3 grid gap-3 md:grid-cols-3">
         <label class="block text-xs text-gray-300">Status
-          <select class="content-entity-variant-status mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white">${compactSelectOptions(["draft", "review", "active", "paused", "archived"], variant.status || "draft")}</select>
+          <select class="content-entity-variant-status mt-1 w-full rounded border px-3 py-2 ${lifecycleStatusClasses(variant.status)}">${compactSelectOptions(["draft", "review", "active", "paused", "archived"], variant.status || "draft")}</select>
         </label>
         <label class="block text-xs text-gray-300">Set active at
           <input class="content-entity-variant-active-at mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white" type="datetime-local" value="${escapeHTML(variant.scheduledActiveAt || "")}">
@@ -1151,6 +1151,30 @@ function blueprintRecipeItemOptions(selectedId = "") {
     return `<option value="${escapeHTML(item.id)}"${selected}>` +
       `${escapeHTML(item.name || item.id)} ($${cost})</option>`;
   })].join("");
+}
+
+const lifecycleStatusClassNames = [
+  "border-violet-500", "bg-violet-950", "text-violet-100", "ring-violet-500/40",
+  "border-blue-500", "bg-blue-950", "text-blue-100", "ring-blue-500/40",
+  "border-emerald-500", "bg-emerald-950", "text-emerald-100", "ring-emerald-500/40",
+  "border-amber-500", "bg-amber-950", "text-amber-100", "ring-amber-500/40",
+  "border-gray-600", "bg-gray-900", "text-gray-300", "ring-gray-500/40",
+  "bg-gray-800", "bg-gray-950", "text-white", "ring-1",
+];
+
+function lifecycleStatusClasses(value) {
+  const lifecycle = normalizedText(value || "draft");
+  if (lifecycle === "draft") return "border-violet-500 bg-violet-950 text-violet-100 ring-1 ring-violet-500/40";
+  if (lifecycle === "review") return "border-blue-500 bg-blue-950 text-blue-100 ring-1 ring-blue-500/40";
+  if (lifecycle === "active") return "border-emerald-500 bg-emerald-950 text-emerald-100 ring-1 ring-emerald-500/40";
+  if (lifecycle === "paused") return "border-amber-500 bg-amber-950 text-amber-100 ring-1 ring-amber-500/40";
+  return "border-gray-600 bg-gray-900 text-gray-300 ring-1 ring-gray-500/40";
+}
+
+function applyLifecycleStatusHighlight(control, value = control?.value) {
+  if (!control) return;
+  control.classList.remove(...lifecycleStatusClassNames);
+  control.classList.add(...lifecycleStatusClasses(value).split(" "));
 }
 
 function workshopOperationsSourceOptions(sourceType, selectedId = "") {
@@ -6305,7 +6329,7 @@ function renderDetailedVariantReview(variants) {
         </div>
       </summary>
       <label class="block border-y border-gray-700 bg-gray-800/50 p-3 text-xs text-gray-300 sm:absolute sm:right-3 sm:top-3 sm:z-10 sm:border-0 sm:bg-transparent sm:p-0">Variant status
-        <select class="content-entity-variant-status ml-2 rounded-full border border-gray-600 bg-gray-950 px-3 py-1 text-xs text-white">
+        <select class="content-entity-variant-status ml-2 rounded-full border px-3 py-1 text-xs ${lifecycleStatusClasses(variant.status)}">
           ${compactSelectOptions(["draft", "review", "active", "paused", "archived"], variant.status || "draft")}
         </select>
       </label>
@@ -6330,7 +6354,10 @@ function renderDetailedVariantReview(variants) {
     </details>`;
   }).join("");
   const entityStatus = document.getElementById("contentReviewEntityStatus");
-  if (entityStatus) entityStatus.value = document.getElementById("contentStatus")?.value || "draft";
+  if (entityStatus) {
+    entityStatus.value = document.getElementById("contentStatus")?.value || "draft";
+    applyLifecycleStatusHighlight(entityStatus);
+  }
 }
 
 function connectionErdTableList(rows = [], emptyLabel = "None connected") {
@@ -6444,7 +6471,7 @@ function connectionErdVariantColumns({
           </div>
           <button type="button" data-connection-action="entity-status"
             data-connection-entity-variant-id="${escapeHTML(variant.entityVariantId)}"
-            class="shrink-0 rounded-full bg-gray-900 px-2 py-1 text-[10px] text-gray-300 hover:ring-1 hover:ring-[#9edbd7]">${escapeHTML(variant.status || "draft")}</button>
+            class="shrink-0 rounded-full border px-2 py-1 text-[10px] ${lifecycleStatusClasses(variant.status)} hover:ring-2">${escapeHTML(variant.status || "draft")}</button>
         </div>
         <button type="button" data-connection-action="entity"
           data-connection-entity-variant-id="${escapeHTML(variant.entityVariantId)}"
@@ -6482,7 +6509,7 @@ function connectionErdVariantColumns({
         <div class="flex flex-wrap gap-2">
           <button type="button" data-connection-action="entity" class="rounded border border-gray-500 px-3 py-1 text-xs text-[#bce7e4] hover:border-white">Edit entity</button>
           <button type="button" data-connection-action="entity-status"
-            class="rounded-full border border-gray-500 bg-gray-900 px-3 py-1 text-xs text-[#bce7e4] hover:border-white">Status: ${escapeHTML(entityStatus)}</button>
+            class="rounded-full border px-3 py-1 text-xs ${lifecycleStatusClasses(entityStatus)} hover:ring-2">Status: ${escapeHTML(entityStatus)}</button>
         </div>
       </div>
       ${mainAssetIds.length ? `<div class="mt-3"><div class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Overall entity Assets</div>
@@ -10411,6 +10438,21 @@ export async function setupContentBuilder() {
   });
   document.getElementById("contentReviewEntityStatus")?.addEventListener("change", (event) => {
     setInputValue("contentStatus", event.target.value || "draft");
+    applyLifecycleStatusHighlight(event.target);
+    state.isDirty = true;
+  });
+  document.getElementById("contentVariantReviewRows")?.addEventListener("change", (event) => {
+    const status = event.target.closest(".content-entity-variant-status");
+    if (!status) return;
+    applyLifecycleStatusHighlight(status);
+    const variantId = status.closest("[data-entity-variant-id]")?.dataset.entityVariantId || "";
+    const actionStatus = [...document.querySelectorAll(".content-variant-action-row")]
+      .find((row) => row.dataset.entityVariantId === variantId)
+      ?.querySelector(".content-entity-variant-status");
+    if (actionStatus) {
+      actionStatus.value = status.value;
+      applyLifecycleStatusHighlight(actionStatus);
+    }
     state.isDirty = true;
   });
   document.getElementById("contentVariantReviewRows")?.addEventListener("click", (event) => {
