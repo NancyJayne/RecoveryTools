@@ -23,6 +23,7 @@ let inventoryOperations = {
 };
 let lastManufacturingPreviewVariantId = "";
 let cachedPromotions = [];
+const inventoryStocktakeFocusKey = "recovery-tools-inventory-stocktake-focus";
 
 function asMoney(value) {
   const amount = Number(value ?? 0);
@@ -84,6 +85,7 @@ export function setupProductManager() {
 
   setupAssetManager();
   setupInventoryOperations();
+  setupInventoryStocktakeFocus();
   setupPromotionsManager();
 
   if (document.body.dataset.productSaveRefreshBound !== "true") {
@@ -317,6 +319,46 @@ function workshopDate(value) {
       timeStyle: "short",
       timeZone: "Australia/Brisbane",
     }).format(date);
+}
+
+function storedInventoryStocktakeFocus() {
+  try {
+    return JSON.parse(sessionStorage.getItem(inventoryStocktakeFocusKey) || "null");
+  } catch {
+    sessionStorage.removeItem(inventoryStocktakeFocusKey);
+    return null;
+  }
+}
+
+async function focusInventoryStocktake(detail = null) {
+  const target = detail || storedInventoryStocktakeFocus();
+  if (!target?.entityId) return;
+  showProductManagerTool("inventory");
+  const search = document.getElementById("inventoryStocktakeSearch");
+  if (search) search.value = target.entityId || target.entityName || "";
+  await loadInventoryOperations();
+  const row = [...document.querySelectorAll("[data-stocktake-row]")].find((candidate) =>
+    candidate.dataset.entityId === target.entityId &&
+    (!target.entityVariantId || candidate.dataset.itemVariantId === target.entityVariantId));
+  if (!row) {
+    showToast("The matching inventory row is not currently tracked.", "error");
+    return;
+  }
+  sessionStorage.removeItem(inventoryStocktakeFocusKey);
+  row.scrollIntoView({ behavior: "smooth", block: "center" });
+  row.style.outline = "2px solid #9edbd7";
+  row.style.outlineOffset = "-2px";
+  row.querySelector(".stocktake-quantity")?.focus({ preventScroll: true });
+}
+
+function setupInventoryStocktakeFocus() {
+  if (document.body.dataset.inventoryStocktakeFocusBound !== "true") {
+    document.body.dataset.inventoryStocktakeFocusBound = "true";
+    window.addEventListener("inventory-stocktake-focus", (event) => {
+      focusInventoryStocktake(event.detail);
+    });
+  }
+  if (storedInventoryStocktakeFocus()) focusInventoryStocktake();
 }
 
 function workshopOperationsMarkup(session) {

@@ -6272,7 +6272,13 @@ function connectionErdTable({ eyebrow, title, rows = [], tone = "teal" }) {
   </section>`;
 }
 
-function connectionErdVariantColumns({ title, recordType, variants = [], record = null }) {
+function connectionErdVariantColumns({
+  title,
+  recordType,
+  entityType = "",
+  variants = [],
+  record = null,
+}) {
   const definitions = state.options.templateDefinitions?.[recordType] || [];
   const mainAssetIds = uniqueValues((Array.isArray(record?.assets) ? record.assets : [])
     .map((asset) => typeof asset === "string" ? asset : asset.assetId || asset.id));
@@ -6324,8 +6330,12 @@ function connectionErdVariantColumns({ title, recordType, variants = [], record 
     const namedAssetIds = new Set(fieldRows.flatMap((field) => field.assetIds));
     const otherAssetIds = variantAssetIds.filter((assetId) => !namedAssetIds.has(assetId));
     const hasNamedAssetField = fieldRows.some((field) => field.isAssetField);
-    const stockEnabled = recordType === "item" &&
-      variant.behaviourDefaults?.inventoryTracked === true;
+    const showItemStock = recordType === "item";
+    const stockEnabled = variant.behaviourDefaults?.inventoryTracked === true;
+    const stockSummary = stockEnabled
+      ? `Stock ${Number(variant.stockQty ?? 0)} · Reorder ${Number(variant.reorderLevel ?? 0)}` +
+        `${variant.inventoryUnit ? ` · ${escapeHTML(variant.inventoryUnit)}` : ""}`
+      : "Inventory not tracked";
     return `<article class="min-w-[17rem] flex-1 overflow-hidden rounded border border-[#407471]/70 bg-gray-950/45">
       <header class="border-b border-[#407471]/40 bg-[#153b38]/45 p-3">
         <div class="flex items-start justify-between gap-3">
@@ -6342,12 +6352,14 @@ function connectionErdVariantColumns({ title, recordType, variants = [], record 
           class="mt-3 rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white hover:text-white">Edit variant</button>
       </header>
       <div class="divide-y divide-white/10">
-        ${stockEnabled ? `<section class="p-3">
-          <div>
-            <div><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">${escapeHTML(title)} stock</div>
-              <p class="mt-1 text-sm text-gray-100">Stock ${Number(variant.stockQty ?? 0)} · Reorder ${Number(variant.reorderLevel ?? 0)}</p></div>
-          </div>
-        </section>` : ""}
+        ${showItemStock ? `<section class="p-3"><div class="flex items-start justify-between gap-2">
+          <div><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">${escapeHTML(title)} stock</div>
+            <p class="mt-1 text-sm ${stockEnabled ? "text-gray-100" : "text-gray-500"}">${stockSummary}</p></div>
+          <button type="button" data-connection-action="inventory-stocktake"
+            data-connection-entity-id="${escapeHTML(record?.id || document.getElementById("contentId")?.value || "")}" data-connection-entity-name="${escapeHTML(title)}"
+            data-connection-entity-variant-id="${escapeHTML(variant.entityVariantId)}"
+            class="shrink-0 rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white">Edit inventory</button>
+        </div></section>` : ""}
         ${otherAssetIds.length || !hasNamedAssetField ? `<section class="p-3">
           <div>
             <div class="min-w-0"><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">${hasNamedAssetField ? "Other Assets" : "Assets"}</div>
@@ -6366,7 +6378,7 @@ function connectionErdVariantColumns({ title, recordType, variants = [], record 
   return `<section class="relative z-10 min-w-0 max-w-full overflow-hidden rounded-lg border-2 border-[#407471] bg-[#081d20] shadow-xl">
     <header class="border-b border-[#407471]/40 px-4 py-3">
       <div class="flex flex-wrap items-start justify-between gap-3">
-        <div><div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">${escapeHTML(recordType)} · current entity</div>
+        <div><div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">${escapeHTML(recordType)} · ${escapeHTML(entityType || "type not set")}</div>
           <h4 class="mt-1 break-words text-lg font-semibold leading-6 text-white">${escapeHTML(title)}</h4></div>
         <div class="flex flex-wrap gap-2">
           <button type="button" data-connection-action="entity" class="rounded border border-gray-500 px-3 py-1 text-xs text-[#bce7e4] hover:border-white">Edit entity</button>
@@ -6392,6 +6404,7 @@ function connectionErdProductVariantColumns({
   operationsLinks = [],
   accessGrants = [],
   bundleComponents = [],
+  tracksSeats = false,
 }) {
   const blueprintName = (id) => (state.records.blueprints || [])
     .find((blueprint) => blueprint.id === id)?.name || id || "Blueprint";
@@ -6416,8 +6429,10 @@ function connectionErdProductVariantColumns({
       </header>
       <div class="divide-y divide-white/10">
         <section class="p-3"><div class="flex items-start justify-between gap-2">
-          <div><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">Product stock</div>
-            <p class="mt-1 text-sm text-gray-100">Stock ${Number(variant.stock ?? 0)}</p></div>
+          <div><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">${tracksSeats ? "Ticketing" : "Product stock"}</div>
+            <p class="mt-1 text-sm text-gray-100">${tracksSeats
+    ? `Capacity ${Number(variant.seatCapacity ?? 0)} · Low-ticket warning ${Number(variant.nearCapacityWarning ?? 0)}`
+    : `Stock ${Number(variant.stock ?? 0)}`}</p></div>
           <button type="button" data-connection-action="stock" data-connection-variant-id="${escapeHTML(variantId)}"
             class="rounded border border-gray-600 px-2 py-1 text-xs text-blue-200 hover:border-white">Edit</button>
         </div></section>
@@ -6726,6 +6741,7 @@ function renderBuilderSummaries(record = state.editingRecord) {
 
   if (relationships) {
     const name = document.getElementById("contentName")?.value || record?.name || "Untitled content";
+    const entityType = document.getElementById("contentType")?.value || record?.type || recordType;
     const variantContentLinks = [
       ...(record?.productVariantContentLinks || []),
       ...(record?.productRelation?.variantContentLinks || []),
@@ -6767,10 +6783,13 @@ function renderBuilderSummaries(record = state.editingRecord) {
       operationsLinks,
       accessGrants,
       bundleComponents,
+      tracksSeats: productRelation.tracksSeats === true || record?.productTracksSeats === true ||
+        record?.productRelation?.tracksSeats === true,
     });
     const entityTable = connectionErdVariantColumns({
       title: name,
       recordType,
+      entityType,
       variants: entityVariants,
       record,
     });
@@ -9095,6 +9114,18 @@ export async function setupContentBuilder() {
     }
     if (action === "entity-stock") {
       openEntityStockDrawer(button.dataset.connectionEntityVariantId || "");
+      return;
+    }
+    if (action === "inventory-stocktake") {
+      const detail = {
+        entityId: button.dataset.connectionEntityId ||
+          document.getElementById("contentId")?.value || state.editingRecord?.id || "",
+        entityVariantId: button.dataset.connectionEntityVariantId || "",
+        entityName: button.dataset.connectionEntityName || "",
+      };
+      sessionStorage.setItem("recovery-tools-inventory-stocktake-focus", JSON.stringify(detail));
+      document.querySelector(".admin-link[href=\"/admin/products\"]")?.click();
+      window.dispatchEvent(new CustomEvent("inventory-stocktake-focus", { detail }));
       return;
     }
     if (action === "stock") {
