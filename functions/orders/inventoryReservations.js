@@ -1,6 +1,7 @@
 import admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
 import { inventoryTargetsForItems } from "../utils/bundleInventory.js";
+import { activeWorkshopHolds } from "../utils/workshopInventoryAllocations.js";
 
 const ACTIVE = "active";
 
@@ -55,6 +56,8 @@ export async function createInventoryReservation(db, {
     }));
 
   if (!reservationItems.length) return null;
+
+  const workshopHolds = await activeWorkshopHolds(db);
 
   await db.runTransaction(async (transaction) => {
     const activeQuery = db.collection("inventoryReservations").where("status", "==", ACTIVE);
@@ -142,12 +145,14 @@ export async function createInventoryReservation(db, {
       if (!item.inventoryTracked) continue;
       if (item.variantId) {
         const path = `${item.variantCollection}/${item.variantId}`;
-        if ((variantStock.get(path) ?? 0) < alreadyReserved + requestedQuantity) {
+        const held = workshopHolds.get(`productVariant:${item.variantId}`) || 0;
+        if ((variantStock.get(path) ?? 0) - held < alreadyReserved + requestedQuantity) {
           throw new HttpsError("failed-precondition", `${item.name || "This option"} no longer has enough stock.`);
         }
       } else {
         const productReserved = reserved.get(itemKey(item.productId)) || 0;
-        if ((productStock.get(item.productId) ?? 0) <
+        const held = workshopHolds.get(`product:${item.productId}`) || 0;
+        if ((productStock.get(item.productId) ?? 0) - held <
             productReserved + (requestedProducts.get(item.productId) || 0)) {
           throw new HttpsError(
             "failed-precondition",

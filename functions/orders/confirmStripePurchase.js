@@ -25,6 +25,7 @@ import { accessExpiry } from "../utils/accessGrantTiming.js";
 import { accessEmailDetails } from "../utils/orderAccessEmail.js";
 import { instructorDetails } from "../utils/instructorName.js";
 import { consumeInventoryReservation } from "./inventoryReservations.js";
+import { syncWorkshopInventoryAllocations } from "../utils/workshopInventoryAllocations.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -622,6 +623,7 @@ const confirmStripePurchaseHandler = async (request) => {
     }, { merge: true });
   });
   await recoveryBatch.commit();
+  await syncWorkshopInventoryAllocations(db, invoiceNumber);
 
   await recordOrderConfirmationEmail({
     orderRef,

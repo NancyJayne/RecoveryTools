@@ -6,6 +6,7 @@ import sgMail from "@sendgrid/mail";
 import { stripeModeLabel, stripeSecretValue } from "../utils/stripeEnvironment.js";
 import { getBusinessProfile } from "../utils/businessProfile.js";
 import { logEmailEvent } from "../utils/emailLog.js";
+import { syncWorkshopInventoryAllocations } from "../utils/workshopInventoryAllocations.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -329,6 +330,7 @@ export const refundWorkshopOrder = onCall(
       updatedAt: now,
     }, { merge: true });
     await batch.commit();
+    await syncWorkshopInventoryAllocations(db, orderId);
 
     const emailWarning = refund.status === "succeeded"
       ? await sendRefundEmail({ order, orderId, amount, refundId: refund.id, request })

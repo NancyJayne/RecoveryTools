@@ -23,6 +23,7 @@ import {
   consumeInventoryReservation,
   releaseInventoryReservation,
 } from "../orders/inventoryReservations.js";
+import { syncWorkshopInventoryAllocations } from "../utils/workshopInventoryAllocations.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -549,6 +550,7 @@ export async function writeCheckoutCompleted({ stripe, session, event }) {
   }, { merge: true });
 
   await batch.commit();
+  await syncWorkshopInventoryAllocations(db, orderId);
 }
 
 async function markStripeEvent({ event, status, errorMessage = "", extra = {} }) {
@@ -608,6 +610,9 @@ export const handleStripeWebhook = onRequest(
 
     const existingEvent = await admin.firestore().collection("stripeEvents").doc(event.id).get();
     if (existingEvent.data()?.processingStatus === "processed") {
+      if (event.type === "checkout.session.completed") {
+        await syncWorkshopInventoryAllocations(admin.firestore(), event.data.object.id);
+      }
       return res.status(200).send("Already processed");
     }
 

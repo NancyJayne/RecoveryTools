@@ -368,6 +368,8 @@ function workshopOperationsMarkup(session) {
       No Workshop Operations Blueprint is connected to this session.
     </div>`;
   }
+  const sessionEnd = new Date(session.eventEndAt || session.eventStartAt || "").getTime();
+  const canComplete = Number.isFinite(sessionEnd) && sessionEnd <= Date.now();
   const workshopList = document.getElementById("workshopSessionList");
   if (workshopList && workshopList.dataset.operationsBound !== "true") {
     workshopList.dataset.operationsBound = "true";
@@ -402,23 +404,25 @@ function workshopOperationsMarkup(session) {
       <td class="px-2 py-2">${escapeHTML(component.inventoryTreatment)}</td>
       <td class="px-2 py-2">${escapeHTML(component.quantityBasis)}</td>
       <td class="px-2 py-2 font-semibold text-white">${component.requiredQuantity} ${escapeHTML(component.unit)}</td>
+      <td class="px-2 py-2 text-amber-200">${component.heldQuantity || 0} ${escapeHTML(component.unit)}</td>
       <td class="px-2 py-2 ${component.shortage > 0 ? "text-red-300" : "text-gray-300"}">
-        ${component.stock}${component.shortage > 0 ? ` · Short ${component.shortage}` : ""}
+        ${component.stock} · ${component.availableAfterHold ?? component.stock} available${component.shortage > 0 ? ` · Short ${component.shortage}` : ""}
       </td>
-    </tr>`).join("") : `<tr><td colspan="6" class="px-2 py-3 text-gray-400">No equipment or materials configured.</td></tr>`;
+    </tr>`).join("") : `<tr><td colspan="7" class="px-2 py-3 text-gray-400">No equipment or materials configured.</td></tr>`;
   const hasDeductions = operations.components?.some((component) =>
     component.deductOnIssue && ["consumable", "take-home"].includes(component.inventoryTreatment));
   return `<section class="workshop-operations-checklist mt-4 rounded border border-[#407471]/60 bg-gray-900/70 p-3">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div><h5 class="font-semibold text-white">Workshop operations: ${escapeHTML(operations.blueprintName)}</h5>
-      <p class="text-xs text-gray-400">${escapeHTML(operations.blueprintVariantName || "Default setup")} · Confirmed ${session.sold} · Checked in ${session.actualAttendees || 0}</p></div>
+      <p class="text-xs text-gray-400">${escapeHTML(operations.blueprintVariantName || "Default setup")} · Confirmed ${session.sold} · Checked in ${session.actualAttendees || 0}</p>
+      <p class="mt-1 text-xs text-amber-200">Required materials remain on hold until this session is completed. Only consumables and take-home items are deducted.</p></div>
       <button type="button" class="print-workshop-operations rounded border border-gray-600 px-3 py-1 text-xs">Print checklist</button>
     </div>
     <div class="mt-3 overflow-x-auto"><table class="w-full min-w-[720px] text-sm">
-      <thead><tr class="text-left text-xs uppercase text-gray-400"><th class="px-2 py-2">Packed</th><th class="px-2 py-2">Item</th><th class="px-2 py-2">Treatment</th><th class="px-2 py-2">Basis</th><th class="px-2 py-2">Required</th><th class="px-2 py-2">In stock</th></tr></thead>
+      <thead><tr class="text-left text-xs uppercase text-gray-400"><th class="px-2 py-2">Packed</th><th class="px-2 py-2">Item</th><th class="px-2 py-2">Treatment</th><th class="px-2 py-2">Basis</th><th class="px-2 py-2">Required</th><th class="px-2 py-2">On hold</th><th class="px-2 py-2">Stock / available</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-    ${operations.issued ? `<p class="mt-3 text-sm text-green-300">Consumables and giveaways have been issued and recorded.</p>` : hasDeductions ? `<button type="button" class="issue-workshop-consumables mt-3 rounded bg-[#407471] px-3 py-2 text-sm font-semibold text-white"
-      data-product-id="${escapeHTML(session.productId)}" data-product-variant-id="${escapeHTML(session.productVariantId)}">Packed/issued — deduct consumables and giveaways</button>` : ""}
+    ${operations.issued ? `<p class="mt-3 text-sm text-green-300">Consumables and giveaways have been issued and recorded.</p>` : hasDeductions ? `<button type="button" class="issue-workshop-consumables mt-3 rounded bg-[#407471] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+      data-product-id="${escapeHTML(session.productId)}" data-product-variant-id="${escapeHTML(session.productVariantId)}"${canComplete ? "" : " disabled"}>${canComplete ? "Complete Workshop — deduct sold-ticket consumables" : "Available after Workshop ends"}</button>` : ""}
   </section>`;
 }
 

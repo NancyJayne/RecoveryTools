@@ -522,6 +522,8 @@ function cleanManualInclusions(value, sourceProductVariantId) {
       `INCLUSION-${slugify(sourceProductVariantId)}-${index + 1}`,
     name: cleanString(entry?.name).slice(0, 200),
     quantity: Math.max(asNumber(entry?.quantity) ?? 1, 1),
+    sourceBlueprintId: cleanString(entry?.sourceBlueprintId),
+    sourceComponentId: cleanString(entry?.sourceComponentId),
   })).filter((entry) => entry.name);
 }
 

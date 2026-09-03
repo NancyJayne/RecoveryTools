@@ -1793,6 +1793,7 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
                 <p class="mt-1 text-xs text-gray-400">Select an exact Product variant when needed, set its quantity, and choose whether that Product stock or Workshop ticket allocation is deducted.</p>
               </div>
               <div class="flex flex-wrap gap-2">
+                <button type="button" class="import-blueprint-inclusions rounded border border-blue-500 px-3 py-1 text-xs text-blue-200">Import from connected Blueprint</button>
                 <button type="button" class="add-product-bundle-component rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add linked Product</button>
                 <button type="button" class="add-product-manual-inclusion rounded border border-gray-600 px-3 py-1 text-xs text-gray-200">Add unlinked inclusion</button>
               </div>
@@ -1974,6 +1975,8 @@ function syncSelectedProductVariantRows() {
           quantity: Math.max(Number(
             inclusionRow.querySelector(".product-manual-inclusion-quantity")?.value || 1,
           ), 1),
+          sourceBlueprintId: inclusionRow.dataset.sourceBlueprintId || "",
+          sourceComponentId: inclusionRow.dataset.sourceComponentId || "",
         })).filter((entry) => entry.name),
       deliveryMode: row.querySelector(".product-variant-delivery-mode")?.value || "",
       physicalFulfilment: row.querySelector(".product-variant-physical-fulfilment")?.value || "none",
@@ -5787,6 +5790,50 @@ function bundleComponentsMarkup(components = []) {
     </div>`).join("") || "<p class=\"product-bundle-empty text-xs text-gray-400\">No linked Product inclusions.</p>";
 }
 
+function blueprintInclusionsForProductVariant(productVariantId) {
+  const directLinks = productVariantContentLinksFromRows(true).filter((link) =>
+    link.productVariantId === productVariantId &&
+    ["ManufacturedFrom", "OperatedWith"].includes(link.linkRole) && link.entityId);
+  const planLinks = productUnlocksFromRows().filter((grant) =>
+    grant.productVariantId === productVariantId && String(grant.accessEntityType || "").toLowerCase() === "plan");
+  const workshopLinks = planLinks.flatMap((grant) => {
+    const plan = (state.records.plans || []).find((entry) => entry.id === grant.accessEntityId);
+    const planVariant = (plan?.entityVariants || []).find((entry) =>
+      entry.entityVariantId === grant.accessEntityVariantId) || plan?.entityVariants?.[0] || plan;
+    return (planVariant?.linkedBlueprintIds || []).map((blueprintId) => ({
+      productVariantId,
+      entityId: blueprintId,
+      entityVariantId: "",
+      linkRole: "OperatedWith",
+    })).filter((link) => {
+      const blueprint = (state.records.blueprints || []).find((entry) => entry.id === link.entityId);
+      return String(blueprint?.type || blueprint?.blueprintType || "").toLowerCase() === "workshop operations";
+    });
+  });
+  const links = [...new Map([...directLinks, ...workshopLinks]
+    .map((link) => [`${link.entityId}:${link.entityVariantId || ""}`, link])).values()];
+  return links.flatMap((link) => {
+    const blueprint = (state.records.blueprints || []).find((entry) => entry.id === link.entityId);
+    const blueprintVariant = (blueprint?.entityVariants || []).find((entry) =>
+      entry.entityVariantId === link.entityVariantId) || blueprint?.entityVariants?.[0] || blueprint;
+    return (blueprintVariant?.linkedItemComponents || []).map((component, index) => {
+      const item = (state.records.items || []).find((entry) => entry.id === component.itemId);
+      const product = (state.records.products || []).find((entry) => entry.id === component.productId);
+      const sourceName = item?.name || item?.title || product?.name || product?.title ||
+        component.itemId || component.productId || `Component ${index + 1}`;
+      const basis = component.quantityBasis && component.quantityBasis !== "fixed"
+        ? ` (${String(component.quantityBasis).replaceAll("-", " ")})` : "";
+      return {
+        inclusionId: `BLUEPRINT-${link.entityId}-${component.componentId || index + 1}`,
+        name: `${sourceName}${basis}`,
+        quantity: Math.max(Number(component.quantity || 1), 1),
+        sourceBlueprintId: link.entityId,
+        sourceComponentId: component.componentId || `COMPONENT-${index + 1}`,
+      };
+    });
+  });
+}
+
 function manualInclusionsMarkup(inclusions = [], legacyInclusions = "") {
   const entries = Array.isArray(inclusions) && inclusions.length
     ? inclusions
@@ -5797,7 +5844,9 @@ function manualInclusionsMarkup(inclusions = [], legacyInclusions = "") {
     })).filter((entry) => entry.name);
   return entries.map((entry, index) => `
     <div class="product-manual-inclusion-row grid gap-2 rounded border border-gray-700 p-2 md:grid-cols-[1fr_7rem_auto]"
-      data-inclusion-id="${escapeHTML(entry.inclusionId || `INCLUSION-${index + 1}`)}">
+      data-inclusion-id="${escapeHTML(entry.inclusionId || `INCLUSION-${index + 1}`)}"
+      data-source-blueprint-id="${escapeHTML(entry.sourceBlueprintId || "")}"
+      data-source-component-id="${escapeHTML(entry.sourceComponentId || "")}">
       <input class="product-manual-inclusion-name rounded bg-gray-800 px-2 py-2 text-white"
         value="${escapeHTML(entry.name || "")}" placeholder="Inclusion name">
       <input class="product-manual-inclusion-quantity rounded bg-gray-800 px-2 py-2 text-white"
@@ -9913,6 +9962,38 @@ export async function setupContentBuilder() {
       }]));
       rows?.lastElementChild?.querySelector(".product-manual-inclusion-name")?.focus();
       state.isDirty = true;
+      return;
+    }
+    const importBlueprintInclusions = event.target.closest(".import-blueprint-inclusions");
+    if (importBlueprintInclusions) {
+      const sourceRow = importBlueprintInclusions.closest(".content-product-variant-row");
+      const variantId = sourceRow?.querySelector(".product-variant-id")?.value.trim() ||
+        sourceRow?.dataset.productVariantId || "";
+      const imported = blueprintInclusionsForProductVariant(variantId);
+      if (!imported.length) {
+        showToast("Connect a populated Manufacturing or Workshop Operations Blueprint first.", "error");
+        return;
+      }
+      const rows = sourceRow.querySelector(".product-manual-inclusion-rows");
+      const existing = [...rows.querySelectorAll(".product-manual-inclusion-row")].map((row) => ({
+        inclusionId: row.dataset.inclusionId,
+        name: row.querySelector(".product-manual-inclusion-name")?.value.trim() || "",
+        quantity: Number(row.querySelector(".product-manual-inclusion-quantity")?.value || 1),
+        sourceBlueprintId: row.dataset.sourceBlueprintId || "",
+        sourceComponentId: row.dataset.sourceComponentId || "",
+      })).filter((entry) => entry.name);
+      const importedKeys = new Set(imported.map((entry) =>
+        `${entry.sourceBlueprintId}:${entry.sourceComponentId}`));
+      rows.innerHTML = manualInclusionsMarkup([
+        ...existing.filter((entry) => !importedKeys.has(
+          `${entry.sourceBlueprintId}:${entry.sourceComponentId}`,
+        )),
+        ...imported,
+      ]);
+      syncSelectedProductVariantRows();
+      updateMarketplacePreviewRow(sourceRow);
+      state.isDirty = true;
+      showToast(`${imported.length} Blueprint inclusion${imported.length === 1 ? "" : "s"} imported.`, "success");
       return;
     }
     const removeBundleComponent = event.target.closest(".remove-product-bundle-component");

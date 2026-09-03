@@ -4,6 +4,12 @@ import admin from "../functions/node_modules/firebase-admin/lib/index.js";
 import { getContentBuilderData } from "../functions/admin/getContentBuilderData.js";
 import { getInventoryOperationsData } from "../functions/products/getInventoryOperationsData.js";
 import { recordWorkshopOperationsIssue } from "../functions/products/recordWorkshopOperationsIssue.js";
+import {
+  activeWorkshopHolds,
+  syncWorkshopInventoryAllocations,
+} from "../functions/utils/workshopInventoryAllocations.js";
+import { createInventoryReservation } from "../functions/orders/inventoryReservations.js";
+import { recordManufacturingRun } from "../functions/products/recordManufacturingRun.js";
 
 assert(process.env.FIRESTORE_EMULATOR_HOST, "Run this check through the Firestore emulator.");
 if (!admin.apps.length) admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT || "recovery-tools" });
@@ -21,6 +27,8 @@ const ids = {
   variant: `TEST-OPS-VARIANT-${suffix}`,
   link: `TEST-OPS-LINK-${suffix}`,
   order: `TEST-OPS-ORDER-${suffix}`,
+  manufacturedProduct: `TEST-OPS-MANUFACTURED-${suffix}`,
+  manufacturingBlueprint: `TEST-OPS-MANUFACTURING-BLUEPRINT-${suffix}`,
 };
 const request = { auth: { uid: `TEST-ADMIN-${suffix}`, token: { admin: true, email: "test@example.test" } } };
 const cleanup = [];
@@ -85,6 +93,7 @@ async function main() {
     });
     await set("productVariants", ids.variant, {
       productId: ids.product, variantName: "Session", seatCapacity: 10, status: "active",
+      eventEndAt: new Date(Date.now() - 60000).toISOString(),
     });
     await set("plans", ids.plan, {
       name: "Workshop Plan",
@@ -110,6 +119,51 @@ async function main() {
       paymentStatus: "paid",
       orderLines: [{ productId: ids.product, productVariantId: ids.variant, quantity: 3 }],
     });
+    await syncWorkshopInventoryAllocations(db, ids.order);
+    const allocations = await db.collection("workshopOperationsAllocations")
+      .where("orderId", "==", ids.order).get();
+    allocations.docs.forEach((doc) => cleanup.push(["workshopOperationsAllocations", doc.id]));
+    assert.equal(allocations.docs.length, 3, "Workshop material holds were not created from the paid order.");
+    assert.equal(allocations.docs.find((doc) => doc.data().componentId === "GIVEAWAY")?.data().quantityHeld, 6,
+      "Per-ticket Item quantities were not held.");
+    assert.equal(allocations.docs.find((doc) => doc.data().componentId === "BALLS")?.data().quantityHeld, 1,
+      "Fixed reusable equipment was not held once for the session.");
+    const holds = await activeWorkshopHolds(db);
+    assert.equal(holds.get(`productVariant:${ids.giveawayVariant}`), 3,
+      "Exact Product Variant holds were not available to stock enforcement.");
+    await set("products", ids.manufacturedProduct, {
+      name: "Manufactured test Product", type: "Physical Product", inventoryTracked: true, stock: 0,
+    });
+    await set("blueprints", ids.manufacturingBlueprint, {
+      name: "Manufacturing test", type: "product manufacture", status: "active",
+      entityVariants: [{ entityVariantId: "DEFAULT", linkedItemComponents: [{
+        componentId: "HELD-ITEM", itemId: ids.item, quantity: 1, unit: "each",
+      }] }],
+    });
+    await assert.rejects(() => recordManufacturingRun.run({
+      ...request,
+      data: { productId: ids.manufacturedProduct, blueprintId: ids.manufacturingBlueprint,
+        blueprintVariantId: "DEFAULT", quantityProduced: 5 },
+    }), /held for Workshops/, "Manufacturing ignored Item stock held for the Workshop.");
+    await assert.rejects(() => createInventoryReservation(db, {
+      uid: request.auth.uid,
+      items: [{ id: ids.giveawayProduct, variantId: ids.giveawayVariant,
+        name: "Recovery balm samples", quantity: 18, inventoryTracked: true }],
+      stripeExpiresAt: Date.now() + 300000,
+      reservationExpiresAt: Date.now() + 300000,
+    }), /enough stock/, "Checkout ignored Product stock held for the Workshop.");
+    await db.collection("orders").doc(ids.order).set({
+      orderLines: [{ productId: ids.product, productVariantId: ids.variant, quantity: 3, refundedQuantity: 1 }],
+    }, { merge: true });
+    await syncWorkshopInventoryAllocations(db, ids.order);
+    const refundedAllocations = await db.collection("workshopOperationsAllocations")
+      .where("orderId", "==", ids.order).get();
+    assert.equal(refundedAllocations.docs.find((doc) => doc.data().componentId === "GIVEAWAY")
+      ?.data().quantityHeld, 4, "Partial refunds did not recalculate per-ticket material holds.");
+    await db.collection("orders").doc(ids.order).set({
+      orderLines: [{ productId: ids.product, productVariantId: ids.variant, quantity: 3, refundedQuantity: 0 }],
+    }, { merge: true });
+    await syncWorkshopInventoryAllocations(db, ids.order);
 
     const builder = await getContentBuilderData.run(request);
     assert(builder.options.blueprintTypes.includes("workshop operations"),
@@ -126,6 +180,8 @@ async function main() {
       ?.requiredQuantity, 1, "Fixed reusable quantity was not calculated.");
     const balm = session.operations.components.find((component) => component.componentId === "BALM-SAMPLE");
     assert.equal(balm?.requiredQuantity, 3, "Product Variant attendee quantity was not calculated.");
+    assert.equal(balm?.heldQuantity, 3, "Sold-ticket Workshop stock was not placed on hold.");
+    assert.equal(balm?.availableAfterHold, 17, "Workshop-held stock was not removed from availability.");
     assert.equal(balm?.stock, 20, "Exact Product Variant stock was not resolved.");
 
     const issued = await recordWorkshopOperationsIssue.run({
@@ -144,6 +200,19 @@ async function main() {
       "Embedded Product Variant stock was not updated.");
     assert.equal((await db.collection("products").doc(ids.giveawayProduct).get()).data()?.stock, 99,
       "The parent Product stock was incorrectly changed for an exact Product Variant allocation.");
+    const completedAllocations = await db.collection("workshopOperationsAllocations")
+      .where("orderId", "==", ids.order).get();
+    assert(completedAllocations.docs.every((doc) => Number(doc.data().quantityHeld || 0) === 0),
+      "Completing Workshop Operations did not clear all material holds.");
+    assert.equal(completedAllocations.docs.find((doc) => doc.data().componentId === "BALLS")?.data().status,
+      "released", "Reusable equipment was not released after the Workshop.");
+    assert.equal(completedAllocations.docs.find((doc) => doc.data().componentId === "GIVEAWAY")?.data().status,
+      "consumed", "Take-home inventory hold was not marked consumed.");
+    await syncWorkshopInventoryAllocations(db, ids.order);
+    const resyncedAllocations = await db.collection("workshopOperationsAllocations")
+      .where("orderId", "==", ids.order).get();
+    assert(resyncedAllocations.docs.every((doc) => doc.data().status !== "active"),
+      "Order resynchronisation reactivated holds for a completed Workshop.");
 
     await recordWorkshopOperationsIssue.run({
       ...request,

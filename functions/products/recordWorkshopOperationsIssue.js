@@ -57,7 +57,7 @@ export const recordWorkshopOperationsIssue = onCall(
     }
     const db = admin.firestore();
     const [productSnap, variantSnap, linksSnap, grantsSnap, plansSnap, blueprintsSnap,
-      ordersSnap, attendanceSnap] = await Promise.all([
+      ordersSnap, attendanceSnap, allocationsSnap] = await Promise.all([
       db.collection("products").doc(productId).get(),
       db.collection("productVariants").doc(productVariantId).get(),
       db.collection("productVariantContentLinks").where("productId", "==", productId).get(),
@@ -66,6 +66,8 @@ export const recordWorkshopOperationsIssue = onCall(
       db.collection("blueprints").get(),
       db.collection("orders").get(),
       db.collection("workshopAttendance").where("productVariantId", "==", productVariantId).get(),
+      db.collection("workshopOperationsAllocations")
+        .where("productVariantId", "==", productVariantId).get(),
     ]);
     if (!productSnap.exists || !variantSnap.exists || clean(variantSnap.data()?.productId) !== productId) {
       throw new HttpsError("not-found", "Workshop session not found.");
@@ -88,6 +90,15 @@ export const recordWorkshopOperationsIssue = onCall(
     const blueprintVariantId = resolution.blueprintVariantId;
 
     const variant = variantSnap.data() || {};
+    const workshopEndsAt = variant.eventEndAt || variant.eventStartAt || productSnap.data()?.eventEndAt ||
+      productSnap.data()?.eventStartAt;
+    const workshopEndMillis = workshopEndsAt?.toMillis?.() || new Date(workshopEndsAt || "").getTime();
+    if (!Number.isFinite(workshopEndMillis) || workshopEndMillis > Date.now()) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Workshop Operations can only be completed after the Workshop session has ended.",
+      );
+    }
     const capacity = Math.max(Number(variant.seatCapacity || 0), 0);
     let confirmedAttendees = 0;
     ordersSnap.docs.forEach((doc) => {
@@ -222,6 +233,19 @@ export const recordWorkshopOperationsIssue = onCall(
         issuedByEmail: request.auth.token.email || "",
         createdAt: now,
         updatedAt: now,
+      });
+      allocationsSnap.docs.forEach((allocationDoc) => {
+        const allocation = allocationDoc.data() || {};
+        if (allocation.status !== "active") return;
+        const consumed = allocation.deductOnIssue === true &&
+          ["consumable", "take-home"].includes(clean(allocation.inventoryTreatment));
+        transaction.set(allocationDoc.ref, {
+          status: consumed ? "consumed" : "released",
+          quantityHeld: 0,
+          workshopOperationsIssueId: issueId,
+          completedAt: now,
+          updatedAt: now,
+        }, { merge: true });
       });
     });
     return { success: true, workshopOperationsIssueId: issueId };

@@ -405,6 +405,7 @@ export const getInventoryOperationsData = onCall(
             operationsBlueprint,
             operationsResolution?.blueprintVariantId,
           );
+          const issuedOperations = completedOperationsIssues.get(clean(variant.id)) || null;
           const operationsComponents = itemComponents(
             operationsBlueprint,
             operationsResolution?.blueprintVariantId,
@@ -437,6 +438,8 @@ export const getInventoryOperationsData = onCall(
                 items.get(component.itemId)?.name || items.get(component.itemId)?.title ||
                 component.productVariantId || component.productId || component.itemId,
               requiredQuantity,
+              heldQuantity: issuedOperations ? 0 : requiredQuantity,
+              availableAfterHold: Math.max(selectedStock - (issuedOperations ? 0 : requiredQuantity), 0),
               stock: selectedStock,
               variants: summary?.variants || [],
               shortage: Math.max(requiredQuantity - selectedStock, 0),
@@ -470,7 +473,7 @@ export const getInventoryOperationsData = onCall(
               workshopPlanVariantId: operationsResolution?.planVariantId || "",
               source: operationsResolution?.source || "",
               components: operationsComponents,
-              issued: completedOperationsIssues.get(clean(variant.id)) || null,
+              issued: issuedOperations,
             } : null,
           });
         });
