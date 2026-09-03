@@ -6292,6 +6292,7 @@ function connectionErdVariantColumns({ title, recordType, variants = [], record 
       <span class="min-w-0 break-words">${escapeHTML(assetName(assetId))}</span>
     </li>`;
   };
+  const entityStatus = document.getElementById("contentStatus")?.value || record?.status || "draft";
   const columns = variants.map((variant, index) => {
     const definition = definitions.find((candidate) =>
       candidate.id === variant.templateVariantId || candidate.templateId === variant.templateId);
@@ -6332,14 +6333,13 @@ function connectionErdVariantColumns({ title, recordType, variants = [], record 
             <h5 class="break-words font-semibold text-white">${escapeHTML(variant.name || `Variant ${index + 1}`)}</h5>
             <p class="mt-1 break-words text-xs text-gray-400">${escapeHTML(definition ? templateOptionLabel(definition) : "No template")}</p>
           </div>
-          <span class="shrink-0 rounded-full bg-gray-900 px-2 py-1 text-[10px] text-gray-300">${escapeHTML(variant.status || "draft")}</span>
+          <button type="button" data-connection-action="entity-status"
+            data-connection-entity-variant-id="${escapeHTML(variant.entityVariantId)}"
+            class="shrink-0 rounded-full bg-gray-900 px-2 py-1 text-[10px] text-gray-300 hover:ring-1 hover:ring-[#9edbd7]">${escapeHTML(variant.status || "draft")}</button>
         </div>
         <button type="button" data-connection-action="entity"
           data-connection-entity-variant-id="${escapeHTML(variant.entityVariantId)}"
           class="mt-3 rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white hover:text-white">Edit variant</button>
-        <button type="button" data-connection-action="entity-status"
-          data-connection-entity-variant-id="${escapeHTML(variant.entityVariantId)}"
-          class="mt-3 rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white hover:text-white">Variant status</button>
       </header>
       <div class="divide-y divide-white/10">
         ${stockEnabled ? `<section class="p-3">
@@ -6370,7 +6370,8 @@ function connectionErdVariantColumns({ title, recordType, variants = [], record 
           <h4 class="mt-1 break-words text-lg font-semibold leading-6 text-white">${escapeHTML(title)}</h4></div>
         <div class="flex flex-wrap gap-2">
           <button type="button" data-connection-action="entity" class="rounded border border-gray-500 px-3 py-1 text-xs text-[#bce7e4] hover:border-white">Edit entity</button>
-          <button type="button" data-connection-action="entity-status" class="rounded border border-gray-500 px-3 py-1 text-xs text-[#bce7e4] hover:border-white">Entity status</button>
+          <button type="button" data-connection-action="entity-status"
+            class="rounded-full border border-gray-500 bg-gray-900 px-3 py-1 text-xs text-[#bce7e4] hover:border-white">Status: ${escapeHTML(entityStatus)}</button>
         </div>
       </div>
       ${mainAssetIds.length ? `<div class="mt-3"><div class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Overall entity Assets</div>
@@ -6704,10 +6705,27 @@ function renderBuilderSummaries(record = state.editingRecord) {
 
   if (relationships) {
     const name = document.getElementById("contentName")?.value || record?.name || "Untitled content";
-    const variantContentLinks = productRelation.variantContentLinks ||
-      record?.productVariantContentLinks || [];
-    const manufacturingLinks = variantContentLinks.filter((link) =>
+    const variantContentLinks = [
+      ...(record?.productVariantContentLinks || []),
+      ...(record?.productRelation?.variantContentLinks || []),
+      ...(productRelation.variantContentLinks || []),
+    ].filter((link, index, links) => index === links.findIndex((candidate) =>
+      candidate.productVariantId === link.productVariantId &&
+      candidate.entityId === link.entityId &&
+      candidate.entityVariantId === link.entityVariantId &&
+      candidate.linkRole === link.linkRole));
+    let manufacturingLinks = variantContentLinks.filter((link) =>
       link.linkRole === "ManufacturedFrom");
+    const legacyManufacturingBlueprintId = productRelation.manufacturingBlueprintId ||
+      record?.manufacturingBlueprintId || record?.productRelation?.manufacturingBlueprintId || "";
+    if (!manufacturingLinks.length && legacyManufacturingBlueprintId) {
+      manufacturingLinks = variants.map((variant) => ({
+        productVariantId: variant.variantId,
+        entityId: legacyManufacturingBlueprintId,
+        entityVariantId: "",
+        linkRole: "ManufacturedFrom",
+      }));
+    }
     const bundleComponents = variants.flatMap((variant) =>
       (variant.bundleComponents || []).map((component) => ({
         ...component,
