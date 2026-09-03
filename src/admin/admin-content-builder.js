@@ -6385,6 +6385,7 @@ function connectionErdVariantColumns({ title, recordType, variants = [], record 
 
 function connectionErdProductVariantColumns({
   title,
+  status = "draft",
   variants = [],
   price = "",
   blueprintLinks = [],
@@ -6449,7 +6450,11 @@ function connectionErdProductVariantColumns({
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div><div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">Outward connection</div>
           <h4 class="mt-1 break-words text-lg font-semibold leading-6 text-white">${escapeHTML(title)}</h4></div>
-        <button type="button" data-connection-action="product" class="rounded border border-gray-500 px-3 py-1 text-xs text-blue-200 hover:border-white">Edit Product</button>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" data-connection-action="product" class="rounded border border-gray-500 px-3 py-1 text-xs text-blue-200 hover:border-white">Edit Product</button>
+          <button type="button" data-connection-action="product-status"
+            class="rounded-full border border-gray-500 bg-gray-900 px-3 py-1 text-xs text-blue-200 hover:border-white">Status: ${escapeHTML(status)}</button>
+        </div>
       </div>
     </header>
     <div class="overflow-x-auto p-3"><div class="flex min-w-full gap-3">
@@ -6587,6 +6592,14 @@ function openProductVariantEditor(variantId = "", section = "identity") {
   const row = productVariantRow(variantId);
   row?.querySelector(`[data-variant-editor="${CSS.escape(section)}"]`)?.click();
   row?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function openProductStatusEditor() {
+  setCheckboxValue("contentIsShopProduct", true);
+  openContentProductDrawer();
+  const controls = document.querySelector(".content-product-status-checkbox")?.closest("fieldset");
+  controls?.scrollIntoView({ behavior: "smooth", block: "center" });
+  controls?.querySelector("input:checked")?.focus({ preventScroll: true });
 }
 
 function openProductBlueprintConnections(role = "ManufacturedFrom", requestedVariantId = "") {
@@ -6736,6 +6749,8 @@ function renderBuilderSummaries(record = state.editingRecord) {
       .map((variant) => ({ label: variant.name, meta: variant.status || "draft" }));
     const productTable = connectionErdProductVariantColumns({
       title: isShopProduct ? "Product" : "Product not connected",
+      status: productRelation.shopStatus || record?.productShopStatus ||
+        record?.productRelation?.shopStatus || record?.shopStatus || "draft",
       variants,
       price,
       blueprintLinks: manufacturingLinks,
@@ -9026,6 +9041,10 @@ export async function setupContentBuilder() {
     if (action === "product") {
       setCheckboxValue("contentIsShopProduct", true);
       openContentProductDrawer();
+      return;
+    }
+    if (action === "product-status") {
+      openProductStatusEditor();
       return;
     }
     if (action === "product-variant") {
