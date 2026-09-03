@@ -2362,7 +2362,12 @@ function setupBuilderStepControls() {
 
   document.getElementById("contentBuilderForm")?.addEventListener("input", (event) => {
     state.isDirty = true;
-    if (event.target.closest("#contentReviewEntityStatus, .content-entity-variant-status")) {
+    if (event.target.closest([
+      "#contentReviewEntityStatus",
+      ".content-entity-variant-status",
+      ".content-product-status-checkbox",
+      ".product-variant-status-checkbox",
+    ].join(", "))) {
       return;
     }
     renderBuilderSummaries();
