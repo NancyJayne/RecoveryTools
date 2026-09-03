@@ -1916,11 +1916,11 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
             <h5 class="font-semibold text-white">Variant status and save</h5>
             <p class="mt-1 text-xs text-gray-400">Choose one status, then save this variant to return to its detail preview.</p>
             <select class="product-variant-status hidden" aria-hidden="true" tabindex="-1">
-              ${compactSelectOptions(["draft", "active", "paused", "archived"], productVariant.status || "draft")}
+              ${compactSelectOptions(["draft", "review", "active", "paused", "archived"], productVariant.status || "draft")}
             </select>
             <div class="mt-3 flex flex-wrap items-center gap-4">
-              ${["draft", "active", "paused", "archived"].map((status) => `
-                <label class="inline-flex items-center gap-2 rounded border border-gray-700 px-3 py-2 text-sm">
+              ${["draft", "review", "active", "paused", "archived"].map((status) => `
+                <label class="inline-flex items-center gap-2 rounded border px-3 py-2 text-sm ${lifecycleStatusClasses(status)}">
                   <input type="checkbox" class="product-variant-status-checkbox accent-[#407471]"
                     data-product-variant-status="${status}"${(productVariant.status || "draft") === status ? " checked" : ""}>
                   ${status === "paused" ? "Paused / hidden" : status[0].toUpperCase() + status.slice(1)}
@@ -4354,7 +4354,7 @@ function productRelationPayload() {
     productCategoryId: document.getElementById("contentProductCategoryId")?.value || "",
     productType: document.getElementById("contentProductDeliveryType")?.value || "Physical",
     physicalFulfilment,
-    shopStatus: marketplaceMode === "hidden" ? "draft" : "active",
+    shopStatus: document.getElementById("contentProductShopStatus")?.value || "draft",
     effectiveShopPrice: optionalNumberFromInput("contentProductPrice"),
     stock: inventoryTracked ? totalVariantStock : null,
     visible: ["active", "coming-soon"].includes(marketplaceMode),
@@ -4978,6 +4978,7 @@ function marketplacePreviewStateOverlay(label, tone = "purple", editorTarget = "
   if (!label) return "";
   const tones = {
     amber: "border-amber-400 text-amber-200",
+    blue: "border-blue-400 text-blue-200",
     purple: "border-purple-400 text-purple-200",
     red: "border-red-400 text-red-300",
     gray: "border-gray-400 text-gray-200",
@@ -5055,12 +5056,14 @@ function marketplaceTilePreviewMarkup() {
       : outOfStock
         ? { label: "Out of Stock", target: "data-product-editor-target=\"contentProductHasPhysicalFulfilment\"", tone: "gray" }
         : shopStatus === "draft"
-          ? { label: "Draft", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "gray" }
-          : marketplaceMode === "coming-soon"
-            ? { label: "Coming Soon", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "purple" }
-            : ["hidden", "scheduled"].includes(marketplaceMode)
-              ? { label: "Hidden", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "amber" }
-              : null;
+          ? { label: "Draft", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "purple" }
+          : shopStatus === "review"
+            ? { label: "Review", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "blue" }
+            : marketplaceMode === "coming-soon"
+              ? { label: "Coming Soon", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "purple" }
+              : ["hidden", "scheduled"].includes(marketplaceMode)
+                ? { label: "Hidden", target: "data-product-editor-target=\"contentProductMarketplaceMode\"", tone: "amber" }
+                : null;
   let active = !archived && marketplaceMode === "active" && shopStatus === "active";
   const fulfilmentLabels = [...new Set(currentProductVariants()
     .map((variant) => variant.physicalFulfilment)
@@ -5118,7 +5121,7 @@ function marketplaceTilePreviewMarkup() {
     <div class="mt-4 border-t border-gray-700 pt-3">
       <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Product setup</p>
       <div class="flex flex-wrap gap-2 text-xs">
-        <button type="button" data-product-status-controls class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">Status: ${escapeHTML(currentProductEditorStatus())}</button>
+        <button type="button" data-product-status-controls class="rounded-full border px-2 py-1 ${lifecycleStatusClasses(currentProductEditorStatus())} hover:ring-2">Status: ${escapeHTML(currentProductEditorStatus())}</button>
         <button type="button" data-product-editor-target="contentProductMarketplaceAudience" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">Audience: ${marketplaceAudience === "affiliates" ? "Approved affiliates only" : "Everyone"}</button>
         <button type="button" data-product-editor-target="contentProductFeatured" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">${featured ? "★ Featured" : "☆ Not featured"}</button>
         <button type="button" data-product-editor-target="contentProductCategoryId" class="${marketplacePreviewAttention(!category, "rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white")}">Filter: ${escapeHTML(categoryLabel)}</button>
@@ -5131,9 +5134,8 @@ function marketplaceTilePreviewMarkup() {
 
 function currentProductEditorStatus() {
   if (document.getElementById("contentProductArchived")?.checked) return "archived";
-  if ((document.getElementById("contentProductShopStatus")?.value || "draft") === "draft") {
-    return "draft";
-  }
+  const shopStatus = document.getElementById("contentProductShopStatus")?.value || "draft";
+  if (["draft", "review"].includes(shopStatus)) return shopStatus;
   return document.getElementById("contentProductMarketplaceMode")?.value === "active"
     ? "active" : "paused";
 }
@@ -5151,8 +5153,7 @@ function setProductEditorStatus(nextStatus) {
   const marketplaceMode = document.getElementById("contentProductMarketplaceMode");
   if (!archived || !shopStatus || !marketplaceMode) return;
   archived.checked = nextStatus === "archived";
-  shopStatus.value = nextStatus === "draft"
-    ? "draft" : nextStatus === "archived" ? "archived" : "active";
+  shopStatus.value = ["draft", "review", "archived"].includes(nextStatus) ? nextStatus : "active";
   marketplaceMode.value = nextStatus === "active" ? "active" : "hidden";
   syncProductStatusCheckboxes();
   renderMarketplaceTileControls();
@@ -5472,9 +5473,6 @@ function marketplaceVariantCardPreview(
   const marketplaceMode = productVariant.marketplaceMode || "inherit";
   const productMarketplaceMode = document.getElementById("contentProductMarketplaceMode")?.value || "hidden";
   const effectiveMarketplaceMode = marketplaceMode === "inherit" ? productMarketplaceMode : marketplaceMode;
-  const statusLabel = marketplaceMode === "inherit"
-    ? productVariant.status || "draft"
-    : marketplaceMode;
   const archived = document.getElementById("contentProductArchived")?.checked === true ||
     productVariant.status === "archived";
   const inventoryTracked = document.getElementById("contentProductInventoryTracked")?.checked === true;
@@ -5494,12 +5492,14 @@ function marketplaceVariantCardPreview(
         : variantStatus === "paused"
           ? { label: "Paused", section: "lifecycle", tone: "amber" }
           : variantStatus === "draft"
-            ? { label: "Draft", section: "lifecycle", tone: "gray" }
-            : effectiveMarketplaceMode === "coming-soon"
-              ? { label: "Coming Soon", section: "visibility", tone: "purple" }
-              : ["hidden", "scheduled"].includes(effectiveMarketplaceMode)
-                ? { label: "Hidden", section: "visibility", tone: "amber" }
-                : null;
+            ? { label: "Draft", section: "lifecycle", tone: "purple" }
+            : variantStatus === "review"
+              ? { label: "Review", section: "lifecycle", tone: "blue" }
+              : effectiveMarketplaceMode === "coming-soon"
+                ? { label: "Coming Soon", section: "visibility", tone: "purple" }
+                : ["hidden", "scheduled"].includes(effectiveMarketplaceMode)
+                  ? { label: "Hidden", section: "visibility", tone: "amber" }
+                  : null;
   let active = !archived && variantStatus === "active" && effectiveMarketplaceMode === "active";
   const deliveryType = document.getElementById("contentProductDeliveryType")?.value || "";
   const productType = marketplacePreviewProductType(deliveryType);
@@ -5590,7 +5590,7 @@ function marketplaceVariantCardPreview(
       <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Variant setup</p>
       <div class="flex flex-wrap gap-2">
       ${isPrimary ? `<button type="button" data-variant-editor="identity" class="rounded bg-gray-950 px-2 py-1 text-xs font-medium text-[#9edbd7] hover:text-white">Primary</button>` : ""}
-      <button type="button" data-variant-editor="visibility" class="rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white">Status: ${escapeHTML(statusLabel)}</button>
+      <button type="button" data-variant-editor="visibility" class="rounded-full border px-2 py-1 text-xs ${lifecycleStatusClasses(variantStatus)} hover:ring-2">Status: ${escapeHTML(variantStatus)}</button>
       <span class="rounded bg-gray-950 px-2 py-1 text-xs text-gray-300">Type: ${escapeHTML(productType)}</span>
       <button type="button" data-variant-editor="purchase" class="${marketplacePreviewAttention(fulfilmentMissing, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white", purchaseSetupReviewed ? "optional" : "required")}">Purchase setup: ${escapeHTML(fulfilmentMissing ? "Review" : fulfilmentSummary)}</button>
       <button type="button" data-product-editor-target="contentProductCategoryId" class="${marketplacePreviewAttention(!category, "rounded bg-gray-950 px-2 py-1 text-xs text-gray-300 hover:text-white")}">${escapeHTML(categoryLabel || "Set category")}</button>
@@ -6550,7 +6550,7 @@ function connectionErdProductVariantColumns({
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0"><h5 class="break-words font-semibold text-white">${escapeHTML(variant.name || `Product variant ${index + 1}`)}</h5>
             <p class="mt-1 text-xs text-gray-400">${escapeHTML(variant.marketplaceMode || "Inherit visibility")} · ${escapeHTML(moneyLabel(variantPrice))}</p></div>
-          <span class="shrink-0 rounded-full bg-gray-900 px-2 py-1 text-[10px] text-gray-300">${escapeHTML(variant.status || "draft")}</span>
+          <span class="shrink-0 rounded-full border px-2 py-1 text-[10px] ${lifecycleStatusClasses(variant.status)}">${escapeHTML(variant.status || "draft")}</span>
         </div>
         <button type="button" data-connection-action="product-variant"
           data-connection-variant-id="${escapeHTML(variantId)}" data-connection-product-section="identity"
@@ -6605,7 +6605,7 @@ function connectionErdProductVariantColumns({
         <div class="flex flex-wrap gap-2">
           <button type="button" data-connection-action="product" class="rounded border border-gray-500 px-3 py-1 text-xs text-blue-200 hover:border-white">Edit Product</button>
           <button type="button" data-connection-action="product-status"
-            class="rounded-full border border-gray-500 bg-gray-900 px-3 py-1 text-xs text-blue-200 hover:border-white">Status: ${escapeHTML(status)}</button>
+            class="rounded-full border px-3 py-1 text-xs ${lifecycleStatusClasses(status)} hover:ring-2">Status: ${escapeHTML(status)}</button>
         </div>
       </div>
     </header>
