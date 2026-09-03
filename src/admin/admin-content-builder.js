@@ -2373,6 +2373,24 @@ async function openEntityVariantEditor(variantId, fieldKey = "") {
     row.querySelector("input, select, textarea, button"))?.focus({ preventScroll: true });
 }
 
+async function openEntityStatusEditor(variantId = "") {
+  await navigateBuilderStep(3);
+  if (!variantId) {
+    const entityStatus = document.getElementById("contentReviewEntityStatus");
+    entityStatus?.scrollIntoView({ behavior: "smooth", block: "center" });
+    entityStatus?.focus({ preventScroll: true });
+    return;
+  }
+  const reviewRow = document.querySelector(
+    `.content-variant-review-row[data-entity-variant-id="${CSS.escape(variantId)}"]`,
+  );
+  if (!reviewRow) return;
+  reviewRow.open = true;
+  const status = reviewRow.querySelector(".content-entity-variant-status");
+  reviewRow.scrollIntoView({ behavior: "smooth", block: "center" });
+  status?.focus({ preventScroll: true });
+}
+
 function templateInput(id) {
   return document.getElementById(id)?.value || "";
 }
@@ -6319,34 +6337,27 @@ function connectionErdVariantColumns({ title, recordType, variants = [], record 
         <button type="button" data-connection-action="entity"
           data-connection-entity-variant-id="${escapeHTML(variant.entityVariantId)}"
           class="mt-3 rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white hover:text-white">Edit variant</button>
+        <button type="button" data-connection-action="entity-status"
+          data-connection-entity-variant-id="${escapeHTML(variant.entityVariantId)}"
+          class="mt-3 rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white hover:text-white">Variant status</button>
       </header>
       <div class="divide-y divide-white/10">
         ${stockEnabled ? `<section class="p-3">
-          <div class="flex items-start justify-between gap-2">
+          <div>
             <div><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">${escapeHTML(title)} stock</div>
               <p class="mt-1 text-sm text-gray-100">Stock ${Number(variant.stockQty ?? 0)} · Reorder ${Number(variant.reorderLevel ?? 0)}</p></div>
-            <button type="button" data-connection-action="entity-stock"
-              data-connection-entity-variant-id="${escapeHTML(variant.entityVariantId)}"
-              class="rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white">Edit</button>
           </div>
         </section>` : ""}
         ${otherAssetIds.length || !hasNamedAssetField ? `<section class="p-3">
-          <div class="flex items-start justify-between gap-2">
+          <div>
             <div class="min-w-0"><div class="text-xs font-semibold uppercase tracking-wide text-gray-400">${hasNamedAssetField ? "Other Assets" : "Assets"}</div>
               ${otherAssetIds.length ? `<ul class="mt-2 space-y-2">${otherAssetIds.map(assetMarkup).join("")}</ul>` : `<span class="text-sm text-gray-500">No variant Assets</span>`}</div>
-            <button type="button" data-connection-action="asset"
-              data-connection-entity-variant-id="${escapeHTML(variant.entityVariantId)}"
-              class="rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white">Choose</button>
           </div>
         </section>` : ""}
         ${fieldRows.map((field) => `<section class="p-3">
-          <div class="flex items-start justify-between gap-2">
+          <div>
             <div class="min-w-0"><div class="break-words text-xs font-semibold uppercase tracking-wide text-gray-400">${escapeHTML(field.name)}</div>
               ${field.assetIds.length ? `<ul class="mt-2 space-y-2">${field.assetIds.map(assetMarkup).join("")}</ul>` : connectionErdTableList(field.values.map((value) => ({ label: value })), "Not set")}</div>
-            ${field.linked ? `<button type="button" data-connection-action="entity-field"
-              data-connection-entity-variant-id="${escapeHTML(variant.entityVariantId)}"
-              data-connection-field-key="${escapeHTML(field.key)}"
-              class="rounded border border-gray-600 px-2 py-1 text-xs text-[#bce7e4] hover:border-white">${field.isAssetField ? "Choose" : "Edit"}</button>` : ""}
           </div>
         </section>`).join("")}
       </div>
@@ -6357,7 +6368,10 @@ function connectionErdVariantColumns({ title, recordType, variants = [], record 
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div><div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">${escapeHTML(recordType)} · current entity</div>
           <h4 class="mt-1 break-words text-lg font-semibold leading-6 text-white">${escapeHTML(title)}</h4></div>
-        <button type="button" data-connection-action="entity" class="rounded border border-gray-500 px-3 py-1 text-xs text-[#bce7e4] hover:border-white">Edit content</button>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" data-connection-action="entity" class="rounded border border-gray-500 px-3 py-1 text-xs text-[#bce7e4] hover:border-white">Edit entity</button>
+          <button type="button" data-connection-action="entity-status" class="rounded border border-gray-500 px-3 py-1 text-xs text-[#bce7e4] hover:border-white">Entity status</button>
+        </div>
       </div>
       ${mainAssetIds.length ? `<div class="mt-3"><div class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Overall entity Assets</div>
         <ul class="mt-2 flex flex-wrap gap-3">${mainAssetIds.map(assetMarkup).join("")}</ul></div>` : ""}
@@ -9005,6 +9019,10 @@ export async function setupContentBuilder() {
     }
     if (action === "product-unlocks") {
       openProductUnlockConnections(button.dataset.connectionVariantId || "");
+      return;
+    }
+    if (action === "entity-status") {
+      await openEntityStatusEditor(button.dataset.connectionEntityVariantId || "");
       return;
     }
     if (["entity", "build"].includes(action)) {
