@@ -461,7 +461,7 @@ function normalizeVariant(value, index, sourceProductId = "") {
     eventEndAt: cleanString(value.eventEndAt),
     eventLocation: cleanString(value.eventLocation),
     instructor: cleanString(value.instructor),
-    bundleComponents: cleanBundleComponents(value.bundleComponents, variantId),
+    bundleComponents: cleanBundleComponents(value.bundleComponents, variantId, sourceProductId),
     primaryAssetId: cleanString(value.primaryAssetId),
     promotionAssetIds: [...new Set((Array.isArray(value.promotionAssetIds) ? value.promotionAssetIds : [])
       .map(cleanString).filter(Boolean))].slice(0, 20),
@@ -498,7 +498,7 @@ function cleanPrerequisites(value, sourceProductId, sourceVariantId) {
   }).slice(0, 20);
 }
 
-function cleanBundleComponents(value, sourceProductVariantId) {
+function cleanBundleComponents(value, sourceProductVariantId, sourceProductId) {
   const seen = new Set();
   return (Array.isArray(value) ? value : []).slice(0, 100).map((component, index) => ({
     bundleComponentId: cleanString(component?.bundleComponentId) ||
@@ -510,7 +510,9 @@ function cleanBundleComponents(value, sourceProductVariantId) {
     inventoryAction: component?.inventoryAction === "none" ? "none" : "deduct",
   })).filter((component) => {
     const key = `${component.componentProductId}:${component.componentProductVariantId}`;
-    if (!component.componentProductId || seen.has(key)) return false;
+    if (!component.componentProductId || !component.componentProductVariantId ||
+        component.componentProductId === sourceProductId &&
+          component.componentProductVariantId === sourceProductVariantId || seen.has(key)) return false;
     seen.add(key);
     return true;
   });

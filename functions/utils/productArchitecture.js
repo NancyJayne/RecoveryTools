@@ -128,7 +128,9 @@ export function bundleComponentsForProduct(productId, variantId, architecture) {
     }))
     .filter((component) => {
       const key = `${component.componentProductId}:${component.componentProductVariantId}`;
-      if (!component.componentProductId || component.componentProductId === productId || seen.has(key)) return false;
+      if (!component.componentProductId || !component.componentProductVariantId ||
+          component.componentProductId === productId && component.componentProductVariantId === variantId ||
+          seen.has(key)) return false;
       seen.add(key);
       return true;
     });

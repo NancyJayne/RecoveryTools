@@ -422,7 +422,9 @@ function cleanBundleComponents(value, sourceProductVariantId, sourceProductId) {
     inventoryAction: component?.inventoryAction === "none" ? "none" : "deduct",
   })).filter((component) => {
     const key = `${component.componentProductId}:${component.componentProductVariantId}`;
-    if (!component.componentProductId || component.componentProductId === sourceProductId || seen.has(key)) return false;
+    if (!component.componentProductId || !component.componentProductVariantId ||
+        component.componentProductId === sourceProductId &&
+          component.componentProductVariantId === sourceProductVariantId || seen.has(key)) return false;
     seen.add(key);
     return true;
   });

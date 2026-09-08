@@ -4314,6 +4314,27 @@ function productRelationPayload() {
   });
   variants.forEach((variant) => {
     const label = variant.name || variant.variantId || "Product variant";
+    const incompleteBundleComponent = (variant.bundleComponents || []).find((component) =>
+      !component.componentProductId || !component.componentProductVariantId);
+    if (incompleteBundleComponent) {
+      focusProductVariantSaveIssue(
+        variant.variantId,
+        "purchase",
+        ".product-bundle-component-variant",
+      );
+      throw new Error(`Choose an exact linked Product variant for every inclusion in ${label}.`);
+    }
+    const selfBundleComponent = (variant.bundleComponents || []).find((component) =>
+      component.componentProductId === currentProductId() &&
+      component.componentProductVariantId === variant.variantId);
+    if (selfBundleComponent) {
+      focusProductVariantSaveIssue(
+        variant.variantId,
+        "purchase",
+        ".product-bundle-component-variant",
+      );
+      throw new Error(`${label} cannot include itself. Choose another exact Product variant.`);
+    }
     if (["scheduled", "coming-soon"].includes(variant.marketplaceMode) && !variant.marketplaceStartsAt) {
       throw new Error(`Choose a marketplace start date for ${label}.`);
     }
@@ -5855,7 +5876,7 @@ function bundleComponentsMarkup(components = []) {
         ${bundleProductOptions(component.componentProductId)}
       </select>
       <select class="product-bundle-component-variant min-w-0 w-full rounded bg-gray-800 px-2 py-2 text-white">
-        <option value="">Use Product-level stock</option>
+        <option value="">Choose exact Product variant</option>
         ${bundleVariantOptions(component.componentProductId, component.componentProductVariantId)}
       </select>
       <input class="product-bundle-component-quantity min-w-0 w-full rounded bg-gray-800 px-2 py-2 text-white"
@@ -10257,7 +10278,7 @@ export async function setupContentBuilder() {
       const row = event.target.closest(".product-bundle-component-row");
       const variant = row?.querySelector(".product-bundle-component-variant");
       if (variant) {
-        variant.innerHTML = `<option value="">Use Product-level stock</option>${bundleVariantOptions(event.target.value)}`;
+        variant.innerHTML = `<option value="">Choose exact Product variant</option>${bundleVariantOptions(event.target.value)}`;
       }
     }
     syncSelectedProductVariantRows();
