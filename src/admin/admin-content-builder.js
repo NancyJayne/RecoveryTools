@@ -2974,7 +2974,23 @@ function closeLinkedRecordSelector() {
 
 function linkedSelectorRecords(context = linkedRecordSelectorContext) {
   if (!context?.select) return [];
-  return linkedTemplateFieldRecords({ linkedTable: context.select.dataset.linkedTable });
+  const records = linkedTemplateFieldRecords({ linkedTable: context.select.dataset.linkedTable });
+  if (normalizedText(context.select.dataset.linkedTable) !== "products") return records;
+  const productId = currentProductId();
+  if (!productId) return records;
+  const current = {
+    id: productId,
+    name: document.getElementById("contentName")?.value || productId,
+    recordType: "product",
+    productType: document.getElementById("contentProductDeliveryType")?.value || "",
+    status: currentProductEditorStatus(),
+    variants: currentProductVariants(),
+  };
+  const merged = [...records];
+  const index = merged.findIndex((record) => record.id === productId);
+  if (index >= 0) merged[index] = { ...merged[index], ...current };
+  else merged.push(current);
+  return merged;
 }
 
 function linkedSelectorRecordVariants(record = {}) {
@@ -3094,7 +3110,12 @@ function renderLinkedRecordSelector() {
           <div class="min-w-0 flex-1">
             <span class="flex flex-wrap items-start justify-between gap-2">
               <span class="font-semibold text-white">${escapeHTML(record.name || record.title || record.id)}</span>
-              <span class="text-xs text-gray-400">${escapeHTML([record.type || record.assetType, record.status].filter(Boolean).join(" · "))}</span>
+              <span class="text-xs text-gray-400">${escapeHTML([
+    String(record.recordType || context.select.dataset.linkedTable || "record")
+      .replace(/s$/i, "").toUpperCase(),
+    record.type || record.productType || record.assetType,
+    record.status,
+  ].filter(Boolean).join(" · "))}</span>
             </span>
             ${record.shortDescription ? `<p class="mt-1 text-sm text-gray-300">${escapeHTML(record.shortDescription)}</p>` : ""}
             ${context.multiple && variants.length ? `<div class="mt-3 rounded border border-gray-700 bg-gray-900/70 p-2">
@@ -3163,6 +3184,9 @@ function openLinkedRecordSelector(trigger) {
     fixedStatus && `Status: ${fixedStatus}`,
     fixedTags.length && `Required tags: ${fixedTags.join(", ")}`,
   ].filter(Boolean).join(" · ") || "The template has not imposed an additional type, status or tag restriction.";
+  if (constraint && multiple) {
+    constraint.textContent += " Tick one or more exact variants, or use All variants, then select Add selected.";
+  }
   setInputValue("contentLinkedRecordSearch", "");
   const availableTags = uniqueValues(records.flatMap((record) => record.tags || [])).sort();
   const tagFilter = document.getElementById("contentLinkedRecordTagFilter");
