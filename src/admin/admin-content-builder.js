@@ -6158,6 +6158,7 @@ function renderProductUnlockRows(grants = []) {
             data-field-key="product-unlock-${escapeHTML(grant.productVariantId || "all")}-${index}"
             data-field-name="${escapeHTML(`${entityType} to unlock`)}"
             data-field-type="linked" data-linked-table="${escapeHTML(`${entityType}s`)}"
+            data-allow-record-reuse="true"
             data-linked-type-filter="" data-linked-status-filter="" data-linked-tag-filters="">
             <option value="">Choose content to unlock</option>
             ${targetOptions}
