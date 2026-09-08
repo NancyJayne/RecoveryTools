@@ -5991,6 +5991,30 @@ function refreshProductBlueprintConnectionSummary(row) {
   summary.textContent = `${productVariant} · ${role}: ${blueprint} → ${blueprintVariant}`;
 }
 
+function refreshProductBlueprintRoleConstraint(row, clearIncompatible = false) {
+  if (!row) return;
+  const roleSelect = row.querySelector(".variant-content-link-role");
+  const blueprintSelect = row.querySelector(".variant-content-blueprint");
+  const blueprintVariantSelect = row.querySelector(".variant-content-blueprint-variant");
+  if (!roleSelect || !blueprintSelect) return;
+  const workshopOperations = roleSelect.value === "OperatedWith";
+  const requiredType = workshopOperations ? "Workshop Operations" : "Product Manufacture";
+  blueprintSelect.dataset.linkedTypeFilter = requiredType;
+  blueprintSelect.dataset.fieldName = workshopOperations
+    ? "Workshop Operations Blueprint"
+    : "Manufacturing Blueprint";
+  const selectedBlueprint = (state.records.blueprints || []).find((record) =>
+    record.id === blueprintSelect.value);
+  const selectedType = normalizedText(selectedBlueprint?.type || selectedBlueprint?.blueprintType);
+  if (clearIncompatible && selectedBlueprint && selectedType !== normalizedText(requiredType)) {
+    blueprintSelect.value = "";
+    if (blueprintVariantSelect) {
+      blueprintVariantSelect.innerHTML = "<option value=\"\">Default Blueprint variant</option>";
+    }
+  }
+  refreshLinkedTemplatePickerLabel(blueprintSelect);
+}
+
 function renderProductVariantContentLinkRows(links = []) {
   const container = document.getElementById("productVariantContentLinkRows");
   if (!container) return;
@@ -6050,6 +6074,9 @@ function renderProductVariantContentLinkRows(links = []) {
   }).join("") || "<p class=\"text-xs text-gray-400\">No manufacturing or Workshop Operations Blueprint selected.</p>";
   container.querySelectorAll(".content-template-linked-select").forEach(
     refreshLinkedTemplatePickerLabel,
+  );
+  container.querySelectorAll(".product-variant-content-link-row").forEach((row) =>
+    refreshProductBlueprintRoleConstraint(row),
   );
   container.querySelectorAll(".product-variant-content-link-row").forEach(
     refreshProductBlueprintConnectionSummary,
@@ -9512,6 +9539,12 @@ export async function setupContentBuilder() {
       ".variant-content-product-variant, .variant-content-blueprint, " +
       ".variant-content-blueprint-variant, .variant-content-link-role",
     )) return;
+    if (event.target.classList.contains("variant-content-link-role")) {
+      refreshProductBlueprintRoleConstraint(
+        event.target.closest(".product-variant-content-link-row"),
+        true,
+      );
+    }
     if (event.target.classList.contains("variant-content-blueprint")) {
       const row = event.target.closest(".product-variant-content-link-row");
       const variantSelect = row?.querySelector(".variant-content-blueprint-variant");
