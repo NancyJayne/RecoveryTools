@@ -3003,7 +3003,8 @@ function renderLinkedRecordSelector() {
   // valid (for example, one Dress code Item for every Workshop variant). Only
   // prevent the same record being selected twice inside this exact field.
   const selectionScope = context.select.closest(".content-template-linked-field") || document;
-  const selectedElsewhere = new Set([...selectionScope.querySelectorAll(
+  const allowRecordReuse = context.select.dataset.allowRecordReuse === "true";
+  const selectedElsewhere = allowRecordReuse ? new Set() : new Set([...selectionScope.querySelectorAll(
     `.content-template-linked-select[data-field-key="${CSS.escape(context.select.dataset.fieldKey || "")}"]`,
   )].filter((select) => select !== context.select).map((select) => select.value).filter(Boolean));
   const records = linkedSelectorRecords(context).filter((record) => {
@@ -6157,6 +6158,7 @@ function renderProductUnlockRows(grants = []) {
             data-field-key="product-unlock-${escapeHTML(grant.productVariantId || "all")}-${index}"
             data-field-name="${escapeHTML(`${entityType} to unlock`)}"
             data-field-type="linked" data-linked-table="${escapeHTML(`${entityType}s`)}"
+            data-allow-record-reuse="true"
             data-linked-type-filter="" data-linked-status-filter="" data-linked-tag-filters="">
             <option value="">Choose content to unlock</option>
             ${targetOptions}
