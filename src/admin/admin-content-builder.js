@@ -5806,7 +5806,7 @@ function prerequisiteRowsMarkup(prerequisites = [], sourceVariantId = "") {
         <select class="product-prerequisite-product-selector content-template-linked-select hidden"
           data-field-key="product-prerequisite-product-${index}" data-field-name="Prerequisite Product"
           data-linked-table="Products" data-linked-type-filter="" data-linked-status-filter=""
-          data-linked-tag-filters="">
+          data-linked-tag-filters="" data-allow-record-reuse="true">
           <option value="">Choose prerequisite Product</option>${productOptions}
         </select>
         <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700"
@@ -5817,7 +5817,7 @@ function prerequisiteRowsMarkup(prerequisites = [], sourceVariantId = "") {
         <select class="product-prerequisite-item-selector content-template-linked-select hidden"
           data-field-key="product-prerequisite-item-${index}" data-field-name="External qualification"
           data-linked-table="Items" data-linked-type-filter="Qualification" data-linked-status-filter=""
-          data-linked-tag-filters="">
+          data-linked-tag-filters="" data-allow-record-reuse="true">
           <option value="">Choose external qualification</option>${itemOptions}
         </select>
         <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700"
@@ -6158,7 +6158,6 @@ function renderProductUnlockRows(grants = []) {
             data-field-key="product-unlock-${escapeHTML(grant.productVariantId || "all")}-${index}"
             data-field-name="${escapeHTML(`${entityType} to unlock`)}"
             data-field-type="linked" data-linked-table="${escapeHTML(`${entityType}s`)}"
-            data-allow-record-reuse="true"
             data-linked-type-filter="" data-linked-status-filter="" data-linked-tag-filters="">
             <option value="">Choose content to unlock</option>
             ${targetOptions}
