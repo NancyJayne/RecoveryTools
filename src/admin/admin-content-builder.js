@@ -2567,6 +2567,9 @@ function linkedTemplateSelectMarkup(field, key, required = false) {
         data-linked-type-filter="${escapeHTML(selectedType)}"
         data-linked-status-filter="${escapeHTML(selectedStatus)}"
         data-linked-tag-filters="${escapeHTML(selectedTags.join(","))}"
+        data-selector-multiple="${Number(field.maxEntries || 0) === 1 ? "false" : "true"}"
+        data-allow-record-reuse="${supportsExactLinkedVariant(field.linkedTable) ? "true" : "false"}"
+        data-relationship-label="${escapeHTML(field.name || "Linked content")} for"
         data-repeatable="false"
         data-required="${required ? "true" : "false"}"
       >
@@ -2974,6 +2977,42 @@ function linkedSelectorRecords(context = linkedRecordSelectorContext) {
   return linkedTemplateFieldRecords({ linkedTable: context.select.dataset.linkedTable });
 }
 
+function linkedSelectorRecordVariants(record = {}) {
+  return Array.isArray(record.variants) && record.variants.length
+    ? record.variants
+    : Array.isArray(record.entityVariants) ? record.entityVariants : [];
+}
+
+function linkedSelectorVariantId(variant = {}) {
+  return variant.productVariantId || variant.variantId || variant.entityVariantId || variant.id || "";
+}
+
+function linkedSelectorChoiceKey(recordId, variantId = "") {
+  return `${recordId}::${variantId}`;
+}
+
+function linkedSelectorVariantUnavailable(context, recordId, variantId) {
+  const row = context?.select?.closest(".content-product-variant-row");
+  const ownerVariantId = row?.querySelector(".product-variant-id")?.value || row?.dataset.productVariantId || "";
+  const currentId = currentProductId();
+  if (!ownerVariantId || !currentId || recordId !== currentId || variantId !== ownerVariantId) return false;
+  return context.select.classList.contains("product-prerequisite-product-selector") ||
+    context.select.classList.contains("product-bundle-component-product");
+}
+
+function updateLinkedSelectorSelectedCount() {
+  const context = linkedRecordSelectorContext;
+  const count = context?.selectedChoices?.size || 0;
+  const label = document.getElementById("contentLinkedRecordSelectorSelectedCount");
+  if (label) label.textContent = context?.multiple
+    ? `${count} exact selection${count === 1 ? "" : "s"}` : "";
+  const confirm = document.getElementById("confirmContentLinkedRecordSelectorBtn");
+  if (confirm) {
+    confirm.classList.toggle("hidden", !context?.multiple);
+    confirm.disabled = count === 0;
+  }
+}
+
 async function refreshLinkedRecordSelectorData() {
   const context = linkedRecordSelectorContext;
   if (!context) return;
@@ -3027,7 +3066,7 @@ function renderLinkedRecordSelector() {
       const selected = context.select.value === record.id;
       const unavailable = selectedElsewhere.has(record.id);
       const tags = uniqueValues(record.tags || []);
-      const variants = Array.isArray(record.entityVariants) ? record.entityVariants : [];
+      const variants = linkedSelectorRecordVariants(record);
       const recordAssets = Array.isArray(record.assets) ? record.assets : [];
       const imageAsset = recordAssets.find((asset) => {
         const type = normalizedText(asset?.assetType || asset?.type);
@@ -3041,7 +3080,15 @@ function renderLinkedRecordSelector() {
         primaryAsset?.url || record.imageUrl || record.image || "";
       const table = normalizedText(context.select.dataset.linkedTable);
       const editable = !["asset", "assets", "item asset", "item assets"].includes(table);
-      return `<article class="w-full overflow-hidden rounded border p-3 ${selected ? "border-[#9edbd7] bg-[#153b38]" : "border-gray-700 bg-gray-950/60"} ${unavailable ? "opacity-50" : ""}">
+      const availableVariants = variants.filter((variant) => !linkedSelectorVariantUnavailable(
+        context,
+        record.id,
+        linkedSelectorVariantId(variant),
+      ));
+      const selectedVariantIds = availableVariants.filter((variant) =>
+        context.selectedChoices?.has(linkedSelectorChoiceKey(record.id, linkedSelectorVariantId(variant))));
+      const allVariantsSelected = availableVariants.length > 0 && selectedVariantIds.length === availableVariants.length;
+      return `<article class="w-full overflow-hidden rounded border p-3 ${selected || selectedVariantIds.length ? "border-[#9edbd7] bg-[#153b38]" : "border-gray-700 bg-gray-950/60"} ${unavailable ? "opacity-50" : ""}">
         <div class="flex min-w-0 gap-3">
           ${imageUrl ? `<img src="${escapeHTML(imageUrl)}" alt="" class="h-20 w-20 shrink-0 rounded border border-gray-700 object-cover">` : ""}
           <div class="min-w-0 flex-1">
@@ -3050,19 +3097,33 @@ function renderLinkedRecordSelector() {
               <span class="text-xs text-gray-400">${escapeHTML([record.type || record.assetType, record.status].filter(Boolean).join(" · "))}</span>
             </span>
             ${record.shortDescription ? `<p class="mt-1 text-sm text-gray-300">${escapeHTML(record.shortDescription)}</p>` : ""}
-            ${variants.length ? `<div class="mt-2 flex flex-wrap gap-1">${variants.map((variant) => `<span class="rounded border border-gray-700 bg-gray-900 px-2 py-0.5 text-xs text-gray-300">${escapeHTML(variant.name || variant.entityVariantId || "Variant")} · ${escapeHTML(variant.status || "draft")}</span>`).join("")}</div>` : ""}
+            ${context.multiple && variants.length ? `<div class="mt-3 rounded border border-gray-700 bg-gray-900/70 p-2">
+              <label class="mb-2 flex cursor-pointer items-center gap-2 text-xs font-semibold text-[#9edbd7]">
+                <input type="checkbox" data-linked-selector-all-variants="${escapeHTML(record.id)}" class="accent-[#407471]" ${allVariantsSelected ? "checked" : ""}> All variants
+              </label>
+              <div class="grid gap-2 sm:grid-cols-2">${variants.map((variant) => {
+    const variantId = linkedSelectorVariantId(variant);
+    const checked = context.selectedChoices?.has(linkedSelectorChoiceKey(record.id, variantId));
+    const variantUnavailable = linkedSelectorVariantUnavailable(context, record.id, variantId);
+    return `<label class="flex cursor-pointer items-center gap-2 rounded border border-gray-700 px-2 py-1 text-xs text-gray-200">
+                  <input type="checkbox" data-linked-selector-variant-record-id="${escapeHTML(record.id)}" data-linked-selector-variant-id="${escapeHTML(variantId)}" class="accent-[#407471]" ${checked ? "checked" : ""} ${variantUnavailable ? "disabled" : ""}>
+                  <span>${escapeHTML(variant.name || variantId)} · ${escapeHTML(variant.status || "draft")}</span>
+                </label>`;
+  }).join("")}</div>
+            </div>` : variants.length ? `<div class="mt-2 flex flex-wrap gap-1">${variants.map((variant) => `<span class="rounded border border-gray-700 bg-gray-900 px-2 py-0.5 text-xs text-gray-300">${escapeHTML(variant.name || variant.entityVariantId || "Variant")} · ${escapeHTML(variant.status || "draft")}</span>`).join("")}</div>` : ""}
             ${tags.length ? `<div class="mt-2 flex flex-wrap gap-1">${tags.map((tag) => `<span class="rounded bg-gray-800 px-2 py-0.5 text-xs text-gray-300">${escapeHTML(tag)}</span>`).join("")}</div>` : ""}
           </div>
         </div>
         <div class="mt-3 flex flex-wrap justify-end gap-2">
           ${editable ? `<button type="button" data-linked-selector-edit-record-id="${escapeHTML(record.id)}" class="rounded border border-gray-600 px-3 py-1 text-xs text-gray-200 hover:border-[#407471] hover:text-white">Edit</button>` : ""}
-          <button type="button" data-linked-selector-record-id="${escapeHTML(record.id)}" class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7] hover:bg-[#407471]/20" ${unavailable ? "disabled" : ""}>${selected ? "Selected" : "Choose"}</button>
+          ${context.multiple ? (!variants.length ? `<label class="flex cursor-pointer items-center gap-2 rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]"><input type="checkbox" data-linked-selector-variant-record-id="${escapeHTML(record.id)}" data-linked-selector-variant-id="" class="accent-[#407471]" ${context.selectedChoices?.has(linkedSelectorChoiceKey(record.id, "")) ? "checked" : ""}> Select</label>` : "") : `<button type="button" data-linked-selector-record-id="${escapeHTML(record.id)}" class="rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7] hover:bg-[#407471]/20" ${unavailable ? "disabled" : ""}>${selected ? "Selected" : "Choose"}</button>`}
         </div>
       </article>`;
     }).join("") : `<div class="rounded border border-dashed border-gray-700 p-8 text-center text-sm text-gray-400">No matching content. Adjust the search or create a new record with these filters.</div>`;
   }
   const count = document.getElementById("contentLinkedRecordSelectorCount");
   if (count) count.textContent = `${records.length} matching record${records.length === 1 ? "" : "s"}`;
+  updateLinkedSelectorSelectedCount();
 }
 
 function openLinkedRecordSelector(trigger) {
@@ -3074,7 +3135,15 @@ function openLinkedRecordSelector(trigger) {
     showToast("Could not open this selector. Close and reopen the Product Creator, then try again.", "error");
     return false;
   }
-  linkedRecordSelectorContext = { trigger, select };
+  const multiple = select.dataset.selectorMultiple === "true";
+  const selectedChoices = new Map();
+  if (multiple && select.value) {
+    const row = select.closest(".product-variant-content-link-row, .content-product-unlock-row, .product-prerequisite-row, .product-bundle-component-row, .content-template-linked-row");
+    const variantSelect = row?.querySelector(".variant-content-blueprint-variant, .content-product-unlock-target-variant, .product-prerequisite-variant, .product-bundle-component-variant, .content-template-linked-variant");
+    const key = linkedSelectorChoiceKey(select.value, variantSelect?.value || "");
+    selectedChoices.set(key, { recordId: select.value, variantId: variantSelect?.value || "" });
+  }
+  linkedRecordSelectorContext = { trigger, select, multiple, selectedChoices };
   const records = linkedSelectorRecords();
   const fixedType = select.dataset.linkedTypeFilter || "";
   const fixedStatus = select.dataset.linkedStatusFilter || "";
@@ -3084,6 +3153,10 @@ function openLinkedRecordSelector(trigger) {
   if (title) title.textContent = `Choose ${select.dataset.fieldName || table}`;
   const context = document.getElementById("contentLinkedRecordSelectorContext");
   if (context) context.textContent = table;
+  const ownerRow = select.closest(".content-product-variant-row");
+  const ownerName = ownerRow?.querySelector(".product-variant-name")?.value ||
+    ownerRow?.querySelector(".product-variant-id")?.value || "";
+  if (context && ownerName) context.textContent = `${select.dataset.relationshipLabel || select.dataset.fieldName || table} · ${ownerName}`;
   const constraint = document.getElementById("contentLinkedRecordSelectorConstraint");
   if (constraint) constraint.textContent = [
     fixedType && `Type: ${fixedType}`,
@@ -3109,6 +3182,83 @@ function openLinkedRecordSelector(trigger) {
   renderLinkedRecordSelector();
   void refreshLinkedRecordSelectorData();
   document.getElementById("contentLinkedRecordSearch")?.focus();
+  return true;
+}
+
+function applyLinkedSelectorChoices(context) {
+  const choices = [...(context?.selectedChoices?.values() || [])];
+  const select = context?.select;
+  if (!select || !choices.length) return false;
+  const blueprintRow = select.closest(".product-variant-content-link-row");
+  const unlockRow = select.closest(".content-product-unlock-row");
+  const prerequisiteRow = select.closest(".product-prerequisite-row");
+  const bundleRow = select.closest(".product-bundle-component-row");
+  if (blueprintRow) {
+    const rows = [...document.querySelectorAll(".product-variant-content-link-row")];
+    const index = rows.indexOf(blueprintRow);
+    const links = productVariantContentLinksFromRows(true);
+    const base = links[index] || {};
+    links.splice(index, 1, ...choices.map((choice) => ({
+      ...base,
+      entityId: choice.recordId,
+      entityVariantId: choice.variantId,
+    })));
+    renderProductVariantContentLinkRows(links);
+  } else if (unlockRow) {
+    const rows = [...document.querySelectorAll(".content-product-unlock-row")];
+    const index = rows.indexOf(unlockRow);
+    const grants = productUnlocksFromRows(true);
+    const base = grants[index] || {};
+    grants.splice(index, 1, ...choices.map((choice) => ({
+      ...base,
+      accessEntityId: choice.recordId,
+      accessEntityVariantId: choice.variantId,
+    })));
+    renderProductUnlockRows(grants);
+  } else if (prerequisiteRow) {
+    const productRow = prerequisiteRow.closest(".content-product-variant-row");
+    const sourceVariantId = productRow?.querySelector(".product-variant-id")?.value || "";
+    const container = prerequisiteRow.closest(".product-prerequisite-rows");
+    const rows = [...(container?.querySelectorAll(".product-prerequisite-row") || [])];
+    const index = rows.indexOf(prerequisiteRow);
+    const prerequisites = rows.map((row) => prerequisiteFromRow(row) || {});
+    const itemRequirement = prerequisiteRow.querySelector(".product-prerequisite-kind")?.value === "item";
+    prerequisites.splice(index, 1, ...choices.map((choice) => itemRequirement
+      ? { requirementType: "item", itemId: choice.recordId }
+      : { requirementType: "product-variant", productId: choice.recordId, productVariantId: choice.variantId }));
+    if (container) container.innerHTML = prerequisiteRowsMarkup(prerequisites, sourceVariantId);
+  } else if (bundleRow) {
+    const productRow = bundleRow.closest(".content-product-variant-row");
+    const container = bundleRow.closest(".product-bundle-component-rows");
+    const rows = [...(container?.querySelectorAll(".product-bundle-component-row") || [])];
+    const index = rows.indexOf(bundleRow);
+    syncSelectedProductVariantRows();
+    const ownerVariantId = productRow?.querySelector(".product-variant-id")?.value || "";
+    const variant = currentProductVariants().find((candidate) => candidate.variantId === ownerVariantId) || {};
+    const components = variant.bundleComponents || [];
+    const base = components[index] || { quantity: 1, inventoryAction: "deduct" };
+    components.splice(index, 1, ...choices.map((choice, choiceIndex) => ({
+      ...base,
+      bundleComponentId: choiceIndex === 0 ? base.bundleComponentId : "",
+      componentProductId: choice.recordId,
+      componentProductVariantId: choice.variantId,
+    })));
+    if (container) container.innerHTML = bundleComponentsMarkup(components);
+  } else {
+    const field = select.closest(".content-template-linked-field");
+    if (!field) return false;
+    const existing = [...field.querySelectorAll(".content-template-linked-row")].map((row) => {
+      const entity = row.querySelector(".content-template-linked-select")?.value || "";
+      const variant = row.querySelector(".content-template-linked-variant")?.value || "";
+      return entity ? { entityId: entity, entityVariantId: variant } : null;
+    }).filter(Boolean);
+    const currentIndex = [...field.querySelectorAll(".content-template-linked-select")].indexOf(select);
+    existing.splice(Math.max(currentIndex, 0), select.value ? 1 : 0,
+      ...choices.map((choice) => ({ entityId: choice.recordId, entityVariantId: choice.variantId })));
+    restoreLinkedTemplateField(field, existing);
+  }
+  state.isDirty = true;
+  refreshMarketplacePreviews();
   return true;
 }
 
@@ -5827,7 +5977,8 @@ function prerequisiteRowsMarkup(prerequisites = [], sourceVariantId = "") {
         <select class="product-prerequisite-product-selector content-template-linked-select hidden"
           data-field-key="product-prerequisite-product-${index}" data-field-name="Prerequisite Product"
           data-linked-table="Products" data-linked-type-filter="" data-linked-status-filter=""
-          data-linked-tag-filters="" data-allow-record-reuse="true">
+          data-linked-tag-filters="" data-allow-record-reuse="true" data-selector-multiple="true"
+          data-relationship-label="Prerequisites for">
           <option value="">Choose prerequisite Product</option>${productOptions}
         </select>
         <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700"
@@ -5838,7 +5989,8 @@ function prerequisiteRowsMarkup(prerequisites = [], sourceVariantId = "") {
         <select class="product-prerequisite-item-selector content-template-linked-select hidden"
           data-field-key="product-prerequisite-item-${index}" data-field-name="External qualification"
           data-linked-table="Items" data-linked-type-filter="Qualification" data-linked-status-filter=""
-          data-linked-tag-filters="" data-allow-record-reuse="true">
+          data-linked-tag-filters="" data-allow-record-reuse="true" data-selector-multiple="true"
+          data-relationship-label="External qualifications for">
           <option value="">Choose external qualification</option>${itemOptions}
         </select>
         <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700"
@@ -5868,14 +6020,29 @@ function bundleVariantOptions(productId, selectedVariantId = "") {
 }
 
 function bundleComponentsMarkup(components = []) {
-  return components.map((component, index) => `
+  return components.map((component, index) => {
+    const product = (state.records.products || []).find((candidate) =>
+      candidate.id === component.componentProductId);
+    const variant = (product?.variants || []).find((candidate) =>
+      (candidate.variantId || candidate.id) === component.componentProductVariantId);
+    const selectionLabel = product
+      ? `${product.name || product.id}${variant ? ` → ${variant.name || variant.variantId || variant.id}` : ""}`
+      : "Choose linked Product variants";
+    return `
     <div class="product-bundle-component-row grid min-w-0 gap-2 rounded border border-gray-700 p-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_6rem_minmax(10rem,auto)_auto]"
       data-bundle-component-id="${escapeHTML(component.bundleComponentId || `BUNDLE-COMPONENT-${index + 1}`)}">
-      <select class="product-bundle-component-product min-w-0 w-full rounded bg-gray-800 px-2 py-2 text-white">
+      <span class="content-template-linked-picker grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <select class="product-bundle-component-product content-template-linked-select hidden"
+        data-field-key="product-inclusion-${index}" data-field-name="Linked Product inclusion"
+        data-linked-table="Products" data-linked-type-filter="" data-linked-status-filter=""
+        data-linked-tag-filters="" data-allow-record-reuse="true" data-selector-multiple="true"
+        data-relationship-label="Purchasing this variant includes">
         <option value="">Choose underlying Product</option>
         ${bundleProductOptions(component.componentProductId)}
       </select>
-      <select class="product-bundle-component-variant min-w-0 w-full rounded bg-gray-800 px-2 py-2 text-white">
+      <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">${escapeHTML(selectionLabel)}</button>
+      </span>
+      <select class="product-bundle-component-variant hidden">
         <option value="">Choose exact Product variant</option>
         ${bundleVariantOptions(component.componentProductId, component.componentProductVariantId)}
       </select>
@@ -5886,7 +6053,8 @@ function bundleComponentsMarkup(components = []) {
           ${component.inventoryAction === "none" ? "" : "checked"}> Deduct stock/tickets
       </label>
       <button type="button" class="remove-product-bundle-component rounded border border-red-700 px-3 py-1 text-red-200 sm:justify-self-start xl:justify-self-auto">Remove</button>
-    </div>`).join("") || "<p class=\"product-bundle-empty text-xs text-gray-400\">No linked Product inclusions.</p>";
+    </div>`;
+  }).join("") || "<p class=\"product-bundle-empty text-xs text-gray-400\">No linked Product inclusions.</p>";
 }
 
 function blueprintInclusionsForProductVariant(productVariantId) {
@@ -6081,7 +6249,9 @@ function renderProductVariantContentLinkRows(links = []) {
             data-field-name="${linkRole === "ManufacturedFrom" ? "Manufacturing Blueprint" : "Workshop operations Blueprint"}"
             data-linked-table="Blueprints"
             data-linked-type-filter="${linkRole === "ManufacturedFrom" ? "Product Manufacture" : "Workshop Operations"}"
-            data-linked-status-filter="" data-linked-tag-filters="">
+            data-linked-status-filter="" data-linked-tag-filters="" data-selector-multiple="true"
+            data-allow-record-reuse="true"
+            data-relationship-label="Blueprints for">
             <option value="">Choose Blueprint</option>${blueprintOptions}
           </select>
           <button type="button" class="open-content-linked-selector min-w-0 flex-1 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">Choose Blueprint</button>
@@ -6179,7 +6349,8 @@ function renderProductUnlockRows(grants = []) {
             data-field-key="product-unlock-${escapeHTML(grant.productVariantId || "all")}-${index}"
             data-field-name="${escapeHTML(`${entityType} to unlock`)}"
             data-field-type="linked" data-linked-table="${escapeHTML(`${entityType}s`)}"
-            data-allow-record-reuse="true"
+            data-allow-record-reuse="true" data-selector-multiple="true"
+            data-relationship-label="Purchasing this variant unlocks"
             data-linked-type-filter="" data-linked-status-filter="" data-linked-tag-filters="">
             <option value="">Choose content to unlock</option>
             ${targetOptions}
@@ -9203,6 +9374,32 @@ export async function setupContentBuilder() {
     handleTemplateGuidedFieldsClick,
   );
   document.getElementById("contentLinkedRecordSelectorResults")?.addEventListener("click", async (event) => {
+    const variantCheckbox = event.target.closest("[data-linked-selector-variant-record-id]");
+    if (variantCheckbox && linkedRecordSelectorContext?.multiple) {
+      const recordId = variantCheckbox.dataset.linkedSelectorVariantRecordId || "";
+      const variantId = variantCheckbox.dataset.linkedSelectorVariantId || "";
+      const key = linkedSelectorChoiceKey(recordId, variantId);
+      if (variantCheckbox.checked) {
+        linkedRecordSelectorContext.selectedChoices.set(key, { recordId, variantId });
+      } else linkedRecordSelectorContext.selectedChoices.delete(key);
+      renderLinkedRecordSelector();
+      return;
+    }
+    const allVariants = event.target.closest("[data-linked-selector-all-variants]");
+    if (allVariants && linkedRecordSelectorContext?.multiple) {
+      const recordId = allVariants.dataset.linkedSelectorAllVariants || "";
+      const record = linkedSelectorRecords().find((candidate) => candidate.id === recordId);
+      linkedSelectorRecordVariants(record).forEach((variant) => {
+        const variantId = linkedSelectorVariantId(variant);
+        if (linkedSelectorVariantUnavailable(linkedRecordSelectorContext, recordId, variantId)) return;
+        const key = linkedSelectorChoiceKey(recordId, variantId);
+        if (allVariants.checked) {
+          linkedRecordSelectorContext.selectedChoices.set(key, { recordId, variantId });
+        } else linkedRecordSelectorContext.selectedChoices.delete(key);
+      });
+      renderLinkedRecordSelector();
+      return;
+    }
     const editOption = event.target.closest("[data-linked-selector-edit-record-id]");
     if (editOption) {
       const context = linkedRecordSelectorContext;
@@ -9253,6 +9450,11 @@ export async function setupContentBuilder() {
   document.getElementById("closeContentLinkedRecordSelectorBtn")?.addEventListener(
     "click", closeLinkedRecordSelector,
   );
+  document.getElementById("confirmContentLinkedRecordSelectorBtn")?.addEventListener("click", () => {
+    const context = linkedRecordSelectorContext;
+    if (!context?.multiple || !context.selectedChoices?.size) return;
+    if (applyLinkedSelectorChoices(context)) closeLinkedRecordSelector();
+  });
   document.getElementById("createContentLinkedRecordBtn")?.addEventListener(
     "click", createFromLinkedRecordSelector,
   );
