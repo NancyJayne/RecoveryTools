@@ -2099,7 +2099,11 @@
                       Archived
                     </label>
                   </fieldset>
-                  <button id="applyContentProductBtn" type="button" class="rounded bg-[#407471] px-4 py-2 text-white hover:bg-[#305a56]">Save product details</button>
+                  <div class="flex min-w-0 flex-col items-start gap-2">
+                    <button id="applyContentProductBtn" type="button" class="rounded bg-[#407471] px-4 py-2 text-white hover:bg-[#305a56]">Save product details</button>
+                    <p id="contentProductSaveFeedback" role="status" aria-live="polite"
+                      class="hidden max-w-xl rounded border px-3 py-2 text-sm"></p>
+                  </div>
                 </div>
                 </div>
               </section>

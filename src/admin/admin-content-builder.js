@@ -2974,6 +2974,20 @@ function linkedSelectorRecords(context = linkedRecordSelectorContext) {
   return linkedTemplateFieldRecords({ linkedTable: context.select.dataset.linkedTable });
 }
 
+async function refreshLinkedRecordSelectorData() {
+  const context = linkedRecordSelectorContext;
+  if (!context) return;
+  try {
+    const response = await getContentBuilderData();
+    if (linkedRecordSelectorContext !== context) return;
+    state.options = { ...state.options, ...(response.data?.options || {}) };
+    state.records = { ...state.records, ...(response.data?.records || {}) };
+    renderLinkedRecordSelector();
+  } catch (error) {
+    console.error("Failed to refresh linked content selector:", error);
+  }
+}
+
 function renderLinkedRecordSelector() {
   const context = linkedRecordSelectorContext;
   if (!context) return;
@@ -2993,7 +3007,7 @@ function renderLinkedRecordSelector() {
     `.content-template-linked-select[data-field-key="${CSS.escape(context.select.dataset.fieldKey || "")}"]`,
   )].filter((select) => select !== context.select).map((select) => select.value).filter(Boolean));
   const records = linkedSelectorRecords(context).filter((record) => {
-    const recordType = normalizedText(record.type || record.assetType);
+    const recordType = normalizedText(record.type || record.blueprintType || record.assetType);
     const recordStatus = normalizedText(record.status || "active");
     const tags = uniqueValues(record.tags || []).map(normalizedText);
     if (fixedType && recordType !== fixedType) return false;
@@ -3002,7 +3016,7 @@ function renderLinkedRecordSelector() {
     if (secondaryType && recordType !== normalizedText(secondaryType)) return false;
     if (secondaryTag && !tags.includes(normalizedText(secondaryTag))) return false;
     const haystack = normalizedText([
-      record.name, record.title, record.id, record.type, record.assetType, ...tags,
+      record.name, record.title, record.id, record.type, record.blueprintType, record.assetType, ...tags,
     ].filter(Boolean).join(" "));
     return terms.every((term) => haystack.includes(term));
   });
@@ -3092,6 +3106,7 @@ function openLinkedRecordSelector(trigger) {
   modal?.classList.add("flex");
   modal?.setAttribute("aria-hidden", "false");
   renderLinkedRecordSelector();
+  void refreshLinkedRecordSelectorData();
   document.getElementById("contentLinkedRecordSearch")?.focus();
   return true;
 }
@@ -4288,6 +4303,14 @@ function productRelationPayload() {
   syncSelectedProductVariantRows();
   populateGeneratedProductSku();
   const variants = parseProductVariants(document.getElementById("contentProductVariants")?.value);
+  const productStatus = currentProductEditorStatus();
+  variants.forEach((variant) => {
+    const inheritsMarketplace = !variant.marketplaceMode || variant.marketplaceMode === "inherit";
+    const canActivateWithProduct = ["draft", "review", "active"].includes(variant.status || "draft");
+    if (inheritsMarketplace && productStatus === "active" && canActivateWithProduct) {
+      variant.status = "active";
+    }
+  });
   variants.forEach((variant) => {
     const label = variant.name || variant.variantId || "Product variant";
     if (["scheduled", "coming-soon"].includes(variant.marketplaceMode) && !variant.marketplaceStartsAt) {
@@ -4697,6 +4720,7 @@ function chooseProductEntity(recordType, recordId) {
 function openContentProductDrawer() {
   const drawer = document.getElementById("contentProductDrawer");
   if (!drawer) return;
+  setProductSaveFeedback("", "");
   if (!drawer.contains(document.activeElement) && document.activeElement !== document.body) {
     productDrawerReturnFocus = document.activeElement;
   }
@@ -4918,7 +4942,20 @@ function syncProductArchivedFromVariants(variants = currentProductVariants()) {
 }
 
 function bundleProductOptions(selectedProductId = "") {
-  return (state.records.products || []).map((product) => {
+  const currentProductId = document.getElementById("contentProductId")?.value ||
+    document.getElementById("contentExistingProductId")?.value || "";
+  const products = [...(state.records.products || [])];
+  if (currentProductId) {
+    const draftProduct = {
+      id: currentProductId,
+      name: document.getElementById("contentName")?.value || currentProductId,
+      variants: currentProductVariants(),
+    };
+    const index = products.findIndex((product) => product.id === currentProductId);
+    if (index >= 0) products[index] = { ...products[index], ...draftProduct };
+    else products.push(draftProduct);
+  }
+  return products.map((product) => {
     const selected = product.id === selectedProductId ? " selected" : "";
     return `<option value="${escapeHTML(product.id)}"${selected}>${escapeHTML(product.name || product.id)}</option>`;
   }).join("");
@@ -5796,7 +5833,11 @@ function prerequisiteRowsMarkup(prerequisites = [], sourceVariantId = "") {
 }
 
 function bundleVariantOptions(productId, selectedVariantId = "") {
-  const product = (state.records.products || []).find((candidate) => candidate.id === productId);
+  const currentProductId = document.getElementById("contentProductId")?.value ||
+    document.getElementById("contentExistingProductId")?.value || "";
+  const product = productId && productId === currentProductId
+    ? { variants: currentProductVariants() }
+    : (state.records.products || []).find((candidate) => candidate.id === productId);
   return (product?.variants || []).map((variant) => {
     const variantId = variant.variantId || variant.id;
     const selected = variantId === selectedVariantId ? " selected" : "";
@@ -8700,6 +8741,33 @@ async function buildAndSavePayload(confirmDuplicate = false, action = "save") {
   }
 }
 
+function setProductSaveFeedback(type, message) {
+  const feedback = document.getElementById("contentProductSaveFeedback");
+  if (!feedback) return;
+  const styles = {
+    saving: ["border-blue-500", "bg-blue-950", "text-blue-100"],
+    success: ["border-emerald-500", "bg-emerald-950", "text-emerald-100"],
+    error: ["border-red-500", "bg-red-950", "text-red-100"],
+  };
+  Object.values(styles).flat().forEach((className) => feedback.classList.remove(className));
+  feedback.classList.add(...(styles[type] || styles.saving));
+  feedback.textContent = message;
+  feedback.classList.toggle("hidden", !message);
+}
+
+function focusProductVariantSaveIssue(variantId, section, selector) {
+  const row = [...document.querySelectorAll(".content-product-variant-row")].find((candidate) =>
+    (candidate.querySelector(".product-variant-id")?.value || candidate.dataset.productVariantId || "") ===
+      variantId);
+  if (!row) return;
+  row.querySelector(`[data-variant-editor="${section}"]`)?.click();
+  setTimeout(() => {
+    const field = row.querySelector(selector);
+    field?.scrollIntoView({ behavior: "smooth", block: "center" });
+    field?.focus({ preventScroll: true });
+  }, 0);
+}
+
 async function saveProductDetailsFromDrawer() {
   const button = document.getElementById("applyContentProductBtn");
   const returnStep = state.currentStep;
@@ -8709,6 +8777,7 @@ async function saveProductDetailsFromDrawer() {
     button.disabled = true;
     button.textContent = "Saving product details...";
   }
+  setProductSaveFeedback("saving", "Saving Product details. Please wait; one click is enough.");
   try {
     const payload = await formPayload(false);
     if (!payload.productRelation) throw new Error("Select or create a Product first.");
@@ -8716,12 +8785,14 @@ async function saveProductDetailsFromDrawer() {
     if (payload.productRelation.requiresSessionTime === true) {
       const incomplete = productVariants.find((variant) => !variant.eventStartAt || !variant.eventEndAt);
       if (incomplete) {
+        focusProductVariantSaveIssue(incomplete.variantId, "purchase", ".product-variant-event-start");
         throw new Error(`Enter the session start and end time for ${incomplete.name || "each Product variant"}.`);
       }
     }
     if (payload.productRelation.requiresLocation === true) {
       const incomplete = productVariants.find((variant) => !variant.eventLocation);
       if (incomplete) {
+        focusProductVariantSaveIssue(incomplete.variantId, "purchase", ".product-variant-event-location");
         throw new Error(`Enter the location or address for ${incomplete.name || "each Product variant"}.`);
       }
     }
@@ -8747,6 +8818,8 @@ async function saveProductDetailsFromDrawer() {
       history.replaceState({}, "", `/admin/content/builder?type=${encodeURIComponent(payload.recordType)}` +
         `&id=${encodeURIComponent(recordId)}`);
     }
+    setProductSaveFeedback("success", "Product details saved successfully.");
+    await new Promise((resolve) => setTimeout(resolve, 450));
     state.isDirty = false;
     closeContentProductDrawer();
     await loadData();
@@ -8770,7 +8843,9 @@ async function saveProductDetailsFromDrawer() {
     window.dispatchEvent(new CustomEvent("admin-product-saved"));
   } catch (error) {
     console.error("Failed to save Product details:", error);
-    showToast(error.message || "Failed to save Product details.", "error");
+    const message = error.message || "Failed to save Product details.";
+    setProductSaveFeedback("error", message);
+    showToast(message, "error");
   } finally {
     if (button) {
       button.dataset.saving = "false";
@@ -9106,6 +9181,11 @@ export async function setupContentBuilder() {
         showToast(error.message || "Failed to link the selected record.", "error");
       }
       return;
+    }
+    if (![...select.options].some((selectOption) => selectOption.value === recordId)) {
+      const record = linkedSelectorRecords(context).find((candidate) =>
+        (candidate.id || candidate.assetId) === recordId);
+      select.add(new Option(linkedTemplateRecordLabel(record || { id: recordId }), recordId));
     }
     select.value = recordId;
     refreshLinkedTemplatePickerLabel(select);
