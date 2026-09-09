@@ -2993,10 +2993,16 @@ function linkedSelectorRecords(context = linkedRecordSelectorContext) {
   return merged;
 }
 
-function linkedSelectorRecordVariants(record = {}) {
-  return Array.isArray(record.variants) && record.variants.length
-    ? record.variants
-    : Array.isArray(record.entityVariants) ? record.entityVariants : [];
+function linkedSelectorRecordVariants(record = {}, context = linkedRecordSelectorContext) {
+  const productCollection = normalizedText(context?.select?.dataset.linkedTable) === "products";
+  if (productCollection) {
+    return Array.isArray(record.variants) && record.variants.length
+      ? record.variants
+      : Array.isArray(record.entityVariants) ? record.entityVariants : [];
+  }
+  return Array.isArray(record.entityVariants) && record.entityVariants.length
+    ? record.entityVariants
+    : Array.isArray(record.variants) ? record.variants : [];
 }
 
 function linkedSelectorVariantId(variant = {}) {
@@ -3082,7 +3088,7 @@ function renderLinkedRecordSelector() {
       const selected = context.select.value === record.id;
       const unavailable = selectedElsewhere.has(record.id);
       const tags = uniqueValues(record.tags || []);
-      const variants = linkedSelectorRecordVariants(record);
+      const variants = linkedSelectorRecordVariants(record, context);
       const recordAssets = Array.isArray(record.assets) ? record.assets : [];
       const imageAsset = recordAssets.find((asset) => {
         const type = normalizedText(asset?.assetType || asset?.type);
@@ -9485,7 +9491,7 @@ export async function setupContentBuilder() {
     if (allVariants && linkedRecordSelectorContext?.multiple) {
       const recordId = allVariants.dataset.linkedSelectorAllVariants || "";
       const record = linkedSelectorRecords().find((candidate) => candidate.id === recordId);
-      linkedSelectorRecordVariants(record).forEach((variant) => {
+      linkedSelectorRecordVariants(record, linkedRecordSelectorContext).forEach((variant) => {
         const variantId = linkedSelectorVariantId(variant);
         if (linkedSelectorVariantUnavailable(linkedRecordSelectorContext, recordId, variantId)) return;
         const key = linkedSelectorChoiceKey(recordId, variantId);
