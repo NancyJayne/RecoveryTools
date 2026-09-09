@@ -5333,6 +5333,12 @@ function marketplaceTilePreviewMarkup() {
   const featured = document.getElementById("contentProductFeatured")?.checked === true;
   const archived = document.getElementById("contentProductArchived")?.checked === true;
   const marketplaceMode = document.getElementById("contentProductMarketplaceMode")?.value || "hidden";
+  const marketplaceListing = {
+    active: { label: "Visible now", classes: "border-emerald-500 bg-emerald-950/95 text-emerald-100" },
+    scheduled: { label: "Scheduled / hidden", classes: "border-amber-500 bg-amber-950/95 text-amber-100" },
+    "coming-soon": { label: "Coming soon", classes: "border-purple-500 bg-purple-950/95 text-purple-100" },
+    hidden: { label: "Hidden", classes: "border-purple-500 bg-purple-950/95 text-purple-100" },
+  }[marketplaceMode] || { label: "Review required", classes: "border-purple-500 bg-purple-950/95 text-purple-100" };
   const marketplaceAudience = document.getElementById("contentProductMarketplaceAudience")?.value || "public";
   const shopStatus = document.getElementById("contentProductShopStatus")?.value || "draft";
   const inventoryTracked = document.getElementById("contentProductInventoryTracked")?.checked === true;
@@ -5396,12 +5402,18 @@ function marketplaceTilePreviewMarkup() {
     ${previewState
     ? marketplacePreviewStateOverlay(previewState.label, previewState.tone, previewState.target)
     : ""}
-    <button type="button" data-product-editor-target="contentProductTileImageSource"
-      class="${marketplacePreviewAttention(!imageUrl, "flex h-48 w-full items-center justify-center overflow-hidden rounded bg-gray-950 text-xs text-gray-400 ring-[#407471] hover:ring-2")}">
-      ${imageUrl
+    <div class="relative">
+      <button type="button" data-product-editor-target="contentProductTileImageSource"
+        class="${marketplacePreviewAttention(!imageUrl, "flex h-48 w-full items-center justify-center overflow-hidden rounded bg-gray-950 text-xs text-gray-400 ring-[#407471] hover:ring-2")}">
+        ${imageUrl
     ? `<img src="${escapeHTML(imageUrl)}" alt="${escapeHTML(productName || "Product")}" class="h-full w-full object-cover">`
     : "Set Marketplace image"}
-    </button>
+      </button>
+      <button type="button" data-product-editor-target="contentProductMarketplaceMode"
+        class="absolute bottom-2 left-2 rounded border px-3 py-1.5 text-left text-xs font-semibold shadow-lg hover:ring-2 hover:ring-white/50 ${marketplaceListing.classes}">
+        Marketplace listing: ${escapeHTML(marketplaceListing.label)}
+      </button>
+    </div>
     <button type="button" data-product-editor-target="contentProductDeliveryType"
       class="absolute right-2 top-2 rounded bg-[#407471] px-2 py-1 text-xs font-semibold text-white">${escapeHTML(productType)}</button>
     ${featured ? `<button type="button" data-product-editor-target="contentProductFeatured" class="absolute left-2 top-2 rounded bg-yellow-500 px-2 py-1 text-xs text-black">★ Featured</button>` : ""}
@@ -5419,6 +5431,7 @@ function marketplaceTilePreviewMarkup() {
     <div class="mt-4 border-t border-gray-700 pt-3">
       <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Product setup</p>
       <div class="flex flex-wrap gap-2 text-xs">
+        <button type="button" data-product-editor-target="contentProductMarketplaceMode" class="w-full rounded border px-2 py-1.5 text-left font-semibold ${marketplaceListing.classes}">Marketplace listing: ${escapeHTML(marketplaceListing.label)}</button>
         <button type="button" data-product-status-controls class="rounded-full border px-2 py-1 ${lifecycleStatusClasses(currentProductEditorStatus())} hover:ring-2">Status: ${escapeHTML(currentProductEditorStatus())}</button>
         <button type="button" data-product-editor-target="contentProductMarketplaceAudience" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">Audience: ${marketplaceAudience === "affiliates" ? "Approved affiliates only" : "Everyone"}</button>
         <button type="button" data-product-editor-target="contentProductFeatured" class="rounded bg-gray-950 px-2 py-1 text-gray-200 hover:text-white">${featured ? "★ Featured" : "☆ Not featured"}</button>
