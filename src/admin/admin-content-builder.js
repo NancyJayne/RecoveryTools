@@ -1850,7 +1850,7 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
             </div>
           </div>
           <div data-variant-editor-section="sale" class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
-            <h5 class="font-semibold text-white">Price and sale</h5>
+            <h5 class="font-semibold text-white">Sale</h5>
             <div class="mt-3 grid gap-3 md:grid-cols-2">
               <label class="product-variant-affiliate-pricing-field ${affiliateAvailable ? "" : "hidden"} block text-sm">Variant affiliate-price override
                 <input class="product-variant-wholesale-price mt-1 w-full rounded bg-gray-800 px-3 py-2 text-white"
@@ -5911,7 +5911,7 @@ function marketplaceVariantCardPreview(
       <button type="button" data-variant-connection="blueprint" class="${marketplacePreviewAttention(blueprintMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white", blueprintTone)}">Blueprints</button>
       <button type="button" data-variant-connection="unlock" class="${marketplacePreviewAttention(unlockMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white", unlockTone)}">Unlocks</button>
       <button type="button" data-variant-editor="visibility" class="${marketplacePreviewAttention(visibilityMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Visibility &amp; status</button>
-      <button type="button" data-variant-editor="sale" class="${marketplacePreviewAttention(priceSaleMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Price &amp; sale</button>
+      <button type="button" data-variant-editor="sale" class="${marketplacePreviewAttention(priceSaleMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white")}">Sale</button>
       <button type="button" data-variant-editor="promotion" class="${marketplacePreviewAttention(promotionMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white", "optional")}">Promotion videos</button>
       <button type="button" data-variant-editor="prerequisites" class="${marketplacePreviewAttention(prerequisitesMissing, "rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:border-[#407471] hover:text-white", "optional")}">Prerequisites</button>
       </div>
@@ -10465,7 +10465,7 @@ export async function setupContentBuilder() {
         price: "Marketplace price",
         purchase: "Purchase setup",
         visibility: "Visibility and status",
-        sale: "Price and sale",
+        sale: "Sale",
         promotion: "Promotion videos",
         prerequisites: "Purchase prerequisites",
       };
