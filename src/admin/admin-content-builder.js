@@ -9078,6 +9078,87 @@ function setProductSaveFeedback(type, message) {
   feedback.classList.toggle("hidden", !message);
 }
 
+function clearProductSaveFieldErrors() {
+  document.querySelectorAll("#contentProductDrawer [data-product-save-error]").forEach((element) => {
+    const addedClasses = String(element.dataset.productSaveErrorClasses || "").split(" ").filter(Boolean);
+    element.classList.remove(...addedClasses);
+    element.removeAttribute("aria-invalid");
+    delete element.dataset.productSaveError;
+    delete element.dataset.productSaveErrorClasses;
+  });
+  document.querySelectorAll("#contentProductDrawer .product-save-field-error").forEach((note) => note.remove());
+}
+
+function markProductSaveFieldError(target, message) {
+  if (!target) return false;
+  const visibleTarget = target.matches("input, select, textarea, button") && !target.classList.contains("hidden")
+    ? target
+    : target.closest(
+      ".product-bundle-component-row, .product-variant-content-link-row, " +
+      ".content-product-unlock-row, [data-variant-editor-section], details, section",
+    ) || target;
+  const attentionClasses = ["border-purple-500", "bg-purple-950/40", "ring-1", "ring-purple-500"];
+  const addedClasses = attentionClasses.filter((className) => !visibleTarget.classList.contains(className));
+  visibleTarget.classList.add(...addedClasses);
+  visibleTarget.dataset.productSaveError = "true";
+  visibleTarget.dataset.productSaveErrorClasses = addedClasses.join(" ");
+  if (target.matches("input, select, textarea")) target.setAttribute("aria-invalid", "true");
+  const note = document.createElement("p");
+  note.className = "product-save-field-error mt-2 text-sm font-medium text-purple-300";
+  note.textContent = `Needs attention: ${message}`;
+  visibleTarget.insertAdjacentElement("afterend", note);
+  visibleTarget.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (target.matches("input, select, textarea, button") && !target.classList.contains("hidden")) {
+    target.focus({ preventScroll: true });
+  }
+  return true;
+}
+
+function highlightProductSaveError(message) {
+  const normalized = normalizedText(message);
+  const activeVariantPanel = [...document.querySelectorAll(".product-variant-editor-panel")]
+    .find((panel) => !panel.classList.contains("hidden"));
+  const activeVariantRow = activeVariantPanel?.closest(".content-product-variant-row");
+  const activeConnectionVariantId = document.getElementById("contentVariantOwnedConnections")
+    ?.dataset.activeProductVariantId || "";
+  const connectionVariantRow = activeConnectionVariantId
+    ? document.querySelector(`.content-product-variant-row[data-product-variant-id="${CSS.escape(activeConnectionVariantId)}"]`)
+    : null;
+  const variantRow = activeVariantRow || connectionVariantRow;
+  let target = null;
+  if (normalized.includes("session start") || normalized.includes("session end")) {
+    target = variantRow?.querySelector(".product-variant-event-start");
+  } else if (normalized.includes("location") || normalized.includes("address")) {
+    target = variantRow?.querySelector(".product-variant-event-location");
+  } else if (normalized.includes("linked product variant") || normalized.includes("cannot include itself")) {
+    target = variantRow?.querySelector(".product-bundle-component-row");
+  } else if (normalized.includes("manufacturing") || normalized.includes("operations blueprint") ||
+      normalized.includes("blueprint type")) {
+    target = [...document.querySelectorAll(".product-variant-content-link-row")]
+      .find((row) => !row.classList.contains("hidden"));
+  } else if (normalized.includes("unlock after purchase") || normalized.includes("content to unlock")) {
+    target = [...document.querySelectorAll(".content-product-unlock-row")]
+      .find((row) => !row.classList.contains("hidden"));
+  } else if (normalized.includes("affiliate wholesale")) {
+    target = document.getElementById("contentProductWholesalePrice");
+  } else if (normalized.includes("marketplace start")) {
+    target = variantRow?.querySelector(".product-variant-marketplace-start") ||
+      document.getElementById("contentProductMarketplaceStartsAt");
+  } else if (normalized.includes("marketplace end")) {
+    target = variantRow?.querySelector(".product-variant-marketplace-end") ||
+      document.getElementById("contentProductMarketplaceEndsAt");
+  } else if (normalized.includes("sale end")) {
+    target = variantRow?.querySelector(".product-variant-sale-end") ||
+      document.getElementById("contentProductSaleEndsAt");
+  } else if (normalized.includes("select or create a product")) {
+    target = document.getElementById("contentProductId");
+  }
+  target ||= activeVariantPanel?.querySelector(`[data-variant-editor-section="${CSS.escape(activeVariantPanel.dataset.editorSection || "")}"]`);
+  target ||= document.querySelector("#contentProductDrawer details[open]");
+  target ||= document.getElementById("contentProductSaveFeedback");
+  markProductSaveFieldError(target, message);
+}
+
 function focusProductVariantSaveIssue(variantId, section, selector) {
   const row = [...document.querySelectorAll(".content-product-variant-row")].find((candidate) =>
     (candidate.querySelector(".product-variant-id")?.value || candidate.dataset.productVariantId || "") ===
@@ -9101,6 +9182,7 @@ async function saveProductDetailsFromDrawer({ closeDrawer = true, validateComple
     button.textContent = "Saving product details...";
   }
   setProductSaveFeedback("saving", "Saving Product details. Please wait; one click is enough.");
+  clearProductSaveFieldErrors();
   try {
     const payload = await formPayload(false);
     if (!payload.productRelation) throw new Error("Select or create a Product first.");
@@ -9182,6 +9264,7 @@ async function saveProductDetailsFromDrawer({ closeDrawer = true, validateComple
     console.error("Failed to save Product details:", error);
     const message = error.message || "Failed to save Product details.";
     setProductSaveFeedback("error", message);
+    highlightProductSaveError(message);
     showToast(message, "error");
     return false;
   } finally {
