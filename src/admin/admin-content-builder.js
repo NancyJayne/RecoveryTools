@@ -3156,6 +3156,12 @@ function openLinkedRecordSelector(trigger) {
     showToast("Could not open this selector. Close and reopen the Product Creator, then try again.", "error");
     return false;
   }
+  if (select.classList.contains("content-product-unlock-target")) {
+    const unlockType = select.closest(".content-product-unlock-row")
+      ?.querySelector(".content-product-unlock-type")?.value || "Plan";
+    select.dataset.linkedTable = `${unlockType}s`;
+    select.dataset.fieldName = `${unlockType} content to unlock`;
+  }
   const multiple = select.dataset.selectorMultiple === "true";
   const selectedChoices = new Map();
   if (multiple) {
@@ -6428,10 +6434,12 @@ function renderProductUnlockRows(grants = []) {
           <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">${escapeHTML(entityType)} unlock</p>
           <p class="mt-1 break-words text-sm text-[#9edbd7]">${escapeHTML(selectionLabel)}</p>
         </div>
-        <select class="content-product-unlock-type min-w-0 rounded bg-gray-800 px-2 py-2 text-sm text-white"
-          data-row-index="${index}">
-          ${typeOptions}
-        </select>
+        <label class="min-w-0 text-xs text-gray-400">Unlock content type
+          <select class="content-product-unlock-type mt-1 w-full min-w-0 rounded bg-gray-800 px-2 py-2 text-sm text-white"
+            data-row-index="${index}">
+            ${typeOptions}
+          </select>
+        </label>
         <span class="content-template-linked-picker hidden">
           <select class="content-product-unlock-target content-template-linked-select hidden"
             data-field-key="product-unlock-${escapeHTML(grant.productVariantId || "all")}-${index}"
