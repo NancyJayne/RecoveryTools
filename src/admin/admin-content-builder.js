@@ -9091,10 +9091,10 @@ function focusProductVariantSaveIssue(variantId, section, selector) {
   }, 0);
 }
 
-async function saveProductDetailsFromDrawer() {
+async function saveProductDetailsFromDrawer({ closeDrawer = true, validateComplete = true } = {}) {
   const button = document.getElementById("applyContentProductBtn");
   const returnStep = state.currentStep;
-  if (button?.dataset.saving === "true") return;
+  if (button?.dataset.saving === "true") return false;
   if (button) {
     button.dataset.saving = "true";
     button.disabled = true;
@@ -9105,14 +9105,14 @@ async function saveProductDetailsFromDrawer() {
     const payload = await formPayload(false);
     if (!payload.productRelation) throw new Error("Select or create a Product first.");
     const productVariants = payload.productRelation.variants || [];
-    if (payload.productRelation.requiresSessionTime === true) {
+    if (validateComplete && payload.productRelation.requiresSessionTime === true) {
       const incomplete = productVariants.find((variant) => !variant.eventStartAt || !variant.eventEndAt);
       if (incomplete) {
         focusProductVariantSaveIssue(incomplete.variantId, "purchase", ".product-variant-event-start");
         throw new Error(`Enter the session start and end time for ${incomplete.name || "each Product variant"}.`);
       }
     }
-    if (payload.productRelation.requiresLocation === true) {
+    if (validateComplete && payload.productRelation.requiresLocation === true) {
       const incomplete = productVariants.find((variant) => !variant.eventLocation);
       if (incomplete) {
         focusProductVariantSaveIssue(incomplete.variantId, "purchase", ".product-variant-event-location");
@@ -9142,6 +9142,19 @@ async function saveProductDetailsFromDrawer() {
         `&id=${encodeURIComponent(recordId)}`);
     }
     setProductSaveFeedback("success", "Product details saved successfully.");
+    if (!closeDrawer) {
+      state.editingRecord = {
+        ...(state.editingRecord || {}),
+        ...payload,
+        id: state.editingRecord?.id,
+        recordType: state.editingRecord?.recordType || payload.recordType,
+      };
+      state.isDirty = false;
+      renderBuilderSummaries(state.editingRecord);
+      showToast("Product section saved.", "success");
+      window.dispatchEvent(new CustomEvent("admin-product-saved"));
+      return true;
+    }
     await new Promise((resolve) => setTimeout(resolve, 450));
     state.isDirty = false;
     closeContentProductDrawer();
@@ -9164,16 +9177,37 @@ async function saveProductDetailsFromDrawer() {
     renderBuilderSummaries(state.editingRecord);
     showToast("Product details saved.", "success");
     window.dispatchEvent(new CustomEvent("admin-product-saved"));
+    return true;
   } catch (error) {
     console.error("Failed to save Product details:", error);
     const message = error.message || "Failed to save Product details.";
     setProductSaveFeedback("error", message);
     showToast(message, "error");
+    return false;
   } finally {
     if (button) {
       button.dataset.saving = "false";
       button.disabled = false;
       button.textContent = "Save product details";
+    }
+  }
+}
+
+async function saveProductSection(doneButton) {
+  if (doneButton?.dataset.saving === "true") return false;
+  const originalText = doneButton?.textContent || "Done";
+  if (doneButton) {
+    doneButton.dataset.saving = "true";
+    doneButton.disabled = true;
+    doneButton.textContent = "Saving...";
+  }
+  try {
+    return await saveProductDetailsFromDrawer({ closeDrawer: false, validateComplete: false });
+  } finally {
+    if (doneButton) {
+      doneButton.dataset.saving = "false";
+      doneButton.disabled = false;
+      doneButton.textContent = originalText;
     }
   }
 }
@@ -9928,7 +9962,7 @@ export async function setupContentBuilder() {
       state.isDirty = true;
     });
   });
-  document.getElementById("contentProductDrawer")?.addEventListener("click", (event) => {
+  document.getElementById("contentProductDrawer")?.addEventListener("click", async (event) => {
     const editLinkedRecord = event.target.closest(".edit-selected-linked-record");
     if (editLinkedRecord) {
       editSelectedLinkedRecord(editLinkedRecord);
@@ -9941,6 +9975,7 @@ export async function setupContentBuilder() {
     }
     const closeContext = event.target.closest("[data-close-product-context]");
     if (closeContext) {
+      if (!await saveProductSection(closeContext)) return;
       closeContext.closest("[data-product-context-panel]")?.classList.add("hidden");
       returnToProductTilePreview();
       return;
@@ -9950,6 +9985,7 @@ export async function setupContentBuilder() {
     const section = closeButton.closest("details");
     if (!section) return;
     if (section.id === "contentProductFulfilmentSection") section.dataset.reviewed = "true";
+    if (!await saveProductSection(closeButton)) return;
     section.open = false;
     if (section.hasAttribute("data-product-preview-section")) section.classList.add("hidden");
     returnToProductTilePreview();
@@ -9970,7 +10006,8 @@ export async function setupContentBuilder() {
     }
     setProductEditorStatus(nextStatus);
   });
-  document.getElementById("closeVariantOwnedConnectionsBtn")?.addEventListener("click", () => {
+  document.getElementById("closeVariantOwnedConnectionsBtn")?.addEventListener("click", async (event) => {
+    if (!await saveProductSection(event.currentTarget)) return;
     const owner = document.getElementById("contentVariantOwnedConnections");
     owner?.classList.add("hidden");
     const summary = document.getElementById("contentVariantOwnedConnectionsSummary");
@@ -10054,7 +10091,7 @@ export async function setupContentBuilder() {
     const trigger = event.target.closest(".open-admin-linked-variant-bubble");
     if (trigger && !trigger.contains(event.relatedTarget)) closeAdminLinkedVariantBubbleSoon();
   });
-  document.getElementById("contentProductVariantRows")?.addEventListener("click", (event) => {
+  document.getElementById("contentProductVariantRows")?.addEventListener("click", async (event) => {
     const editLinkedRecord = event.target.closest(".edit-selected-linked-record");
     if (editLinkedRecord) {
       event.stopPropagation();
@@ -10206,6 +10243,7 @@ export async function setupContentBuilder() {
     const closeEditor = event.target.closest("[data-close-variant-editor]");
     if (closeEditor) {
       syncSelectedProductVariantRows();
+      if (!await saveProductSection(closeEditor)) return;
       const panel = closeEditor.closest(".product-variant-editor-panel");
       const row = closeEditor.closest(".content-product-variant-row");
       panel?.classList.add("hidden");
@@ -10220,6 +10258,7 @@ export async function setupContentBuilder() {
       if (panel?.dataset.editorSection === "purchase" && row) {
         row.dataset.purchaseSetupReviewed = "true";
       }
+      if (!await saveProductSection(closeSection)) return;
       closeVariantEditorAndReturn(row);
       state.isDirty = true;
       return;
@@ -10255,9 +10294,9 @@ export async function setupContentBuilder() {
     const saveVariant = event.target.closest("[data-save-variant-editor]");
     if (saveVariant) {
       const row = saveVariant.closest(".content-product-variant-row");
+      syncSelectedProductVariantRows();
+      if (!await saveProductSection(saveVariant)) return;
       closeVariantEditorAndReturn(row);
-      state.isDirty = true;
-      showToast("Variant changes are ready. Save Product details when you finish editing.", "success");
       return;
     }
     const connectionTrigger = event.target.closest("[data-variant-connection]");
