@@ -1818,12 +1818,12 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
               </div>
               <div class="flex flex-wrap gap-2">
                 <button type="button" class="import-blueprint-inclusions rounded border border-blue-500 px-3 py-1 text-xs text-blue-200">Import from connected Blueprint</button>
-                <button type="button" class="add-product-bundle-component rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add linked Product</button>
                 <button type="button" class="add-product-manual-inclusion rounded border border-gray-600 px-3 py-1 text-xs text-gray-200">Add unlinked inclusion</button>
               </div>
             </div>
             <div class="product-bundle-component-rows mt-3 space-y-2">${bundleComponentsMarkup(productVariant.bundleComponents || [])}</div>
             <div class="product-manual-inclusion-rows mt-2 space-y-2">${manualInclusionsMarkup(productVariant.manualInclusions, productVariant.inclusions)}</div>
+            <div class="mt-3 flex justify-end"><button type="button" class="add-product-bundle-component rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add or edit linked Products</button></div>
           </div>
           </section>
           <div data-variant-editor-section="visibility" class="rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
@@ -1905,12 +1905,12 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
                 <h5 class="font-semibold text-white">Purchase prerequisites</h5>
                 <p class="mt-1 text-xs text-gray-400">Choose an exact Product variant for automatic purchase/access checks, or an Item such as an external qualification for future manual verification.</p>
               </div>
-              <div class="flex flex-wrap gap-2">
-                <button type="button" class="choose-external-qualification rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Choose or create external qualification</button>
-                <button type="button" class="add-product-prerequisite rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add prerequisite</button>
-              </div>
             </div>
             <div class="product-prerequisite-rows mt-3 space-y-2">${prerequisiteRowsMarkup(productVariant.prerequisiteProductVariants || [], productVariant.variantId || "")}</div>
+            <div class="mt-3 flex flex-wrap justify-end gap-2">
+              <button type="button" class="choose-external-qualification rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add or edit external qualifications</button>
+              <button type="button" class="add-product-prerequisite rounded border border-[#407471] px-3 py-1 text-xs text-[#9edbd7]">Add or edit Product prerequisites</button>
+            </div>
           </div>
           <div data-variant-editor-section="visibility" class="variant-editor-actions rounded border border-gray-700 p-3 md:col-span-2 xl:col-span-4">
             <h5 class="font-semibold text-white">Variant status and save</h5>
@@ -3158,11 +3158,42 @@ function openLinkedRecordSelector(trigger) {
   }
   const multiple = select.dataset.selectorMultiple === "true";
   const selectedChoices = new Map();
-  if (multiple && select.value) {
+  if (multiple) {
     const row = select.closest(".product-variant-content-link-row, .content-product-unlock-row, .product-prerequisite-row, .product-bundle-component-row, .content-template-linked-row");
-    const variantSelect = row?.querySelector(".variant-content-blueprint-variant, .content-product-unlock-target-variant, .product-prerequisite-variant, .product-bundle-component-variant, .content-template-linked-variant");
-    const key = linkedSelectorChoiceKey(select.value, variantSelect?.value || "");
-    selectedChoices.set(key, { recordId: select.value, variantId: variantSelect?.value || "" });
+    const owner = row?.closest("#productVariantContentLinkRows, #contentProductUnlockRows, .product-prerequisite-rows, .product-bundle-component-rows, .content-template-linked-rows") || row;
+    const selectorClass = [...select.classList].find((className) => [
+      "variant-content-blueprint",
+      "content-product-unlock-target",
+      "product-prerequisite-product-selector",
+      "product-prerequisite-item-selector",
+      "product-bundle-component-product",
+      "content-template-linked-select",
+    ].includes(className));
+    let peerSelects = selectorClass ? [...owner.querySelectorAll(`.${selectorClass}`)] : [select];
+    if (row?.classList.contains("product-variant-content-link-row")) {
+      const productVariantId = row.querySelector(".variant-content-product-variant")?.value || "";
+      const linkRole = row.querySelector(".variant-content-link-role")?.value || "ManufacturedFrom";
+      peerSelects = peerSelects.filter((peer) => {
+        const peerRow = peer.closest(".product-variant-content-link-row");
+        return peerRow?.querySelector(".variant-content-product-variant")?.value === productVariantId &&
+          peerRow?.querySelector(".variant-content-link-role")?.value === linkRole;
+      });
+    } else if (row?.classList.contains("content-product-unlock-row")) {
+      const productVariantId = row.querySelector(".content-product-unlock-variant")?.value || "";
+      const entityType = row.querySelector(".content-product-unlock-type")?.value || "Plan";
+      peerSelects = peerSelects.filter((peer) => {
+        const peerRow = peer.closest(".content-product-unlock-row");
+        return peerRow?.querySelector(".content-product-unlock-variant")?.value === productVariantId &&
+          peerRow?.querySelector(".content-product-unlock-type")?.value === entityType;
+      });
+    }
+    peerSelects.forEach((peer) => {
+      if (!peer.value || peer.dataset.linkedTable !== select.dataset.linkedTable) return;
+      const peerRow = peer.closest(".product-variant-content-link-row, .content-product-unlock-row, .product-prerequisite-row, .product-bundle-component-row, .content-template-linked-row");
+      const variantSelect = peerRow?.querySelector(".variant-content-blueprint-variant, .content-product-unlock-target-variant, .product-prerequisite-variant, .product-bundle-component-variant, .content-template-linked-variant");
+      const key = linkedSelectorChoiceKey(peer.value, variantSelect?.value || "");
+      selectedChoices.set(key, { recordId: peer.value, variantId: variantSelect?.value || "" });
+    });
   }
   linkedRecordSelectorContext = { trigger, select, multiple, selectedChoices };
   const records = linkedSelectorRecords();
@@ -3218,56 +3249,69 @@ function applyLinkedSelectorChoices(context) {
   const prerequisiteRow = select.closest(".product-prerequisite-row");
   const bundleRow = select.closest(".product-bundle-component-row");
   if (blueprintRow) {
-    const rows = [...document.querySelectorAll(".product-variant-content-link-row")];
-    const index = rows.indexOf(blueprintRow);
     const links = productVariantContentLinksFromRows(true);
-    const base = links[index] || {};
-    links.splice(index, 1, ...choices.map((choice) => ({
-      ...base,
+    const ownerVariantId = blueprintRow.querySelector(".variant-content-product-variant")?.value || "";
+    const linkRole = blueprintRow.querySelector(".variant-content-link-role")?.value || "ManufacturedFrom";
+    const retained = links.filter((link) =>
+      link.productVariantId !== ownerVariantId || link.linkRole !== linkRole);
+    retained.push(...choices.map((choice) => ({
+      productVariantId: ownerVariantId,
+      entityType: "Blueprint",
       entityId: choice.recordId,
       entityVariantId: choice.variantId,
+      linkRole,
+      status: "active",
     })));
-    renderProductVariantContentLinkRows(links);
+    renderProductVariantContentLinkRows(retained);
   } else if (unlockRow) {
-    const rows = [...document.querySelectorAll(".content-product-unlock-row")];
-    const index = rows.indexOf(unlockRow);
     const grants = productUnlocksFromRows(true);
-    const base = grants[index] || {};
-    grants.splice(index, 1, ...choices.map((choice) => ({
-      ...base,
+    const ownerVariantId = unlockRow.querySelector(".content-product-unlock-variant")?.value || "";
+    const accessEntityType = unlockRow.querySelector(".content-product-unlock-type")?.value || "Plan";
+    const matching = grants.filter((grant) =>
+      grant.productVariantId === ownerVariantId && grant.accessEntityType === accessEntityType);
+    const retained = grants.filter((grant) =>
+      grant.productVariantId !== ownerVariantId || grant.accessEntityType !== accessEntityType);
+    retained.push(...choices.map((choice) => ({
+      ...(matching.find((grant) => grant.accessEntityId === choice.recordId &&
+        grant.accessEntityVariantId === choice.variantId) || matching[0] || {}),
+      productVariantId: ownerVariantId,
+      accessEntityType,
       accessEntityId: choice.recordId,
       accessEntityVariantId: choice.variantId,
     })));
-    renderProductUnlockRows(grants);
+    renderProductUnlockRows(retained);
   } else if (prerequisiteRow) {
     const productRow = prerequisiteRow.closest(".content-product-variant-row");
     const sourceVariantId = productRow?.querySelector(".product-variant-id")?.value || "";
     const container = prerequisiteRow.closest(".product-prerequisite-rows");
     const rows = [...(container?.querySelectorAll(".product-prerequisite-row") || [])];
-    const index = rows.indexOf(prerequisiteRow);
     const prerequisites = rows.map((row) => prerequisiteFromRow(row) || {});
     const itemRequirement = prerequisiteRow.querySelector(".product-prerequisite-kind")?.value === "item";
-    prerequisites.splice(index, 1, ...choices.map((choice) => itemRequirement
+    const retained = prerequisites.filter((entry) =>
+      itemRequirement ? entry.requirementType !== "item" : entry.requirementType === "item");
+    retained.push(...choices.map((choice) => itemRequirement
       ? { requirementType: "item", itemId: choice.recordId }
       : { requirementType: "product-variant", productId: choice.recordId, productVariantId: choice.variantId }));
-    if (container) container.innerHTML = prerequisiteRowsMarkup(prerequisites, sourceVariantId);
+    if (container) container.innerHTML = prerequisiteRowsMarkup(retained, sourceVariantId);
   } else if (bundleRow) {
     const productRow = bundleRow.closest(".content-product-variant-row");
     const container = bundleRow.closest(".product-bundle-component-rows");
-    const rows = [...(container?.querySelectorAll(".product-bundle-component-row") || [])];
-    const index = rows.indexOf(bundleRow);
     syncSelectedProductVariantRows();
     const ownerVariantId = productRow?.querySelector(".product-variant-id")?.value || "";
     const variant = currentProductVariants().find((candidate) => candidate.variantId === ownerVariantId) || {};
     const components = variant.bundleComponents || [];
-    const base = components[index] || { quantity: 1, inventoryAction: "deduct" };
-    components.splice(index, 1, ...choices.map((choice, choiceIndex) => ({
-      ...base,
-      bundleComponentId: choiceIndex === 0 ? base.bundleComponentId : "",
-      componentProductId: choice.recordId,
-      componentProductVariantId: choice.variantId,
-    })));
-    if (container) container.innerHTML = bundleComponentsMarkup(components);
+    const nextComponents = choices.map((choice, choiceIndex) => {
+      const existing = components.find((component) =>
+        component.componentProductId === choice.recordId &&
+        component.componentProductVariantId === choice.variantId);
+      return {
+        ...(existing || { quantity: 1, inventoryAction: "deduct" }),
+        bundleComponentId: existing?.bundleComponentId || `BUNDLE-COMPONENT-${Date.now()}-${choiceIndex}`,
+        componentProductId: choice.recordId,
+        componentProductVariantId: choice.variantId,
+      };
+    });
+    if (container) container.innerHTML = bundleComponentsMarkup(nextComponents);
   } else {
     const field = select.closest(".content-template-linked-field");
     if (!field) return false;
@@ -5989,15 +6033,24 @@ function prerequisiteRowsMarkup(prerequisites = [], sourceVariantId = "") {
       entry.productVariantId,
       sourceVariantId,
     );
-    return `<div class="product-prerequisite-row grid min-w-0 gap-2 rounded border border-gray-700 p-2 sm:grid-cols-2">
-      <select class="product-prerequisite-kind rounded bg-gray-800 px-2 py-2 text-white">
+    const record = itemRequirement
+      ? (state.records.items || []).find((item) => item.id === entry.itemId)
+      : (state.records.products || []).find((product) => product.id === entry.productId);
+    const selectedVariant = itemRequirement ? null : (record?.variants || []).find((variant) =>
+      (variant.variantId || variant.id) === entry.productVariantId);
+    const selectionLabel = record
+      ? `${record.name || record.id}${selectedVariant ? ` → ${selectedVariant.name || selectedVariant.variantId || selectedVariant.id}` : ""}`
+      : (itemRequirement ? "No external qualification selected" : "No Product variant selected");
+    return `<div class="product-prerequisite-row flex min-w-0 flex-wrap items-center gap-3 rounded border border-gray-700 bg-gray-950/40 p-3">
+      <div class="min-w-48 flex-1"><p class="text-xs font-semibold uppercase tracking-wide text-gray-400">${itemRequirement ? "External qualification" : "Product prerequisite"}</p><p class="mt-1 break-words text-sm text-[#9edbd7]">${escapeHTML(selectionLabel)}</p></div>
+      <select class="product-prerequisite-kind w-auto rounded bg-gray-800 px-2 py-2 text-sm text-white" aria-label="Prerequisite type">
         <option value="product"${itemRequirement ? "" : " selected"}>Product variant prerequisite</option>
         <option value="item"${itemRequirement ? " selected" : ""}>External qualification</option>
       </select>
       <select class="product-prerequisite-target hidden">
         <option value="${escapeHTML(itemRequirement ? entry.itemId || "" : entry.productId || "")}" selected></option>
       </select>
-      <span class="content-template-linked-picker product-prerequisite-product-picker grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]${itemRequirement ? " hidden" : ""}">
+      <span class="content-template-linked-picker product-prerequisite-product-picker hidden">
         <select class="product-prerequisite-product-selector content-template-linked-select hidden"
           data-field-key="product-prerequisite-product-${index}" data-field-name="Prerequisite Product"
           data-linked-table="Products" data-linked-type-filter="" data-linked-status-filter=""
@@ -6005,11 +6058,11 @@ function prerequisiteRowsMarkup(prerequisites = [], sourceVariantId = "") {
           data-relationship-label="Prerequisites for">
           <option value="">Choose prerequisite Product</option>${productOptions}
         </select>
-        <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700"
+        <button type="button" class="open-content-linked-selector"
           data-linked-selector-target=".product-prerequisite-product-selector">Choose prerequisite Product</button>
-        <button type="button" class="edit-selected-linked-record rounded border border-gray-600 px-3 py-2 text-xs text-gray-200" disabled>Edit selected</button>
+        <button type="button" class="edit-selected-linked-record" disabled>Edit selected</button>
       </span>
-      <span class="content-template-linked-picker product-prerequisite-item-picker grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]${itemRequirement ? "" : " hidden"}">
+      <span class="content-template-linked-picker product-prerequisite-item-picker hidden">
         <select class="product-prerequisite-item-selector content-template-linked-select hidden"
           data-field-key="product-prerequisite-item-${index}" data-field-name="External qualification"
           data-linked-table="Items" data-linked-type-filter="Qualification" data-linked-status-filter=""
@@ -6017,15 +6070,15 @@ function prerequisiteRowsMarkup(prerequisites = [], sourceVariantId = "") {
           data-relationship-label="External qualifications for">
           <option value="">Choose external qualification</option>${itemOptions}
         </select>
-        <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700"
+        <button type="button" class="open-content-linked-selector"
           data-linked-selector-target=".product-prerequisite-item-selector">Choose external qualification</button>
-        <button type="button" class="edit-selected-linked-record rounded border border-gray-600 px-3 py-2 text-xs text-gray-200" disabled>Edit selected</button>
+        <button type="button" class="edit-selected-linked-record" disabled>Edit selected</button>
       </span>
-      <select class="product-prerequisite-variant rounded bg-gray-800 px-2 py-2 text-white"${itemRequirement ? " disabled" : ""}>
+      <select class="product-prerequisite-variant hidden"${itemRequirement ? " disabled" : ""}>
         <option value="">${itemRequirement ? "Manual verification will be added later" : "Choose required variant"}</option>
         ${variantOptions}
       </select>
-      <button type="button" class="remove-product-prerequisite justify-self-start rounded border border-red-700 px-3 py-1 text-red-200 sm:col-span-2">Remove</button>
+      <button type="button" class="remove-product-prerequisite rounded border border-red-700 px-3 py-1 text-sm text-red-200">Remove</button>
     </div>`;
   }).join("") || "<p class=\"product-prerequisite-empty text-xs text-gray-400\">No prerequisites.</p>";
 }
@@ -6053,9 +6106,10 @@ function bundleComponentsMarkup(components = []) {
       ? `${product.name || product.id}${variant ? ` → ${variant.name || variant.variantId || variant.id}` : ""}`
       : "Choose linked Product variants";
     return `
-    <div class="product-bundle-component-row grid min-w-0 gap-2 rounded border border-gray-700 p-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_6rem_minmax(10rem,auto)_auto]"
+    <div class="product-bundle-component-row grid min-w-0 gap-3 rounded border border-gray-700 bg-gray-950/40 p-3 sm:grid-cols-[minmax(12rem,1fr)_6rem_minmax(10rem,auto)_auto] sm:items-end"
       data-bundle-component-id="${escapeHTML(component.bundleComponentId || `BUNDLE-COMPONENT-${index + 1}`)}">
-      <span class="content-template-linked-picker grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <div class="min-w-0"><p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Linked Product variant</p><p class="mt-1 break-words text-sm text-[#9edbd7]">${escapeHTML(selectionLabel)}</p></div>
+      <span class="content-template-linked-picker hidden">
       <select class="product-bundle-component-product content-template-linked-select hidden"
         data-field-key="product-inclusion-${index}" data-field-name="Linked Product inclusion"
         data-linked-table="Products" data-linked-type-filter="" data-linked-status-filter=""
@@ -6064,7 +6118,7 @@ function bundleComponentsMarkup(components = []) {
         <option value="">Choose underlying Product</option>
         ${bundleProductOptions(component.componentProductId)}
       </select>
-      <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">${escapeHTML(selectionLabel)}</button>
+      <button type="button" class="open-content-linked-selector">${escapeHTML(selectionLabel)}</button>
       </span>
       <select class="product-bundle-component-variant hidden">
         <option value="">Choose exact Product variant</option>
@@ -6259,15 +6313,15 @@ function renderProductVariantContentLinkRows(links = []) {
     const linkRole = link.linkRole || "ManufacturedFrom";
     const blueprintVariantOptions = blueprintContentVariantOptions(link.entityId, link.entityVariantId);
     return `
-      <div class="product-variant-content-link-row grid min-w-0 gap-2 overflow-hidden rounded border border-gray-700 p-2 sm:grid-cols-2">
-        <select class="variant-content-link-role min-w-0 rounded bg-gray-800 px-2 py-2 text-white">
+      <div class="product-variant-content-link-row flex min-w-0 flex-wrap items-center gap-3 overflow-hidden rounded border border-gray-700 bg-gray-950/40 p-3">
+        <select class="variant-content-link-role w-auto rounded border border-gray-600 bg-gray-800 px-2 py-2 text-sm text-white" aria-label="Blueprint connection type">
           <option value="ManufacturedFrom"${linkRole === "ManufacturedFrom" ? " selected" : ""}>Manufacturing recipe</option>
           <option value="OperatedWith"${linkRole === "OperatedWith" ? " selected" : ""}>Workshop operations</option>
         </select>
-        <select class="variant-content-product-variant min-w-0 rounded bg-gray-800 px-2 py-2 text-white">
+        <select class="variant-content-product-variant hidden">
           <option value=""${link.productVariantId ? "" : " selected"}>Choose Product variant${link.productVariantId ? "" : " — legacy all-variant link"}</option>${productVariantOptions}
         </select>
-        <span class="content-template-linked-picker grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <span class="content-template-linked-picker">
           <select class="variant-content-blueprint content-template-linked-select hidden"
             data-field-key="product-blueprint-${escapeHTML(link.productVariantId || "all")}"
             data-field-name="${linkRole === "ManufacturedFrom" ? "Manufacturing Blueprint" : "Workshop operations Blueprint"}"
@@ -6278,14 +6332,14 @@ function renderProductVariantContentLinkRows(links = []) {
             data-relationship-label="Blueprints for">
             <option value="">Choose Blueprint</option>${blueprintOptions}
           </select>
-          <button type="button" class="open-content-linked-selector min-w-0 flex-1 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">Choose Blueprint</button>
-          <button type="button" class="edit-selected-linked-record rounded border border-gray-600 px-3 py-2 text-xs text-gray-200" disabled>Edit selected</button>
+          <button type="button" class="open-content-linked-selector hidden">Choose Blueprint</button>
+          <button type="button" class="edit-selected-linked-record rounded border border-gray-600 px-3 py-2 text-xs text-gray-200" disabled>Edit content</button>
         </span>
-        <select class="variant-content-blueprint-variant min-w-0 rounded bg-gray-800 px-2 py-2 text-white" aria-label="Exact Blueprint variation">
+        <select class="variant-content-blueprint-variant hidden" aria-label="Exact Blueprint variation">
           <option value="">${escapeHTML(defaultBlueprintContentVariantLabel(link.entityId))}</option>${blueprintVariantOptions}
         </select>
-        <button type="button" class="remove-product-variant-content-link justify-self-start rounded border border-red-700 px-3 py-1 text-red-200 sm:col-span-2">Remove</button>
-        <p class="product-variant-blueprint-selection min-w-0 break-words text-sm text-[#9edbd7] sm:col-span-2"></p>
+        <p class="product-variant-blueprint-selection min-w-48 flex-1 break-words text-sm text-[#9edbd7]"></p>
+        <button type="button" class="remove-product-variant-content-link rounded border border-red-700 px-3 py-1 text-xs text-red-200">Remove</button>
       </div>`;
   }).join("") || "<p class=\"text-xs text-gray-400\">No manufacturing or Workshop Operations Blueprint selected.</p>";
   container.querySelectorAll(".content-template-linked-select").forEach(
@@ -6358,17 +6412,27 @@ function renderProductUnlockRows(grants = []) {
       }).join("");
     const durationType = ["days", "weeks", "months", "years"].includes(grant.durationType)
       ? grant.durationType : "";
+    const targetRecord = options.find((record) => record.id === grant.accessEntityId);
+    const targetVariant = productUnlockTargetVariants(entityType, grant.accessEntityId)
+      .find((variant) => linkedSelectorVariantId(variant) === grant.accessEntityVariantId);
+    const selectionLabel = targetRecord
+      ? `${targetRecord.name || targetRecord.id}${targetVariant ? ` → ${targetVariant.name || linkedSelectorVariantId(targetVariant)}` : " → All variants"}`
+      : "No unlock selected";
     return `
-      <div class="content-product-unlock-row grid min-w-0 gap-2 overflow-hidden rounded border border-gray-700 p-2 sm:grid-cols-2">
-        <select class="content-product-unlock-variant min-w-0 rounded bg-gray-800 px-2 py-2 text-white">
+      <div class="content-product-unlock-row grid min-w-0 gap-3 overflow-hidden rounded border border-gray-700 bg-gray-950/40 p-3 md:grid-cols-[minmax(14rem,1fr)_10rem_8rem_10rem_auto] md:items-end">
+        <select class="content-product-unlock-variant hidden">
           <option value=""${grant.productVariantId ? "" : " selected"}>Choose Product variant${grant.productVariantId ? "" : " — legacy all-variant unlock"}</option>
           ${variantOptions}
         </select>
-        <select class="content-product-unlock-type min-w-0 rounded bg-gray-800 px-2 py-2 text-white"
+        <div class="min-w-0">
+          <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">${escapeHTML(entityType)} unlock</p>
+          <p class="mt-1 break-words text-sm text-[#9edbd7]">${escapeHTML(selectionLabel)}</p>
+        </div>
+        <select class="content-product-unlock-type min-w-0 rounded bg-gray-800 px-2 py-2 text-sm text-white"
           data-row-index="${index}">
           ${typeOptions}
         </select>
-        <span class="content-template-linked-picker grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <span class="content-template-linked-picker hidden">
           <select class="content-product-unlock-target content-template-linked-select hidden"
             data-field-key="product-unlock-${escapeHTML(grant.productVariantId || "all")}-${index}"
             data-field-name="${escapeHTML(`${entityType} to unlock`)}"
@@ -6379,21 +6443,21 @@ function renderProductUnlockRows(grants = []) {
             <option value="">Choose content to unlock</option>
             ${targetOptions}
           </select>
-          <button type="button" class="open-content-linked-selector min-w-0 rounded border border-[#407471] bg-gray-800 px-3 py-2 text-left text-white hover:bg-gray-700">Choose content to unlock</button>
-          <button type="button" class="edit-selected-linked-record rounded border border-gray-600 px-3 py-2 text-xs text-gray-200" disabled>Edit selected</button>
+          <button type="button" class="open-content-linked-selector">Choose content to unlock</button>
+          <button type="button" class="edit-selected-linked-record" disabled>Edit selected</button>
         </span>
-        <select class="content-product-unlock-target-variant min-w-0 rounded bg-gray-800 px-2 py-2 text-white"
+        <select class="content-product-unlock-target-variant hidden"
           ${targetVariantOptions ? "" : "disabled"}>
           <option value="">${targetVariantOptions ? "All content variants" : "No content variants"}</option>
           ${targetVariantOptions}
         </select>
-        <label class="min-w-0 text-xs text-gray-400">Access duration
+        <label class="min-w-0 text-xs text-gray-400">Duration
           <select class="content-product-unlock-duration-type mt-1 w-full min-w-0 rounded bg-gray-800 px-2 py-2 text-white">
             <option value=""${durationType ? "" : " selected"}>Leave blank — permanent access</option>
             ${compactSelectOptions(["days", "weeks", "months", "years"], durationType)}
           </select>
         </label>
-        <label class="min-w-0 text-xs text-gray-400">Duration amount
+        <label class="min-w-0 text-xs text-gray-400">Amount
           <input class="content-product-unlock-duration-value mt-1 w-full min-w-0 rounded bg-gray-800 px-2 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
             type="number" min="1" step="1" value="${escapeHTML(durationType ? grant.durationValue ?? "" : "")}"
             placeholder="${durationType ? `Number of ${escapeHTML(durationType)}` : "Select a duration first"}"${durationType ? "" : " disabled"}>
@@ -6403,7 +6467,7 @@ function renderProductUnlockRows(grants = []) {
             type="datetime-local" value="${escapeHTML(grant.endsAt || "")}">
         </label>
         <button type="button"
-          class="remove-content-product-unlock justify-self-start rounded border border-red-700 px-3 py-1 text-red-200 sm:col-span-2">
+          class="remove-content-product-unlock rounded border border-red-700 px-3 py-2 text-xs text-red-200">
           Remove
         </button>
       </div>
@@ -9769,7 +9833,19 @@ export async function setupContentBuilder() {
   });
   document.getElementById("addProductVariantContentLinkBtn")?.addEventListener(
     "click",
-    (event) => addProductVariantContentLinkRow(event.currentTarget.dataset.productVariantId || ""),
+    (event) => {
+      const ownerVariantId = event.currentTarget.dataset.productVariantId || "";
+      const existing = [...document.querySelectorAll(".product-variant-content-link-row")].find((row) =>
+        row.querySelector(".variant-content-product-variant")?.value === ownerVariantId);
+      if (existing) {
+        openLinkedRecordSelector(existing.querySelector(".open-content-linked-selector"));
+        return;
+      }
+      addProductVariantContentLinkRow(ownerVariantId);
+      const created = [...document.querySelectorAll(".product-variant-content-link-row")].find((row) =>
+        row.querySelector(".variant-content-product-variant")?.value === ownerVariantId);
+      openLinkedRecordSelector(created?.querySelector(".open-content-linked-selector"));
+    },
   );
   document.getElementById("productVariantContentLinkRows")?.addEventListener("click", (event) => {
     const remove = event.target.closest(".remove-product-variant-content-link");
@@ -10285,6 +10361,12 @@ export async function setupContentBuilder() {
       const rows = productRow?.querySelector(".product-prerequisite-rows");
       const sourceVariantId = productRow?.querySelector(".product-variant-id")?.value ||
         productRow?.dataset.productVariantId || "";
+      const existing = [...(rows?.querySelectorAll(".product-prerequisite-row") || [])].find((row) =>
+        row.querySelector(".product-prerequisite-kind")?.value === "product");
+      if (existing) {
+        openLinkedRecordSelector(existing.querySelector(".product-prerequisite-product-picker .open-content-linked-selector"));
+        return;
+      }
       rows?.querySelector(".product-prerequisite-empty")?.remove();
       rows?.insertAdjacentHTML("beforeend", prerequisiteRowsMarkup([{
         requirementType: "product-variant",
@@ -10303,6 +10385,12 @@ export async function setupContentBuilder() {
       const rows = productRow?.querySelector(".product-prerequisite-rows");
       const sourceVariantId = productRow?.querySelector(".product-variant-id")?.value ||
         productRow?.dataset.productVariantId || "";
+      const existing = [...(rows?.querySelectorAll(".product-prerequisite-row") || [])].find((row) =>
+        row.querySelector(".product-prerequisite-kind")?.value === "item");
+      if (existing) {
+        openLinkedRecordSelector(existing.querySelector(".product-prerequisite-item-picker .open-content-linked-selector"));
+        return;
+      }
       rows?.querySelector(".product-prerequisite-empty")?.remove();
       rows?.insertAdjacentHTML("beforeend", prerequisiteRowsMarkup([{
         requirementType: "item",
@@ -10332,7 +10420,14 @@ export async function setupContentBuilder() {
       const variants = currentProductVariants();
       const variant = variants.find((entry) => entry.variantId === variantId);
       if (!variant) return;
-      variant.bundleComponents = [...(variant.bundleComponents || []), {
+      if ((variant.bundleComponents || []).length) {
+        const existingSelector = sourceRow.querySelector(
+          ".product-bundle-component-row .open-content-linked-selector",
+        );
+        if (existingSelector) openLinkedRecordSelector(existingSelector);
+        return;
+      }
+      variant.bundleComponents = [{
         bundleComponentId: `BUNDLE-COMPONENT-${Date.now()}`,
         componentProductId: "",
         componentProductVariantId: "",
@@ -10346,8 +10441,9 @@ export async function setupContentBuilder() {
       );
       refreshedRow?.querySelector("[data-variant-editor=\"purchase\"]")?.click();
       const bundleRows = refreshedRow?.querySelectorAll(".product-bundle-component-row") || [];
-      bundleRows[bundleRows.length - 1]
-        ?.querySelector(".product-bundle-component-product")?.focus();
+      const selector = bundleRows[bundleRows.length - 1]
+        ?.querySelector(".open-content-linked-selector");
+      if (selector) openLinkedRecordSelector(selector);
       state.isDirty = true;
       return;
     }
@@ -10450,8 +10546,8 @@ export async function setupContentBuilder() {
       if (itemSelect) itemSelect.value = "";
       refreshLinkedTemplatePickerLabel(productSelect);
       refreshLinkedTemplatePickerLabel(itemSelect);
-      productPicker?.classList.toggle("hidden", isItem);
-      itemPicker?.classList.toggle("hidden", !isItem);
+      productPicker?.classList.add("hidden");
+      itemPicker?.classList.add("hidden");
       if (variant) {
         variant.disabled = isItem;
         variant.innerHTML = isItem
@@ -10674,7 +10770,17 @@ export async function setupContentBuilder() {
     window.open(externalUrl(url), "_blank", "noopener,noreferrer");
   });
   document.getElementById("addContentProductUnlockBtn")?.addEventListener("click", (event) => {
-    addProductUnlockRow(event.currentTarget.dataset.productVariantId || "");
+    const ownerVariantId = event.currentTarget.dataset.productVariantId || "";
+    const existing = [...document.querySelectorAll(".content-product-unlock-row")].find((row) =>
+      row.querySelector(".content-product-unlock-variant")?.value === ownerVariantId);
+    if (existing) {
+      openLinkedRecordSelector(existing.querySelector(".open-content-linked-selector"));
+      return;
+    }
+    addProductUnlockRow(ownerVariantId);
+    const created = [...document.querySelectorAll(".content-product-unlock-row")].find((row) =>
+      row.querySelector(".content-product-unlock-variant")?.value === ownerVariantId);
+    openLinkedRecordSelector(created?.querySelector(".open-content-linked-selector"));
   });
   document.getElementById("contentProductUnlockRows")?.addEventListener("change", (event) => {
     if (event.target.classList.contains("content-product-unlock-variant")) {
