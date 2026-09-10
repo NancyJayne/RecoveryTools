@@ -315,41 +315,25 @@
 <!-- Full Dynamic Profile Section -->
 <section id="profileSection" class="tab-content hidden p-6">
   <!-- Profile Header -->
-  <div class="flex items-center gap-4 mb-8">
-    <img id="profileAvatar" src="" alt="Profile Image" class="w-24 h-24 rounded-full border-2 border-green-400 object-cover">
-    <div class="mt-2 flex gap-3">
-  <label for="avatarUpload" class="text-sm text-blue-400 underline cursor-pointer">Change Photo</label>
-  <input id="avatarUpload" type="file" accept="image/*" class="hidden" />
-  
-  <button id="removeAvatarBtn" type="button" class="text-sm text-red-400 underline">Remove Photo</button>
-</div>
-<div class="flex items-center gap-2 mt-2">
-  <h2 data-profile-name class="text-2xl font-bold">Loading...</h2>
-  <span id="affiliateBadge" class="hidden bg-green-500 text-xs px-2 py-1 rounded">Affiliate</span>
+  <div class="mb-8 flex flex-col items-start gap-5 sm:flex-row sm:items-center">
+    <div class="shrink-0">
+      <img id="profileAvatar" src="" alt="Profile Image" class="h-24 w-24 rounded-full border-2 border-green-400 object-cover">
+      <div class="mt-2 flex w-24 flex-col items-center gap-1 text-center">
+        <label for="avatarUpload" class="cursor-pointer text-sm text-blue-300 hover:text-blue-200">Change photo</label>
+        <input id="avatarUpload" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" />
+        <button id="removeAvatarBtn" type="button" class="text-xs text-red-400 hover:text-red-300">Remove photo</button>
+      </div>
+    </div>
 
-  <button
-    id="affiliateSignup"
-    type="button"
-    class="hidden text-blue-400 hover:underline text-sm"
-    aria-label="Become an Affiliate"
-  >
-    Become an Affiliate
-  </button>
-
-  <a id="affiliateAccessLink" href="/affiliate" class="router-link hidden text-sm text-green-500 hover:underline">
-    🤝 Affiliate Dashboard
-  </a>
-  <a id="therapistAccessLink" href="/therapist" class="router-link hidden text-sm text-indigo-400 hover:underline">
-    💼 Therapist Tools
-  </a>
-  <a id="adminAccessLink" href="/admin" class="router-link hidden text-sm text-purple-400 hover:underline">
-    🔐 Admin Dashboard
-  </a>
-</div>
-
-      <div data-profile-email class="text-gray-400 text-sm"></div>
-      <div data-profile-id class="text-gray-400 text-xs"></div>
-      <div data-profile-subscription class="text-green-400 text-xs"></div>
+    <div class="min-w-0 flex-1">
+      <h1 class="text-3xl font-bold">Welcome, <span data-profile-name>Loading...</span></h1>
+      <div id="profileDashboardAccess" class="mt-4 hidden flex-wrap items-center gap-2 rounded-lg border border-gray-700 bg-gray-900/60 p-3">
+        <span class="mr-1 text-sm font-semibold text-gray-300">Your dashboards:</span>
+        <a id="affiliateAccessLink" href="/affiliate" class="router-link hidden rounded-full border border-green-600 px-3 py-1.5 text-sm text-green-300 hover:bg-green-900/50">Affiliate</a>
+        <a id="therapistAccessLink" href="/therapist" class="router-link hidden rounded-full border border-indigo-500 px-3 py-1.5 text-sm text-indigo-300 hover:bg-indigo-900/50">Therapist</a>
+        <a id="adminAccessLink" href="/admin" class="router-link hidden rounded-full border border-purple-500 px-3 py-1.5 text-sm text-purple-300 hover:bg-purple-900/50">Admin</a>
+      </div>
+      <button id="affiliateSignup" type="button" class="mt-3 hidden text-sm text-blue-400 hover:underline" aria-label="Become an Affiliate">Become an Affiliate</button>
     </div>
   </div>
 

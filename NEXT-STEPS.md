@@ -33,6 +33,7 @@
 - [x] User, Affiliate, and Admin dashboard titles control collapsible navigation: expanded dashboards include their Back to Profile/menu controls, while collapsed dashboards leave only the labelled title rail and reopen arrow. Each dashboard remembers its own setting and smaller screens retain a compact horizontal control.
 - [x] Profile role-dashboard links use the same full-width block layout and spacing as the User navigation buttons, preventing Affiliate, Therapist, and Admin controls from shrinking or overlapping.
 - [x] Authenticated users can upload, replace, and remove their own JPG, PNG, or WebP profile photo up to 5 MB; Storage rules isolate each avatar by user UID and replacement images bypass stale browser cache.
+- [x] Simplify the Profile header to show `Welcome, [Name]`, group photo actions beneath the avatar, keep email in My Profile, and show a dedicated dashboard-access panel only when the user has Affiliate, Therapist, or Admin access.
 - [x] Marketplace now hides Products whose primary linked content is paused or archived.
 - [x] Inventory Stocktake now lists only Items and Products explicitly marked as inventory tracked.
 - [x] Reopening Inventory Stocktake or Record Manufacturing now refreshes current tracked records automatically.
