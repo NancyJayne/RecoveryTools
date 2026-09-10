@@ -229,6 +229,7 @@ function normalizeProduct(
   reservations = new Map(),
   ownedVariants = new Set(),
   productsById = new Map(),
+  includeHiddenVariants = false,
 ) {
   const data = doc.data() || {};
   const itemId = data.itemId || data.legacyItemId || "";
@@ -489,7 +490,7 @@ function normalizeProduct(
         .filter((asset) => normalizeStatus(asset.type) === "image")
         .map((asset) => asset.url),
     };
-  }).filter((variant) => variant.visible !== false);
+  }).filter((variant) => includeHiddenVariants || variant.visible !== false);
   if (variants.length && !normalizedVariants.length) visible = false;
   // Product descriptions are inherited from the primary linked entity. Product-variant
   // descriptions remain the explicit sellable overrides handled above.
@@ -633,6 +634,7 @@ export const getFirestoreProducts = onCall(
           reservations,
           ownedVariants,
           productsById,
+          includeHidden && isAdmin,
         ))
         .filter((product) => product.marketplaceAudience !== "affiliates" || approvedAffiliate || isAdmin)
         .filter((product) => includeHidden && isAdmin ? true : product.visible !== false)

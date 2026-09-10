@@ -429,6 +429,7 @@ Implemented or confirmed. Test-only gaps are kept in the launch checklist below 
 - [x] Customer order history and the Admin Order record show the purchase correctly.
 - [x] Invoice is generated correctly.
 - [x] Product variants remain visible through cart, checkout, success, Admin Orders, and packing slips.
+- [x] Successful checkout clears the signed-in user's cart, and Admin Products refreshes both Product records and live Workshop variant ticketing.
 - [x] Packing slip preview now opens correctly and its generated PDF contains recipient/contact details, items, quantities, variants/SKUs, and notes.
 - [x] Approval and unassigned-order counts appear as purple notification badges, including per-approval-type counts.
 - [x] Customer issue rating was removed from Order Help and Admin Orders; complaint details, status, notes, resolution notes, and editable due date now share the same workflow.

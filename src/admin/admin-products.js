@@ -281,7 +281,17 @@ function setupInventoryOperations() {
   }
   if (productRefresh?.dataset.bound !== "true") {
     productRefresh.dataset.bound = "true";
-    productRefresh.addEventListener("click", loadInventoryOperations);
+    productRefresh.addEventListener("click", async () => {
+      productRefresh.disabled = true;
+      productRefresh.textContent = "Refreshing...";
+      try {
+        await Promise.all([loadProducts(), loadInventoryOperations()]);
+        showToast("Products and live ticketing refreshed.", "success");
+      } finally {
+        productRefresh.disabled = false;
+        productRefresh.textContent = "Refresh Products";
+      }
+    });
   }
   loadInventoryOperations();
 }
@@ -1127,6 +1137,32 @@ function renderProductManagerList(products) {
     body.appendChild(tags);
     body.appendChild(description);
     body.appendChild(btn);
+
+    if (Array.isArray(p.variants) && p.variants.length) {
+      const variantsPanel = document.createElement("section");
+      variantsPanel.className = "mt-4 rounded border border-gray-700 bg-gray-900/70 p-3";
+      variantsPanel.innerHTML = `
+        <h4 class="text-sm font-semibold text-white">${p.tracksSeats === true ? "Workshop variants and ticketing" : "Product variants"}</h4>
+        <div class="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          ${p.variants.map((variant) => {
+    const ticketing = p.tracksSeats === true || variant.seatCapacity !== undefined;
+    const status = variant.marketplaceMode === "inherit"
+      ? `Uses Product status (${p.shopStatus || "draft"})`
+      : variant.marketplaceMode || (variant.visible === false ? "hidden" : "active");
+    return `<article class="min-w-0 rounded border border-gray-700 p-3">
+              <p class="truncate font-semibold text-white">${escapeHTML(variantLabel(variant))}</p>
+              <p class="mt-1 text-xs text-gray-400">${escapeHTML(status)}</p>
+              ${ticketing ? `<dl class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                <dt class="text-gray-400">Capacity</dt><dd class="text-right text-white">${Number(variant.seatCapacity || 0)}</dd>
+                <dt class="text-gray-400">Sold</dt><dd class="text-right text-white">${Number(variant.ticketsSold || 0)}</dd>
+                <dt class="text-gray-400">Reserved</dt><dd class="text-right text-white">${Number(variant.ticketsReserved || 0)}</dd>
+                <dt class="text-gray-400">Remaining</dt><dd class="text-right font-semibold text-white">${variant.ticketsRemaining ?? "Unlimited"}</dd>
+              </dl>` : `<p class="mt-2 text-xs text-gray-300">Stock: ${Number(variant.stock || 0)}</p>`}
+            </article>`;
+  }).join("")}
+        </div>`;
+      body.appendChild(variantsPanel);
+    }
 
     const actions = document.createElement("div");
     actions.className = "mt-3 flex flex-wrap gap-2";

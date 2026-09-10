@@ -2,6 +2,7 @@
 import { functions } from "../utils/firebase-config.js";
 import { httpsCallable } from "firebase/functions";
 import { showToast } from "../utils/utils.js";
+import { setCart, updateCartCount } from "./shop-cart.js";
 
 export async function confirmOrderFromStripeRedirect() {
   const params = new URLSearchParams(window.location.search);
@@ -19,6 +20,10 @@ export async function confirmOrderFromStripeRedirect() {
 
     if (order?.orderId || order?.invoiceId || order?.stripeCheckoutSessionId) {
       showToast("Order confirmed. A receipt has been emailed to you.", "success");
+      // Carts are scoped to the signed-in user. Clear that authoritative cart,
+      // rather than only the retired device-wide legacy key.
+      setCart([]);
+      updateCartCount();
       localStorage.removeItem("recovery_cart");
       sessionStorage.removeItem("cartBackup");
 
