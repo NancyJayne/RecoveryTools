@@ -159,43 +159,10 @@ export async function setupProfilePage() {
     document.getElementById("profileAvatar").src = photoURL;
     document.getElementById("headerAvatar").src = photoURL;
 
-    // Toggle and bind remove button
+    // The removal action is bound once below with the upload controls.
     const removeBtn = document.getElementById("removeAvatarBtn");
     if (removeBtn) {
-      if (!hasCustomPhoto) {
-        removeBtn.classList.add("hidden");
-      } else {
-        removeBtn.classList.remove("hidden");
-
-        removeBtn.onclick = async () => {
-          if (!confirm("Are you sure you want to remove your profile photo?")) return;
-
-          removeBtn.disabled = true;
-          removeBtn.textContent = "Removing...";
-
-          try {
-            const { deleteObject, ref, getStorage } = await import("firebase/storage");
-            const storage = getStorage();
-            const avatarRef = ref(storage, `avatars/${user.uid}.jpg`);
-            await deleteObject(avatarRef).catch(() => {}); // ignore if doesn't exist
-
-            const userRef = doc(db, "users", user.uid);
-            await updateDoc(userRef, { photoURL: "" });
-
-            document.getElementById("profileAvatar").src = fallbackURL;
-            document.getElementById("headerAvatar").src = fallbackURL;
-            removeBtn.classList.add("hidden");
-
-            showToast("✅ Profile photo removed.", "success");
-          } catch (err) {
-            console.error("Remove photo error:", err);
-            showToast("Failed to remove photo.", "error");
-          } finally {
-            removeBtn.disabled = false;
-            removeBtn.textContent = "Remove Photo";
-          }
-        };
-      }
+      removeBtn.classList.toggle("hidden", !hasCustomPhoto);
     }
   } catch (err) {
     console.error("Error fetching user roles or profile:", err);
@@ -413,6 +380,18 @@ function setupProfileFormHandlers() {
       const file = e.target.files[0];
       if (!file || !auth?.currentUser) return;
 
+      const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+      if (!allowedTypes.has(file.type)) {
+        showToast("Choose a JPG, PNG, or WebP image.", "error");
+        avatarInput.value = "";
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        showToast("Profile photos must be 5 MB or smaller.", "error");
+        avatarInput.value = "";
+        return;
+      }
+
       const storageRef = (await import("firebase/storage")).ref;
       const uploadBytes = (await import("firebase/storage")).uploadBytes;
       const getDownloadURL = (await import("firebase/storage")).getDownloadURL;
@@ -422,19 +401,32 @@ function setupProfileFormHandlers() {
       const avatarRef = storageRef(storage, `avatars/${auth?.currentUser?.uid}.jpg`);
 
       try {
-        await uploadBytes(avatarRef, file);
+        avatarInput.disabled = true;
+        showToast("Uploading profile photo...", "info");
+        await uploadBytes(avatarRef, file, {
+          contentType: file.type,
+          cacheControl: "no-cache, max-age=0",
+        });
         const url = await getDownloadURL(avatarRef);
 
         const userRef = doc(db, "users", auth?.currentUser?.uid);
         await updateDoc(userRef, { photoURL: url });
 
-        document.getElementById("profileAvatar").src = url;
-        document.getElementById("headerAvatar").src = url;
+        const refreshedUrl = `${url}${url.includes("?") ? "&" : "?"}updated=${Date.now()}`;
+        document.getElementById("profileAvatar").src = refreshedUrl;
+        document.getElementById("headerAvatar").src = refreshedUrl;
+        document.getElementById("removeAvatarBtn")?.classList.remove("hidden");
 
         showToast("✅ Profile photo updated.", "success");
       } catch (err) {
         console.error("Avatar upload error:", err);
-        showToast("Failed to upload photo.", "error");
+        const message = err?.code === "storage/unauthorized"
+          ? "Your session cannot update this photo. Sign out, sign back in, and try again."
+          : "Failed to upload photo.";
+        showToast(message, "error");
+      } finally {
+        avatarInput.disabled = false;
+        avatarInput.value = "";
       }
     });
     const removeBtn = document.getElementById("removeAvatarBtn");
@@ -468,6 +460,7 @@ function setupProfileFormHandlers() {
           // Update UI with fallback image
           document.getElementById("profileAvatar").src = fallbackURL;
           document.getElementById("headerAvatar").src = fallbackURL;
+          removeBtn.classList.add("hidden");
 
           showToast("🧼 Photo removed and reset to default.", "success");
         } catch (err) {
