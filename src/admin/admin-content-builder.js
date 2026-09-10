@@ -6298,7 +6298,21 @@ function refreshProductBlueprintConnectionSummary(row) {
   const productVariant = row.querySelector(".variant-content-product-variant")?.selectedOptions?.[0]
     ?.textContent?.trim() || "Product variant not selected";
   const blueprintSelect = row.querySelector(".variant-content-blueprint");
-  const blueprint = blueprintSelect?.selectedOptions?.[0]?.textContent?.trim() || "Blueprint not selected";
+  const connected = Boolean(blueprintSelect?.value);
+  row.dataset.connectionState = connected ? "connected" : "unconnected";
+  row.classList.toggle("border-dashed", !connected);
+  row.classList.toggle("border-purple-500", !connected);
+  row.classList.toggle("bg-purple-950/20", !connected);
+  summary.classList.toggle("text-purple-300", !connected);
+  summary.classList.toggle("font-semibold", !connected);
+  summary.classList.toggle("text-[#9edbd7]", connected);
+  const removeButton = row.querySelector(".remove-product-variant-content-link");
+  if (removeButton) removeButton.textContent = connected ? "Remove" : "Cancel";
+  if (!connected) {
+    summary.textContent = `No ${role} Blueprint connected to ${productVariant}. Choose a Blueprint to create this connection.`;
+    return;
+  }
+  const blueprint = blueprintSelect.selectedOptions?.[0]?.textContent?.trim() || "Blueprint not selected";
   const blueprintVariantSelect = row.querySelector(".variant-content-blueprint-variant");
   const blueprintVariant = blueprintVariantSelect?.selectedOptions?.[0]?.textContent?.trim() ||
     "Default Blueprint variant";
@@ -6360,10 +6374,12 @@ function renderProductVariantContentLinkRows(links = []) {
     const blueprintVariantOptions = blueprintContentVariantOptions(link.entityId, link.entityVariantId);
     return `
       <div class="product-variant-content-link-row flex min-w-0 flex-wrap items-center gap-3 overflow-hidden rounded border border-gray-700 bg-gray-950/40 p-3">
-        <select class="variant-content-link-role w-auto rounded border border-gray-600 bg-gray-800 px-2 py-2 text-sm text-white" aria-label="Blueprint connection type">
-          <option value="ManufacturedFrom"${linkRole === "ManufacturedFrom" ? " selected" : ""}>Manufacturing recipe</option>
-          <option value="OperatedWith"${linkRole === "OperatedWith" ? " selected" : ""}>Workshop operations</option>
-        </select>
+        <label class="text-xs text-gray-400">Blueprint purpose
+          <select class="variant-content-link-role mt-1 w-full rounded border border-gray-600 bg-gray-800 px-2 py-2 text-sm text-white" aria-label="Blueprint purpose">
+            <option value="ManufacturedFrom"${linkRole === "ManufacturedFrom" ? " selected" : ""}>Manufacturing recipe</option>
+            <option value="OperatedWith"${linkRole === "OperatedWith" ? " selected" : ""}>Workshop operations</option>
+          </select>
+        </label>
         <select class="variant-content-product-variant hidden">
           <option value=""${link.productVariantId ? "" : " selected"}>Choose Product variant${link.productVariantId ? "" : " — legacy all-variant link"}</option>${productVariantOptions}
         </select>
