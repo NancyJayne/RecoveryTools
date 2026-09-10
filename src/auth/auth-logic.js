@@ -69,17 +69,7 @@ export async function handleSignup(email, password, name) {
         uid: user.uid,
         name,
         email: user.email || email,
-
-        roles: {
-          admin: false,
-          affiliate: false,
-          therapist: false,
-        },
-
-        role: "user",
-
         photoURL: "",
-        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       },
       { merge: true },
