@@ -19,7 +19,7 @@
   }
 
   .profile-tab-btn {
-    @apply text-left w-full bg-gray-700 text-white px-4 py-2 rounded hover:bg-[#305a56];
+    @apply block w-full box-border text-left bg-gray-700 text-white px-4 py-2 rounded hover:bg-[#305a56];
   }
   .profile-tab-btn.active {
     @apply bg-[#407471] text-white;

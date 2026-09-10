@@ -31,6 +31,7 @@
 - [x] Admin CRM now supports removing and restoring individual Course, Workshop, or Program access without deleting its history.
 - [x] Admin role visibility now refreshes Firebase custom claims before rendering and ignores stale asynchronous role results, preventing a newly assigned administrator's Dashboard link from appearing and then disappearing.
 - [x] User, Affiliate, and Admin dashboard titles control collapsible navigation: expanded dashboards include their Back to Profile/menu controls, while collapsed dashboards leave only the labelled title rail and reopen arrow. Each dashboard remembers its own setting and smaller screens retain a compact horizontal control.
+- [x] Profile role-dashboard links use the same full-width block layout and spacing as the User navigation buttons, preventing Affiliate, Therapist, and Admin controls from shrinking or overlapping.
 - [x] Marketplace now hides Products whose primary linked content is paused or archived.
 - [x] Inventory Stocktake now lists only Items and Products explicitly marked as inventory tracked.
 - [x] Reopening Inventory Stocktake or Record Manufacturing now refreshes current tracked records automatically.
