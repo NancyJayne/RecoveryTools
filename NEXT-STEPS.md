@@ -146,6 +146,7 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
   - [x] Isolate saved carts by Firebase user UID, keep guest carts separate, and refresh the visible cart when authentication changes.
   - [x] Confirm two signed-in customers can hold seats in separate carts and that successful payment moves a seat from Reserved to Sold.
   - [x] Confirm a bundle purchase creates separate exact Workshop Plan-variant unlocks. The customer Workshop reader now keeps each unlocked variant's details, Assets/downloads, and underlying booked session separate while retaining the bundle Product variant only as purchase-source history.
+  - [x] Treat paid, unassigned Workshop registrations—including bundles whose exact components are Workshop sessions—as actionable Admin Orders so they contribute to the avatar and Admin Orders notification badge even though they require no physical shipping.
   - [x] Hide the empty-module notice for purchased Workshops that do not use Blueprint modules.
   - [x] Show active PDF/document/download Assets linked directly to the Workshop Plan, independently of Blueprint modules.
   - [x] Add exact Product-variant purchase prerequisites. The Marketplace identifies missing prior variants and disables Add to Cart; Checkout authoritatively accepts an existing paid purchase, active unlock, another cart line, or an exact component included in the same bundle. Configure Advanced to require Foundations, and Strategic to require Foundations plus Advanced.

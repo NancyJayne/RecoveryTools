@@ -16,12 +16,34 @@ function fulfilmentStatus(order = {}) {
   return status;
 }
 
+function orderLines(order = {}) {
+  if (Array.isArray(order.orderLines) && order.orderLines.length) return order.orderLines;
+  return Array.isArray(order.products) ? order.products : [];
+}
+
+function hasWorkshopBooking(order = {}) {
+  return orderLines(order).some((line) => {
+    const productType = cleanString(line.productType || line.type).toLowerCase();
+    const bundleItems = line.bundleInventory || line.bundleInventoryItems || [];
+    return productType.includes("workshop") ||
+      (Array.isArray(bundleItems) && bundleItems.some((item) => item?.isWorkshop === true));
+  });
+}
+
+function isPaid(order = {}) {
+  const status = cleanString(order.paymentStatus || order.status).toLowerCase();
+  return ["paid", "complete", "completed", "succeeded"].includes(status) ||
+    Number(order.amountPaid || order.totalPaid || 0) > 0;
+}
+
 function needsAssignment(order = {}) {
-  return (
-    order.hasPhysicalItems !== false &&
-    !cleanString(order.assignedAdminUid) &&
-    fulfilmentStatus(order) === "new"
-  );
+  if (order.archived === true || cleanString(order.assignedAdminUid)) return false;
+  const physicalOrderNeedsWork = order.hasPhysicalItems !== false && fulfilmentStatus(order) === "new";
+  const workshopBookingNeedsWork = hasWorkshopBooking(order) && isPaid(order) &&
+    !["refunded", "cancelled", "canceled"].includes(
+      cleanString(order.refundStatus || order.paymentStatus || order.status).toLowerCase(),
+    );
+  return physicalOrderNeedsWork || workshopBookingNeedsWork;
 }
 
 export const getAdminOrderAlerts = onCall(
