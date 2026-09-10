@@ -1749,6 +1749,9 @@ function renderSelectedProductVariantRows(productVariants = currentProductVarian
             </label>
           </section>
           <section data-variant-editor-section="purchase" class="flex min-w-0 flex-col gap-4 rounded border border-[#407471] bg-gray-900/80 p-4 md:col-span-2 xl:col-span-4">
+          <div class="product-variant-bundle-derived-note hidden rounded border border-blue-500 bg-blue-950/40 p-3 text-sm text-blue-100">
+            <strong>Bundle purchase:</strong> session times, location, instructor, capacity and availability come from the linked Product variants below. This bundle does not use its own session or stock record.
+          </div>
           <div class="grid gap-3 rounded border border-gray-700 p-3 sm:grid-cols-2">
             <div class="sm:col-span-2">
               <h6 class="font-semibold text-white">Inventory or tickets</h6>
@@ -3338,6 +3341,7 @@ function applyLinkedSelectorChoices(context) {
     restoreLinkedTemplateField(field, existing);
   }
   state.isDirty = true;
+  updateProductPhysicalFields();
   refreshMarketplacePreviews();
   return true;
 }
@@ -5096,7 +5100,9 @@ function updateProductPhysicalFields() {
   document.getElementById("contentProductInventoryTrackedField")?.classList.remove("hidden");
   document.getElementById("contentProductInventoryHelp")?.classList.remove("hidden");
   document.querySelectorAll(".product-variant-stock-field").forEach((field) => {
-    field.classList.toggle("hidden", !tracked);
+    const isBundle = Boolean(field.closest(".content-product-variant-row")
+      ?.querySelector(".product-bundle-component-row .product-bundle-component-product")?.value);
+    field.classList.toggle("hidden", !tracked || isBundle);
   });
   document.querySelectorAll(".product-variant-physical-fulfilment-field").forEach((field) => {
     field.classList.toggle("hidden", !physicalFulfilmentEnabled);
@@ -5107,19 +5113,34 @@ function updateProductPhysicalFields() {
   const location = document.getElementById("contentProductRequiresLocation")?.checked === true;
   const instructor = document.getElementById("contentProductRequiresInstructor")?.checked === true;
   document.querySelectorAll(".product-variant-calendar-field").forEach((field) => {
-    field.classList.toggle("hidden", !calendar);
+    const isBundle = Boolean(field.closest(".content-product-variant-row")
+      ?.querySelector(".product-bundle-component-row .product-bundle-component-product")?.value);
+    field.classList.toggle("hidden", !calendar || isBundle);
   });
   document.querySelectorAll(".product-variant-seats-field").forEach((field) => {
-    field.classList.toggle("hidden", !seats);
+    const isBundle = Boolean(field.closest(".content-product-variant-row")
+      ?.querySelector(".product-bundle-component-row .product-bundle-component-product")?.value);
+    field.classList.toggle("hidden", !seats || isBundle);
   });
   document.querySelectorAll(".product-variant-session-field").forEach((field) => {
-    field.classList.toggle("hidden", !timing);
+    const isBundle = Boolean(field.closest(".content-product-variant-row")
+      ?.querySelector(".product-bundle-component-row .product-bundle-component-product")?.value);
+    field.classList.toggle("hidden", !timing || isBundle);
   });
   document.querySelectorAll(".product-variant-location-field").forEach((field) => {
-    field.classList.toggle("hidden", !location);
+    const isBundle = Boolean(field.closest(".content-product-variant-row")
+      ?.querySelector(".product-bundle-component-row .product-bundle-component-product")?.value);
+    field.classList.toggle("hidden", !location || isBundle);
   });
   document.querySelectorAll(".product-variant-instructor-field").forEach((field) => {
-    field.classList.toggle("hidden", !instructor);
+    const isBundle = Boolean(field.closest(".content-product-variant-row")
+      ?.querySelector(".product-bundle-component-row .product-bundle-component-product")?.value);
+    field.classList.toggle("hidden", !instructor || isBundle);
+  });
+  document.querySelectorAll(".product-variant-bundle-derived-note").forEach((note) => {
+    const isBundle = Boolean(note.closest(".content-product-variant-row")
+      ?.querySelector(".product-bundle-component-row .product-bundle-component-product")?.value);
+    note.classList.toggle("hidden", !isBundle);
   });
   if (!tracked) setInputValue("contentProductStock", "");
   const summary = document.getElementById("contentProductFulfilmentSummary");
@@ -9201,14 +9222,16 @@ async function saveProductDetailsFromDrawer({ closeDrawer = true, validateComple
     if (!payload.productRelation) throw new Error("Select or create a Product first.");
     const productVariants = payload.productRelation.variants || [];
     if (validateComplete && payload.productRelation.requiresSessionTime === true) {
-      const incomplete = productVariants.find((variant) => !variant.eventStartAt || !variant.eventEndAt);
+      const incomplete = productVariants.find((variant) =>
+        !(variant.bundleComponents || []).length && (!variant.eventStartAt || !variant.eventEndAt));
       if (incomplete) {
         focusProductVariantSaveIssue(incomplete.variantId, "purchase", ".product-variant-event-start");
         throw new Error(`Enter the session start and end time for ${incomplete.name || "each Product variant"}.`);
       }
     }
     if (validateComplete && payload.productRelation.requiresLocation === true) {
-      const incomplete = productVariants.find((variant) => !variant.eventLocation);
+      const incomplete = productVariants.find((variant) =>
+        !(variant.bundleComponents || []).length && !variant.eventLocation);
       if (incomplete) {
         focusProductVariantSaveIssue(incomplete.variantId, "purchase", ".product-variant-event-location");
         throw new Error(`Enter the location or address for ${incomplete.name || "each Product variant"}.`);
@@ -10650,6 +10673,7 @@ export async function setupContentBuilder() {
         rows.innerHTML = bundleComponentsMarkup([]);
       }
       syncSelectedProductVariantRows();
+      updateProductPhysicalFields();
       state.isDirty = true;
       return;
     }
