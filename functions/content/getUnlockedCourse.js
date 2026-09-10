@@ -59,14 +59,16 @@ function publicAsset(asset, id) {
   };
 }
 
-async function assetsForRecord(db, record, recordId) {
+async function assetsForRecord(db, record, recordId, entityVariantId = "") {
   const linkedAssetsSnapshot = recordId
     ? await db.collection("entityAssets").where("entityId", "==", recordId).get()
     : null;
   const linkedAssetIds = linkedAssetsSnapshot?.docs
     .filter((snapshot) => {
       const link = snapshot.data() || {};
-      return !["archived", "inactive"].includes(normalizedStatus(link.status));
+      const linkedVariantId = cleanString(link.entityVariantId);
+      return !["archived", "inactive"].includes(normalizedStatus(link.status)) &&
+        (!entityVariantId || !linkedVariantId || linkedVariantId === entityVariantId);
     })
     .map((snapshot) => cleanString(snapshot.data()?.assetId)) || [];
   const assetIds = unique([
@@ -107,11 +109,27 @@ async function purchasedProductVariant(db, access, accessId) {
   if (!variantId) return null;
   const snapshot = await db.collection("productVariants").doc(variantId).get();
   if (!snapshot.exists) return null;
-  const variant = snapshot.data() || {};
+  let resolvedVariantId = variantId;
+  let variant = snapshot.data() || {};
+  const accessVariantId = cleanString(access.accessVariantId || access.accessEntityVariantId);
+  const bundleComponents = Array.isArray(variant.bundleComponents) ? variant.bundleComponents : [];
+  if (accessVariantId && cleanString(variant.contentVariantId) !== accessVariantId && bundleComponents.length) {
+    const componentVariantIds = unique(bundleComponents.map((component) =>
+      cleanString(component.componentProductVariantId || component.productVariantId)));
+    const componentSnapshots = await Promise.all(componentVariantIds.map((componentVariantId) =>
+      db.collection("productVariants").doc(componentVariantId).get()));
+    const matchingIndex = componentSnapshots.findIndex((componentSnapshot) =>
+      componentSnapshot.exists &&
+      cleanString(componentSnapshot.data()?.contentVariantId) === accessVariantId);
+    if (matchingIndex >= 0) {
+      resolvedVariantId = componentVariantIds[matchingIndex];
+      variant = componentSnapshots[matchingIndex].data() || {};
+    }
+  }
   const variantStatus = normalizedStatus(variant.status || "active");
   return {
-    id: variantId,
-    name: variant.variantName || variant.name || access.sourceProductVariantName || variantId,
+    id: resolvedVariantId,
+    name: variant.variantName || variant.name || access.sourceProductVariantName || resolvedVariantId,
     eventStartAt: cleanString(variant.eventStartAt),
     eventEndAt: cleanString(variant.eventEndAt),
     eventLocation: cleanString(variant.eventLocation),
@@ -225,11 +243,18 @@ export const getUnlockedCourse = onCall({
     );
   }
 
+  const baseCourse = publicContent(course, courseId);
+  const publicSelectedVariant = selectedCourseVariant
+    ? publicContent(selectedCourseVariant, accessVariantId)
+    : null;
   return {
     course: {
-      ...publicContent(course, courseId),
-      selectedVariant: selectedCourseVariant ? publicContent(selectedCourseVariant, accessVariantId) : null,
-      media: await assetsForRecord(db, course, courseId),
+      ...baseCourse,
+      ...(publicSelectedVariant || {}),
+      id: courseId,
+      type: baseCourse.type,
+      selectedVariant: publicSelectedVariant,
+      media: await assetsForRecord(db, contentScope, courseId, accessVariantId),
     },
     modules: modules.filter(Boolean),
     booking,
