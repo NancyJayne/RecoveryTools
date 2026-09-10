@@ -30,11 +30,11 @@
   }
 
   .dashboard-sidebar-header {
-    @apply mb-3 flex items-center justify-between gap-2 rounded border border-gray-700 bg-gray-900/70 px-3 py-2;
+    @apply mb-3 flex items-center justify-between gap-2 px-1 py-2;
   }
 
   .dashboard-sidebar-label {
-    @apply font-semibold tracking-wide text-gray-200;
+    @apply text-xl font-bold text-white;
   }
 
   .dashboard-sidebar-toggle {
@@ -55,7 +55,7 @@
     }
 
     .dashboard-sidebar-collapsed .dashboard-sidebar-header {
-      @apply flex-col px-2;
+      @apply flex-col px-1;
     }
 
     .dashboard-sidebar-collapsed .dashboard-sidebar-label {

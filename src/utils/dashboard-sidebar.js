@@ -29,10 +29,6 @@ function setupSidebar(sidebar) {
   const header = document.createElement("div");
   header.className = "dashboard-sidebar-header";
 
-  const title = document.createElement("span");
-  title.className = "dashboard-sidebar-label";
-  title.textContent = label;
-
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "dashboard-sidebar-toggle";
@@ -52,6 +48,12 @@ function setupSidebar(sidebar) {
     writeCollapsedPreference(storageKey, collapsed);
   });
 
+  const title = document.createElement("span");
+  title.className = "dashboard-sidebar-label";
+  title.textContent = label;
+
+  header.setAttribute("role", "heading");
+  header.setAttribute("aria-level", "1");
   header.append(title, toggle);
   sidebar.append(header, content);
   sidebar.dataset.sidebarReady = "true";
