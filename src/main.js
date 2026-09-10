@@ -17,6 +17,7 @@ import { initAdminNavigation } from "./admin/admin-navigation.js";
 import { loadRecaptchaScript } from "./utils/loadRecaptcha.js";
 import { initAppEntry } from "./app-entry.js";
 import { applyBusinessProfile } from "./utils/business-profile.js";
+import { initDashboardSidebars } from "./utils/dashboard-sidebar.js";
 
 const siteKey = getRecaptchaSiteKey();
 if (siteKey && !usesFirebaseEmulators()) loadRecaptchaScript(siteKey);
@@ -136,6 +137,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   adjustMainHeight();
   setupNavMenuToggle();
   applyBusinessProfile();
+  initDashboardSidebars();
 
   window.logClientError = logClientError;
 

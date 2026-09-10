@@ -355,7 +355,7 @@
 
   <!-- Profile Navigation -->
   <div class="flex flex-col md:flex-row gap-8">
-    <aside class="w-full md:w-48 flex flex-col gap-2">
+    <aside id="profileDashboardSidebar" data-dashboard-sidebar data-sidebar-label="User" data-sidebar-storage-key="user" class="w-full md:w-48 flex flex-col gap-2">
       <button data-profile-tab="myProfile" class="profile-tab-btn">My Profile</button>
       <button data-profile-tab="myCourses" class="profile-tab-btn">My Courses</button>
       <button data-profile-tab="myWorkshops" class="profile-tab-btn">My Workshops</button>
@@ -460,7 +460,7 @@
 
   <div class="flex flex-col lg:flex-row gap-8">
     <!-- Sidebar -->
-    <aside class="w-full lg:w-64 space-y-2">
+    <aside id="affiliateDashboardSidebar" data-dashboard-sidebar data-sidebar-label="Affiliate" data-sidebar-storage-key="affiliate" class="w-full lg:w-64 space-y-2">
       <h2 class="text-xl font-semibold text-green-300 mb-4">Affiliate Menu</h2>
       <button type="button" data-affiliate-tab="affiliateEarningsTab" class="affiliate-link block w-full px-4 py-2 rounded text-left hover:bg-green-800">My Earnings</button>
       <button type="button" data-affiliate-tab="affiliateSettingsTab" class="affiliate-link block w-full px-4 py-2 rounded text-left hover:bg-green-800">Settings</button>
@@ -923,7 +923,7 @@
         </div>
   <div class="flex flex-col lg:flex-row gap-8">
     <!-- Sidebar -->
-    <aside class="w-full lg:w-64 space-y-2">
+    <aside id="adminDashboardSidebar" data-dashboard-sidebar data-sidebar-label="Admin" data-sidebar-storage-key="admin" class="w-full lg:w-64 space-y-2">
       <h2 class="text-xl font-semibold text-purple-300 mb-4">Admin Menu</h2>
       <a href="/admin" class="admin-link block px-4 py-2 rounded hover:bg-purple-800">Dashboard</a>
       <a href="/admin/orders" class="admin-link flex items-center justify-between px-4 py-2 rounded hover:bg-purple-800">
