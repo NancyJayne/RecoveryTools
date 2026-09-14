@@ -430,7 +430,7 @@ Implemented or confirmed. Test-only gaps are kept in the launch checklist below 
 - [x] Invoice is generated correctly.
 - [x] Product variants remain visible through cart, checkout, success, Admin Orders, and packing slips.
 - [x] Admin pages immediately close when another tab in the same browser profile signs out or switches to a non-admin account; protected CRM and Communications rules remain authoritative.
-- [x] CRM manual access grants can target an exact Product variant and apply only that variant's configured Item, Blueprint, or Plan unlocks; whole-Product access remains an explicit choice.
+- [x] CRM manual access grants can target an exact Product variant and apply only that variant's configured Item, Blueprint, or Plan unlocks; whole-Product access remains an explicit choice, and CRM summaries show both the unlocked entity variant and source Product variant.
 - [x] Successful checkout clears the signed-in user's cart, and Admin Products refreshes both Product records and live Workshop variant ticketing.
 - [x] Packing slip preview now opens correctly and its generated PDF contains recipient/contact details, items, quantities, variants/SKUs, and notes.
 - [x] Approval and unassigned-order counts appear as purple notification badges, including per-approval-type counts.

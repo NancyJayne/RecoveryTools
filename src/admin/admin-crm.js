@@ -543,6 +543,11 @@ async function loadAccessCatalog() {
       accessCatalog[catalogType].push({
         id: record.id,
         name: content.name || content.title || record.id,
+        variants: (Array.isArray(content.entityVariants) ? content.entityVariants : []).map((variant) => ({
+          id: variant.entityVariantId || variant.variantId || variant.id || "",
+          name: variant.name || variant.variantName || variant.sizeLabel ||
+            variant.entityVariantId || variant.variantId || variant.id || "Variant",
+        })).filter((variant) => variant.id),
       });
     });
   }));
@@ -1053,6 +1058,7 @@ async function renderUserAccess(uid, accessType) {
     where("userId", "==", uid),
   );
   const accessSnapshot = await getDocs(q);
+  const catalogById = new Map(accessCatalog[accessType].map((entry) => [entry.id, entry]));
   const names = new Map(accessCatalog[accessType].map((entry) => [entry.id, entry.name]));
   const records = accessSnapshot.docs.filter((accessDoc) => {
     const data = accessDoc.data();
@@ -1066,11 +1072,21 @@ async function renderUserAccess(uid, accessType) {
       const data = accessDoc.data();
       const accessId = data.accessId || data.accessEntityId;
       const name = escapeHTML(names.get(accessId) || accessId);
+      const accessVariantId = data.accessVariantId || data.accessEntityVariantId || "";
+      const accessVariant = catalogById.get(accessId)?.variants?.find((variant) =>
+        variant.id === accessVariantId);
+      const sourceProduct = allProducts.find((product) => product.id === data.sourceProductId);
+      const sourceVariant = sourceProduct?.variants?.find((variant) =>
+        variant.id === data.sourceProductVariantId);
       const revoked = data.active === false || Boolean(data.revokedAt);
       const status = revoked ? "Removed" : "Unlocked";
       return `<div class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded
         bg-gray-700 p-2">
-        <span><strong>${name}</strong> (${status})</span>
+        <span class="min-w-0">
+          <strong>${name}</strong> (${status})
+          ${accessVariantId ? `<span class="mt-1 block text-xs text-[#9edbd7]">Entity variant: ${escapeHTML(accessVariant?.name || accessVariantId)}</span>` : ""}
+          ${data.sourceProductVariantId ? `<span class="block text-xs text-gray-300">Granted through: ${escapeHTML(sourceProduct?.name || data.sourceProductId || "Product")} / ${escapeHTML(sourceVariant?.name || data.sourceProductVariantName || data.sourceProductVariantId)}</span>` : ""}
+        </span>
         <button type="button"
           class="crm-access-action rounded border border-purple-400 px-2 py-1 text-xs
             text-purple-100 hover:bg-purple-900/40"
