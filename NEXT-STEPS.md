@@ -133,11 +133,11 @@ This is the agreed order for the next major modules. Each area uses a focused `c
 
 Sell and safely operate Workshop tickets before waiting for the complete automated instructor-payment system.
 
-- [x] Correct the Firebase Storage bucket for the next combined Workshop Hosting deployment. The deployed August 31 bundle still targets the nonexistent legacy `recovery-tools.appspot.com` bucket, causing production Asset uploads to fail their preflight with HTTP 404; the correct `recovery-tools.firebasestorage.app` bucket passed an upload-style CORS preflight on September 1. Local `.env` and `.env.live-backup` now use the correct bucket, `.env.production` carries the public production value, and both Hosting workflows no longer override it with the obsolete GitHub secret. Restart `npm run dev` before retesting locally; production remains unchanged until the later Hosting deployment.
+- [x] Correct the Firebase Storage bucket for the combined Workshop Hosting deployment. Production now uses `recovery-tools.firebasestorage.app`; the production workflow supplies and validates that public value explicitly, and the September 14 Hosting release completed successfully.
 
 - [x] Remove Workshop from the Item type choices and keep it under Plans. New Workshop Items are rejected server-side even if a stale client submits one; active workbook/entity-type settings cannot reintroduce the choice, while existing legacy Workshop Items remain editable until deliberately migrated. `npm run verify:workshop-boundary:emulator` passed against the merged release candidate on August 27. Include this Functions change in the next normal V2 deployment rather than deploying it separately.
 
-- [ ] Release public Workshop discovery, session details, capacity/remaining places, Product-variant selection, Stripe purchase, booking confirmation, attendee records, customer Profile access, cancellation/refund handling, and mobile presentation.
+- [x] Release public Workshop discovery, session details, capacity/remaining places, Product-variant selection, Stripe purchase, booking confirmation, attendee records, customer Profile access, cancellation/refund handling, and mobile presentation.
   - [x] Show available Workshop-session counts, remaining-place warnings, sold-out states, and prevent the customer from selecting more places than remain.
   - [x] Revalidate Workshop seat capacity server-side before creating the Stripe Checkout session so stale or altered carts cannot knowingly exceed current paid-ticket availability.
   - [x] Reserve Workshop seats atomically during Stripe Checkout and consume or release the reservation through the existing confirmation/webhook lifecycle.
@@ -156,8 +156,10 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
   - [x] Confirm an abandoned Stripe Checkout expires, releases its reserved Workshop seat, and restores normal availability.
   - [x] Confirm refunding a Workshop bundle restores both underlying session ticket allocations, marks the bundle-provided CRM access as removed, retains the Admin Order refund reason/amount/status, and leaves separately purchased Workshop access active.
   - [x] Confirm Marketplace, Workshop messaging, cart, and checkout presentation remain usable across tested mobile, tablet, and desktop widths.
-  - [ ] Confirm the purchased Workshop page, booking information, and direct downloads on a physical mobile device.
-  - [ ] Complete end-to-end emulator and mobile acceptance testing for discovery through confirmation/Profile, including sold-out, cancellation, and refund cases.
+  - [x] Confirm the purchased Workshop page, booking information, and direct downloads on a physical mobile device.
+  - [x] Complete end-to-end emulator and mobile acceptance testing for discovery through confirmation/Profile, including sold-out, cancellation, and refund cases.
+  - [x] Confirm a published Workshop can be edited after deployment, saved without an internal transaction error, reopened with the changes preserved, and reflected in Marketplace. Production hotfix PR #8 deployed the corrected `updateContentControlRecord` transaction on September 14.
+  - [x] Confirm every currently live Workshop session has the intended date/time, location, Instructor, capacity, warning threshold, prerequisites, unlocks, and customer-facing information.
 - [ ] Add instructor/session operating information and equipment/material checklists; direct Workshop PDF/download display is implemented, but the final “what to bring/wear” document still needs to be created, attached, and acceptance-tested.
   - [x] Add `Workshop Operations` as a separate Blueprint type beside manufacturing and connect its exact Blueprint variant to an exact Workshop Product variant/session with `OperatedWith`. It reuses Blueprint variants, Assets, notes, and requirements without creating finished stock or inheriting manufacturing deductions.
   - [x] Allow Products, ProductVariants, Items, and ItemVariants to be allocated to a specific Workshop session as a fixed quantity, per capacity, per confirmed attendee, or per actual attendee. Exact Product-variant allocations read and deduct only that Product variant's finished-goods stock.
