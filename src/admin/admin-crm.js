@@ -106,8 +106,30 @@ function selectedProductIds() {
 function selectedProductRows() {
   return [...document.querySelectorAll("#crmProductRows > div")].map((row) => ({
     productId: row.querySelector(".crm-product-select")?.value || "",
+    productVariantId: row.querySelector(".crm-product-variant-select")?.value || "",
     quantity: Math.max(1, Number(row.querySelector(".crm-product-quantity")?.value || 1)),
   })).filter((row) => row.productId);
+}
+
+function refreshProductVariantOptions(row, selectedVariantId = "") {
+  const productId = row.querySelector(".crm-product-select")?.value || "";
+  const select = row.querySelector(".crm-product-variant-select");
+  if (!select) return;
+  const product = accessProducts.find((entry) => entry.id === productId);
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  select.disabled = !productId || !variants.length;
+  select.innerHTML = !productId
+    ? "<option value=''>Choose a Product first</option>"
+    : variants.length
+      ? [
+        "<option value=''>Choose an exact variant...</option>",
+        "<option value='__all__'>Whole Product - all configured unlocks</option>",
+        ...variants.map((variant) => (
+          `<option value="${escapeHTML(variant.id)}">${escapeHTML(variant.name)}</option>`
+        )),
+      ].join("")
+      : "<option value='__all__'>Whole Product - no variants</option>";
+  select.value = variants.length ? selectedVariantId : "__all__";
 }
 
 function refreshProductRowOptions() {
@@ -131,9 +153,12 @@ function addProductRow(value = "") {
   if (!container) return;
   container.querySelector("[data-loading-products]")?.remove();
   const row = document.createElement("div");
-  row.className = "flex gap-2";
+  row.className = "grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_6rem_auto]";
   row.innerHTML = `
     <select class="crm-product-select input min-w-0 flex-1" aria-label="Access Product"></select>
+    <select class="crm-product-variant-select input min-w-0" aria-label="Exact Product variant" disabled>
+      <option value="">Choose a Product first</option>
+    </select>
     <label class="flex w-24 items-center gap-2 text-sm text-gray-300">
       <span>Qty</span>
       <input type="number" min="1" step="1" value="1" class="crm-product-quantity input min-w-0 w-full"
@@ -144,7 +169,10 @@ function addProductRow(value = "") {
   `;
   container.appendChild(row);
   const select = row.querySelector("select");
-  select.addEventListener("change", refreshProductRowOptions);
+  select.addEventListener("change", () => {
+    refreshProductRowOptions();
+    refreshProductVariantOptions(row);
+  });
   row.querySelector("button").addEventListener("click", () => {
     row.remove();
     if (!container.querySelector(".crm-product-select")) addProductRow();
@@ -152,6 +180,7 @@ function addProductRow(value = "") {
   });
   refreshProductRowOptions();
   select.value = value;
+  refreshProductVariantOptions(row);
 }
 
 function showProductAction(action) {
@@ -521,11 +550,25 @@ async function loadAccessCatalog() {
     entries.sort((a, b) => a.name.localeCompare(b.name));
   });
   try {
-    const [productsSnap, grantsSnap, pricesSnap] = await Promise.all([
+    const [productsSnap, variantsSnap, grantsSnap, pricesSnap] = await Promise.all([
       getDocs(collection(db, "products")),
+      getDocs(collection(db, "productVariants")),
       getDocs(collection(db, "productAccessGrants")),
       getDocs(collection(db, "productPrices")),
     ]);
+    const variantsByProduct = new Map();
+    variantsSnap.docs.forEach((variantDoc) => {
+      const variant = variantDoc.data() || {};
+      const productId = variant.productId || variant.ProductID || "";
+      if (!productId) return;
+      if (!variantsByProduct.has(productId)) variantsByProduct.set(productId, []);
+      variantsByProduct.get(productId).push({
+        id: variant.productVariantId || variant.variantId || variantDoc.id,
+        name: variant.variantName || variant.name || variant.sku || variantDoc.id,
+        price: Number(variant.priceOverride ?? variant.price ?? 0),
+      });
+    });
+    variantsByProduct.forEach((variants) => variants.sort((a, b) => a.name.localeCompare(b.name)));
     const grants = grantsSnap.docs.map((grantDoc) => ({ id: grantDoc.id, ...grantDoc.data() }));
     const prices = new Map(pricesSnap.docs.map((priceDoc) => {
       const price = priceDoc.data();
@@ -545,6 +588,7 @@ async function loadAccessCatalog() {
         image: product.image || product.imageUrl || "/images/product-placeholder.png",
         unlocksAccess: product.unlocksAccess === true || productGrants.length > 0,
         accessGrants: productGrants,
+        variants: variantsByProduct.get(productDoc.id) || [],
       };
     }).sort((a, b) => a.name.localeCompare(b.name));
     accessProducts = allProducts.filter((product) => product.unlocksAccess);
@@ -558,15 +602,18 @@ async function loadAccessCatalog() {
   }
 }
 
-function sharedCartItem(product, quantity = 1) {
+function sharedCartItem(product, quantity = 1, productVariantId = "") {
+  const variant = product.variants?.find((entry) => entry.id === productVariantId);
   return {
     id: product.id,
-    name: product.name,
-    price: product.price,
+    name: variant ? `${product.name} - ${variant.name}` : product.name,
+    price: variant?.price || product.price,
     quantity,
     type: product.type,
     requiresShipping: product.requiresShipping,
     image: product.image,
+    variantId: variant?.id || "",
+    variantName: variant?.name || "",
   };
 }
 
@@ -587,7 +634,11 @@ async function createSharedCart({ email = false } = {}) {
     recipientEmail: recipientEmail || null,
     items: products.map((product) => {
       const row = productRows.find((entry) => entry.productId === product.id);
-      return sharedCartItem(product, row?.quantity || 1);
+      return sharedCartItem(
+        product,
+        row?.quantity || 1,
+        row?.productVariantId === "__all__" ? "" : row?.productVariantId,
+      );
     }),
     active: true,
     createdAt: serverTimestamp(),
@@ -624,28 +675,51 @@ async function grantManualProductAccess() {
   if (!selectedUserId || !products.length || !reason || !reasonNote) {
     return showToast("Select Products, a reason, and explain why access is being granted.", "error");
   }
-  const productsWithoutGrants = products.filter((product) => !product.accessGrants.length);
-  if (productsWithoutGrants.length) {
-    return showToast("One or more selected Products have no canonical access targets.", "error");
+  const missingVariant = productRows.find((row) => {
+    const product = products.find((entry) => entry.id === row.productId);
+    return product?.variants?.length && !row.productVariantId;
+  });
+  if (missingVariant) {
+    return showToast("Choose an exact Product variant or explicitly choose Whole Product.", "error");
   }
-  await Promise.all(products.flatMap((product) => product.accessGrants.map(async (grant) => {
+  const selectedGrants = productRows.flatMap((row) => {
+    const product = products.find((entry) => entry.id === row.productId);
+    if (!product) return [];
+    const wholeProduct = row.productVariantId === "__all__";
+    const grants = product.accessGrants.filter((grant) => {
+      const grantVariantId = grant.productVariantId || grant.ProductVariantID || "";
+      return wholeProduct || !grantVariantId || grantVariantId === row.productVariantId;
+    });
+    return grants.map((grant) => ({ product, row, grant }));
+  });
+  if (!selectedGrants.length || productRows.some((row) => !selectedGrants.some((entry) =>
+    entry.row === row))) {
+    return showToast("One or more selected Product variants have no configured access targets.", "error");
+  }
+  await Promise.all(selectedGrants.map(async ({ product, row, grant }) => {
     const accessType = grant.accessEntityType || grant.accessType;
     const accessId = grant.accessEntityId || grant.accessId;
+    const accessVariantId = grant.accessEntityVariantId || "";
     if (!accessType || !accessId) return;
-    const userAccessId = `${selectedUserId}_${accessType}_${accessId}`;
-    const quantity = productRows.find((row) => row.productId === product.id)?.quantity || 1;
+    const userAccessId = `${selectedUserId}_${accessType}_${accessId}` +
+      (accessVariantId ? `_${accessVariantId}` : "");
+    const sourceProductVariantId = row.productVariantId === "__all__" ? "" : row.productVariantId;
+    const sourceVariant = product.variants?.find((variant) => variant.id === sourceProductVariantId);
     await setDoc(doc(db, "userAccess", userAccessId), {
       userAccessId, userId: selectedUserId, accessType, accessId,
+      accessVariantId,
       sourceProductId: product.id,
-      quantity,
+      sourceProductVariantId,
+      sourceProductVariantName: sourceVariant?.name || "",
+      quantity: row.quantity,
       productAccessGrantId: grant.productAccessGrantId || grant.id,
       source: "admin-manual", manualGrantReason: reason, manualGrantNote: reasonNote,
       grantedAt: serverTimestamp(), grantedBy: auth?.currentUser?.uid || "admin",
       active: true, revokedAt: null, revokedBy: null, revocationReason: null,
       revocable: true, updatedAt: serverTimestamp(),
     }, { merge: true });
-  })));
-  showToast(`${products.length} Product${products.length === 1 ? "" : "s"} unlocked`, "success");
+  }));
+  showToast(`${productRows.length} Product selection${productRows.length === 1 ? "" : "s"} unlocked`, "success");
   await Promise.all(["Course", "Workshop", "Program"].map((type) => (
     renderUserAccess(selectedUserId, type)
   )));
