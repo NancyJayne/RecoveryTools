@@ -1338,6 +1338,21 @@ export const updateContentControlRecord = onCall(
       : [{ docs: [] }, { docs: [] }];
     const newTags = cleanNewTags(updates.newTags);
     await db.runTransaction(async (transaction) => {
+      // Firestore requires every transactional read to happen before the first
+      // write. Product synchronization reads the entity, Product and active
+      // price, so it must run before tags, inventory, assets or the entity are
+      // queued for writing.
+      await updateProductRelation({
+        db,
+        transaction,
+        collection,
+        recordId,
+        updates,
+        itemUpdate: update,
+        request,
+        existingAccessGrantDocs: accessGrantSnapshot.docs,
+        existingVariantLinkDocs: variantLinkSnapshot.docs,
+      });
       newTags.forEach((tag) => {
         const tagId = `TAG-${slugify(tag.name)}`;
         transaction.set(db.collection("tags").doc(tagId), {
@@ -1376,17 +1391,6 @@ export const updateContentControlRecord = onCall(
           createdAt: now,
         }, { merge: true });
       }
-      await updateProductRelation({
-        db,
-        transaction,
-        collection,
-        recordId,
-        updates,
-        itemUpdate: update,
-        request,
-        existingAccessGrantDocs: accessGrantSnapshot.docs,
-        existingVariantLinkDocs: variantLinkSnapshot.docs,
-      });
       syncTemplateAssets({
         transaction,
         db,
