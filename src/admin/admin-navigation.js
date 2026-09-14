@@ -33,6 +33,7 @@ export function initAdminNavigation(role) {
     "/admin/content/builder": "adminContentBuilderSection",
     "/admin/builder": "adminContentControlsSection",
     "/admin/products": "productManagerPanel",
+    "/admin/workshops-courses": "adminWorkshopCourseOperationsSection",
     "/admin/workshops": "adminWorkshopApprovals",
     "/admin/courses": "pendingCourseApprovals",
     "/admin/affiliates": "adminAffiliateStats",
@@ -55,6 +56,13 @@ export function initAdminNavigation(role) {
     });
     document.getElementById(tabId)?.classList.remove("hidden");
     showTabContent("adminSection");
+    if (tabId === "adminContentControlsSection") {
+      // Opening the root Content page is an explicit exit from nested creation.
+      // Drawer-to-drawer navigation stays untouched because it remains on the
+      // Builder route and does not pass through this root page.
+      sessionStorage.removeItem("recovery-tools-content-builder-creation-stack");
+      window.dispatchEvent(new CustomEvent("content-builder-root-reset"));
+    }
   }
 
   document.querySelectorAll(".admin-link").forEach((link) => {

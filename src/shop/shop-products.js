@@ -13,6 +13,7 @@ import { showToast, showTabContent } from "../utils/utils.js";
 const PRODUCT_PLACEHOLDER = "/images/product-placeholder.png";
 let allMarketplaceProducts = [];
 let activeMarketplaceFilter = "all";
+let marketplaceVariantBubbleCloseTimer = null;
 
 function asMoney(value) {
   const amount = Number(value ?? 0);
@@ -51,16 +52,219 @@ function getProductShortDescription(product) {
   return product.shortDescription || product.description || product.longDescription || "";
 }
 
+function getMarketplaceTileImage(product) {
+  return product.marketplaceTileImage || getProductImage(product);
+}
+
+function getMarketplaceTileShortDescription(product) {
+  return product.marketplaceTileShortDescription || getProductShortDescription(product);
+}
+
 function getProductLongDescription(product) {
   return product.longDescription || product.description || product.shortDescription || "";
 }
 
 function getVariantLongDescription(product, variant) {
-  return variant?.longDescription || variant?.shortDescription || getProductLongDescription(product);
+  return variant?.longDescription || getProductLongDescription(product) || variant?.shortDescription || "";
 }
 
 function courseVideoMedia(product) {
   return product.coursePreviewVideo?.url ? product.coursePreviewVideo : null;
+}
+
+function promotionVideos(product, variant) {
+  const media = variant?.media?.length ? variant.media : product.media || [];
+  return media.filter((asset) => asset?.type === "video" && (asset.url || asset.embedUrl));
+}
+
+function marketplaceVideoSection(product, variant) {
+  const section = document.createElement("section");
+  section.className = "mb-5 space-y-4";
+  const videos = promotionVideos(product, variant);
+  section.classList.toggle("hidden", !videos.length);
+  videos.forEach((video) => {
+    const heading = document.createElement("h3");
+    heading.className = "text-lg font-semibold text-white";
+    heading.textContent = video.title || "Preview video";
+    const embedUrl = audibleVideoEmbedUrl(video.embedUrl, video.url);
+    const player = embedUrl ? document.createElement("iframe") : document.createElement("video");
+    player.className = "aspect-video w-full rounded bg-black";
+    if (embedUrl) {
+      player.src = embedUrl;
+      player.title = video.title || "Product preview video";
+      player.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+      player.allowFullscreen = true;
+      player.loading = "lazy";
+    } else {
+      player.src = video.url;
+      player.controls = true;
+      player.preload = "metadata";
+      player.playsInline = true;
+      player.controlsList = "nodownload noremoteplayback";
+    }
+    protectDisplayedMedia(player);
+    section.append(heading, player);
+  });
+  return section;
+}
+
+function productVariantHref(productSlug, productId, productVariantId) {
+  const productKey = productSlug || productId;
+  if (!productKey) return "#";
+  const query = productVariantId
+    ? `?variant=${encodeURIComponent(productVariantId)}`
+    : "";
+  return `/shop/${encodeURIComponent(productKey)}${query}`;
+}
+
+function closeMarketplaceVariantBubbleSoon() {
+  clearTimeout(marketplaceVariantBubbleCloseTimer);
+  marketplaceVariantBubbleCloseTimer = setTimeout(() => {
+    const bubble = document.querySelector(".marketplace-variant-bubble");
+    if (bubble?.dataset.pinned !== "true") bubble?.remove();
+  }, 180);
+}
+
+function showMarketplaceVariantBubble(entry, pinned = false) {
+  clearTimeout(marketplaceVariantBubbleCloseTimer);
+  document.querySelectorAll(".marketplace-variant-bubble").forEach((bubble) => bubble.remove());
+  const href = productVariantHref(
+    entry.productSlug,
+    entry.productId || entry.componentProductId,
+    entry.productVariantId || entry.componentProductVariantId,
+  );
+  const productName = entry.productName || entry.name || entry.productId || entry.componentProductId;
+  const variantName = entry.productVariantName || entry.name ||
+    entry.productVariantId || entry.componentProductVariantId;
+  const bubble = document.createElement("div");
+  bubble.className = `marketplace-variant-bubble fixed left-1/2 top-1/2 z-[70] w-[min(22rem,calc(100vw-2rem))]
+    -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[#407471] bg-gray-800 p-4 shadow-2xl`;
+  bubble.dataset.pinned = pinned ? "true" : "false";
+  bubble.addEventListener("mouseenter", () => clearTimeout(marketplaceVariantBubbleCloseTimer));
+  bubble.addEventListener("mouseleave", closeMarketplaceVariantBubbleSoon);
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-gray-950 text-xl text-white";
+  close.setAttribute("aria-label", "Close bundled Product preview");
+  close.textContent = "×";
+  close.addEventListener("click", (event) => {
+    event.stopPropagation();
+    bubble.remove();
+  });
+  const card = document.createElement("div");
+  card.className = "block w-full text-left";
+  const image = document.createElement("img");
+  image.src = entry.image || PRODUCT_PLACEHOLDER;
+  image.alt = `${productName} — ${variantName}`;
+  image.className = "h-40 w-full rounded object-cover";
+  protectDisplayedMedia(image);
+  const title = document.createElement("h4");
+  title.className = "mt-3 pr-7 text-lg font-semibold text-white";
+  title.textContent = `${productName} — ${variantName}`;
+  const price = document.createElement("div");
+  price.className = "mt-1";
+  const retailPrice = Number(entry.retailPrice);
+  const salePrice = Number(entry.salePrice);
+  const hasSale = entry.salePrice !== null && entry.salePrice !== undefined && Number.isFinite(salePrice);
+  price.innerHTML = hasSale
+    ? `<span class="mr-2 text-gray-500 line-through">${asMoney(retailPrice)}</span>` +
+      `<span class="font-bold text-green-400">${asMoney(salePrice)}</span>`
+    : `<span class="font-bold text-green-400">${asMoney(retailPrice)}</span>`;
+  const wholesalePrice = Number(entry.wholesalePrice);
+  if (Number.isFinite(wholesalePrice) && wholesalePrice > 0) {
+    const affiliate = document.createElement("p");
+    affiliate.className = "mt-1 text-sm font-semibold text-[#9edbd7]";
+    affiliate.textContent = `Affiliate ${asMoney(wholesalePrice)}`;
+    price.appendChild(affiliate);
+  }
+  const description = document.createElement("p");
+  description.className = "mt-2 text-sm text-gray-300";
+  description.textContent = entry.shortDescription || "";
+  card.append(image, title, price);
+  if (description.textContent) card.appendChild(description);
+  const moreDetail = document.createElement("a");
+  moreDetail.href = href;
+  moreDetail.className = "mt-4 inline-flex rounded bg-[#407471] px-4 py-2 text-sm font-semibold text-white hover:bg-[#315e5b]";
+  moreDetail.textContent = "More detail";
+  card.appendChild(moreDetail);
+  bubble.append(close, card);
+  document.body.appendChild(bubble);
+  if (pinned) close.focus();
+}
+
+function marketplaceLinkedVariantList(title, entries = [], usePreviewBubble = false, showEveryQuantity = false) {
+  const section = document.createElement("section");
+  section.className = "mb-4 hidden";
+  if (!entries.length) return section;
+
+  const heading = document.createElement("h3");
+  heading.className = "mb-2 text-base font-semibold text-white";
+  heading.textContent = title;
+  const list = document.createElement("ul");
+  list.className = "list-disc space-y-2 pl-5 text-sm text-gray-300";
+  entries.forEach((entry) => {
+    const item = document.createElement("li");
+    const manualItem = entry.requirementType === "item" || entry.itemId;
+    const link = document.createElement(manualItem ? "span" : usePreviewBubble ? "button" : "a");
+    if (usePreviewBubble) link.type = "button";
+    link.className = "font-semibold text-[#9edbd7] hover:underline";
+    if (manualItem) {
+      link.className = "font-semibold text-[#9edbd7]";
+    } else if (usePreviewBubble) {
+      link.addEventListener("mouseenter", () => showMarketplaceVariantBubble(entry));
+      link.addEventListener("mouseleave", closeMarketplaceVariantBubbleSoon);
+      link.addEventListener("click", () => showMarketplaceVariantBubble(entry, true));
+    } else {
+      link.href = productVariantHref(
+        entry.productSlug,
+        entry.productId || entry.componentProductId,
+        entry.productVariantId || entry.componentProductVariantId,
+      );
+    }
+    const quantity = Number(entry.quantity || 1);
+    const productName = entry.productName || entry.name || entry.itemId ||
+      entry.productId || entry.componentProductId;
+    const variantName = manualItem ? "" : entry.productVariantName || entry.name ||
+      entry.productVariantId || entry.componentProductVariantId;
+    link.textContent = `${showEveryQuantity || quantity > 1 ? `${quantity} × ` : ""}${productName}` +
+      `${variantName ? ` — ${variantName}` : ""}`;
+    item.appendChild(link);
+    if (entry.shortDescription) {
+      const description = document.createElement("span");
+      description.textContent = ` — ${entry.shortDescription}`;
+      item.appendChild(description);
+    }
+    list.appendChild(item);
+  });
+  section.append(heading, list);
+  section.classList.remove("hidden");
+  return section;
+}
+
+function marketplaceUnifiedInclusions(variant = {}) {
+  const linked = variant.bundleProductVariants || [];
+  const manual = Array.isArray(variant.manualInclusions) && variant.manualInclusions.length
+    ? variant.manualInclusions
+    : String(variant.inclusions || "").split(/\r?\n/).map((name) => ({
+      name: name.replace(/^[-*•]\s*/, "").trim(), quantity: 1,
+    })).filter((entry) => entry.name);
+  const section = marketplaceLinkedVariantList("Inclusions", linked, true, true);
+  if (!linked.length && manual.length) {
+    section.classList.remove("hidden");
+    const heading = document.createElement("h3");
+    heading.className = "mb-2 text-base font-semibold text-white";
+    heading.textContent = "Inclusions";
+    const list = document.createElement("ul");
+    list.className = "list-disc space-y-2 pl-5 text-sm text-gray-300";
+    section.append(heading, list);
+  }
+  const list = section.querySelector("ul");
+  manual.slice().reverse().forEach((entry) => {
+    const item = document.createElement("li");
+    item.textContent = `${Math.max(Number(entry.quantity || 1), 1)} × ${entry.name}`;
+    list?.prepend(item);
+  });
+  return section;
 }
 
 function youtubeEmbedUrl(value) {
@@ -236,6 +440,15 @@ function productCategory(product) {
   return "tools";
 }
 
+function isWorkshopProduct(product) {
+  return productCategory(product) === "workshops";
+}
+
+function workshopVariantSoldOut(variant) {
+  const remaining = variant?.ticketsRemaining;
+  return remaining !== null && remaining !== undefined && Number(remaining) <= 0;
+}
+
 function categoryLabel(category) {
   return {
     tools: "Tools",
@@ -403,7 +616,7 @@ export async function loadProducts() {
 export function createProductTile(product) {
   if (product.visible === false) return null;
   const productName = getProductName(product);
-  const productImage = getProductImage(product);
+  const productImage = getMarketplaceTileImage(product);
   const finalPrice = getProductPrice(product);
 
   const wrapper = document.createElement("div");
@@ -425,7 +638,7 @@ export function createProductTile(product) {
   wrapper.dataset.productName = productName;
   wrapper.dataset.productPrice = finalPrice;
   wrapper.dataset.productImage = productImage;
-  wrapper.dataset.productDescription = getProductShortDescription(product);
+  wrapper.dataset.productDescription = getMarketplaceTileShortDescription(product);
   wrapper.dataset.productStock = product.stock ?? 0;
   wrapper.dataset.productFull = JSON.stringify(product);
 
@@ -448,13 +661,6 @@ export function createProductTile(product) {
       px-2 py-1 text-xs font-semibold text-white`;
     wrapper.appendChild(badge);
   }
-  if (product.pricingTier === "affiliate-wholesale") {
-    const badge = document.createElement("span");
-    badge.textContent = "Affiliate wholesale";
-    badge.className = "absolute bottom-2 left-2 rounded bg-[#407471] px-2 py-1 text-xs font-semibold text-white";
-    wrapper.appendChild(badge);
-  }
-
   const image = document.createElement("img");
   image.src = productImage;
   image.alt = getProductImageAlt(product);
@@ -466,35 +672,58 @@ export function createProductTile(product) {
   name.className = "text-lg font-semibold mt-2 text-white";
 
   const shortDesc = document.createElement("p");
-  shortDesc.textContent = getProductShortDescription(product);
+  shortDesc.textContent = getMarketplaceTileShortDescription(product);
   shortDesc.className = "text-sm text-gray-300 mt-1";
 
-  const price = document.createElement("p");
-  price.innerHTML =
-  product.onSale && product.salePrice
-    ? `<span class="line-through text-gray-500 mr-2">
-         ${asMoney(product.retailPrice)}
-       </span><span class="text-green-400 font-bold">
-         ${asMoney(finalPrice)}
-       </span>`
-    : asMoney(finalPrice);
-
-  price.className = "mt-1";
+  const price = document.createElement("div");
+  price.className = "mt-1 flex items-center justify-between gap-3";
+  const retailPrice = document.createElement("p");
+  retailPrice.innerHTML = product.retailOnSale && product.salePrice !== null
+    ? `<span class="mr-2 line-through text-gray-500">${asMoney(product.retailPrice)}</span>` +
+      `<span class="font-bold text-green-400">${asMoney(product.salePrice)}</span>`
+    : `<span class="font-semibold text-green-300">${asMoney(product.retailPrice)}</span>`;
+  price.appendChild(retailPrice);
+  if (Number(product.wholesalePrice) > 0) {
+    const affiliatePrice = document.createElement("p");
+    affiliatePrice.className = "text-right text-sm font-semibold text-[#9edbd7]";
+    affiliatePrice.textContent = `Affiliate ${asMoney(product.wholesalePrice)}`;
+    price.appendChild(affiliatePrice);
+  }
 
   wrapper.appendChild(image);
   wrapper.appendChild(name);
   wrapper.appendChild(shortDesc);
   wrapper.appendChild(price);
 
-  const tracksInventory = product.inventoryTracked !== false;
+  if (isWorkshopProduct(product)) {
+    const availableSessions = Array.isArray(product.variants)
+      ? product.variants.filter((variant) => variant.purchasable !== false && Number(variant.ticketsRemaining) !== 0)
+      : [];
+    const sessionSummary = document.createElement("p");
+    sessionSummary.className = "mt-2 text-sm font-medium text-[#9edbd7]";
+    sessionSummary.textContent = product.variants?.length
+      ? availableSessions.length > 0
+        ? `${availableSessions.length} session${availableSessions.length === 1 ? "" : "s"} available`
+        : "Sold out"
+      : "View Workshop details";
+    wrapper.appendChild(sessionSummary);
+  }
+
+  const tracksInventory = product.inventoryTracked !== false ||
+    product.variants?.some((variant) => variant.inventoryTracked === true);
   const variantStock = Array.isArray(product.variants)
     ? product.variants.reduce((sum, variant) => sum + Number(variant.stock ?? 0), 0)
     : 0;
   const availableStock = product.variants?.length ? variantStock : Number(product.stock ?? 0);
-  if (tracksInventory && availableStock === 0) {
+  const sellableWorkshopVariants = Array.isArray(product.variants)
+    ? product.variants.filter((variant) => variant.purchasable !== false)
+    : [];
+  const workshopSoldOut = isWorkshopProduct(product) && sellableWorkshopVariants.length > 0 &&
+    sellableWorkshopVariants.every(workshopVariantSoldOut);
+  if (workshopSoldOut || !isWorkshopProduct(product) && tracksInventory && availableStock === 0) {
     const overlay = document.createElement("div");
     overlay.className = "absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center rounded";
-    overlay.innerHTML = `<span class="text-white font-semibold text-lg">Out of Stock</span>`;
+    overlay.innerHTML = `<span class="text-white font-semibold text-lg">${workshopSoldOut ? "Sold Out" : "Out of Stock"}</span>`;
     wrapper.appendChild(overlay);
   }
 
@@ -503,7 +732,6 @@ export function createProductTile(product) {
 
 export function showProductDetail(product, options = {}) {
   const detail = document.getElementById("productDetailContainer");
-  if (detail.dataset.currentId === product.id) return;
   if (detail.dataset.mediaProtectionBound !== "true") {
     detail.dataset.mediaProtectionBound = "true";
     detail.addEventListener("contextmenu", (event) => {
@@ -516,8 +744,13 @@ export function showProductDetail(product, options = {}) {
   const productName = getProductName(product);
   const productImage = getProductImage(product);
   const variants = Array.isArray(product.variants) ? product.variants : [];
+  const requestedVariantId = new URLSearchParams(window.location.search).get("variant") || "";
   let selectedVariant = variants.find((variant) =>
-    variant.purchasable !== false && Number(variant.stock ?? 0) > 0,
+    (variant.variantId || variant.id) === requestedVariantId && variant.purchasable !== false,
+  ) || variants.find((variant) =>
+    variant.purchasable !== false && (isWorkshopProduct(product)
+      ? !workshopVariantSoldOut(variant)
+      : Number(variant.stock ?? 0) > 0),
   ) || variants.find((variant) => variant.purchasable !== false) || variants[0] || null;
   let finalPrice = getVariantPrice(product, selectedVariant);
 
@@ -554,23 +787,23 @@ export function showProductDetail(product, options = {}) {
   title.textContent = productName;
   title.className = "text-2xl font-bold mb-2";
 
-  const price = document.createElement("span");
+  const price = document.createElement("div");
   function updatePriceDisplay() {
     finalPrice = getVariantPrice(product, selectedVariant);
-    price.innerHTML =
-      selectedVariant?.onSale
-        ? `<span class="line-through text-gray-500 mr-2">
-             ${asMoney(selectedVariant.retailPriceOverride)}
-           </span><span class="text-green-400 font-bold">
-             ${asMoney(finalPrice)}
-           </span>`
-        : product.onSale && product.salePrice && !selectedVariant?.priceOverride
-          ? `<span class="line-through text-gray-500 mr-2">
-             ${asMoney(product.retailPrice)}
-           </span><span class="text-green-400 font-bold">
-             ${asMoney(finalPrice)}
-           </span>`
-          : asMoney(finalPrice);
+    const affiliatePrice = Number(selectedVariant?.wholesalePrice ?? product.wholesalePrice);
+    const hasAffiliatePrice = Number.isFinite(affiliatePrice) && affiliatePrice > 0;
+    const variantSaleActive = selectedVariant?.retailOnSale === true && Number(selectedVariant.salePrice) >= 0;
+    const productSaleActive = !selectedVariant && product.retailOnSale === true && Number(product.salePrice) >= 0;
+    const retailPrice = Number(selectedVariant?.retailPriceOverride ?? product.retailPrice ?? finalPrice);
+    const salePrice = variantSaleActive ? Number(selectedVariant.salePrice) : Number(product.salePrice);
+
+    const retailLine = variantSaleActive || productSaleActive
+      ? `<span class="line-through text-gray-500 mr-2">${asMoney(retailPrice)}</span>` +
+        `<span class="text-green-400 font-bold">${asMoney(salePrice)}</span>`
+      : `<span class="text-green-400 font-bold">${asMoney(retailPrice)}</span>`;
+    price.innerHTML = `<div>${retailLine}</div>` + (hasAffiliatePrice
+      ? `<div class="mt-1 text-sm font-semibold text-[#9edbd7]">Affiliate ${asMoney(affiliatePrice)}</div>`
+      : "");
   }
   function updateProductImage() {
     img.src = getVariantImage(product, selectedVariant);
@@ -578,17 +811,46 @@ export function showProductDetail(product, options = {}) {
   }
   updateProductImage();
   updatePriceDisplay();
-  price.className = "text-green-400 text-xl font-bold mb-2";
+  price.className = "mb-2 text-xl";
 
 
   const longDesc = document.createElement("p");
   function updateDescription() {
     const description = getVariantLongDescription(product, selectedVariant);
-    const inclusions = selectedVariant?.inclusions || "";
-    longDesc.textContent = [description, inclusions].filter(Boolean).join("\n\n");
+    longDesc.textContent = description;
   }
   updateDescription();
   longDesc.className = "whitespace-pre-line text-sm text-gray-300 mb-4";
+
+  let inclusions = document.createElement("section");
+  let prerequisiteDetails = document.createElement("section");
+  function updateIncludedDetails() {
+    const replacementInclusions = marketplaceUnifiedInclusions(selectedVariant || {});
+    inclusions.replaceWith(replacementInclusions);
+    inclusions = replacementInclusions;
+
+    const replacementPrerequisites = marketplaceLinkedVariantList(
+      "Prerequisites",
+      selectedVariant?.prerequisiteProductVariants || [],
+    );
+    prerequisiteDetails.replaceWith(replacementPrerequisites);
+    prerequisiteDetails = replacementPrerequisites;
+  }
+  updateIncludedDetails();
+
+  const prerequisiteNotice = document.createElement("div");
+  prerequisiteNotice.className = "mb-4 rounded border border-amber-600/60 bg-amber-950/40 p-3 text-sm text-amber-100";
+  function missingPrerequisites() {
+    return (selectedVariant?.prerequisiteProductVariants || []).filter((required) => !required.satisfied);
+  }
+  function updatePrerequisiteNotice() {
+    const missing = missingPrerequisites();
+    prerequisiteNotice.classList.toggle("hidden", !missing.length);
+    prerequisiteNotice.textContent = missing.length
+      ? `Required first: ${missing.map((required) => required.name).join(", ")}. Purchase or unlock ${missing.length === 1 ? "this workshop" : "these workshops"} first, or choose a bundle that includes them.`
+      : "";
+  }
+  updatePrerequisiteNotice();
 
   const featureList = document.createElement("ul");
   featureList.className = "list-disc ml-5 text-sm text-gray-300 mb-4";
@@ -597,6 +859,7 @@ export function showProductDetail(product, options = {}) {
     li.textContent = f;
     featureList.appendChild(li);
   });
+  let marketplaceVideos = marketplaceVideoSection(product, selectedVariant);
   let courseDetails = courseDetailMarkup(product);
   function updateCourseDetails() {
     if (productCategory(product) !== "courses") return;
@@ -673,12 +936,20 @@ export function showProductDetail(product, options = {}) {
       updatePriceDisplay();
       updateProductImage();
       updateDescription();
+      updateIncludedDetails();
       updateCourseDetails();
       updateExperienceDetails();
       updateCapacityWarning();
+      updatePrerequisiteNotice();
+      const updatedVideos = marketplaceVideoSection(product, selectedVariant);
+      marketplaceVideos.replaceWith(updatedVideos);
+      marketplaceVideos = updatedVideos;
       quantity = Math.max(quantity, minimumQuantity());
       qtyDisplay.textContent = String(quantity);
       updateAddButtonState();
+      const url = new URL(window.location.href);
+      url.searchParams.set("variant", selectedVariant?.variantId || selectedVariant?.id || "");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}`);
     });
 
     variantLabel.appendChild(variantSelect);
@@ -714,6 +985,15 @@ export function showProductDetail(product, options = {}) {
     }
   };
   plusBtn.onclick = () => {
+    const remaining = Number(selectedVariant?.ticketsRemaining);
+    const maximum = productCategory(product) === "workshops" &&
+      selectedVariant?.ticketsRemaining !== null && Number.isFinite(remaining)
+      ? remaining
+      : Number.POSITIVE_INFINITY;
+    if (quantity >= maximum) {
+      showToast(`Only ${maximum} place${maximum === 1 ? " is" : "s are"} currently available.`, "error");
+      return;
+    }
     quantity++;
     qtyDisplay.textContent = quantity;
   };
@@ -728,14 +1008,28 @@ export function showProductDetail(product, options = {}) {
     return selectedVariant ? Number(selectedVariant.stock ?? 0) : Number(product.stock ?? 0);
   }
 
+  function tracksCurrentInventory() {
+    if (selectedVariant) {
+      if (isWorkshopProduct(product) && selectedVariant.ticketsRemaining !== null &&
+          selectedVariant.ticketsRemaining !== undefined) return false;
+      return selectedVariant.bundleAvailable !== null && selectedVariant.bundleAvailable !== undefined ||
+        selectedVariant.inventoryTracked === true || product.inventoryTracked !== false;
+    }
+    return product.inventoryTracked !== false;
+  }
+
   function updateAddButtonState() {
-    const tracksInventory = product.inventoryTracked !== false;
-    const isOutOfStock = tracksInventory && currentStock() === 0;
+    const isOutOfStock = tracksCurrentInventory() && currentStock() <= 0;
+    const isWorkshopSoldOut = isWorkshopProduct(product) && workshopVariantSoldOut(selectedVariant);
     const isComingSoon = selectedVariant
       ? selectedVariant.purchasable === false || selectedVariant.comingSoon === true
       : product.purchasable === false || product.comingSoon === true;
-    btn.textContent = isComingSoon ? "Coming soon" : isOutOfStock ? "Out of Stock" : "Add to Cart";
-    btn.disabled = isOutOfStock || isComingSoon;
+    const prerequisitesMissing = missingPrerequisites().length > 0;
+    btn.textContent = isComingSoon
+      ? "Coming soon"
+      : isWorkshopSoldOut ? "Sold out" : isOutOfStock ? "Out of Stock"
+        : prerequisitesMissing ? "Prerequisite required" : "Add to Cart";
+    btn.disabled = isOutOfStock || isWorkshopSoldOut || isComingSoon || prerequisitesMissing;
     btn.classList.toggle("opacity-50", btn.disabled);
     btn.classList.toggle("cursor-not-allowed", btn.disabled);
   }
@@ -778,7 +1072,11 @@ export function showProductDetail(product, options = {}) {
   content.appendChild(title);
   content.appendChild(price);
   content.appendChild(longDesc);
+  content.appendChild(inclusions);
+  content.appendChild(prerequisiteDetails);
+  content.appendChild(prerequisiteNotice);
   content.appendChild(featureList);
+  content.appendChild(marketplaceVideos);
   if (courseDetails) content.appendChild(courseDetails);
   if (experienceDetails.children.length) content.appendChild(experienceDetails);
   content.appendChild(capacityWarning);
@@ -877,7 +1175,11 @@ export function injectProductSchema(product) {
   const productName = getProductName(product);
   const productImage = getProductImage(product);
   const finalPrice = getProductPrice(product);
-  const isOutOfStock = product.inventoryTracked !== false && product.stock === 0;
+  const workshopVariants = Array.isArray(product.variants)
+    ? product.variants.filter((variant) => variant.purchasable !== false) : [];
+  const isOutOfStock = isWorkshopProduct(product)
+    ? workshopVariants.length > 0 && workshopVariants.every(workshopVariantSoldOut)
+    : product.inventoryTracked !== false && product.stock === 0;
 
   const script = document.createElement("script");
   script.type = "application/ld+json";

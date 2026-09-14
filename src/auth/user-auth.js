@@ -27,6 +27,20 @@ function updateHeaderUI(user) {
   }
 }
 
+function enforceCurrentRouteAccess(user, roles = {}) {
+  const path = window.location.pathname || "/";
+  if (!path.startsWith("/admin")) return false;
+
+  if (user && roles.admin === true) return false;
+
+  // Firebase Auth is shared by tabs/windows using the same browser profile.
+  // Never leave an already-rendered Admin dashboard available after another
+  // tab signs out or changes to a non-admin account.
+  const destination = user ? "/profile" : "/";
+  window.location.replace(destination);
+  return true;
+}
+
 // 🔄 Initialize auth state and handle user presence
 export async function setupAuthState() {
   if (!auth) {
@@ -43,11 +57,14 @@ export async function setupAuthState() {
     updateHeaderUI(user);
 
     if (user) {
-      await setupRoleUI(user, { forceRefresh: true });
+      const roles = await setupRoleUI(user, { forceRefresh: true });
+      if (auth.currentUser?.uid !== user.uid) return;
       console.log("✅ User signed in:", user.email);
+      enforceCurrentRouteAccess(user, roles);
     } else {
       await setupRoleUI(null);
       console.log("👋 No user signed in");
+      if (!auth.currentUser) enforceCurrentRouteAccess(null);
     }
   });
 }

@@ -2,6 +2,7 @@ import { httpsCallable } from "firebase/functions";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { functions, storage } from "../utils/firebase-config.js";
 import { showToast } from "../utils/utils.js";
+import { assertAssetUploadSize } from "../utils/asset-upload.js";
 
 const updateProduct = httpsCallable(functions, "updateProduct");
 const updateInventory = httpsCallable(functions, "updateProductInventory");
@@ -12,6 +13,7 @@ const getInventoryOperationsData = httpsCallable(functions, "getInventoryOperati
 const updateInventoryStocktake = httpsCallable(functions, "updateInventoryStocktake");
 const recordManufacturingRun = httpsCallable(functions, "recordManufacturingRun");
 const updateWorkshopAttendance = httpsCallable(functions, "updateWorkshopAttendance");
+const recordWorkshopOperationsIssue = httpsCallable(functions, "recordWorkshopOperationsIssue");
 const managePromotions = httpsCallable(functions, "managePromotions");
 
 let cachedProducts = [];
@@ -21,6 +23,7 @@ let inventoryOperations = {
 };
 let lastManufacturingPreviewVariantId = "";
 let cachedPromotions = [];
+const inventoryStocktakeFocusKey = "recovery-tools-inventory-stocktake-focus";
 
 function asMoney(value) {
   const amount = Number(value ?? 0);
@@ -70,9 +73,19 @@ export function setupProductManager() {
     document.getElementById("showArchivedProductsToggle")
       ?.addEventListener("change", () => renderProductManagerList(cachedProducts));
   }
+  document.getElementById("createProductFromEntityBtn")?.addEventListener("click", async () => {
+    try {
+      const { openNewProductDrawerFromAdmin } = await import("./admin-content-builder.js");
+      await openNewProductDrawerFromAdmin();
+    } catch (error) {
+      console.error("Failed to open Product Creator:", error);
+      showToast(error.message || "Product Creator could not be opened.", "error");
+    }
+  });
 
   setupAssetManager();
   setupInventoryOperations();
+  setupInventoryStocktakeFocus();
   setupPromotionsManager();
 
   if (document.body.dataset.productSaveRefreshBound !== "true") {
@@ -249,6 +262,7 @@ function setupInventoryOperations() {
   const list = document.getElementById("inventoryStocktakeList");
   if (!list) return;
   const refresh = document.getElementById("refreshInventoryOperationsBtn");
+  const productRefresh = document.getElementById("refreshProductOperationsBtn");
   const search = document.getElementById("inventoryStocktakeSearch");
   const save = document.getElementById("saveInventoryStocktakeBtn");
   const productSelect = document.getElementById("manufacturingProductSelect");
@@ -264,6 +278,20 @@ function setupInventoryOperations() {
     document.getElementById("manufacturingQuantityProduced")
       ?.addEventListener("input", renderManufacturingPreview);
     record?.addEventListener("click", submitManufacturingRun);
+  }
+  if (productRefresh?.dataset.bound !== "true") {
+    productRefresh.dataset.bound = "true";
+    productRefresh.addEventListener("click", async () => {
+      productRefresh.disabled = true;
+      productRefresh.textContent = "Refreshing...";
+      try {
+        await Promise.all([loadProducts(), loadInventoryOperations()]);
+        showToast("Products and live ticketing refreshed.", "success");
+      } finally {
+        productRefresh.disabled = false;
+        productRefresh.textContent = "Refresh Products";
+      }
+    });
   }
   loadInventoryOperations();
 }
@@ -282,6 +310,7 @@ async function loadInventoryOperations() {
     renderStocktakeList();
     renderManufacturingOptions();
     renderWorkshopSessions();
+    renderCourseOperations();
     if (document.getElementById("productList")) renderProductManagerList(cachedProducts);
   } catch (error) {
     console.error("Failed to load inventory operations:", error);
@@ -300,6 +329,111 @@ function workshopDate(value) {
       timeStyle: "short",
       timeZone: "Australia/Brisbane",
     }).format(date);
+}
+
+function storedInventoryStocktakeFocus() {
+  try {
+    return JSON.parse(sessionStorage.getItem(inventoryStocktakeFocusKey) || "null");
+  } catch {
+    sessionStorage.removeItem(inventoryStocktakeFocusKey);
+    return null;
+  }
+}
+
+async function focusInventoryStocktake(detail = null) {
+  const target = detail || storedInventoryStocktakeFocus();
+  if (!target?.entityId) return;
+  showProductManagerTool("inventory");
+  const search = document.getElementById("inventoryStocktakeSearch");
+  if (search) search.value = target.entityId || target.entityName || "";
+  await loadInventoryOperations();
+  const row = [...document.querySelectorAll("[data-stocktake-row]")].find((candidate) =>
+    candidate.dataset.entityId === target.entityId &&
+    (!target.entityVariantId || candidate.dataset.itemVariantId === target.entityVariantId));
+  if (!row) {
+    showToast("The matching inventory row is not currently tracked.", "error");
+    return;
+  }
+  sessionStorage.removeItem(inventoryStocktakeFocusKey);
+  row.scrollIntoView({ behavior: "smooth", block: "center" });
+  row.style.outline = "2px solid #9edbd7";
+  row.style.outlineOffset = "-2px";
+  row.querySelector(".stocktake-quantity")?.focus({ preventScroll: true });
+}
+
+function setupInventoryStocktakeFocus() {
+  if (document.body.dataset.inventoryStocktakeFocusBound !== "true") {
+    document.body.dataset.inventoryStocktakeFocusBound = "true";
+    window.addEventListener("inventory-stocktake-focus", (event) => {
+      focusInventoryStocktake(event.detail);
+    });
+  }
+  if (storedInventoryStocktakeFocus()) focusInventoryStocktake();
+}
+
+function workshopOperationsMarkup(session) {
+  const operations = session.operations;
+  if (!operations) {
+    return `<div class="mt-4 rounded border border-dashed border-gray-700 p-3 text-sm text-gray-400">
+      No Workshop Operations Blueprint is connected to this session.
+    </div>`;
+  }
+  const sessionEnd = new Date(session.eventEndAt || session.eventStartAt || "").getTime();
+  const canComplete = Number.isFinite(sessionEnd) && sessionEnd <= Date.now();
+  const workshopList = document.getElementById("workshopSessionList");
+  if (workshopList && workshopList.dataset.operationsBound !== "true") {
+    workshopList.dataset.operationsBound = "true";
+    workshopList.addEventListener("click", async (event) => {
+      if (event.target.closest(".print-workshop-operations")) {
+        window.print();
+        return;
+      }
+      const issue = event.target.closest(".issue-workshop-consumables");
+      if (!issue || !window.confirm("Confirm these consumables and giveaways have been packed or issued and should now be deducted from inventory?")) return;
+      issue.disabled = true;
+      try {
+        await recordWorkshopOperationsIssue({
+          productId: issue.dataset.productId,
+          productVariantId: issue.dataset.productVariantId,
+          confirmation: "ISSUE",
+        });
+        showToast("Workshop consumables and giveaways deducted", "success");
+        await loadInventoryOperations();
+      } catch (error) {
+        console.error("Failed to issue Workshop materials:", error);
+        showToast(error.message || "Failed to issue Workshop materials", "error");
+      } finally {
+        issue.disabled = false;
+      }
+    });
+  }
+  const rows = operations.components?.length ? operations.components.map((component) => `
+    <tr class="border-t border-gray-800">
+      <td class="px-2 py-2"><input type="checkbox" class="accent-[#407471]" aria-label="Packed"></td>
+      <td class="px-2 py-2">${escapeHTML(component.name)}</td>
+      <td class="px-2 py-2">${escapeHTML(component.inventoryTreatment)}</td>
+      <td class="px-2 py-2">${escapeHTML(component.quantityBasis)}</td>
+      <td class="px-2 py-2 font-semibold text-white">${component.requiredQuantity} ${escapeHTML(component.unit)}</td>
+      <td class="px-2 py-2 text-amber-200">${component.heldQuantity || 0} ${escapeHTML(component.unit)}</td>
+      <td class="px-2 py-2 ${component.shortage > 0 ? "text-red-300" : "text-gray-300"}">
+        ${component.stock} · ${component.availableAfterHold ?? component.stock} available${component.shortage > 0 ? ` · Short ${component.shortage}` : ""}
+      </td>
+    </tr>`).join("") : `<tr><td colspan="7" class="px-2 py-3 text-gray-400">No equipment or materials configured.</td></tr>`;
+  const hasDeductions = operations.components?.some((component) =>
+    component.deductOnIssue && ["consumable", "take-home"].includes(component.inventoryTreatment));
+  return `<section class="workshop-operations-checklist mt-4 rounded border border-[#407471]/60 bg-gray-900/70 p-3">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div><h5 class="font-semibold text-white">Workshop operations: ${escapeHTML(operations.blueprintName)}</h5>
+      <p class="text-xs text-gray-400">${escapeHTML(operations.blueprintVariantName || "Default setup")} · Confirmed ${session.sold} · Checked in ${session.actualAttendees || 0}</p>
+      <p class="mt-1 text-xs text-amber-200">Required materials remain on hold until this session is completed. Only consumables and take-home items are deducted.</p></div>
+      <button type="button" class="print-workshop-operations rounded border border-gray-600 px-3 py-1 text-xs">Print checklist</button>
+    </div>
+    <div class="mt-3 overflow-x-auto"><table class="w-full min-w-[720px] text-sm">
+      <thead><tr class="text-left text-xs uppercase text-gray-400"><th class="px-2 py-2">Packed</th><th class="px-2 py-2">Item</th><th class="px-2 py-2">Treatment</th><th class="px-2 py-2">Basis</th><th class="px-2 py-2">Required</th><th class="px-2 py-2">On hold</th><th class="px-2 py-2">Stock / available</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    ${operations.issued ? `<p class="mt-3 text-sm text-green-300">Consumables and giveaways have been issued and recorded.</p>` : hasDeductions ? `<button type="button" class="issue-workshop-consumables mt-3 rounded bg-[#407471] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+      data-product-id="${escapeHTML(session.productId)}" data-product-variant-id="${escapeHTML(session.productVariantId)}"${canComplete ? "" : " disabled"}>${canComplete ? "Complete Workshop — deduct sold-ticket consumables" : "Available after Workshop ends"}</button>` : ""}
+  </section>`;
 }
 
 function renderWorkshopSessions() {
@@ -321,7 +455,12 @@ function renderWorkshopSessions() {
     const attendeeRows = session.attendees.length
       ? session.attendees.map((attendee) => `
           <tr class="border-t border-gray-800 ${attendee.removed ? "opacity-70" : ""}">
-            <td class="px-2 py-2">${escapeHTML(attendee.name)}</td>
+            <td class="px-2 py-2"><input type="checkbox" class="workshop-attendance-checkbox mr-2 accent-[#407471]"
+              data-product-id="${escapeHTML(session.productId)}"
+              data-product-variant-id="${escapeHTML(session.productVariantId || "")}"
+              data-order-id="${escapeHTML(attendee.orderId)}" data-user-id="${escapeHTML(attendee.userId || "")}"
+              ${attendee.checkedIn ? "checked" : ""} ${attendee.removed ? "disabled" : ""}
+              aria-label="Check in ${escapeHTML(attendee.name)}">${escapeHTML(attendee.name)}</td>
             <td class="px-2 py-2">${escapeHTML(attendee.email || "No email")}</td>
             <td class="px-2 py-2">${attendee.quantity}</td>
             <td class="px-2 py-2">
@@ -350,10 +489,11 @@ function renderWorkshopSessions() {
                 ${session.eventLocation ? ` · ${escapeHTML(session.eventLocation)}` : ""}
               </p>
             </div>
-            <div class="grid grid-cols-3 gap-4 text-center text-sm">
+            <div class="grid grid-cols-2 gap-4 text-center text-sm sm:grid-cols-4">
               <span><strong class="block text-white">${capacity || "—"}</strong>Capacity</span>
               <span><strong class="block text-white">${session.sold}</strong>Sold</span>
-              <span><strong class="block text-white">${remaining}</strong>Remaining</span>
+              <span><strong class="block text-amber-300">${Number(session.reserved || 0)}</strong>Reserved</span>
+              <span><strong class="block text-white">${remaining}</strong>Available</span>
             </div>
           </div>
         </summary>
@@ -372,9 +512,90 @@ function renderWorkshopSessions() {
               <tbody>${attendeeRows}</tbody>
             </table>
           </div>
+          ${workshopOperationsMarkup(session)}
         </div>
       </details>`;
   }).join("");
+  list.querySelectorAll(".workshop-attendance-checkbox").forEach((checkbox) => {
+    checkbox.addEventListener("change", async () => {
+      const previous = !checkbox.checked;
+      checkbox.disabled = true;
+      try {
+        await updateWorkshopAttendance({
+          productId: checkbox.dataset.productId,
+          productVariantId: checkbox.dataset.productVariantId,
+          orderId: checkbox.dataset.orderId,
+          userId: checkbox.dataset.userId,
+          checkedIn: checkbox.checked,
+        });
+        showToast(checkbox.checked ? "Attendee checked in" : "Attendee check-in removed", "success");
+        await loadInventoryOperations();
+      } catch (error) {
+        checkbox.checked = previous;
+        showToast(error.message || "Failed to update attendee check-in", "error");
+      } finally {
+        checkbox.disabled = false;
+      }
+    });
+  });
+}
+
+function renderCourseOperations() {
+  const list = document.getElementById("courseOperationsList");
+  if (!list) return;
+  if (!inventoryOperations.accessSummaries.length) {
+    list.textContent = "No Course purchases or active access found.";
+    return;
+  }
+  list.innerHTML = inventoryOperations.accessSummaries.map((summary) => {
+    const product = cachedProducts.find((entry) => (entry.id || entry.productId) === summary.productId);
+    const users = summary.unlockedUsers || [];
+    return `<details class="overflow-hidden rounded border border-gray-700 bg-gray-950/40">
+      <summary class="cursor-pointer p-4 hover:bg-gray-900/70">
+        <div class="flex flex-wrap justify-between gap-3">
+          <strong>${escapeHTML(product?.name || summary.productId)}</strong>
+          <span class="text-sm text-gray-300">${Number(summary.purchased || 0)} purchased · ${users.length} unlocked</span>
+        </div>
+      </summary>
+      <div class="overflow-x-auto border-t border-gray-700 p-3"><table class="min-w-full text-sm">
+        <thead><tr class="text-left text-xs uppercase text-gray-400">
+          <th class="px-2 py-2">User</th><th class="px-2 py-2">Email</th><th class="px-2 py-2">Access</th>
+        </tr></thead>
+        <tbody>${users.length ? users.map((user) => `<tr class="border-t border-gray-800">
+          <td class="px-2 py-2">${escapeHTML(user.name)}</td>
+          <td class="px-2 py-2">${escapeHTML(user.email || "No email")}</td>
+          <td class="px-2 py-2">${escapeHTML(user.accessId || "Unlocked")}</td>
+        </tr>`).join("") : `<tr><td colspan="3" class="px-2 py-3 text-gray-400">No active access.</td></tr>`}</tbody>
+      </table></div>
+    </details>`;
+  }).join("");
+}
+
+export function setupWorkshopCourseOperations() {
+  const panel = document.getElementById("adminWorkshopCourseOperationsSection");
+  if (!panel || panel.dataset.bound === "true") return;
+  panel.dataset.bound = "true";
+  const showTool = (toolName) => {
+    panel.dataset.activeTool = toolName;
+    panel.querySelectorAll(".workshop-course-tool-panel").forEach((section) => {
+      section.classList.toggle("hidden", section.dataset.workshopCoursePanel !== toolName);
+    });
+    panel.querySelectorAll(".workshop-course-tool-btn").forEach((button) => {
+      const active = button.dataset.workshopCourseTool === toolName;
+      button.classList.toggle("bg-[#407471]", active);
+      button.classList.toggle("border", !active);
+      button.classList.toggle("border-gray-600", !active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+  };
+  panel.querySelectorAll(".workshop-course-tool-btn").forEach((button) => {
+    button.addEventListener("click", () => showTool(button.dataset.workshopCourseTool || "workshops"));
+  });
+  showTool(panel.dataset.activeTool || "workshops");
+  document.getElementById("refreshWorkshopCourseOperationsBtn")
+    ?.addEventListener("click", loadInventoryOperations);
+  document.getElementById("workshopSessionSearch")?.addEventListener("input", renderWorkshopSessions);
+  Promise.all([loadProducts(), loadInventoryOperations()]).then(renderCourseOperations);
 }
 
 function createWorkshopSessionsPanel(product) {
@@ -426,10 +647,11 @@ function createWorkshopSessionsPanel(product) {
               <p class="text-xs text-gray-400">${escapeHTML(workshopDate(session.eventStartAt))}${session.eventLocation ? ` · ${escapeHTML(session.eventLocation)}` : ""}</p>
               ${session.instructor ? `<p class="text-xs text-gray-400">Instructor: ${escapeHTML(session.instructor)}</p>` : ""}
             </div>
-            <div class="grid grid-cols-3 gap-4 text-center text-sm">
+            <div class="grid grid-cols-2 gap-4 text-center text-sm sm:grid-cols-4">
               <span><strong class="block text-white">${capacity || "—"}</strong>Capacity</span>
               <span><strong class="block text-white">${session.sold}</strong>Sold</span>
-              <span><strong class="block text-white">${remaining}</strong>Remaining</span>
+              <span><strong class="block text-amber-300">${Number(session.reserved || 0)}</strong>Reserved</span>
+              <span><strong class="block text-white">${remaining}</strong>Available</span>
             </div>
           </div>
         </summary>
@@ -442,6 +664,7 @@ function createWorkshopSessionsPanel(product) {
               <th class="px-2 py-2">Order</th>
             </tr></thead><tbody>${attendeeRows}</tbody>
           </table></div>
+          ${workshopOperationsMarkup(session)}
         </div>
       </details>`;
   }).join("")}`;
@@ -464,6 +687,29 @@ function createWorkshopSessionsPanel(product) {
         showToast("Failed to update attendee check-in", "error");
       } finally {
         checkbox.disabled = false;
+      }
+    });
+  });
+  panel.querySelectorAll(".print-workshop-operations").forEach((button) => {
+    button.addEventListener("click", () => window.print());
+  });
+  panel.querySelectorAll(".issue-workshop-consumables").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (!window.confirm("Confirm these consumables and giveaways have been packed or issued and should now be deducted from inventory?")) return;
+      button.disabled = true;
+      try {
+        await recordWorkshopOperationsIssue({
+          productId: button.dataset.productId,
+          productVariantId: button.dataset.productVariantId,
+          confirmation: "ISSUE",
+        });
+        showToast("Workshop consumables and giveaways deducted", "success");
+        await loadInventoryOperations();
+      } catch (error) {
+        console.error("Failed to issue Workshop materials:", error);
+        showToast(error.message || "Failed to issue Workshop materials", "error");
+      } finally {
+        button.disabled = false;
       }
     });
   });
@@ -892,6 +1138,32 @@ function renderProductManagerList(products) {
     body.appendChild(description);
     body.appendChild(btn);
 
+    if (Array.isArray(p.variants) && p.variants.length) {
+      const variantsPanel = document.createElement("section");
+      variantsPanel.className = "mt-4 rounded border border-gray-700 bg-gray-900/70 p-3";
+      variantsPanel.innerHTML = `
+        <h4 class="text-sm font-semibold text-white">${p.tracksSeats === true ? "Workshop variants and ticketing" : "Product variants"}</h4>
+        <div class="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          ${p.variants.map((variant) => {
+    const ticketing = p.tracksSeats === true || variant.seatCapacity !== undefined;
+    const status = variant.marketplaceMode === "inherit"
+      ? `Uses Product status (${p.shopStatus || "draft"})`
+      : variant.marketplaceMode || (variant.visible === false ? "hidden" : "active");
+    return `<article class="min-w-0 rounded border border-gray-700 p-3">
+              <p class="truncate font-semibold text-white">${escapeHTML(variantLabel(variant))}</p>
+              <p class="mt-1 text-xs text-gray-400">${escapeHTML(status)}</p>
+              ${ticketing ? `<dl class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                <dt class="text-gray-400">Capacity</dt><dd class="text-right text-white">${Number(variant.seatCapacity || 0)}</dd>
+                <dt class="text-gray-400">Sold</dt><dd class="text-right text-white">${Number(variant.ticketsSold || 0)}</dd>
+                <dt class="text-gray-400">Reserved</dt><dd class="text-right text-white">${Number(variant.ticketsReserved || 0)}</dd>
+                <dt class="text-gray-400">Remaining</dt><dd class="text-right font-semibold text-white">${variant.ticketsRemaining ?? "Unlimited"}</dd>
+              </dl>` : `<p class="mt-2 text-xs text-gray-300">Stock: ${Number(variant.stock || 0)}</p>`}
+            </article>`;
+  }).join("")}
+        </div>`;
+      body.appendChild(variantsPanel);
+    }
+
     const actions = document.createElement("div");
     actions.className = "mt-3 flex flex-wrap gap-2";
     [
@@ -924,12 +1196,6 @@ function renderProductManagerList(products) {
       actions.appendChild(actionBtn);
     });
     body.appendChild(actions);
-
-    const workshopPanel = createWorkshopSessionsPanel(p);
-    if (workshopPanel) body.appendChild(workshopPanel);
-
-    const courseAccessPanel = createCourseAccessPanel(p);
-    if (courseAccessPanel) body.appendChild(courseAccessPanel);
 
     if (p.inventoryTracked === true) {
       const inventoryPanel = document.createElement("div");
@@ -1280,7 +1546,14 @@ async function openProductEditor(product) {
   const entityId = product.connectedEntityId;
   const entityType = String(product.connectedEntityType || "").toLowerCase();
   if (!entityId || !["item", "blueprint", "plan"].includes(entityType)) {
-    showToast("Connect this Product to an Item, Blueprint, or Plan before editing it here.", "error");
+    try {
+      const { openNewProductDrawerFromAdmin } = await import("./admin-content-builder.js");
+      await openNewProductDrawerFromAdmin({ productId: product.id || product.productId || "" });
+      showToast("Choose the entity this Product represents before continuing.", "info");
+    } catch (error) {
+      console.error("Failed to connect Product entity:", error);
+      showToast(error.message || "Product Creator could not be opened.", "error");
+    }
     return;
   }
   try {
@@ -1439,6 +1712,10 @@ function openAssetForm(asset = null) {
 async function uploadAssetManagerFile(assetId) {
   const file = document.getElementById("assetManagerFile")?.files?.[0];
   if (!file) return document.getElementById("assetManagerFileUrl")?.value || "";
+  assertAssetUploadSize(
+    file,
+    document.getElementById("assetManagerType")?.value || "Document",
+  );
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, "-");
   const storageRef = ref(storage, `assets/${assetId || Date.now()}/${Date.now()}-${safeName}`);
   await uploadBytes(storageRef, file, { contentType: file.type || undefined });

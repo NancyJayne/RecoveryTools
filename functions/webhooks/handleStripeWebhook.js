@@ -12,9 +12,18 @@ import {
   productDisplayType,
   variantForProduct,
 } from "../utils/productArchitecture.js";
+import {
+  inventoryTargetsForItems,
+  resolveBundleInventoryItems,
+} from "../utils/bundleInventory.js";
 import { canonicalOrderLines, orderDueDate } from "../utils/orderLineSnapshots.js";
 import { accessExpiry } from "../utils/accessGrantTiming.js";
 import { instructorDetails } from "../utils/instructorName.js";
+import {
+  consumeInventoryReservation,
+  releaseInventoryReservation,
+} from "../orders/inventoryReservations.js";
+import { syncWorkshopInventoryAllocations } from "../utils/workshopInventoryAllocations.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -97,13 +106,13 @@ async function componentInventoryByItem(db, items) {
 }
 
 async function reserveInventoryAndCreateOrder(db, orderRef, orderData, items) {
-  const tracked = items.filter((item) => item.inventoryTracked === true);
+  const tracked = inventoryTargetsForItems(items).filter((item) => item.inventoryTracked === true);
   const componentInventory = await componentInventoryByItem(db, items);
   return db.runTransaction(async (transaction) => {
     const existing = await transaction.get(orderRef);
     if (existing.exists) return false;
 
-    const productRefs = [...new Map(tracked.map((item) => [
+    const productRefs = [...new Map(tracked.filter((item) => !item.variantId).map((item) => [
       item.productId,
       db.collection("products").doc(item.productId),
     ])).values()];
@@ -128,10 +137,11 @@ async function reserveInventoryAndCreateOrder(db, orderRef, orderData, items) {
     const variantRequired = new Map();
     tracked.forEach((item) => {
       const quantity = Number(item.quantity || 1);
-      productRequired.set(item.productId, (productRequired.get(item.productId) || 0) + quantity);
       if (item.variantId) {
         const path = `${item.variantSourceCollection || "itemVariants"}/${item.variantId}`;
         variantRequired.set(path, (variantRequired.get(path) || 0) + quantity);
+      } else {
+        productRequired.set(item.productId, (productRequired.get(item.productId) || 0) + quantity);
       }
     });
     productRequired.forEach((quantity, productId) => {
@@ -165,10 +175,12 @@ async function reserveInventoryAndCreateOrder(db, orderRef, orderData, items) {
     transaction.create(orderRef, orderData);
     tracked.forEach((item) => {
       const quantity = Number(item.quantity || 1);
-      transaction.update(db.collection("products").doc(item.productId), {
-        stock: admin.firestore.FieldValue.increment(-quantity),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      if (!item.variantId) {
+        transaction.update(db.collection("products").doc(item.productId), {
+          stock: admin.firestore.FieldValue.increment(-quantity),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
       if (item.variantId) {
         const collection = item.variantSourceCollection || "itemVariants";
         transaction.update(db.collection(collection).doc(item.variantId), {
@@ -217,7 +229,6 @@ async function productSnapshotFromLineItem(lineItem, commissionRates = {}, archi
   const variant = variantForProduct(productId, product.itemId || product.legacyItemId || "", variantId, architecture);
   const inventory = inventoryForProduct(
     productId,
-    product.itemId || product.legacyItemId || "",
     variantId,
     architecture,
   );
@@ -271,9 +282,19 @@ async function productSnapshotFromLineItem(lineItem, commissionRates = {}, archi
     notes: "",
     accessGrants,
     components: componentsForProduct(productId, variantId, architecture),
+    bundleInventoryItems: await resolveBundleInventoryItems(admin.firestore(), {
+      productId,
+      variantId,
+      quantity,
+      architecture,
+    }),
     inventoryTracked: product.inventoryTracked === true || variant?.inventoryTracked === true || !!inventory,
     inventoryId: inventory?.inventoryId || inventory?.id || "",
     sellerUserId: product.sellerUserId || "",
+    taxClass: ["gst-taxable", "gst-free", "input-taxed", "out-of-scope"]
+      .includes(String(product.taxClass || metadata.taxClass || "gst-taxable").toLowerCase())
+      ? String(product.taxClass || metadata.taxClass || "gst-taxable").toLowerCase()
+      : "gst-taxable",
     product,
   };
 }
@@ -303,7 +324,10 @@ export async function writeCheckoutCompleted({ stripe, session, event }) {
   const shippingAmount = centsToDollars(session.total_details?.amount_shipping);
   const total = centsToDollars(session.amount_total);
   const subtotal = centsToDollars(session.amount_subtotal);
-  const gstAmount = Number((total / 11).toFixed(2));
+  const taxableProductTotal = items
+    .filter((item) => item.taxClass === "gst-taxable")
+    .reduce((sum, item) => sum + Number(item.lineTotal || item.price || 0), 0);
+  const gstAmount = Number(((taxableProductTotal + shippingAmount) / 11).toFixed(2));
   const currency = String(session.currency || "aud").toUpperCase();
   const orderLines = canonicalOrderLines(items, currency);
   const affiliatePickupLocation = items
@@ -377,6 +401,11 @@ export async function writeCheckoutCompleted({ stripe, session, event }) {
 
   const orderRef = db.collection("orders").doc(orderId);
   const created = await reserveInventoryAndCreateOrder(db, orderRef, orderData, items);
+  await consumeInventoryReservation(
+    db,
+    session.metadata?.inventoryReservationId || "",
+    orderId,
+  );
   const batch = db.batch();
   if (!created) {
     batch.set(orderRef, {
@@ -521,6 +550,7 @@ export async function writeCheckoutCompleted({ stripe, session, event }) {
   }, { merge: true });
 
   await batch.commit();
+  await syncWorkshopInventoryAllocations(db, orderId);
 }
 
 async function markStripeEvent({ event, status, errorMessage = "", extra = {} }) {
@@ -580,12 +610,26 @@ export const handleStripeWebhook = onRequest(
 
     const existingEvent = await admin.firestore().collection("stripeEvents").doc(event.id).get();
     if (existingEvent.data()?.processingStatus === "processed") {
+      if (event.type === "checkout.session.completed") {
+        await syncWorkshopInventoryAllocations(admin.firestore(), event.data.object.id);
+      }
       return res.status(200).send("Already processed");
     }
 
     try {
       if (event.type === "checkout.session.completed") {
         await writeCheckoutCompleted({ stripe, session: event.data.object, event });
+      } else if (event.type === "checkout.session.expired") {
+        const session = event.data.object;
+        await releaseInventoryReservation(
+          admin.firestore(),
+          session.metadata?.inventoryReservationId || "",
+        );
+        await markStripeEvent({
+          event,
+          status: "processed",
+          extra: { stripeCheckoutSessionId: session.id },
+        });
       } else if (event.type === "payout.paid") {
         const payout = event.data.object;
         await admin.firestore().collection("affiliatePayouts").doc(payout.id).set({

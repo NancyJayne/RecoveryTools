@@ -31,13 +31,16 @@ export const setUserRoles = onCall(
       const normalizedRoles = {
         admin: !!roles.admin,
         affiliate: !!roles.affiliate,
+        instructor: !!roles.instructor,
         therapist: !!roles.therapist,
       };
+      const updatedAt = admin.firestore.FieldValue.serverTimestamp();
 
       await admin.auth().setCustomUserClaims(uid, normalizedRoles);
       await admin.firestore().collection("users").doc(uid).set({
         roles: normalizedRoles,
-        rolesUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        affiliateApplicationStatus: normalizedRoles.affiliate ? "active" : "inactive",
+        rolesUpdatedAt: updatedAt,
         rolesUpdatedBy: request.auth.uid,
       }, { merge: true });
       const affiliateCollection = admin.firestore().collection("affiliates");
@@ -58,7 +61,7 @@ export const setUserRoles = onCall(
           active: true,
           pickupEnabled: false,
           pickupApprovalStatus: "draft",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt,
         }, { merge: true });
       } else {
         const refs = new Map([
@@ -69,14 +72,33 @@ export const setUserRoles = onCall(
           status: "inactive",
           active: false,
           pickupEnabled: false,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt,
         }, { merge: true })));
+      }
+
+      const instructorRef = admin.firestore().collection("instructors").doc(uid);
+      if (normalizedRoles.instructor) {
+        const userRecord = await admin.auth().getUser(uid);
+        await instructorRef.set({
+          instructorId: uid,
+          userId: uid,
+          name: userRecord.displayName || userRecord.email || uid,
+          email: userRecord.email || "",
+          status: "active",
+          active: true,
+          updatedAt,
+          updatedBy: request.auth.uid,
+        }, { merge: true });
+      } else if ((await instructorRef.get()).exists) {
+        await instructorRef.set({ status: "inactive", active: false, updatedAt }, { merge: true });
       }
 
       return {
         success: true,
         uid,
         roles: normalizedRoles,
+        affiliateApplicationStatus: normalizedRoles.affiliate ? "active" : "inactive",
+        requiresTokenRefresh: true,
         message: `Roles updated for UID: ${uid}`,
       };
     } catch (error) {

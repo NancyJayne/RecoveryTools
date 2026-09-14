@@ -31,11 +31,13 @@ async function loadAffiliateBusinessProfile() {
   const enabled = profile.pickupEnabled === true;
   affiliateSetting("affiliateSettingsPickupEnabled").checked = enabled;
   affiliateSetting("affiliateSettingsPickupFields").classList.toggle("hidden", !enabled);
+  affiliateSetting("affiliateSettingsPickupName").required = enabled;
   affiliateSetting("affiliateSettingsPickupStatus").textContent = enabled
     ? `Pickup approval: ${profile.pickupApprovalStatus || "pending"}`
     : "Customer pickup is not enabled.";
   const location = profile.pickupLocation || {};
-  affiliateSetting("affiliateSettingsPickupName").value = location.locationName || "";
+  affiliateSetting("affiliateSettingsPickupName").value =
+    location.businessName || location.locationName || profile.businessName || "";
   affiliateSetting("affiliateSettingsPickupLine1").value = location.addressLine1 || "";
   affiliateSetting("affiliateSettingsPickupLine2").value = location.addressLine2 || "";
   affiliateSetting("affiliateSettingsPickupSuburb").value = location.suburb || "";
@@ -48,6 +50,12 @@ async function loadAffiliateBusinessProfile() {
 async function saveAffiliateBusinessProfile(event) {
   event.preventDefault();
   const pickupEnabled = affiliateSetting("affiliateSettingsPickupEnabled").checked;
+  const pickupBusinessName = affiliateSetting("affiliateSettingsPickupName").value.trim();
+  if (pickupEnabled && !pickupBusinessName) {
+    showToast("Enter the business name customers will see with the pickup address.", "error");
+    affiliateSetting("affiliateSettingsPickupName").focus();
+    return;
+  }
   try {
     const updateProfile = httpsCallable(functions, "updateAffiliateBusinessProfile");
     const response = await updateProfile({
@@ -57,7 +65,7 @@ async function saveAffiliateBusinessProfile(event) {
       businessPhone: affiliateSetting("affiliateSettingsBusinessPhone").value.trim(),
       businessAddress: affiliateSetting("affiliateSettingsBusinessAddress").value.trim(),
       pickupEnabled,
-      locationName: affiliateSetting("affiliateSettingsPickupName").value.trim(),
+      locationName: pickupBusinessName,
       pickupLocation: {
         addressLine1: affiliateSetting("affiliateSettingsPickupLine1").value.trim(),
         addressLine2: affiliateSetting("affiliateSettingsPickupLine2").value.trim(),
@@ -220,6 +228,8 @@ export function initAffiliateDashboard() {
   document.getElementById("affiliateSettingsPickupEnabled")?.addEventListener("change", (event) => {
     document.getElementById("affiliateSettingsPickupFields")
       ?.classList.toggle("hidden", !event.target.checked);
+    const businessName = document.getElementById("affiliateSettingsPickupName");
+    if (businessName) businessName.required = event.target.checked;
   });
   document.getElementById("affiliateBusinessProfileForm")
     ?.addEventListener("submit", saveAffiliateBusinessProfile);

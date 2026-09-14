@@ -30,7 +30,6 @@ export const CONTENT_BUILDER_OPTIONS = {
     "exercise equipment",
     "course",
     "faq",
-    "workshop",
     "content",
     "part",
     "program",
@@ -38,6 +37,7 @@ export const CONTENT_BUILDER_OPTIONS = {
     "policy",
     "event",
     "outcome measure",
+    "qualification",
   ],
   itemKinds: [
     "Shop Product",
@@ -71,6 +71,7 @@ export const CONTENT_BUILDER_OPTIONS = {
     "business workflow",
     "marketing content",
     "product manufacture",
+    "workshop operations",
   ],
   planTypes: [
     "course",

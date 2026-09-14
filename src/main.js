@@ -17,6 +17,7 @@ import { initAdminNavigation } from "./admin/admin-navigation.js";
 import { loadRecaptchaScript } from "./utils/loadRecaptcha.js";
 import { initAppEntry } from "./app-entry.js";
 import { applyBusinessProfile } from "./utils/business-profile.js";
+import { initDashboardSidebars } from "./utils/dashboard-sidebar.js";
 
 const siteKey = getRecaptchaSiteKey();
 if (siteKey && !usesFirebaseEmulators()) loadRecaptchaScript(siteKey);
@@ -136,6 +137,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   adjustMainHeight();
   setupNavMenuToggle();
   applyBusinessProfile();
+  initDashboardSidebars();
 
   window.logClientError = logClientError;
 
@@ -146,6 +148,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   observeAdminPanel("productManagerPanel", "./admin/admin-products.js", "setupProductManager");
+  observeAdminPanel(
+    "adminWorkshopCourseOperationsSection",
+    "./admin/admin-products.js",
+    "setupWorkshopCourseOperations",
+  );
   observeAdminPanel("adminApprovalsSection", "./admin/admin-approvals.js", "setupApprovalDashboard");
   observeAdminPanel("adminContentControlsSection", "./admin/admin-content-controls.js", "setupContentControls");
   observeAdminPanel("pendingCourseApprovals", "./admin/admin-course.js", "setupCourseApprovals");

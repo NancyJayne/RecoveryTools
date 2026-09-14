@@ -12,6 +12,7 @@ function rolesFromClaims(claims = {}) {
     admin: claims.admin === true,
     therapist: claims.therapist === true,
     affiliate: claims.affiliate === true,
+    instructor: claims.instructor === true,
   };
 }
 
@@ -66,16 +67,19 @@ export function applyRoleUI(roles = {}) {
     ?.classList.toggle("hidden", !roles.therapist);
 
   document
-    .getElementById("affiliateBadge")
-    ?.classList.toggle("hidden", !roles.affiliate);
-
-  document
     .getElementById("affiliateAccessLink")
     ?.classList.toggle("hidden", !roles.affiliate);
 
   document
     .getElementById("affiliateAccessBtn")
     ?.classList.toggle("hidden", !roles.affiliate);
+
+  const dashboardAccess = document.getElementById("profileDashboardAccess");
+  if (dashboardAccess) {
+    const hasAdditionalDashboard = roles.admin || roles.therapist || roles.affiliate;
+    dashboardAccess.classList.toggle("hidden", !hasAdditionalDashboard);
+    dashboardAccess.classList.toggle("flex", hasAdditionalDashboard);
+  }
 
   document
     .getElementById("affiliateSignup")

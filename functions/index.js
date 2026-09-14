@@ -94,6 +94,7 @@ export { getInventoryOperationsData } from "./products/getInventoryOperationsDat
 export { updateInventoryStocktake } from "./products/updateInventoryStocktake.js";
 export { recordManufacturingRun } from "./products/recordManufacturingRun.js";
 export { updateWorkshopAttendance } from "./products/updateWorkshopAttendance.js";
+export { recordWorkshopOperationsIssue } from "./products/recordWorkshopOperationsIssue.js";
 export { deleteProduct } from "./products/deleteProduct.js";
 export { getFirestoreProducts } from "./products/getFirestoreProducts.js";
 
@@ -120,6 +121,7 @@ export { exportContentBackup } from "./admin/exportContentBackup.js";
 export { exportMasterWorkbook } from "./admin/exportMasterWorkbook.js";
 export { createContentBuilderRecord } from "./admin/createContentBuilderRecord.js";
 export { upsertContentBuilderTemplate } from "./admin/upsertContentBuilderTemplate.js";
+export { upsertContentCategory } from "./admin/upsertContentCategory.js";
 export { updateContentControlRecord } from "./admin/updateContentControlRecord.js";
 export { maintainContentLifecycle } from "./admin/maintainContentLifecycle.js";
 export { managePromotions } from "./admin/managePromotions.js";

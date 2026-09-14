@@ -3,10 +3,43 @@
 import { showToast } from "../utils/utils.js";
 import { auth, db, functions } from "../utils/firebase-config.js";
 import { httpsCallable } from "firebase/functions";
+import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 
 let checkoutAffiliates = [];
 let productPricingCache = { key: "", loadedAt: 0, products: [] };
+let cartAuthListenerReady = false;
+
+const LEGACY_CART_KEY = "recovery_cart";
+const GUEST_CART_KEY = "recovery_cart:guest";
+
+function cartStorageKey() {
+  return auth?.currentUser?.uid
+    ? `recovery_cart:user:${auth.currentUser.uid}`
+    : GUEST_CART_KEY;
+}
+
+function removeLegacySharedCart() {
+  if (localStorage.getItem(LEGACY_CART_KEY) !== null) {
+    localStorage.removeItem(LEGACY_CART_KEY);
+  }
+}
+
+function readCart() {
+  removeLegacySharedCart();
+  try {
+    const cart = JSON.parse(localStorage.getItem(cartStorageKey()) || "[]");
+    return Array.isArray(cart) ? cart : [];
+  } catch (error) {
+    console.warn("Ignoring invalid saved cart data:", error);
+    return [];
+  }
+}
+
+function writeCart(cart) {
+  removeLegacySharedCart();
+  localStorage.setItem(cartStorageKey(), JSON.stringify(Array.isArray(cart) ? cart : []));
+}
 
 function minimumCartQuantity(item) {
   return item.pricingTier === "affiliate-wholesale"
@@ -45,7 +78,7 @@ async function refreshAuthenticatedCartPricing(cart) {
     if (Number(item.quantity || 1) < minimum) changed = true;
     item.quantity = Math.max(Number(item.quantity || 1), minimum);
   });
-  if (changed) localStorage.setItem("recovery_cart", JSON.stringify(cart));
+  if (changed) writeCart(cart);
   return cart;
 }
 
@@ -145,6 +178,19 @@ export async function initCartUI() {
   await loadSharedCart();
   renderCartItems();
   updateCartCount();
+
+  if (!cartAuthListenerReady && auth) {
+    cartAuthListenerReady = true;
+    let previousOwner = cartStorageKey();
+    onAuthStateChanged(auth, () => {
+      const currentOwner = cartStorageKey();
+      if (currentOwner === previousOwner) return;
+      previousOwner = currentOwner;
+      productPricingCache = { key: "", loadedAt: 0, products: [] };
+      renderCartItems();
+      updateCartCount();
+    });
+  }
 }
 
 export function openCartDrawer() {
@@ -164,7 +210,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 export function addToCart(item) {
-  const cart = JSON.parse(localStorage.getItem("recovery_cart") || "[]");
+  const cart = readCart();
   const existingItem = cart.find((i) =>
     i.id === item.id &&
     i.type === item.type &&
@@ -209,7 +255,7 @@ export function addToCart(item) {
     });
   }
 
-  localStorage.setItem("recovery_cart", JSON.stringify(cart));
+  writeCart(cart);
   renderCartItems();
   openCartDrawer();
   updateCartCount();
@@ -228,7 +274,7 @@ export async function renderCartItems() {
   const checkoutBtn = document.getElementById("cartCheckoutBtn");
   if (!container || !subtotalEl) return;
 
-  let cart = JSON.parse(localStorage.getItem("recovery_cart") || "[]");
+  let cart = readCart();
   try {
     cart = await refreshAuthenticatedCartPricing(cart);
   } catch (error) {
@@ -455,11 +501,10 @@ export async function renderCartItems() {
         affiliateDetails.replaceChildren();
         const business = document.createElement("div");
         business.className = "font-semibold";
-        business.textContent = selected.businessName;
+        business.textContent = selected.pickupLocation.businessName || selected.businessName;
         const address = document.createElement("div");
         address.className = "mt-1 text-gray-300";
         address.textContent = [
-          selected.pickupLocation.locationName,
           selected.pickupLocation.address,
         ].filter(Boolean).join(" — ");
         affiliateDetails.append(business, address);
@@ -491,7 +536,7 @@ export async function renderCartItems() {
 }
 
 function updateCartItem(index, action) {
-  const cart = JSON.parse(localStorage.getItem("recovery_cart") || "[]");
+  const cart = readCart();
   if (!cart[index]) return;
 
   if (action === "increase") cart[index].quantity += 1;
@@ -500,7 +545,7 @@ function updateCartItem(index, action) {
   }
   if (action === "remove") cart.splice(index, 1);
 
-  localStorage.setItem("recovery_cart", JSON.stringify(cart));
+  writeCart(cart);
   renderCartItems();
   updateCartCount();
 }
@@ -518,11 +563,11 @@ export function updateCartCount() {
 }
 
 export function getCurrentCart() {
-  return JSON.parse(localStorage.getItem("recovery_cart") || "[]");
+  return readCart();
 }
 
 export function setCart(cart) {
-  localStorage.setItem("recovery_cart", JSON.stringify(cart));
+  writeCart(cart);
 }
 
 window.openCartDrawer = openCartDrawer;

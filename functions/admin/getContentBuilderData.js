@@ -189,8 +189,17 @@ function normalizeItemRecord(doc, related = {}) {
     productVisible: product?.visible === true,
     productArchived: product?.archived === true,
     productFeatured: product?.featured === true,
+    productMarketplaceTileImageSource: product?.marketplaceTileImageSource || "entity",
+    productMarketplaceTileImageVariantId: product?.marketplaceTileImageVariantId || "",
+    productMarketplaceTileDescriptionSource: product?.marketplaceTileDescriptionSource || "entity",
+    productMarketplaceTileDescriptionVariantId: product?.marketplaceTileDescriptionVariantId || "",
     productRequiresShipping: product?.requiresShipping === true,
     productInventoryTracked: product?.inventoryTracked === true,
+    productFulfilmentReviewed: product?.fulfilmentReviewed === true,
+    productAffiliateAvailable: product?.affiliateAvailable === true ||
+      product?.affiliateAvailable === undefined && Number(product?.wholesalePrice) > 0,
+    productWholesalePrice: product?.wholesalePrice ?? activePrice?.wholesalePrice ?? null,
+    productWholesaleMinQuantity: product?.wholesaleMinQuantity ?? activePrice?.wholesaleMinQuantity ?? 1,
     productRequiresCalendar: product?.requiresCalendar === true,
     productRequiresSessionTime: product?.requiresSessionTime === true,
     productTracksSeats: product?.tracksSeats === true,
@@ -255,6 +264,7 @@ function normalizeItemRecord(doc, related = {}) {
       priceOverride: Number(variant.priceOverride) > 0 ? Number(variant.priceOverride) : null,
       stock: Number(variant.stock ?? 0),
       status: variant.status || "active",
+      bundleComponents: Array.isArray(variant.bundleComponents) ? variant.bundleComponents : [],
     })),
     shopStatus: product?.shopStatus || "",
     inventorySummary: {
@@ -270,8 +280,8 @@ function normalizeItemRecord(doc, related = {}) {
   };
 }
 
-function mergeUnique(left = [], right = []) {
-  return [...new Set([...(left || []), ...(right || [])].filter(Boolean))];
+function mergeUnique(...groups) {
+  return [...new Set(groups.flatMap((group) => group || []).filter(Boolean))];
 }
 
 function addLinkedProducts(records, entityType, productsById, links, architecture) {
@@ -308,12 +318,21 @@ function addLinkedProducts(records, entityType, productsById, links, architectur
       productShopStatus: product.shopStatus || product.status || "draft",
       productVisible: product.websiteVisible === true || product.visible === true,
       productFeatured: product.featured === true,
+      productMarketplaceTileImageSource: product.marketplaceTileImageSource || "entity",
+      productMarketplaceTileImageVariantId: product.marketplaceTileImageVariantId || "",
+      productMarketplaceTileDescriptionSource: product.marketplaceTileDescriptionSource || "entity",
+      productMarketplaceTileDescriptionVariantId: product.marketplaceTileDescriptionVariantId || "",
       productArchived: !!product.archivedAt || product.archived === true,
       productStock: Number(product.stock ?? 0),
       productRequiresShipping: product.requiresShipping === true,
       productPhysicalFulfilment: product.physicalFulfilment ||
         (product.requiresShipping === true ? "shipping" : "none"),
       productInventoryTracked: product.inventoryTracked === true,
+      productFulfilmentReviewed: product.fulfilmentReviewed === true,
+      productAffiliateAvailable: product.affiliateAvailable === true ||
+        product.affiliateAvailable === undefined && Number(product.wholesalePrice) > 0,
+      productWholesalePrice: product.wholesalePrice ?? activePrice?.wholesalePrice ?? null,
+      productWholesaleMinQuantity: product.wholesaleMinQuantity ?? activePrice?.wholesaleMinQuantity ?? 1,
       productRequiresCalendar: product.requiresCalendar === true,
       productRequiresSessionTime: product.requiresSessionTime === true,
       productTracksSeats: product.tracksSeats === true,
@@ -374,23 +393,29 @@ function mergeOptions(
   return {
     ...CONTENT_BUILDER_OPTIONS,
     ...savedOptions,
-    itemTypes: workbookTypes.item?.length
-      ? mergeUnique([], workbookTypes.item)
-      : CONTENT_BUILDER_OPTIONS.itemTypes,
+    itemTypes: mergeUnique(
+      CONTENT_BUILDER_OPTIONS.itemTypes,
+      workbookTypes.item || [],
+      savedOptions.itemTypes || [],
+    )
+      .filter((type) => cleanStatus(type) !== "workshop"),
     itemKinds: mergeUnique(CONTENT_BUILDER_OPTIONS.itemKinds, savedOptions.itemKinds),
-    categoryOptions: workbookCategories.length ? workbookCategories : mergeUnique(
+    categoryOptions: mergeUnique(
       CONTENT_BUILDER_OPTIONS.categoryOptions?.map((option) => option.id),
       savedOptions.categoryOptions?.map((option) => option.id),
+      workbookCategories.map((option) => option.id),
     ).map((id) => {
       const allOptions = [
         ...(CONTENT_BUILDER_OPTIONS.categoryOptions || []),
         ...(savedOptions.categoryOptions || []),
+        ...workbookCategories,
       ];
       return allOptions.find((option) => option.id === id) || { id, name: id };
     }),
-    blueprintTypes: workbookTypes.blueprint?.length
-      ? mergeUnique([], workbookTypes.blueprint)
-      : CONTENT_BUILDER_OPTIONS.blueprintTypes,
+    blueprintTypes: mergeUnique(
+      workbookTypes.blueprint?.length ? workbookTypes.blueprint : CONTENT_BUILDER_OPTIONS.blueprintTypes,
+      ["workshop operations"],
+    ),
     planTypes: workbookTypes.plan?.length
       ? mergeUnique([], workbookTypes.plan)
       : CONTENT_BUILDER_OPTIONS.planTypes,
@@ -414,11 +439,14 @@ async function getAssetRecords(db) {
     const data = doc.data() || {};
     return {
       id: doc.id,
+      assetId: data.assetId || doc.id,
       recordType: "asset",
       name: data.title || data.name || doc.id,
       type: data.type || data.assetType || "",
       status: data.status || data.displayStatus || "",
       url: data.fileUrl || data.url || "",
+      fileUrl: data.fileUrl || "",
+      embedUrl: data.embedUrl || data.youtubeUrl || "",
       thumbnailUrl: data.thumbnailUrl || "",
       altText: data.altText || "",
     };
@@ -687,6 +715,7 @@ export const getContentBuilderData = onCall(
           visible: product.visible === true || product.websiteVisible === true,
           marketplaceMode: product.marketplaceMode ||
             (product.visible === true || product.websiteVisible === true ? "active" : "hidden"),
+          marketplaceAudience: product.marketplaceAudience || "public",
           marketplaceStartsAt: asIso(product.marketplaceStartsAt) || product.marketplaceStartsAt || "",
           marketplaceEndsAt: asIso(product.marketplaceEndsAt) || product.marketplaceEndsAt || "",
           featured: product.featured === true,
@@ -694,6 +723,7 @@ export const getContentBuilderData = onCall(
           stock: Number(product.stock ?? 0),
           price: Number(product.price ?? product.priceFrom ?? 0),
           retailPrice: Number(product.retailPrice ?? product.price ?? product.priceFrom ?? 0),
+          taxClass: product.taxClass || "gst-taxable",
           salePrice: product.salePrice ?? null,
           wholesalePrice: product.wholesalePrice ?? null,
           wholesaleMinQuantity: Number(product.wholesaleMinQuantity ?? 1),
@@ -703,6 +733,7 @@ export const getContentBuilderData = onCall(
           physicalFulfilment: product.physicalFulfilment ||
             (product.requiresShipping === true ? "shipping" : "none"),
           inventoryTracked: product.inventoryTracked === true,
+          fulfilmentReviewed: product.fulfilmentReviewed === true,
           requiresCalendar: product.requiresCalendar === true,
           requiresSessionTime: product.requiresSessionTime === true,
           tracksSeats: product.tracksSeats === true,

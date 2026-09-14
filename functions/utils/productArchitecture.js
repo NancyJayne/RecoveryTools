@@ -112,6 +112,30 @@ export function componentsForProduct(productId, variantId, architecture) {
     .filter((component) => component.itemId);
 }
 
+export function bundleComponentsForProduct(productId, variantId, architecture) {
+  if (!variantId) return [];
+  const variant = (architecture.canonicalVariantsByProductId.get(productId) || [])
+    .find((candidate) => cleanString(candidate.productVariantId || candidate.variantId || candidate.id) === variantId);
+  const seen = new Set();
+  return (Array.isArray(variant?.bundleComponents) ? variant.bundleComponents : [])
+    .map((component, index) => ({
+      bundleComponentId: cleanString(component.bundleComponentId) ||
+        `BUNDLE-${variantId}-${index + 1}`,
+      componentProductId: cleanString(component.componentProductId),
+      componentProductVariantId: cleanString(component.componentProductVariantId),
+      quantity: Math.max(Number(component.quantity || 1), 1),
+      inventoryAction: component.inventoryAction === "none" ? "none" : "deduct",
+    }))
+    .filter((component) => {
+      const key = `${component.componentProductId}:${component.componentProductVariantId}`;
+      if (!component.componentProductId || !component.componentProductVariantId ||
+          component.componentProductId === productId && component.componentProductVariantId === variantId ||
+          seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 export function activePriceForProduct(productId, architecture) {
   return (architecture.pricesByProductId.get(productId) || [])
     .find((price) => status(price.status, "active") === "active" && !price.variantId) || null;
@@ -133,6 +157,16 @@ function normalizedVariant(variant, sourceCollection) {
     name: variant.variantName || variant.name || variant.optionSummary || "",
     colour: variant.colour || "",
     size: variant.size || "",
+    weight: variant.weight === null || variant.weight === undefined || variant.weight === ""
+      ? null : Number(variant.weight),
+    weightUnit: variant.weightUnit || "g",
+    length: variant.length === null || variant.length === undefined || variant.length === ""
+      ? null : Number(variant.length),
+    width: variant.width === null || variant.width === undefined || variant.width === ""
+      ? null : Number(variant.width),
+    height: variant.height === null || variant.height === undefined || variant.height === ""
+      ? null : Number(variant.height),
+    dimensionUnit: variant.dimensionUnit || "cm",
     sku: variant.sku || "",
     priceOverride: Number.isFinite(numericPriceOverride) && numericPriceOverride > 0
       ? numericPriceOverride
@@ -154,8 +188,10 @@ function normalizedVariant(variant, sourceCollection) {
     inventoryTracked: variant.inventoryTracked === true,
     status: variant.status || "active",
     contentVariantId: variant.contentVariantId || "",
+    contentVariantLinkReviewed: variant.contentVariantLinkReviewed === true || Boolean(variant.contentVariantId),
     deliveryMode: variant.deliveryMode || "",
     physicalFulfilment: variant.physicalFulfilment || "",
+    purchaseSetupReviewed: variant.purchaseSetupReviewed === true,
     calendarBookingReference: variant.calendarBookingReference || "",
     seatCapacity: Number.isFinite(Number(variant.seatCapacity)) ? Number(variant.seatCapacity) : null,
     nearCapacityWarning: Number.isFinite(Number(variant.nearCapacityWarning))
@@ -168,7 +204,12 @@ function normalizedVariant(variant, sourceCollection) {
     shortDescription: variant.shortDescription || "",
     longDescription: variant.longDescription || "",
     inclusions: variant.inclusions || "",
+    manualInclusions: Array.isArray(variant.manualInclusions) ? variant.manualInclusions : [],
+    bundleComponents: Array.isArray(variant.bundleComponents) ? variant.bundleComponents : [],
     primaryAssetId: variant.primaryAssetId || "",
+    promotionAssetIds: Array.isArray(variant.promotionAssetIds) ? variant.promotionAssetIds : [],
+    prerequisiteProductVariants: Array.isArray(variant.prerequisiteProductVariants)
+      ? variant.prerequisiteProductVariants : [],
     sourceCollection,
   };
 }
@@ -200,14 +241,20 @@ export function variantForProduct(productId, itemId, variantId, architecture) {
     .find((variant) => variant.variantId === variantId || variant.id === variantId) || null;
 }
 
-export function inventoryForProduct(productId, itemId, variantId, architecture) {
+export function inventoryForProduct(productId, variantId, architecture) {
   const variantInventory = variantId
     ? architecture.inventoryByVariantId?.get(variantId) || []
     : [];
   const productInventory = architecture.inventoryByProductId?.get(productId) || [];
-  const itemInventory = itemId ? architecture.inventoryByItemId?.get(itemId) || [] : [];
-  return variantInventory[0] || productInventory.find((entry) => !entry.variantId) ||
-    itemInventory.find((entry) => !entry.variantId) || productInventory[0] || itemInventory[0] || null;
+  // Product stock and Item/component stock are separate identities. Never
+  // satisfy a Product checkout or Product display from connected Item stock.
+  if (variantId) {
+    return variantInventory.find((entry) =>
+      cleanString(entry.productId) === productId &&
+      cleanString(entry.variantId) === variantId) || null;
+  }
+  return productInventory.find((entry) =>
+    cleanString(entry.productId) === productId && !cleanString(entry.variantId)) || null;
 }
 
 function assetUrl(asset, rendition) {
@@ -215,23 +262,14 @@ function assetUrl(asset, rendition) {
 }
 
 export function mediaForProduct(productId, product, architecture) {
-  const content = primaryContentForProduct(productId, product, architecture);
-  const contentId = cleanString(
-    content?.itemId || content?.blueprintId || content?.planId || content?.id ||
-    product.itemId || product.legacyItemId,
-  );
-  const contentType = content?.planId
-    ? "plan"
-    : content?.blueprintId ? "blueprint" : "item";
   const links = (architecture.entityAssetsByEntityId.get(productId) || [])
     .filter((link) =>
       cleanString(link.entityType).toLowerCase() === "product" &&
       status(link.status, "active") === "active");
-  const contentLinks = links.length ? [] : (architecture.entityAssetsByEntityId.get(contentId) || [])
-    .filter((link) =>
-      cleanString(link.entityType).toLowerCase() === contentType &&
-      status(link.status, "active") === "active");
-  const canonicalMedia = [...links, ...contentLinks]
+  const selectedIds = [cleanString(product.primaryAssetId),
+    ...(Array.isArray(product.promotionAssetIds) ? product.promotionAssetIds.map(cleanString) : [])]
+    .filter(Boolean);
+  const canonicalMedia = [...selectedIds.map((assetId, index) => ({ assetId, sortOrder: index + 1 })), ...links]
     .map((link) => {
       const asset = architecture.assetsById.get(link.assetId);
       if (!asset || status(asset.status, "active") === "archived") return null;
@@ -256,15 +294,6 @@ export function mediaForProduct(productId, product, architecture) {
     .sort((left, right) => left.sortOrder - right.sortOrder);
 
   if (canonicalMedia.length) return canonicalMedia;
-  const templateAssetIds = [
-    ...assetIdsFromTemplateValues(content?.templateFieldValues),
-    ...(Array.isArray(content?.entityVariants) ? content.entityVariants : [])
-      .flatMap((variant) => assetIdsFromTemplateValues(variant?.templateFieldValues)),
-  ];
-  const templateMedia = [...new Set(templateAssetIds)]
-    .map((assetId, index) => assetMedia(assetId, architecture, index + 1))
-    .filter(Boolean);
-  if (templateMedia.length) return templateMedia;
   if (Array.isArray(product.media) && product.media.length) return product.media;
   const images = Array.isArray(product.images) ? product.images : [];
   return images.map((url, index) => ({
@@ -303,28 +332,9 @@ function assetMedia(assetId, architecture, sortOrder = 1) {
   };
 }
 
-function assetIdsFromTemplateValues(values) {
-  const ids = [];
-  const visit = (value) => {
-    if (Array.isArray(value)) {
-      value.forEach(visit);
-      return;
-    }
-    if (value && typeof value === "object") {
-      Object.values(value).forEach(visit);
-      return;
-    }
-    const id = cleanString(value);
-    if (id && id.toUpperCase().startsWith("ASSET-")) ids.push(id);
-  };
-  visit(values);
-  return [...new Set(ids)];
-}
-
 export function mediaForProductVariant(productId, product, variant, architecture, fallback = []) {
   if (!variant) return fallback;
   const variantId = cleanString(variant.variantId || variant.id);
-  const contentVariantId = cleanString(variant.contentVariantId);
   const directLinks = [
     ...(architecture.entityAssetsByEntityId.get(variantId) || []),
     ...(architecture.entityAssetsByEntityId.get(productId) || []),
@@ -332,26 +342,27 @@ export function mediaForProductVariant(productId, product, variant, architecture
     status(link.status, "active") === "active" &&
     (
       cleanString(link.entityType).toLowerCase() === "productvariant" ||
-      cleanString(link.productVariantId) === variantId ||
-      cleanString(link.entityVariantId) === contentVariantId
+      cleanString(link.productVariantId) === variantId
     ));
   const directMedia = directLinks
     .map((link, index) => assetMedia(link.assetId, architecture, Number(link.sortOrder ?? index + 1)))
     .filter(Boolean)
     .sort((left, right) => left.sortOrder - right.sortOrder);
-  if (directMedia.length) return directMedia;
-
-  const content = primaryContentForProduct(productId, product, architecture);
-  const contentVariant = (content?.entityVariants || []).find((candidate) =>
-    cleanString(candidate.entityVariantId) === contentVariantId);
   const assetIds = [
     cleanString(variant.primaryAssetId),
-    ...assetIdsFromTemplateValues(contentVariant?.templateFieldValues),
+    ...(Array.isArray(variant.promotionAssetIds) ? variant.promotionAssetIds.map(cleanString) : []),
   ].filter(Boolean);
   const inferredMedia = [...new Set(assetIds)]
     .map((assetId, index) => assetMedia(assetId, architecture, index + 1))
     .filter(Boolean);
-  return inferredMedia.length ? inferredMedia : fallback;
+  const seen = new Set();
+  const combinedMedia = [...directMedia, ...inferredMedia].filter((asset) => {
+    const key = asset.assetId || asset.url;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return combinedMedia.length ? combinedMedia : fallback;
 }
 
 function legacyAccessGrants(productId, product) {

@@ -1763,7 +1763,7 @@ function buildDocs(workbook, workbookPath) {
     if (id && !["Item", "Blueprint", "Plan"].includes(entityType)) {
       warnings.push(`ProductConnections ${id} has invalid EntityType ${entityType}.`);
     }
-    if (id && !["Represents", "ManufacturedFrom", "Unlocks", "Includes"].includes(linkRole)) {
+    if (id && !["Represents", "ManufacturedFrom", "OperatedWith", "Unlocks", "Includes"].includes(linkRole)) {
       warnings.push(`ProductConnections ${id} has invalid ConnectionType ${linkRole}.`);
     }
     const uniqueKey = [

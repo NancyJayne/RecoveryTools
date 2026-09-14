@@ -266,17 +266,33 @@ async function loadAccessibleContent(contentType) {
       const contentSnap = await getDoc(doc(db, collectionName, accessId));
       if (!contentSnap.exists()) return null;
       const content = contentSnap.data();
+      const accessVariantId = access.accessVariantId || access.accessEntityVariantId || "";
+      const selectedVariant = accessVariantId && Array.isArray(content.entityVariants)
+        ? content.entityVariants.find((variant) =>
+          (variant.entityVariantId || variant.id) === accessVariantId) || null
+        : null;
       const storedType = String(
         content.type || content.itemType || content.blueprintType ||
         content.planType || content.planTypeName || "",
       ).toLowerCase();
-      return storedType === contentType ? { id: accessId, entityType: accessType, ...content } : null;
+      return storedType === contentType ? {
+        id: accessId,
+        accessVariantId,
+        accessRecordId: `${accessId}:${accessVariantId || "ALL"}`,
+        entityType: accessType,
+        ...content,
+        ...(selectedVariant ? {
+          name: selectedVariant.name || content.name,
+          title: selectedVariant.title || selectedVariant.name || content.title,
+          shortDescription: selectedVariant.shortDescription || content.shortDescription,
+        } : {}),
+      } : null;
     } catch (error) {
       console.warn(`Could not load unlocked ${accessType} ${accessId}.`, error);
       return null;
     }
   }));
-  return [...new Map(records.filter(Boolean).map((record) => [record.id, record])).values()];
+  return [...new Map(records.filter(Boolean).map((record) => [record.accessRecordId, record])).values()];
 }
 
 async function renderAccessibleContent({ gridId, contentType, label, href }) {
@@ -304,7 +320,8 @@ async function renderAccessibleContent({ gridId, contentType, label, href }) {
       desc.className = "text-sm text-gray-400";
       desc.textContent = record.shortDescription || record.description || record.longDescription || "";
       const link = document.createElement("a");
-      link.href = `${href}${encodeURIComponent(record.id)}`;
+      link.href = `${href}${encodeURIComponent(record.id)}` +
+        (record.accessVariantId ? `&accessVariant=${encodeURIComponent(record.accessVariantId)}` : "");
       link.className = "inline-block mt-3 text-[#407471] hover:underline";
       link.textContent = `View ${label.replace(/s$/, "")}`;
       card.append(title, desc, link);

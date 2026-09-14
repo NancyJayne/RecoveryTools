@@ -57,6 +57,21 @@ function slugify(value) {
     .slice(0, 60);
 }
 
+function cleanNewTags(value) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).slice(0, 50).flatMap((tag) => {
+    const name = cleanString(tag?.name).slice(0, 100);
+    const categoryId = cleanString(tag?.categoryId).slice(0, 100);
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) return [];
+    if (!categoryId) {
+      throw new HttpsError("invalid-argument", `Choose a category for the new tag "${name}".`);
+    }
+    seen.add(key);
+    return [{ name, categoryId }];
+  });
+}
+
 function generatedProductSku(productId) {
   const token = slugify(productId).replace(/^(PROD|PRODUCT|ITEM|BLUEPRINT|PLAN)-/, "");
   return `RT-${token || "PRODUCT"}`;
@@ -92,7 +107,7 @@ function cleanVariantContentLinks(value) {
       : "",
     entityId: cleanString(link?.entityId),
     entityVariantId: cleanString(link?.entityVariantId),
-    linkRole: ["Represents", "ManufacturedFrom", "Unlocks"].includes(cleanString(link?.linkRole))
+    linkRole: ["Represents", "ManufacturedFrom", "OperatedWith", "Unlocks"].includes(cleanString(link?.linkRole))
       ? cleanString(link.linkRole)
       : "Represents",
     status: "active",
@@ -147,9 +162,20 @@ function cleanTemplateFieldValues(value) {
     if (!key) return;
     if (Array.isArray(rawValue)) {
       output[key] = rawValue
-        .map((item) => cleanString(item).slice(0, 2000))
-        .filter(Boolean)
+        .map((item) => item && typeof item === "object" && !Array.isArray(item)
+          ? {
+            entityId: cleanString(item.entityId || item.id).slice(0, 200),
+            entityVariantId: cleanString(item.entityVariantId || item.variantId).slice(0, 200),
+          }
+          : cleanString(item).slice(0, 2000))
+        .filter((item) => typeof item === "string" ? Boolean(item) : Boolean(item.entityId))
         .slice(0, 100);
+    } else if (rawValue && typeof rawValue === "object") {
+      const entityId = cleanString(rawValue.entityId || rawValue.id).slice(0, 200);
+      if (entityId) output[key] = {
+        entityId,
+        entityVariantId: cleanString(rawValue.entityVariantId || rawValue.variantId).slice(0, 200),
+      };
     } else if (typeof rawValue === "boolean") {
       output[key] = rawValue;
     } else if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
@@ -204,12 +230,26 @@ function cleanItemComponents(value) {
     componentId: cleanString(component?.componentId) || `COMPONENT-${index + 1}`,
     itemId: cleanString(component?.itemId),
     itemVariantId: cleanString(component?.itemVariantId),
+    productId: cleanString(component?.productId),
+    productVariantId: cleanString(component?.productVariantId),
     quantity: asNumber(component?.quantity) ?? 0,
     unit: cleanString(component?.unit) || "each",
     unitCost: asNumber(component?.unitCost) ?? 0,
     estimatedCost: asNumber(component?.estimatedCost) ?? 0,
     notes: cleanString(component?.notes),
-  })).filter((component) => component.itemId && component.quantity > 0);
+    inventoryTreatment: ["bring-return", "consumable", "take-home", "reference", "digital-instruction"]
+      .includes(cleanString(component?.inventoryTreatment))
+      ? cleanString(component.inventoryTreatment)
+      : "bring-return",
+    quantityBasis: ["fixed", "capacity", "confirmed-attendees", "actual-attendees"]
+      .includes(cleanString(component?.quantityBasis))
+      ? cleanString(component.quantityBasis)
+      : "fixed",
+    deductOnIssue: component?.deductOnIssue === true,
+  })).map((component) => component.itemId
+    ? { ...component, productId: "", productVariantId: "" }
+    : { ...component, itemId: "", itemVariantId: "" })
+    .filter((component) => (component.itemId || component.productId) && component.quantity > 0);
 }
 
 function templateFieldKey(value) {
@@ -227,7 +267,8 @@ function validateTemplateFieldValues(template, values) {
     if (!key) return;
     const rawValue = values[key];
     const entries = Array.isArray(rawValue)
-      ? rawValue.filter((entry) => cleanString(entry))
+      ? rawValue.filter((entry) => entry && typeof entry === "object"
+        ? cleanString(entry.entityId || entry.id) : cleanString(entry))
       : rawValue === null || rawValue === undefined || rawValue === ""
         ? []
         : [rawValue];
@@ -341,13 +382,16 @@ async function contentOptions(db) {
   return {
     ...CONTENT_BUILDER_OPTIONS,
     ...saved,
-    itemTypes: workbookTypes.item.length
-      ? mergeUnique([], workbookTypes.item)
-      : CONTENT_BUILDER_OPTIONS.itemTypes,
+    itemTypes: mergeUnique(
+      mergeUnique(CONTENT_BUILDER_OPTIONS.itemTypes, workbookTypes.item),
+      saved.itemTypes,
+    )
+      .filter((type) => cleanString(type).toLowerCase() !== "workshop"),
     itemKinds: mergeUnique(CONTENT_BUILDER_OPTIONS.itemKinds, saved.itemKinds),
-    blueprintTypes: workbookTypes.blueprint.length
-      ? mergeUnique([], workbookTypes.blueprint)
-      : CONTENT_BUILDER_OPTIONS.blueprintTypes,
+    blueprintTypes: mergeUnique(
+      workbookTypes.blueprint.length ? workbookTypes.blueprint : CONTENT_BUILDER_OPTIONS.blueprintTypes,
+      ["workshop operations"],
+    ),
     planTypes: workbookTypes.plan.length
       ? mergeUnique([], workbookTypes.plan)
       : CONTENT_BUILDER_OPTIONS.planTypes,
@@ -372,7 +416,7 @@ function assetTypeFromUrl(url = "") {
   return "document";
 }
 
-function normalizeVariant(value, index) {
+function normalizeVariant(value, index, sourceProductId = "") {
   if (!value || typeof value !== "object") return null;
   const name = cleanString(value.name) ||
     [cleanString(value.colour), cleanString(value.size)].filter(Boolean).join(" / ") ||
@@ -384,16 +428,32 @@ function normalizeVariant(value, index) {
     name,
     colour: cleanString(value.colour),
     size: cleanString(value.size),
+    weight: asNumber(value.weight),
+    weightUnit: ["g", "kg"].includes(cleanString(value.weightUnit).toLowerCase())
+      ? cleanString(value.weightUnit).toLowerCase() : "g",
+    length: asNumber(value.length),
+    width: asNumber(value.width),
+    height: asNumber(value.height),
+    dimensionUnit: ["mm", "cm", "m"].includes(cleanString(value.dimensionUnit).toLowerCase())
+      ? cleanString(value.dimensionUnit).toLowerCase() : "cm",
     sku: cleanString(value.sku),
     priceOverride: (asNumber(value.priceOverride) ?? 0) > 0 ? asNumber(value.priceOverride) : null,
+    salePrice: asNumber(value.salePrice),
+    wholesalePrice: asNumber(value.wholesalePrice),
+    wholesaleMinQuantity: Math.max(asNumber(value.wholesaleMinQuantity) ?? 1, 1),
+    saleStartsAt: cleanString(value.saleStartsAt),
+    saleEndsAt: cleanString(value.saleEndsAt),
     stockQty: asNumber(value.stockQty ?? value.stock) ?? 0,
     status: cleanString(value.status || "active").toLowerCase(),
     contentVariantId: cleanString(value.contentVariantId),
+    contentVariantLinkReviewed: value.contentVariantLinkReviewed === true || Boolean(cleanString(value.contentVariantId)),
     shortDescription: cleanString(value.shortDescription),
     longDescription: cleanString(value.longDescription),
     inclusions: cleanString(value.inclusions),
+    manualInclusions: cleanManualInclusions(value.manualInclusions, variantId),
     deliveryMode: cleanString(value.deliveryMode),
     physicalFulfilment: cleanString(value.physicalFulfilment || "none").toLowerCase(),
+    purchaseSetupReviewed: value.purchaseSetupReviewed === true,
     calendarBookingReference: cleanString(value.calendarBookingReference),
     seatCapacity: asNumber(value.seatCapacity),
     nearCapacityWarning: asNumber(value.nearCapacityWarning),
@@ -401,7 +461,72 @@ function normalizeVariant(value, index) {
     eventEndAt: cleanString(value.eventEndAt),
     eventLocation: cleanString(value.eventLocation),
     instructor: cleanString(value.instructor),
+    bundleComponents: cleanBundleComponents(value.bundleComponents, variantId, sourceProductId),
+    primaryAssetId: cleanString(value.primaryAssetId),
+    promotionAssetIds: [...new Set((Array.isArray(value.promotionAssetIds) ? value.promotionAssetIds : [])
+      .map(cleanString).filter(Boolean))].slice(0, 20),
+    prerequisiteProductVariants: cleanPrerequisites(
+      value.prerequisiteProductVariants,
+      sourceProductId,
+      variantId,
+    ),
   };
+}
+
+function cleanPrerequisites(value, sourceProductId, sourceVariantId) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).map((entry) => {
+    const requirementType = cleanString(entry?.requirementType) === "item" || entry?.itemId
+      ? "item" : "product-variant";
+    return {
+      requirementType,
+      itemId: requirementType === "item" ? cleanString(entry?.itemId) : "",
+      productId: requirementType === "product-variant" ? cleanString(entry?.productId) : "",
+      productVariantId: requirementType === "product-variant"
+        ? cleanString(entry?.productVariantId) : "",
+    };
+  }).filter((entry) => {
+    const key = entry.requirementType === "item"
+      ? `item:${entry.itemId}` : `product:${entry.productId}:${entry.productVariantId}`;
+    const complete = entry.requirementType === "item"
+      ? entry.itemId : entry.productId && entry.productVariantId;
+    if (!complete ||
+        entry.productId === sourceProductId && entry.productVariantId === sourceVariantId ||
+        seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 20);
+}
+
+function cleanBundleComponents(value, sourceProductVariantId, sourceProductId) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).slice(0, 100).map((component, index) => ({
+    bundleComponentId: cleanString(component?.bundleComponentId) ||
+      `BUNDLE-${slugify(sourceProductVariantId)}-${index + 1}`,
+    sourceProductVariantId,
+    componentProductId: cleanString(component?.componentProductId),
+    componentProductVariantId: cleanString(component?.componentProductVariantId),
+    quantity: Math.max(asNumber(component?.quantity) ?? 1, 1),
+    inventoryAction: component?.inventoryAction === "none" ? "none" : "deduct",
+  })).filter((component) => {
+    const key = `${component.componentProductId}:${component.componentProductVariantId}`;
+    if (!component.componentProductId || !component.componentProductVariantId ||
+        component.componentProductId === sourceProductId &&
+          component.componentProductVariantId === sourceProductVariantId || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function cleanManualInclusions(value, sourceProductVariantId) {
+  return (Array.isArray(value) ? value : []).slice(0, 100).map((entry, index) => ({
+    inclusionId: cleanString(entry?.inclusionId) ||
+      `INCLUSION-${slugify(sourceProductVariantId)}-${index + 1}`,
+    name: cleanString(entry?.name).slice(0, 200),
+    quantity: Math.max(asNumber(entry?.quantity) ?? 1, 1),
+    sourceBlueprintId: cleanString(entry?.sourceBlueprintId),
+    sourceComponentId: cleanString(entry?.sourceComponentId),
+  })).filter((entry) => entry.name);
 }
 
 function productTypeFromItem(doc) {
@@ -470,6 +595,12 @@ export const createContentBuilderRecord = onCall(
     const templateId = cleanString(data.template);
     if (!name) {
       throw new HttpsError("invalid-argument", "Name is required.");
+    }
+    if (recordType === "item" && typeValue.toLowerCase() === "workshop") {
+      throw new HttpsError(
+        "invalid-argument",
+        "Create Workshops as Plans, then connect their sellable Product and session variants.",
+      );
     }
     const db = admin.firestore();
     const options = await contentOptions(db);
@@ -687,8 +818,22 @@ export const createContentBuilderRecord = onCall(
         throw new HttpsError("invalid-argument", "The selected Product no longer exists. Refresh and try again.");
       }
 
+      const newTags = cleanNewTags(data.newTags);
       await admin.firestore().runTransaction(async (transaction) => {
         transaction.create(ref, doc);
+        newTags.forEach((tag) => {
+          const tagId = `TAG-${slugify(tag.name)}`;
+          transaction.set(db.collection("tags").doc(tagId), {
+            tagId,
+            name: tag.name,
+            categoryId: tag.categoryId,
+            status: "active",
+            contentOrigin: "app",
+            managedByWorkbook: false,
+            createdAt: now,
+            updatedAt: now,
+          }, { merge: true });
+        });
 
         if (recordType === "item" && uploadedAssets.length) {
           uploadedAssets.forEach((asset, index) => {
@@ -846,15 +991,31 @@ export const createContentBuilderRecord = onCall(
           const retailPrice = asNumber(data.price) ?? 0;
           const salePrice = asNumber(data.salePrice);
           const effectivePrice = salePrice ?? retailPrice;
+          const taxClass = ["gst-taxable", "gst-free", "input-taxed", "out-of-scope"]
+            .includes(cleanString(data.productRelation?.taxClass).toLowerCase())
+            ? cleanString(data.productRelation?.taxClass).toLowerCase() : "gst-taxable";
           // Product variants belong to the Product drawer. `data.variants` is the
           // content entity's Build variants and does not contain Product-only
           // workshop fields such as session time, location, or seat capacity.
           const variants = (Array.isArray(data.productRelation?.variants)
             ? data.productRelation.variants
             : [])
-            .map(normalizeVariant)
+            .map((variant, index) => normalizeVariant(variant, index, productId))
             .filter(Boolean);
           const accessTargets = cleanAccessGrants(data.productRelation?.accessGrants);
+          if (linkRole === "Unlocks" && ["Item", "Blueprint", "Plan"].includes(linkedEntityType) &&
+              !accessTargets.some((grant) =>
+                grant.accessEntityType === linkedEntityType && grant.accessEntityId === id)) {
+            accessTargets.push({
+              accessEntityType: linkedEntityType,
+              accessEntityId: id,
+              accessEntityVariantId: "",
+              productVariantId: "",
+              durationType: "permanent",
+              durationValue: null,
+              endsAt: "",
+            });
+          }
           const variantContentLinks = cleanVariantContentLinks(data.productRelation?.variantContentLinks);
           variantContentLinks.filter((link) => link.linkRole === "Unlocks").forEach((link) => {
             accessTargets.push({
@@ -864,6 +1025,18 @@ export const createContentBuilderRecord = onCall(
               productVariantId: link.productVariantId,
             });
           });
+          if (variantContentLinks.some((link) => !link.productVariantId)) {
+            throw new HttpsError(
+              "failed-precondition",
+              "Every manufacturing, Workshop operations, or lecture Blueprint must belong to an exact Product variant.",
+            );
+          }
+          if (accessTargets.some((grant) => !grant.productVariantId)) {
+            throw new HttpsError(
+              "failed-precondition",
+              "Every unlock after purchase must belong to an exact Product variant.",
+            );
+          }
           const selectedAssetMedia = linkedAssets.map((asset) => ({
             type: cleanString(asset.data.type || asset.data.assetType) ||
               assetTypeFromUrl(asset.data.fileUrl || asset.data.url),
@@ -896,6 +1069,15 @@ export const createContentBuilderRecord = onCall(
               }, { merge: true });
             }
             transaction.set(productRef, {
+              affiliateAvailable: data.productRelation?.affiliateAvailable === true,
+              fulfilmentReviewed: data.productRelation?.fulfilmentReviewed === true,
+              taxClass,
+              marketplaceAudience: cleanString(data.productRelation?.marketplaceAudience || "public")
+                .toLowerCase() === "affiliates" ? "affiliates" : "public",
+              wholesalePrice: data.productRelation?.affiliateAvailable === true
+                ? asNumber(data.productRelation?.wholesalePrice) : null,
+              wholesaleMinQuantity: data.productRelation?.affiliateAvailable === true
+                ? Math.max(asNumber(data.productRelation?.wholesaleMinQuantity) ?? 1, 1) : 1,
               manufacturingBlueprintId,
               estimatedUnitCost: asNumber(data.productRelation?.estimatedUnitCost) ?? 0,
               variantContentLinks,
@@ -952,18 +1134,34 @@ export const createContentBuilderRecord = onCall(
                 sku: variant.sku,
                 status: variant.status || "active",
                 contentVariantId: variant.contentVariantId,
+                contentVariantLinkReviewed: variant.contentVariantLinkReviewed,
                 shortDescription: variant.shortDescription,
                 longDescription: variant.longDescription,
                 inclusions: variant.inclusions,
+                manualInclusions: variant.manualInclusions,
                 isDefault: index === 0,
                 optionSummary: [variant.colour, variant.size].filter(Boolean).join(" / "),
+                colour: variant.colour,
+                size: variant.size,
+                weight: variant.weight,
+                weightUnit: variant.weightUnit,
+                length: variant.length,
+                width: variant.width,
+                height: variant.height,
+                dimensionUnit: variant.dimensionUnit,
                 priceOverride: variant.priceOverride,
+                salePrice: variant.salePrice,
+                wholesalePrice: variant.wholesalePrice,
+                wholesaleMinQuantity: variant.wholesaleMinQuantity,
+                saleStartsAt: variant.saleStartsAt,
+                saleEndsAt: variant.saleEndsAt,
                 currency: "AUD",
                 requiresShippingOverride: ["shipping", "shipping-or-pickup"]
                   .includes(variant.physicalFulfilment),
                 inventoryTracked: data.productRelation?.inventoryTracked === true,
                 deliveryMode: variant.deliveryMode,
                 physicalFulfilment: variant.physicalFulfilment,
+                purchaseSetupReviewed: variant.purchaseSetupReviewed,
                 stockQuantity: variant.stockQty,
                 stockStatus: variant.stockQty > 0 ? "in-stock" : "out-of-stock",
                 calendarBookingReference: variant.calendarBookingReference,
@@ -973,6 +1171,10 @@ export const createContentBuilderRecord = onCall(
                 eventEndAt: variant.eventEndAt,
                 eventLocation: variant.eventLocation,
                 instructor: variant.instructor,
+                bundleComponents: variant.bundleComponents,
+                primaryAssetId: variant.primaryAssetId,
+                promotionAssetIds: variant.promotionAssetIds,
+                prerequisiteProductVariants: variant.prerequisiteProductVariants,
                 sortOrder: index + 1,
                 createdAt: now,
                 updatedAt: now,
@@ -986,11 +1188,17 @@ export const createContentBuilderRecord = onCall(
                   variantId,
                   currency: "AUD",
                   retailPrice: variant.priceOverride,
-                  salePrice: null,
-                  onSale: false,
+                  salePrice: variant.salePrice,
+                  wholesalePrice: data.productRelation?.affiliateAvailable === true
+                    ? variant.wholesalePrice : null,
+                  wholesaleMinQuantity: data.productRelation?.affiliateAvailable === true
+                    ? variant.wholesaleMinQuantity : 1,
+                  onSale: variant.salePrice !== null,
                   effectiveShopPrice: variant.priceOverride,
-                  gstIncluded: true,
-                  gstAmount: Number((variant.priceOverride / 11).toFixed(2)),
+                  taxClass,
+                  gstIncluded: taxClass === "gst-taxable",
+                  gstAmount: taxClass === "gst-taxable"
+                    ? Number((variant.priceOverride / 11).toFixed(2)) : 0,
                   status: "active",
                   createdAt: now,
                   updatedAt: now,
@@ -1023,7 +1231,8 @@ export const createContentBuilderRecord = onCall(
             });
             variantContentLinks.forEach((link) => {
               const linkId = `PRODUCTVARIANTLINK-${slugify(productId)}-${slugify(link.productVariantId)}-` +
-                `${slugify(link.entityType)}-${slugify(link.entityId)}-${slugify(link.entityVariantId || "ALL")}`;
+                `${slugify(link.entityType)}-${slugify(link.entityId)}-${slugify(link.entityVariantId || "ALL")}` +
+                (link.linkRole === "OperatedWith" ? "-OPERATEDWITH" : "");
               transaction.set(db.collection("productVariantContentLinks").doc(linkId), {
                 productVariantContentLinkId: linkId,
                 productId,
@@ -1066,14 +1275,31 @@ export const createContentBuilderRecord = onCall(
             shopStatus: normalizeStatus(data.shopStatus || (doc.visible ? "active" : "draft")),
             visible: data.shopVisible === true || doc.visible === true,
             websiteVisible: doc.websiteVisible === true,
-            archived: false,
+            archived: data.productRelation?.archived === true ||
+              variants.length > 0 && variants.every((variant) => variant.status === "archived"),
             featured: data.featured === true,
+            marketplaceTileImageSource: cleanString(
+              data.productRelation?.marketplaceTileImageSource || "entity",
+            ).toLowerCase(),
+            marketplaceTileImageVariantId: cleanString(
+              data.productRelation?.marketplaceTileImageVariantId,
+            ),
+            marketplaceTileDescriptionSource: cleanString(
+              data.productRelation?.marketplaceTileDescriptionSource || "entity",
+            ).toLowerCase(),
+            marketplaceTileDescriptionVariantId: cleanString(
+              data.productRelation?.marketplaceTileDescriptionVariantId,
+            ),
             requiresShipping: data.productRelation?.requiresShipping === true,
             physicalFulfilment: cleanString(
               data.productRelation?.physicalFulfilment ||
                 (data.productRelation?.requiresShipping ? "shipping" : "none"),
             ).toLowerCase(),
+            fulfilmentReviewed: data.productRelation?.fulfilmentReviewed === true,
             inventoryTracked: data.productRelation?.inventoryTracked === true,
+            affiliateAvailable: data.productRelation?.affiliateAvailable === true,
+            marketplaceAudience: cleanString(data.productRelation?.marketplaceAudience || "public")
+              .toLowerCase() === "affiliates" ? "affiliates" : "public",
             manufacturingBlueprintId,
             estimatedUnitCost: asNumber(data.productRelation?.estimatedUnitCost) ?? 0,
             variantContentLinks,
@@ -1103,7 +1329,12 @@ export const createContentBuilderRecord = onCall(
             slug: cleanString(data.slug) || slugify(name).toLowerCase(),
             price: effectivePrice,
             retailPrice,
+            taxClass,
             salePrice,
+            wholesalePrice: data.productRelation?.affiliateAvailable === true
+              ? asNumber(data.productRelation?.wholesalePrice) : null,
+            wholesaleMinQuantity: data.productRelation?.affiliateAvailable === true
+              ? Math.max(asNumber(data.productRelation?.wholesaleMinQuantity) ?? 1, 1) : 1,
             onSale: salePrice !== null,
             priceFrom: variants
               .map((variant) => variant.priceOverride)
@@ -1163,10 +1394,15 @@ export const createContentBuilderRecord = onCall(
             currency: "AUD",
             retailPrice,
             salePrice,
+            wholesalePrice: data.productRelation?.affiliateAvailable === true
+              ? asNumber(data.productRelation?.wholesalePrice) : null,
+            wholesaleMinQuantity: data.productRelation?.affiliateAvailable === true
+              ? Math.max(asNumber(data.productRelation?.wholesaleMinQuantity) ?? 1, 1) : 1,
             onSale: salePrice !== null,
             effectiveShopPrice: effectivePrice,
-            gstIncluded: true,
-            gstAmount: Number((effectivePrice / 11).toFixed(2)),
+            taxClass,
+            gstIncluded: taxClass === "gst-taxable",
+            gstAmount: taxClass === "gst-taxable" ? Number((effectivePrice / 11).toFixed(2)) : 0,
             status: "active",
             createdAt: now,
             updatedAt: now,
@@ -1186,13 +1422,21 @@ export const createContentBuilderRecord = onCall(
               size: variant.size,
               sku: variant.sku,
               priceOverride: variant.priceOverride,
+              salePrice: variant.salePrice,
+              wholesalePrice: variant.wholesalePrice,
+              wholesaleMinQuantity: variant.wholesaleMinQuantity,
+              saleStartsAt: variant.saleStartsAt,
+              saleEndsAt: variant.saleEndsAt,
               status: variant.status || "active",
               contentVariantId: variant.contentVariantId,
+              contentVariantLinkReviewed: variant.contentVariantLinkReviewed,
               shortDescription: variant.shortDescription,
               longDescription: variant.longDescription,
               inclusions: variant.inclusions,
+              manualInclusions: variant.manualInclusions,
               deliveryMode: variant.deliveryMode,
               physicalFulfilment: variant.physicalFulfilment,
+              purchaseSetupReviewed: variant.purchaseSetupReviewed,
               stock: variant.stockQty,
               calendarBookingReference: variant.calendarBookingReference,
               seatCapacity: variant.seatCapacity,
@@ -1201,6 +1445,10 @@ export const createContentBuilderRecord = onCall(
               eventEndAt: variant.eventEndAt,
               eventLocation: variant.eventLocation,
               instructor: variant.instructor,
+              bundleComponents: variant.bundleComponents,
+              primaryAssetId: variant.primaryAssetId,
+              promotionAssetIds: variant.promotionAssetIds,
+              prerequisiteProductVariants: variant.prerequisiteProductVariants,
               createdAt: now,
               updatedAt: now,
             });
@@ -1213,17 +1461,33 @@ export const createContentBuilderRecord = onCall(
               sku: variant.sku,
               status: variant.status || "active",
               contentVariantId: variant.contentVariantId,
+              contentVariantLinkReviewed: variant.contentVariantLinkReviewed,
               shortDescription: variant.shortDescription,
               longDescription: variant.longDescription,
               inclusions: variant.inclusions,
+              manualInclusions: variant.manualInclusions,
               isDefault: index === 0,
               optionSummary: [variant.colour, variant.size].filter(Boolean).join(" / "),
+              colour: variant.colour,
+              size: variant.size,
+              weight: variant.weight,
+              weightUnit: variant.weightUnit,
+              length: variant.length,
+              width: variant.width,
+              height: variant.height,
+              dimensionUnit: variant.dimensionUnit,
               priceOverride: variant.priceOverride,
+              salePrice: variant.salePrice,
+              wholesalePrice: variant.wholesalePrice,
+              wholesaleMinQuantity: variant.wholesaleMinQuantity,
+              saleStartsAt: variant.saleStartsAt,
+              saleEndsAt: variant.saleEndsAt,
               currency: "AUD",
               requiresShippingOverride: ["shipping", "shipping-or-pickup"].includes(variant.physicalFulfilment),
               inventoryTracked: data.productRelation?.inventoryTracked === true,
               deliveryMode: variant.deliveryMode,
               physicalFulfilment: variant.physicalFulfilment,
+              purchaseSetupReviewed: variant.purchaseSetupReviewed,
               stockQuantity: variant.stockQty,
               stockStatus: variant.stockQty > 0 ? "in-stock" : "out-of-stock",
               calendarBookingReference: variant.calendarBookingReference,
@@ -1233,6 +1497,10 @@ export const createContentBuilderRecord = onCall(
               eventEndAt: variant.eventEndAt,
               eventLocation: variant.eventLocation,
               instructor: variant.instructor,
+              bundleComponents: variant.bundleComponents,
+              primaryAssetId: variant.primaryAssetId,
+              promotionAssetIds: variant.promotionAssetIds,
+              prerequisiteProductVariants: variant.prerequisiteProductVariants,
               sortOrder: index + 1,
               createdAt: now,
               updatedAt: now,
@@ -1247,11 +1515,17 @@ export const createContentBuilderRecord = onCall(
                 variantId,
                 currency: "AUD",
                 retailPrice: variant.priceOverride,
-                salePrice: null,
-                onSale: false,
+                salePrice: variant.salePrice,
+                wholesalePrice: data.productRelation?.affiliateAvailable === true
+                  ? variant.wholesalePrice : null,
+                wholesaleMinQuantity: data.productRelation?.affiliateAvailable === true
+                  ? variant.wholesaleMinQuantity : 1,
+                onSale: variant.salePrice !== null,
                 effectiveShopPrice: variant.priceOverride,
-                gstIncluded: true,
-                gstAmount: Number((variant.priceOverride / 11).toFixed(2)),
+                taxClass,
+                gstIncluded: taxClass === "gst-taxable",
+                gstAmount: taxClass === "gst-taxable"
+                  ? Number((variant.priceOverride / 11).toFixed(2)) : 0,
                 status: "active",
                 createdAt: now,
                 updatedAt: now,
@@ -1313,7 +1587,8 @@ export const createContentBuilderRecord = onCall(
           });
           variantContentLinks.forEach((link) => {
             const linkId = `PRODUCTVARIANTLINK-${slugify(productId)}-${slugify(link.productVariantId)}-` +
-              `${slugify(link.entityType)}-${slugify(link.entityId)}-${slugify(link.entityVariantId || "ALL")}`;
+              `${slugify(link.entityType)}-${slugify(link.entityId)}-${slugify(link.entityVariantId || "ALL")}` +
+              (link.linkRole === "OperatedWith" ? "-OPERATEDWITH" : "");
             transaction.set(db.collection("productVariantContentLinks").doc(linkId), {
               ...appManagedFields,
               productVariantContentLinkId: linkId,

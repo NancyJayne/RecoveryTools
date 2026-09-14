@@ -81,7 +81,7 @@ function cleanVariantContentLinks(value) {
       : "",
     entityId: cleanString(link?.entityId),
     entityVariantId: cleanString(link?.entityVariantId),
-    linkRole: ["Represents", "ManufacturedFrom", "Unlocks"].includes(cleanString(link?.linkRole))
+    linkRole: ["Represents", "ManufacturedFrom", "OperatedWith", "Unlocks"].includes(cleanString(link?.linkRole))
       ? cleanString(link.linkRole)
       : "Represents",
     status: "active",
@@ -168,9 +168,20 @@ function cleanTemplateFieldValues(value) {
     if (!key) return;
     if (Array.isArray(rawValue)) {
       output[key] = rawValue
-        .map((item) => cleanString(item).slice(0, 2000))
-        .filter(Boolean)
+        .map((item) => item && typeof item === "object" && !Array.isArray(item)
+          ? {
+            entityId: cleanString(item.entityId || item.id).slice(0, 200),
+            entityVariantId: cleanString(item.entityVariantId || item.variantId).slice(0, 200),
+          }
+          : cleanString(item).slice(0, 2000))
+        .filter((item) => typeof item === "string" ? Boolean(item) : Boolean(item.entityId))
         .slice(0, 100);
+    } else if (rawValue && typeof rawValue === "object") {
+      const entityId = cleanString(rawValue.entityId || rawValue.id).slice(0, 200);
+      if (entityId) output[key] = {
+        entityId,
+        entityVariantId: cleanString(rawValue.entityVariantId || rawValue.variantId).slice(0, 200),
+      };
     } else if (typeof rawValue === "boolean") {
       output[key] = rawValue;
     } else if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
@@ -225,12 +236,41 @@ function cleanItemComponents(value) {
     componentId: cleanString(component?.componentId) || `COMPONENT-${index + 1}`,
     itemId: cleanString(component?.itemId),
     itemVariantId: cleanString(component?.itemVariantId),
+    productId: cleanString(component?.productId),
+    productVariantId: cleanString(component?.productVariantId),
     quantity: asNumber(component?.quantity) ?? 0,
     unit: cleanString(component?.unit) || "each",
     unitCost: asNumber(component?.unitCost) ?? 0,
     estimatedCost: asNumber(component?.estimatedCost) ?? 0,
     notes: cleanString(component?.notes),
-  })).filter((component) => component.itemId && component.quantity > 0);
+    inventoryTreatment: ["bring-return", "consumable", "take-home", "reference", "digital-instruction"]
+      .includes(cleanString(component?.inventoryTreatment))
+      ? cleanString(component.inventoryTreatment)
+      : "bring-return",
+    quantityBasis: ["fixed", "capacity", "confirmed-attendees", "actual-attendees"]
+      .includes(cleanString(component?.quantityBasis))
+      ? cleanString(component.quantityBasis)
+      : "fixed",
+    deductOnIssue: component?.deductOnIssue === true,
+  })).map((component) => component.itemId
+    ? { ...component, productId: "", productVariantId: "" }
+    : { ...component, itemId: "", itemVariantId: "" })
+    .filter((component) => (component.itemId || component.productId) && component.quantity > 0);
+}
+
+function cleanNewTags(value) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).slice(0, 50).flatMap((tag) => {
+    const name = cleanString(tag?.name).slice(0, 100);
+    const categoryId = cleanString(tag?.categoryId).slice(0, 100);
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) return [];
+    if (!categoryId) {
+      throw new HttpsError("invalid-argument", `Choose a category for the new tag "${name}".`);
+    }
+    seen.add(key);
+    return [{ name, categoryId }];
+  });
 }
 
 function cleanTemplateAssetLinks(value) {
@@ -298,6 +338,14 @@ function normalizeVariant(value, index, itemId, productId) {
     name,
     colour: cleanString(value.colour),
     size: cleanString(value.size),
+    weight: asNumber(value.weight),
+    weightUnit: ["g", "kg"].includes(cleanString(value.weightUnit).toLowerCase())
+      ? cleanString(value.weightUnit).toLowerCase() : "g",
+    length: asNumber(value.length),
+    width: asNumber(value.width),
+    height: asNumber(value.height),
+    dimensionUnit: ["mm", "cm", "m"].includes(cleanString(value.dimensionUnit).toLowerCase())
+      ? cleanString(value.dimensionUnit).toLowerCase() : "cm",
     sku: cleanString(value.sku),
     priceOverride: (asNumber(value.priceOverride) ?? 0) > 0 ? asNumber(value.priceOverride) : null,
     marketplaceMode: cleanString(value.marketplaceMode || "inherit").toLowerCase(),
@@ -311,11 +359,14 @@ function normalizeVariant(value, index, itemId, productId) {
     stock: asNumber(value.stock) ?? 0,
     status: cleanString(value.status || "active").toLowerCase(),
     contentVariantId: cleanString(value.contentVariantId),
+    contentVariantLinkReviewed: value.contentVariantLinkReviewed === true || Boolean(cleanString(value.contentVariantId)),
     shortDescription: cleanString(value.shortDescription),
     longDescription: cleanString(value.longDescription),
     inclusions: cleanString(value.inclusions),
+    manualInclusions: cleanManualInclusions(value.manualInclusions, variantId),
     deliveryMode: cleanString(value.deliveryMode),
     physicalFulfilment: cleanString(value.physicalFulfilment || "none").toLowerCase(),
+    purchaseSetupReviewed: value.purchaseSetupReviewed === true,
     calendarBookingReference: cleanString(value.calendarBookingReference),
     seatCapacity: asNumber(value.seatCapacity),
     nearCapacityWarning: asNumber(value.nearCapacityWarning),
@@ -323,7 +374,71 @@ function normalizeVariant(value, index, itemId, productId) {
     eventEndAt: cleanString(value.eventEndAt),
     eventLocation: cleanString(value.eventLocation),
     instructor: cleanString(value.instructor),
+    bundleComponents: cleanBundleComponents(value.bundleComponents, variantId, productId),
+    primaryAssetId: cleanString(value.primaryAssetId),
+    promotionAssetIds: cleanAssetIds(value.promotionAssetIds),
+    prerequisiteProductVariants: cleanPrerequisites(value.prerequisiteProductVariants, productId, variantId),
   };
+}
+
+function cleanAssetIds(value) {
+  return [...new Set((Array.isArray(value) ? value : []).map(cleanString).filter(Boolean))].slice(0, 20);
+}
+
+function cleanPrerequisites(value, sourceProductId, sourceVariantId) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).map((entry) => {
+    const requirementType = cleanString(entry?.requirementType) === "item" || entry?.itemId
+      ? "item" : "product-variant";
+    return {
+      requirementType,
+      itemId: requirementType === "item" ? cleanString(entry?.itemId) : "",
+      productId: requirementType === "product-variant" ? cleanString(entry?.productId) : "",
+      productVariantId: requirementType === "product-variant"
+        ? cleanString(entry?.productVariantId) : "",
+    };
+  }).filter((entry) => {
+    const key = entry.requirementType === "item"
+      ? `item:${entry.itemId}` : `product:${entry.productId}:${entry.productVariantId}`;
+    const complete = entry.requirementType === "item"
+      ? entry.itemId : entry.productId && entry.productVariantId;
+    if (!complete ||
+        entry.productId === sourceProductId && entry.productVariantId === sourceVariantId || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 20);
+}
+
+function cleanBundleComponents(value, sourceProductVariantId, sourceProductId) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).slice(0, 100).map((component, index) => ({
+    bundleComponentId: cleanString(component?.bundleComponentId) ||
+      `BUNDLE-${slugify(sourceProductVariantId)}-${index + 1}`,
+    sourceProductId,
+    sourceProductVariantId,
+    componentProductId: cleanString(component?.componentProductId),
+    componentProductVariantId: cleanString(component?.componentProductVariantId),
+    quantity: Math.max(asNumber(component?.quantity) ?? 1, 1),
+    inventoryAction: component?.inventoryAction === "none" ? "none" : "deduct",
+  })).filter((component) => {
+    const key = `${component.componentProductId}:${component.componentProductVariantId}`;
+    if (!component.componentProductId || !component.componentProductVariantId ||
+        component.componentProductId === sourceProductId &&
+          component.componentProductVariantId === sourceProductVariantId || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function cleanManualInclusions(value, sourceProductVariantId) {
+  return (Array.isArray(value) ? value : []).slice(0, 100).map((entry, index) => ({
+    inclusionId: cleanString(entry?.inclusionId) ||
+      `INCLUSION-${slugify(sourceProductVariantId)}-${index + 1}`,
+    name: cleanString(entry?.name).slice(0, 200),
+    quantity: Math.max(asNumber(entry?.quantity) ?? 1, 1),
+    sourceBlueprintId: cleanString(entry?.sourceBlueprintId),
+    sourceComponentId: cleanString(entry?.sourceComponentId),
+  })).filter((entry) => entry.name);
 }
 
 async function updateProductRelation({
@@ -368,7 +483,31 @@ async function updateProductRelation({
   const linkRole = cleanString(relation.linkRole) || "Represents";
   const isManufacturingLink = collection === "blueprints" && linkRole === "ManufacturedFrom";
   const accessTargets = cleanAccessGrants(relation.accessGrants);
+  if (linkRole === "Unlocks" && !accessTargets.some((grant) =>
+    grant.accessEntityType === linkedEntityType && grant.accessEntityId === recordId)) {
+    accessTargets.push({
+      accessEntityType: linkedEntityType,
+      accessEntityId: recordId,
+      accessEntityVariantId: "",
+      productVariantId: "",
+      durationType: "permanent",
+      durationValue: null,
+      endsAt: "",
+    });
+  }
   const variantContentLinks = cleanVariantContentLinks(relation.variantContentLinks);
+  if (variantContentLinks.some((link) => !link.productVariantId)) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Every manufacturing, Workshop operations, or lecture Blueprint must belong to an exact Product variant.",
+    );
+  }
+  if (accessTargets.some((grant) => !grant.productVariantId)) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Every unlock after purchase must belong to an exact Product variant.",
+    );
+  }
   const desiredAccessGrantIds = new Set();
   const desiredVariantLinkIds = new Set();
   variantContentLinks.filter((link) => link.linkRole === "Unlocks").forEach((link) => {
@@ -534,6 +673,9 @@ async function updateProductRelation({
   const endsMs = saleEndsAt ? Date.parse(saleEndsAt) : null;
   const onSale = salePrice !== null && (!startsMs || startsMs <= nowMs) && (!endsMs || endsMs > nowMs);
   const effectivePrice = onSale ? salePrice : retailPrice;
+  const taxClass = ["gst-taxable", "gst-free", "input-taxed", "out-of-scope"]
+    .includes(cleanString(relation.taxClass).toLowerCase())
+    ? cleanString(relation.taxClass).toLowerCase() : "gst-taxable";
   const stock = asNumber(relation.stock) ?? asNumber(productData.stock) ?? 0;
   const variants = Array.isArray(relation.variants)
     ? relation.variants
@@ -542,6 +684,8 @@ async function updateProductRelation({
     : [];
   const legacyProductType = productTypeValue(relation.productType || itemUpdate.type || itemData.type, "tool");
   const canonicalProductType = canonicalProductTypeValue(relation.productType || legacyProductType);
+  const inheritedShortDescription = cleanString(updates.shortDescription);
+  const inheritedLongDescription = cleanString(updates.longDescription);
 
   transaction.set(productRef, {
     productId,
@@ -555,6 +699,9 @@ async function updateProductRelation({
     itemId: collection === "items" ? recordId : "",
     name,
     title: name,
+    description: inheritedShortDescription,
+    shortDescription: inheritedShortDescription,
+    longDescription: inheritedLongDescription,
     type: cleanString(relation.productType) || legacyProductType,
     itemType: itemUpdate.type || itemData.type || itemData.itemType || "",
     itemKind: itemUpdate.itemKind || itemData.itemKind || "",
@@ -568,15 +715,28 @@ async function updateProductRelation({
     visible: asBoolean(relation.visible),
     websiteVisible: asBoolean(relation.visible),
     marketplaceMode,
+    marketplaceAudience: cleanString(relation.marketplaceAudience || "public").toLowerCase() === "affiliates"
+      ? "affiliates" : "public",
     marketplaceStartsAt,
     marketplaceEndsAt,
-    archived: asBoolean(relation.archived),
+    archived: asBoolean(relation.archived) ||
+      variants.length > 0 && variants.every((variant) => variant.status === "archived"),
     featured: asBoolean(relation.featured),
+    marketplaceTileImageSource: cleanString(
+      relation.marketplaceTileImageSource || "entity",
+    ).toLowerCase(),
+    marketplaceTileImageVariantId: cleanString(relation.marketplaceTileImageVariantId),
+    marketplaceTileDescriptionSource: cleanString(
+      relation.marketplaceTileDescriptionSource || "entity",
+    ).toLowerCase(),
+    marketplaceTileDescriptionVariantId: cleanString(relation.marketplaceTileDescriptionVariantId),
     requiresShipping: asBoolean(relation.requiresShipping),
     physicalFulfilment: cleanString(
       relation.physicalFulfilment || (asBoolean(relation.requiresShipping) ? "shipping" : "none"),
     ).toLowerCase(),
+    fulfilmentReviewed: relation.fulfilmentReviewed === true,
     inventoryTracked: asBoolean(relation.inventoryTracked),
+    affiliateAvailable: relation.affiliateAvailable === true,
     manufacturingBlueprintId,
     estimatedUnitCost: asNumber(relation.estimatedUnitCost) ?? 0,
     variantContentLinks,
@@ -602,9 +762,11 @@ async function updateProductRelation({
       .concat([effectivePrice])
       .sort((a, b) => a - b)[0],
     retailPrice,
+    taxClass,
     salePrice,
-    wholesalePrice: asNumber(relation.wholesalePrice),
-    wholesaleMinQuantity: Math.max(asNumber(relation.wholesaleMinQuantity) ?? 1, 1),
+    wholesalePrice: relation.affiliateAvailable === true ? asNumber(relation.wholesalePrice) : null,
+    wholesaleMinQuantity: relation.affiliateAvailable === true
+      ? Math.max(asNumber(relation.wholesaleMinQuantity) ?? 1, 1) : 1,
     onSale,
     saleStartsAt,
     saleEndsAt,
@@ -686,7 +848,8 @@ async function updateProductRelation({
   });
   variantContentLinks.forEach((link) => {
     const linkId = `PRODUCTVARIANTLINK-${slugify(productId)}-${slugify(link.productVariantId)}-` +
-      `${slugify(link.entityType)}-${slugify(link.entityId)}-${slugify(link.entityVariantId || "ALL")}`;
+      `${slugify(link.entityType)}-${slugify(link.entityId)}-${slugify(link.entityVariantId || "ALL")}` +
+      (link.linkRole === "OperatedWith" ? "-OPERATEDWITH" : "");
     desiredVariantLinkIds.add(linkId);
     transaction.set(db.collection("productVariantContentLinks").doc(linkId), {
       productVariantContentLinkId: linkId,
@@ -719,8 +882,9 @@ async function updateProductRelation({
     saleStartsAt,
     saleEndsAt,
     effectiveShopPrice: effectivePrice,
-    gstIncluded: true,
-    gstAmount: Number((effectivePrice / 11).toFixed(2)),
+    taxClass,
+    gstIncluded: taxClass === "gst-taxable",
+    gstAmount: taxClass === "gst-taxable" ? Number((effectivePrice / 11).toFixed(2)) : 0,
     status: "active",
     updatedAt: now,
     createdAt: productData.createdAt || now,
@@ -756,13 +920,24 @@ async function updateProductRelation({
       sku: variant.sku,
       status: variant.status || "active",
       contentVariantId: variant.contentVariantId,
+      contentVariantLinkReviewed: variant.contentVariantLinkReviewed,
       shortDescription: variant.shortDescription,
       longDescription: variant.longDescription,
       inclusions: variant.inclusions,
+      manualInclusions: variant.manualInclusions,
       deliveryMode: variant.deliveryMode,
       physicalFulfilment: variant.physicalFulfilment,
+      purchaseSetupReviewed: variant.purchaseSetupReviewed,
       isDefault: index === 0,
       optionSummary: [variant.colour, variant.size].filter(Boolean).join(" / "),
+      colour: variant.colour,
+      size: variant.size,
+      weight: variant.weight,
+      weightUnit: variant.weightUnit,
+      length: variant.length,
+      width: variant.width,
+      height: variant.height,
+      dimensionUnit: variant.dimensionUnit,
       priceOverride: variant.priceOverride,
       marketplaceMode: variant.marketplaceMode,
       marketplaceStartsAt: variant.marketplaceStartsAt,
@@ -784,6 +959,10 @@ async function updateProductRelation({
       eventEndAt: variant.eventEndAt,
       eventLocation: variant.eventLocation,
       instructor: variant.instructor,
+      bundleComponents: variant.bundleComponents,
+      primaryAssetId: variant.primaryAssetId,
+      promotionAssetIds: variant.promotionAssetIds,
+      prerequisiteProductVariants: variant.prerequisiteProductVariants,
       sortOrder: index + 1,
       contentOrigin: "app",
       managedByWorkbook: false,
@@ -808,8 +987,9 @@ async function updateProductRelation({
         saleEndsAt: variant.saleEndsAt,
         onSale: variant.salePrice !== null,
         effectiveShopPrice: variant.priceOverride,
-        gstIncluded: true,
-        gstAmount: Number((variant.priceOverride / 11).toFixed(2)),
+        taxClass,
+        gstIncluded: taxClass === "gst-taxable",
+        gstAmount: taxClass === "gst-taxable" ? Number((variant.priceOverride / 11).toFixed(2)) : 0,
         status: "active",
         updatedAt: now,
         createdAt: now,
@@ -979,6 +1159,14 @@ export const updateContentControlRecord = onCall(
     const db = admin.firestore();
     const existingSnapshot = await db.collection(collection).doc(recordId).get();
     const existing = existingSnapshot.data() || {};
+    const requestedType = cleanString(updates.type).toLowerCase();
+    const existingType = cleanString(existing.type || existing.itemType).toLowerCase();
+    if (collection === "items" && requestedType === "workshop" && existingType !== "workshop") {
+      throw new HttpsError(
+        "invalid-argument",
+        "Create Workshops as Plans, then connect their sellable Product and session variants.",
+      );
+    }
     const actor = actorOwnership(request);
     const now = admin.firestore.FieldValue.serverTimestamp();
     const update = {
@@ -1148,7 +1336,21 @@ export const updateContentControlRecord = onCall(
         db.collection("productVariantContentLinks").where("productId", "==", relationProductId).get(),
       ])
       : [{ docs: [] }, { docs: [] }];
+    const newTags = cleanNewTags(updates.newTags);
     await db.runTransaction(async (transaction) => {
+      newTags.forEach((tag) => {
+        const tagId = `TAG-${slugify(tag.name)}`;
+        transaction.set(db.collection("tags").doc(tagId), {
+          tagId,
+          name: tag.name,
+          categoryId: tag.categoryId,
+          status: "active",
+          contentOrigin: "app",
+          managedByWorkbook: false,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      });
       if (collection === "items" && updates.createsProduct !== true &&
           updates.inventoryTracked !== undefined) {
         const inventoryRef = db.collection("inventory").doc(`INV-${slugify(recordId)}`);

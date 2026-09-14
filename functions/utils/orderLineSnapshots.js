@@ -31,6 +31,18 @@ export function canonicalOrderLine(item, index, currency = "AUD") {
     unit: component.unit || "each",
     inventoryAction: component.inventoryAction || "deduct",
   })).filter((component) => component.itemId);
+  const bundleInventory = (item.bundleInventoryItems || []).map((component) => ({
+    bundleComponentId: clean(component.bundleComponentId),
+    productId: clean(component.productId),
+    productVariantId: clean(component.variantId || component.productVariantId),
+    variantSourceCollection: clean(component.variantSourceCollection) || "productVariants",
+    quantity: Math.max(Number(component.quantity || 1), 1),
+    quantityPerBundle: Math.max(Number(component.quantityPerBundle || 1), 1),
+    inventoryTracked: component.inventoryTracked === true,
+    isWorkshop: component.isWorkshop === true,
+    inventoryAction: component.inventoryAction === "none" ? "none" : "deduct",
+    seatCapacity: Math.max(Number(component.seatCapacity || 0), 0),
+  })).filter((component) => component.productId);
 
   return {
     schemaVersion: 2,
@@ -60,6 +72,7 @@ export function canonicalOrderLine(item, index, currency = "AUD") {
     creatorUserId: clean(item.creatorUserId || item.creatorId),
     accessTargets,
     componentInventory: components,
+    bundleInventory,
   };
 }
 

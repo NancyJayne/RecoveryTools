@@ -16,10 +16,16 @@ import {
   productDisplayType,
   variantForProduct,
 } from "../utils/productArchitecture.js";
+import {
+  inventoryTargetsForItems,
+  resolveBundleInventoryItems,
+} from "../utils/bundleInventory.js";
 import { canonicalOrderLines, orderDueDate } from "../utils/orderLineSnapshots.js";
 import { accessExpiry } from "../utils/accessGrantTiming.js";
 import { accessEmailDetails } from "../utils/orderAccessEmail.js";
 import { instructorDetails } from "../utils/instructorName.js";
+import { consumeInventoryReservation } from "./inventoryReservations.js";
+import { syncWorkshopInventoryAllocations } from "../utils/workshopInventoryAllocations.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -282,7 +288,6 @@ const confirmStripePurchaseHandler = async (request) => {
       );
       const inventory = inventoryForProduct(
         productId,
-        product.itemId || product.legacyItemId || "",
         variantId,
         architecture,
       );
@@ -327,7 +332,17 @@ const confirmStripePurchaseHandler = async (request) => {
         accessGrants: accessGrantsForProduct(productId, product, architecture)
           .filter((grant) => !grant.productVariantId || grant.productVariantId === variantId),
         components: componentsForProduct(productId, variantId, architecture),
+        bundleInventoryItems: await resolveBundleInventoryItems(admin.firestore(), {
+          productId,
+          variantId,
+          quantity: item.quantity,
+          architecture,
+        }),
         sellerUserId: product.sellerUserId || "",
+        taxClass: ["gst-taxable", "gst-free", "input-taxed", "out-of-scope"]
+          .includes(String(product.taxClass || metadata.taxClass || "gst-taxable").toLowerCase())
+          ? String(product.taxClass || metadata.taxClass || "gst-taxable").toLowerCase()
+          : "gst-taxable",
       };
     }),
   );
@@ -336,7 +351,10 @@ const confirmStripePurchaseHandler = async (request) => {
   const subtotal = (session.amount_subtotal || 0) / 100;
   const shipping = (session.total_details?.amount_shipping || 0) / 100;
   const total = (session.amount_total || 0) / 100;
-  const gst = total / 11;
+  const taxableProductTotal = enrichedProducts
+    .filter((item) => item.taxClass === "gst-taxable")
+    .reduce((sum, item) => sum + Number(item.lineTotal || 0), 0);
+  const gst = Number(((taxableProductTotal + shipping) / 11).toFixed(2));
 
   const invoiceNumber = session.id;
   const orderRef = admin.firestore().collection("orders").doc(invoiceNumber);
@@ -430,8 +448,11 @@ const confirmStripePurchaseHandler = async (request) => {
       return { created: false, orderData: existingOrderSnap.data() };
     }
 
-    const trackedItems = enrichedProducts.filter((item) => item.inventoryTracked);
-    const productRefs = trackedItems.map((item) => db.collection("products").doc(item.productId));
+    const trackedItems = inventoryTargetsForItems(enrichedProducts)
+      .filter((item) => item.inventoryTracked);
+    const productRefs = trackedItems
+      .filter((item) => !item.variantId)
+      .map((item) => db.collection("products").doc(item.productId));
     const variantRefs = trackedItems
       .filter((item) => item.variantId)
       .map((item) => db.collection(item.variantSourceCollection || "itemVariants").doc(item.variantId));
@@ -466,9 +487,10 @@ const confirmStripePurchaseHandler = async (request) => {
     trackedItems.forEach((item) => {
       const quantity = Number(item.quantity || 0);
       if (!quantity) return;
-      productRequired.set(item.productId, (productRequired.get(item.productId) || 0) + quantity);
       if (item.variantId) {
         variantRequired.set(item.variantId, (variantRequired.get(item.variantId) || 0) + quantity);
+      } else {
+        productRequired.set(item.productId, (productRequired.get(item.productId) || 0) + quantity);
       }
     });
     productRequired.forEach((quantity, productId) => {
@@ -534,10 +556,12 @@ const confirmStripePurchaseHandler = async (request) => {
       const quantity = Number(item.quantity || 0);
       if (!quantity) return;
 
-      transaction.update(db.collection("products").doc(item.productId), {
-        stock: admin.firestore.FieldValue.increment(-quantity),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      if (!item.variantId) {
+        transaction.update(db.collection("products").doc(item.productId), {
+          stock: admin.firestore.FieldValue.increment(-quantity),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
 
       const inventoryId = item.inventoryId || (item.variantId
         ? `INV-${slugify(item.variantId)}`
@@ -572,6 +596,11 @@ const confirmStripePurchaseHandler = async (request) => {
   });
 
   const persistedOrderData = transactionResult.created ? orderData : transactionResult.orderData;
+  await consumeInventoryReservation(
+    db,
+    session.metadata?.inventoryReservationId || "",
+    invoiceNumber,
+  );
   const recoveryBatch = db.batch();
   recoveryBatch.set(orderRef, {
     orderLineSchemaVersion: 2,
@@ -594,6 +623,7 @@ const confirmStripePurchaseHandler = async (request) => {
     }, { merge: true });
   });
   await recoveryBatch.commit();
+  await syncWorkshopInventoryAllocations(db, invoiceNumber);
 
   await recordOrderConfirmationEmail({
     orderRef,

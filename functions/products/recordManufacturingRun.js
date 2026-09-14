@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
+import { activeWorkshopHolds } from "../utils/workshopInventoryAllocations.js";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -76,11 +77,12 @@ export const recordManufacturingRun = onCall(
 
     const components = recipeComponents(blueprintSnap.data(), blueprintVariantId);
     if (!components.length) throw new HttpsError("failed-precondition", "The Blueprint recipe has no Item components.");
-    const [inventoryQueries, itemSnapshots] = await Promise.all([
+    const [inventoryQueries, itemSnapshots, workshopHolds] = await Promise.all([
       Promise.all(components.map((component) =>
         db.collection("inventory").where("itemId", "==", component.itemId).get())),
       Promise.all(components.map((component) =>
         db.collection("items").doc(component.itemId).get())),
+      activeWorkshopHolds(db),
     ]);
     const componentInventory = components.map((component, index) => {
       const itemData = itemSnapshots[index].data() || {};
@@ -147,10 +149,15 @@ export const recordManufacturingRun = onCall(
           ? component.fallbackStock
           : componentSnaps[index].data()?.stockQty ?? component.fallbackStock);
         const used = component.quantity * quantityProduced;
-        if (before < used) {
+        const held = Number(workshopHolds.get(`item:${component.itemId}`) || 0) +
+          Number(component.itemVariantId
+            ? workshopHolds.get(`itemVariant:${component.itemId}:${component.itemVariantId}`) || 0
+            : 0);
+        const available = Math.max(before - held, 0);
+        if (available < used) {
           throw new HttpsError(
             "failed-precondition",
-            `${component.itemId} needs ${used} ${component.unit}; only ${before} is available.`,
+            `${component.itemId} needs ${used} ${component.unit}; only ${available} is available after ${held} is held for Workshops.`,
           );
         }
         transaction.set(component.ref, {
@@ -184,6 +191,7 @@ export const recordManufacturingRun = onCall(
           unit: component.unit,
           perProduct: component.quantity,
           used,
+          heldForWorkshops: held,
           before,
           after: before - used,
         };

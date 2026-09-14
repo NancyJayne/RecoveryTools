@@ -81,6 +81,11 @@ function cleanTemplateFields(value) {
     const key = cleanFieldKey(field?.key || field?.id || name);
     const fieldType = canonicalFieldType(field?.fieldType);
     const linkedTable = cleanString(field?.linkedTable).slice(0, 80);
+    const linkedTypeFilter = cleanString(field?.linkedTypeFilter).slice(0, 100);
+    const linkedStatusFilter = cleanString(field?.linkedStatusFilter).toLowerCase().slice(0, 40);
+    const linkedTagFilters = [...new Set((Array.isArray(field?.linkedTagFilters)
+      ? field.linkedTagFilters : []).map((tag) => cleanString(tag).slice(0, 100)).filter(Boolean))]
+      .slice(0, 20);
     const minEntries = entryLimit(field?.minEntries);
     const allowUnlimited = field?.allowUnlimited === true;
     const maxEntries = allowUnlimited ? null : entryLimit(field?.maxEntries);
@@ -140,6 +145,9 @@ function cleanTemplateFields(value) {
       name,
       fieldType,
       linkedTable,
+      linkedTypeFilter,
+      linkedStatusFilter,
+      linkedTagFilters,
       required: field?.required === true,
       repeatable: field?.repeatable === true,
       minEntries,

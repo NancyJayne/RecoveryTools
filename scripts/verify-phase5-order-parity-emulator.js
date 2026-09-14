@@ -143,7 +143,9 @@ async function main() {
     assert.equal(firstOrder.data()?.orderLines?.[0]?.unitPrice, 11);
     assert.equal(firstOrder.data()?.orderLines?.[0]?.componentInventory?.[0]?.totalQuantity, 4);
     assert.equal(firstOrder.data()?.products?.[0]?.productTitle, "Phase 5 physical Product");
-    assert.equal((await db.collection("products").doc(productId).get()).data()?.stock, 8);
+    // A variant sale consumes only the ProductVariant stock identity. The
+    // parent Product stock is a separate bucket for products without variants.
+    assert.equal((await db.collection("products").doc(productId).get()).data()?.stock, 10);
     assert.equal((await db.collection("productVariants").doc(variantId).get()).data()?.stockQuantity, 8);
     assert.equal((await db.collection("inventory").doc(inventoryId).get()).data()?.stockQty, 8);
     assert.equal((await db.collection("inventory").doc(componentInventoryId).get()).data()?.stockQty, 16);
@@ -157,7 +159,7 @@ async function main() {
     // the idempotent order-item and access side effects were committed.
     await Promise.all([accessRef.delete(), orderItemRef.delete()]);
     await writeCheckoutCompleted({ stripe, session, event: secondEvent });
-    assert.equal((await db.collection("products").doc(productId).get()).data()?.stock, 8);
+    assert.equal((await db.collection("products").doc(productId).get()).data()?.stock, 10);
     assert.equal((await db.collection("productVariants").doc(variantId).get()).data()?.stockQuantity, 8);
     assert.equal((await db.collection("inventory").doc(inventoryId).get()).data()?.stockQty, 8);
     assert.equal((await db.collection("inventory").doc(componentInventoryId).get()).data()?.stockQty, 16);

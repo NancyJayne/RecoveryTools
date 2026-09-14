@@ -15,10 +15,17 @@ import {
   productDisplayType,
   variantForProduct,
 } from "../utils/productArchitecture.js";
+import { resolveBundleInventoryItems } from "../utils/bundleInventory.js";
+import { preferredOrderLines } from "../utils/orderLineSnapshots.js";
 import {
   pickupLocationMetadata,
   resolveSelectedPickupLocation,
 } from "./pickupLocations.js";
+import {
+  attachStripeSessionToReservation,
+  createInventoryReservation,
+  releaseInventoryReservation,
+} from "./inventoryReservations.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_SECRET_KEY_TEST = defineSecret("STRIPE_SECRET_KEY_TEST");
@@ -26,6 +33,71 @@ const RECAPTCHA_SECRET_KEY = defineSecret("RECAPTCHA_SECRET_KEY");
 
 if (!admin.apps.length) {
   admin.initializeApp();
+}
+
+function productVariantKey(productId, variantId) {
+  return `${cleanString(productId)}:${cleanString(variantId)}`;
+}
+
+async function assertPurchasePrerequisites(db, uid, items, architecture) {
+  const requirements = items.flatMap((item) => (item.prerequisiteProductVariants || [])
+    .filter((required) => required.requirementType !== "item" && !required.itemId)
+    .map((required) => ({ source: item, ...required })));
+  if (!requirements.length) return;
+
+  const available = new Set();
+  const availableAccess = new Set();
+  items.forEach((item) => {
+    if (item.variantId) available.add(productVariantKey(item.id, item.variantId));
+    (item.bundleInventoryItems || []).forEach((component) => {
+      if (component.variantId) available.add(productVariantKey(component.productId, component.variantId));
+    });
+  });
+
+  const [orders, access] = await Promise.all([
+    db.collection("users").doc(uid).collection("orders").get(),
+    db.collection("userAccess").where("userId", "==", uid).get(),
+  ]);
+  orders.docs.forEach((snapshot) => {
+    const order = snapshot.data() || {};
+    const orderStatus = cleanString(order.paymentStatus || order.status).toLowerCase();
+    if (["cancelled", "canceled", "refunded", "failed", "unpaid"].includes(orderStatus)) return;
+    preferredOrderLines(order).forEach((line) => {
+      const productId = line.productId || line.id;
+      const variantId = line.productVariantId || line.variantId;
+      if (productId && variantId) available.add(productVariantKey(productId, variantId));
+      (line.bundleInventory || line.bundleInventoryItems || []).forEach((component) => {
+        if (component.productId && (component.productVariantId || component.variantId)) {
+          available.add(productVariantKey(component.productId, component.productVariantId || component.variantId));
+        }
+      });
+    });
+  });
+  access.docs.forEach((snapshot) => {
+    const record = snapshot.data() || {};
+    if (record.revoked === true || record.active === false || cleanString(record.status).toLowerCase() === "revoked") return;
+    if (record.sourceProductId && record.sourceProductVariantId) {
+      available.add(productVariantKey(record.sourceProductId, record.sourceProductVariantId));
+    }
+    const type = record.accessType || record.accessEntityType;
+    const id = record.accessId || record.accessEntityId;
+    if (type && id) availableAccess.add(`${type}:${id}:${record.accessEntityVariantId || ""}`);
+  });
+
+  const missing = requirements.find((required) => {
+    if (available.has(productVariantKey(required.productId, required.productVariantId))) return false;
+    return !(architecture.accessGrantsByProductId.get(required.productId) || [])
+      .filter((grant) => !grant.productVariantId || grant.productVariantId === required.productVariantId)
+      .some((grant) => availableAccess.has(`${grant.accessEntityType || grant.accessType}:` +
+        `${grant.accessEntityId || grant.accessId}:${grant.accessEntityVariantId || ""}`));
+  });
+  if (!missing) return;
+  const requiredVariant = variantForProduct(missing.productId, "", missing.productVariantId, architecture);
+  const requiredName = requiredVariant?.name || missing.productVariantId;
+  throw new HttpsError(
+    "failed-precondition",
+    `${missing.source.name} requires ${requiredName}. Purchase or unlock it first, or choose a bundle that includes it.`,
+  );
 }
 
 const verifyRecaptcha = async (token) => {
@@ -58,6 +130,52 @@ function firstImage(data) {
 
 function cleanString(value) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeStatus(value) {
+  return cleanString(value).toLowerCase();
+}
+
+function isWorkshopProduct(data = {}) {
+  const type = normalizeStatus(data.type || productDisplayType(data, ""));
+  return type.includes("workshop") || type.includes("webinar") || type.includes("session");
+}
+
+function paidOrder(order = {}) {
+  const states = [order.paymentStatus, order.orderStatus, order.status].map(normalizeStatus);
+  return states.includes("paid") &&
+    !states.some((value) => ["cancelled", "canceled", "refunded", "failed", "void"].includes(value));
+}
+
+function soldWorkshopTickets(ordersSnapshot, productId, variantId) {
+  return ordersSnapshot.docs.reduce((total, orderDoc) => {
+    const order = orderDoc.data() || {};
+    if (!paidOrder(order)) return total;
+    const lines = Array.isArray(order.orderLines) && order.orderLines.length
+      ? order.orderLines
+      : Array.isArray(order.products) ? order.products : [];
+    return total + lines.reduce((lineTotal, line) => {
+      const lineProductId = cleanString(line.productId);
+      const lineVariantId = cleanString(line.productVariantId || line.variantId);
+      const remainingLineQuantity = Math.max(
+        Number(line.quantity || 1) - Number(line.refundedQuantity || 0),
+        0,
+      );
+      const direct = lineProductId === productId && lineVariantId === variantId
+        ? remainingLineQuantity
+        : 0;
+      const bundled = (line.bundleInventory || line.bundleInventoryItems || []).reduce((sum, component) =>
+        cleanString(component.productId) === productId &&
+        cleanString(component.productVariantId || component.variantId) === variantId
+          ? sum + Math.max(
+            Number(component.quantity || 1) -
+              Number(component.quantityPerBundle || 1) * Number(line.refundedQuantity || 0),
+            0,
+          )
+          : sum, 0);
+      return lineTotal + direct + bundled;
+    }, 0);
+  }, 0);
 }
 
 async function applyPromotionCode(db, { code, items, uid, approvedAffiliate }) {
@@ -237,6 +355,7 @@ const createCheckoutSessionHandler = async (request) => {
   }));
 
   const db = admin.firestore();
+  let reservationId = "";
 
   try {
     // 🛒 Securely fetch product data from Firestore
@@ -278,10 +397,24 @@ const createCheckoutSessionHandler = async (request) => {
       userData.roles?.affiliate === true &&
       !["pending", "rejected", "inactive", "archived"].includes(affiliateStatus);
 
+    const workshopOrdersSnapshot = productDocs.some((doc) => {
+      const data = doc.data() || {};
+      return isWorkshopProduct(data);
+    })
+      ? await db.collection("orders").get()
+      : null;
+
     const validatedItems = await Promise.all(productDocs.map(async (doc, i) => {
       if (!doc.exists) throw new HttpsError("not-found", `Product not found: ${productIds[i]}`);
 
       const data = doc.data();
+      const marketplaceAudience = cleanString(data.marketplaceAudience || "public").toLowerCase();
+      if (marketplaceAudience === "affiliates" && !approvedAffiliate) {
+        throw new HttpsError(
+          "permission-denied",
+          `${data.name || doc.id} is available to approved affiliates only.`,
+        );
+      }
       const shopStatus = cleanString(data.shopStatus).toLowerCase();
       if (data.archived === true || shopStatus === "archived" ||
           !data.marketplaceMode && data.visible === false) {
@@ -298,7 +431,10 @@ const createCheckoutSessionHandler = async (request) => {
           ["scheduled", "coming-soon"].includes(marketplaceMode) && !marketplaceStarted) {
         throw new HttpsError("failed-precondition", `${data.name || doc.id} is not available for purchase yet.`);
       }
-      const quantity = cart[i].quantity || 1;
+      const quantity = Number(cart[i].quantity || 1);
+      if (!Number.isInteger(quantity) || quantity < 1) {
+        throw new HttpsError("invalid-argument", "Product quantities must be whole numbers of at least one.");
+      }
       const variantId = cleanString(cart[i].variantId);
       const variant = variantForProduct(doc.id, data.itemId || data.legacyItemId || "", variantId, architecture);
       const activePrice = activePriceForProduct(doc.id, architecture);
@@ -316,6 +452,19 @@ const createCheckoutSessionHandler = async (request) => {
           throw new HttpsError("failed-precondition", `${variant.name || doc.id} is not available for purchase yet.`);
         }
       }
+      const isWorkshop = isWorkshopProduct(data);
+      const seatCapacity = Number(variant?.seatCapacity || data.seatCapacity || 0);
+      if (isWorkshop && seatCapacity > 0 && workshopOrdersSnapshot) {
+        const ticketsSold = soldWorkshopTickets(workshopOrdersSnapshot, doc.id, variantId);
+        const ticketsRemaining = Math.max(seatCapacity - ticketsSold, 0);
+        if (quantity > ticketsRemaining) {
+          const label = variant?.name || data.name || doc.id;
+          const availability = ticketsRemaining === 0
+            ? `${label} is sold out.`
+            : `Only ${ticketsRemaining} place${ticketsRemaining === 1 ? " is" : "s are"} left for ${label}.`;
+          throw new HttpsError("failed-precondition", availability);
+        }
+      }
       const saleStartsMs = data.saleStartsAt ? Date.parse(data.saleStartsAt) : null;
       const saleEndsMs = data.saleEndsAt ? Date.parse(data.saleEndsAt) : null;
       const saleActive = data.salePrice !== null && data.salePrice !== undefined && data.salePrice !== "" &&
@@ -328,9 +477,13 @@ const createCheckoutSessionHandler = async (request) => {
       const variantSaleActive = variant?.salePrice !== null && variant?.salePrice !== undefined &&
         variant?.salePrice !== "" && (!variantSaleStartsMs || variantSaleStartsMs <= nowMs) &&
         (!variantSaleEndsMs || variantSaleEndsMs > nowMs);
-      const wholesalePrice = approvedAffiliate
-        ? variant?.wholesalePrice ?? variantPrice?.wholesalePrice ?? variantPrice?.affiliatePrice ??
-          data.wholesalePrice ?? activePrice?.wholesalePrice ?? activePrice?.affiliatePrice ?? null
+      const storedWholesalePrice = variant?.wholesalePrice ?? variantPrice?.wholesalePrice ??
+        variantPrice?.affiliatePrice ?? data.wholesalePrice ?? activePrice?.wholesalePrice ??
+        activePrice?.affiliatePrice ?? null;
+      const affiliateAvailable = data.affiliateAvailable === true ||
+        data.affiliateAvailable === undefined && Number(storedWholesalePrice) > 0;
+      const wholesalePrice = approvedAffiliate && affiliateAvailable
+        ? storedWholesalePrice
         : null;
       const wholesaleMinQuantity = Math.max(Number(
         variant?.wholesaleMinQuantity || variantPrice?.wholesaleMinQuantity ||
@@ -351,6 +504,12 @@ const createCheckoutSessionHandler = async (request) => {
       const media = mediaForProduct(doc.id, data, architecture);
       const image = media.find((asset) => asset.type === "image")?.url || firstImage(data);
       const accessGrants = accessGrantsForProduct(doc.id, data, architecture);
+      const bundleInventoryItems = await resolveBundleInventoryItems(db, {
+        productId: doc.id,
+        variantId,
+        quantity,
+        architecture,
+      });
       const configuredFulfilment = variant?.physicalFulfilment || data.physicalFulfilment ||
         (data.requiresShipping === true ? "shipping" : "none");
       const requestedFulfilment = cleanString(cart[i].physicalFulfilment).toLowerCase();
@@ -389,6 +548,7 @@ const createCheckoutSessionHandler = async (request) => {
         itemId: data.itemId || null,
         variantId: variantId || null,
         variantName: variantName || null,
+        variantSourceCollection: variant?.sourceCollection || "productVariants",
         sku: variant?.sku || data.sku || null,
         accessType: accessGrants[0]?.accessEntityType || data.accessType || null,
         relatedPlanId: accessGrants.find((grant) => grant.accessEntityType === "Plan")?.accessEntityId ||
@@ -398,10 +558,19 @@ const createCheckoutSessionHandler = async (request) => {
         physicalFulfilment,
         pickupLocation,
         requiresShipping: physicalFulfilment === "shipping",
+        inventoryTracked: variant?.inventoryTracked === true ||
+          (data.inventoryTracked ?? physicalFulfilment !== "none"),
+        isWorkshop,
+        seatCapacity,
         unlocksAccess: accessGrants.length > 0 || data.unlocksAccess === true,
         type: data.type || "item",
         productType: productDisplayType(data, "item"),
         accessGrants,
+        bundleInventoryItems,
+        prerequisiteProductVariants: variant?.prerequisiteProductVariants || [],
+        taxClass: ["gst-taxable", "gst-free", "input-taxed", "out-of-scope"]
+          .includes(cleanString(data.taxClass).toLowerCase())
+          ? cleanString(data.taxClass).toLowerCase() : "gst-taxable",
         price,
         pricingTier: Number(wholesalePrice) > 0 ? "affiliate-wholesale" : "retail",
         quantity,
@@ -409,6 +578,7 @@ const createCheckoutSessionHandler = async (request) => {
         stripeAccountId: creatorMap[data.creatorId] || null,
       };
     }));
+    await assertPurchasePrerequisites(db, uid, validatedItems, architecture);
     const promotion = await applyPromotionCode(db, {
       code: promotionCode,
       items: validatedItems,
@@ -442,6 +612,7 @@ const createCheckoutSessionHandler = async (request) => {
             ...pickupLocationMetadata(item.pickupLocation),
             unlocksAccess: item.unlocksAccess ? "true" : "false",
             pricingTier: item.pricingTier || "retail",
+            taxClass: item.taxClass || "gst-taxable",
           },
         },
       },
@@ -528,6 +699,15 @@ const createCheckoutSessionHandler = async (request) => {
     };
 
     const baseUrl = appBaseUrl();
+    const stripeExpiresAt = Math.floor(Date.now() / 1000) + 31 * 60;
+    const reservationExpiresAt = (stripeExpiresAt + 5 * 60) * 1000;
+    reservationId = await createInventoryReservation(db, {
+      uid,
+      items: validatedItems,
+      stripeExpiresAt,
+      reservationExpiresAt,
+    });
+    if (reservationId) metadata.inventoryReservationId = reservationId;
     const sessionConfig = {
       mode: "payment",
       payment_method_types: ["card"],
@@ -535,6 +715,7 @@ const createCheckoutSessionHandler = async (request) => {
       success_url: `${baseUrl}/checkout?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/cart`,
       metadata,
+      expires_at: stripeExpiresAt,
 
       customer: stripeCustomerId,
 
@@ -607,9 +788,17 @@ const createCheckoutSessionHandler = async (request) => {
       JSON.stringify(sessionConfig, null, 2),
     );
     const session = await stripe.checkout.sessions.create(sessionConfig);
+    try {
+      await attachStripeSessionToReservation(db, reservationId, session.id);
+    } catch (error) {
+      // Stripe metadata still carries the reservation ID, so completion and
+      // expiry can finish it even if this convenience back-reference fails.
+      console.error("Could not attach Stripe session to inventory reservation:", error);
+    }
     return { id: session.id, url: session.url };
 
   } catch (err) {
+    await releaseInventoryReservation(db, reservationId);
     if (err instanceof HttpsError) {
       throw err;
     }

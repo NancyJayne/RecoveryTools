@@ -18,8 +18,10 @@ async function main() {
   const planId = `TEST-CANONICAL-PLAN-${suffix}`;
   const itemProductId = `TEST-CANONICAL-PRODUCT-${suffix}`;
   const planProductId = `TEST-CANONICAL-PLAN-PRODUCT-${suffix}`;
+  const planProductVariantId = `${planProductId}-VARIANT`;
   const selectedAssetId = `TEST-CANONICAL-ASSET-${suffix}`;
   const standaloneProductId = `TEST-STANDALONE-PRODUCT-${suffix}`;
+  const standaloneProductVariantId = `${standaloneProductId}-VARIANT`;
   const linkedPlanId = `TEST-LINK-EXISTING-PLAN-${suffix}`;
   const managedAssetId = `TEST-MANAGED-ASSET-${suffix}`;
   const request = {
@@ -42,8 +44,16 @@ async function main() {
       },
     });
     assert(standaloneResult.id === standaloneProductId, "Standalone Product ID was not preserved.");
+    await db.collection("productVariants").doc(standaloneProductVariantId).set({
+      productVariantId: standaloneProductVariantId,
+      productId: standaloneProductId,
+      variantName: "Default",
+      status: "draft",
+      visible: false,
+    });
     cleanup.push(
       ["products", standaloneProductId],
+      ["productVariants", standaloneProductVariantId],
       ["productPrices", `PRICE-${standaloneProductId}-BASE`],
     );
     const standalone = await db.collection("products").doc(standaloneProductId).get();
@@ -74,6 +84,13 @@ async function main() {
           existingProductId: standaloneProductId,
           productId: standaloneProductId,
           linkRole: "Unlocks",
+          accessGrants: [{
+            accessEntityType: "Plan",
+            accessEntityId: linkedPlanId,
+            accessEntityVariantId: "",
+            productVariantId: standaloneProductVariantId,
+            durationType: "permanent",
+          }],
         },
       },
     });
@@ -158,6 +175,15 @@ async function main() {
         inventoryTracked: true,
         requiresShipping: true,
         stockQty: 3,
+        productRelation: {
+          variants: [{
+            variantId: `${itemProductId}-VARIANT`,
+            name: "Default",
+            sku: "TEST-SKU",
+            priceOverride: 25,
+            stockQty: 3,
+          }],
+        },
         variants: [{
           variantId: `${itemProductId}-VARIANT`,
           name: "Default",
@@ -261,10 +287,29 @@ async function main() {
         createsProduct: true,
         productId: planProductId,
         price: 49,
+        productRelation: {
+          variants: [{
+            variantId: planProductVariantId,
+            name: "Default",
+            priceOverride: 49,
+          }],
+          accessGrants: [{
+            accessEntityType: "Plan",
+            accessEntityId: planId,
+            accessEntityVariantId: "",
+            productVariantId: planProductVariantId,
+            durationType: "permanent",
+          }],
+        },
       },
     });
     assert(planResult.success === true, "Plan create callable did not succeed.");
-    cleanup.push(["plans", planId], ["products", planProductId], ["productPrices", `PRICE-${planProductId}-BASE`]);
+    cleanup.push(
+      ["plans", planId],
+      ["products", planProductId],
+      ["productVariants", planProductVariantId],
+      ["productPrices", `PRICE-${planProductId}-BASE`],
+    );
     const planLinks = await db.collection("productLinks").where("productId", "==", planProductId).get();
     assert(planLinks.docs.some((doc) => doc.data()?.linkedEntityType === "Plan"), "Plan ProductLink was not written.");
     planLinks.docs.forEach((doc) => cleanup.push(["productLinks", doc.id]));

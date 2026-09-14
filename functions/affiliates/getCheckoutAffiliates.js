@@ -23,6 +23,7 @@ function availablePickupLocation(location, now = new Date()) {
 function publicPickupLocation(id, location) {
   return {
     pickupLocationId: id,
+    businessName: clean(location.businessName),
     locationName: clean(location.locationName) || "Pickup location",
     address: [
       location.addressLine1,
@@ -65,22 +66,29 @@ export const getCheckoutAffiliates = onCall(
         const data = doc.data() || {};
         const user = users[index]?.exists ? users[index].data() || {} : {};
         if (user.roles?.affiliate !== true) return null;
+        const businessName = clean(data.businessName || user.business?.name || user.businessName);
+        if (!businessName) return null;
         const affiliatePickupLocations = pickupLocations
           .filter((location) => clean(location.affiliateId) === doc.id)
           .sort((left, right) =>
             Number(right.id === clean(data.defaultPickupLocationId)) -
             Number(left.id === clean(data.defaultPickupLocationId)));
         const pickupLocation = affiliatePickupLocations[0];
+        const pickupBusinessName = clean(pickupLocation?.businessName || businessName);
         return {
           affiliateId: doc.id,
-          businessName: data.businessName || user.business?.name || user.businessName ||
-            user.name || data.name || data.affiliateCode || doc.id,
+          businessName,
           pickupAvailable:
             data.pickupEnabled === true &&
             lower(data.pickupApprovalStatus) === "approved" &&
-            Boolean(pickupLocation),
+            Boolean(pickupLocation) &&
+            Boolean(pickupBusinessName),
           pickupLocation: pickupLocation
-            ? publicPickupLocation(pickupLocation.id, pickupLocation)
+            ? publicPickupLocation(pickupLocation.id, {
+              ...pickupLocation,
+              businessName: pickupBusinessName,
+              locationName: pickupBusinessName,
+            })
             : null,
         };
       }).filter(Boolean).sort((left, right) => left.businessName.localeCompare(right.businessName)),

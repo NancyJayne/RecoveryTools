@@ -3,6 +3,8 @@ import admin from "firebase-admin";
 import {
   activePriceForProduct,
   activePriceForVariant,
+  bundleComponentsForProduct,
+  inventoryForProduct,
   loadProductArchitecture,
   mediaForProduct,
   mediaForProductVariant,
@@ -11,6 +13,7 @@ import {
   productDisplayType,
   variantsForProduct,
 } from "../utils/productArchitecture.js";
+import { preferredOrderLines } from "../utils/orderLineSnapshots.js";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -18,6 +21,43 @@ if (!admin.apps.length) {
 
 function normalizeStatus(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function variantKey(productId, variantId) {
+  return `${String(productId || "").trim()}:${String(variantId || "").trim()}`;
+}
+
+function ownedProductVariants(uid, ordersSnapshot, accessSnapshot) {
+  const owned = new Set();
+  if (!uid) return owned;
+  ordersSnapshot.docs.forEach((snapshot) => {
+    const order = snapshot.data() || {};
+    if (![order.userId, order.buyerUid, order.uid].includes(uid)) return;
+    if (["cancelled", "canceled", "refunded", "failed", "unpaid"]
+      .includes(normalizeStatus(order.paymentStatus || order.status))) return;
+    preferredOrderLines(order).forEach((line) => {
+      if ((line.productId || line.id) && (line.productVariantId || line.variantId)) {
+        owned.add(variantKey(line.productId || line.id, line.productVariantId || line.variantId));
+      }
+      (line.bundleInventory || line.bundleInventoryItems || []).forEach((component) => {
+        if (component.productId && (component.productVariantId || component.variantId)) {
+          owned.add(variantKey(component.productId, component.productVariantId || component.variantId));
+        }
+      });
+    });
+  });
+  accessSnapshot?.docs.forEach((snapshot) => {
+    const access = snapshot.data() || {};
+    if (access.revoked === true || access.active === false || normalizeStatus(access.status) === "revoked") return;
+    if (access.sourceProductId && access.sourceProductVariantId) {
+      owned.add(variantKey(access.sourceProductId, access.sourceProductVariantId));
+    }
+    const accessType = access.accessType || access.accessEntityType;
+    const accessId = access.accessId || access.accessEntityId;
+    const accessVariantId = access.accessEntityVariantId || "";
+    if (accessType && accessId) owned.add(`ACCESS:${accessType}:${accessId}:${accessVariantId}`);
+  });
+  return owned;
 }
 
 function dateMillis(value) {
@@ -141,10 +181,43 @@ function ticketSalesFromOrders(snapshot) {
       const variantId = String(line.productVariantId || line.variantId || "").trim();
       if (!productId) return;
       const key = `${productId}:${variantId}`;
-      sales.set(key, (sales.get(key) || 0) + Math.max(Number(line.quantity || 1), 1));
+      sales.set(key, (sales.get(key) || 0) + Math.max(
+        Number(line.quantity || 1) - Number(line.refundedQuantity || 0),
+        0,
+      ));
+      (line.bundleInventory || line.bundleInventoryItems || []).forEach((component) => {
+        if (component.isWorkshop !== true) return;
+        const componentProductId = String(component.productId || "").trim();
+        const componentVariantId = String(component.productVariantId || component.variantId || "").trim();
+        if (!componentProductId) return;
+        const componentKey = `${componentProductId}:${componentVariantId}`;
+        const remaining = Math.max(
+          Number(component.quantity || 1) -
+            Number(component.quantityPerBundle || 1) * Number(line.refundedQuantity || 0),
+          0,
+        );
+        sales.set(componentKey, (sales.get(componentKey) || 0) + remaining);
+      });
     });
   });
   return sales;
+}
+
+function activeReservationQuantities(snapshot) {
+  const reservations = new Map();
+  const now = Date.now();
+  snapshot.docs.forEach((doc) => {
+    const data = doc.data() || {};
+    if (normalizeStatus(data.status) !== "active" || Number(data.reservationExpiresAt || 0) <= now) return;
+    (Array.isArray(data.items) ? data.items : []).forEach((item) => {
+      const productId = String(item.productId || "").trim();
+      const variantId = String(item.variantId || "").trim();
+      if (!productId) return;
+      const key = `${productId}:${variantId}`;
+      reservations.set(key, (reservations.get(key) || 0) + Math.max(Number(item.quantity || 1), 1));
+    });
+  });
+  return reservations;
 }
 
 function normalizeProduct(
@@ -153,9 +226,15 @@ function normalizeProduct(
   ticketSales = new Map(),
   approvedAffiliate = false,
   instructorsById = new Map(),
+  reservations = new Map(),
+  ownedVariants = new Set(),
+  productsById = new Map(),
+  includeHiddenVariants = false,
 ) {
   const data = doc.data() || {};
-  const variants = variantsForProduct(doc.id, data.itemId || data.legacyItemId || "", architecture);
+  const itemId = data.itemId || data.legacyItemId || "";
+  const variants = variantsForProduct(doc.id, itemId, architecture);
+  const productInventory = inventoryForProduct(doc.id, "", architecture);
   const activePrice = activePriceForProduct(doc.id, architecture);
   const media = mediaForProduct(doc.id, data, architecture);
   const linkedContent = primaryContentForProduct(doc.id, data, architecture);
@@ -187,7 +266,9 @@ function normalizeProduct(
   const onSale = Number(salePrice) >= 0 && salePrice !== null && salePrice !== "" &&
     (!saleStartsMs || saleStartsMs <= nowMs) && (!saleEndsMs || saleEndsMs > nowMs);
   const productWholesalePrice = data.wholesalePrice ?? activePrice?.wholesalePrice ?? activePrice?.affiliatePrice;
-  const wholesalePrice = approvedAffiliate && Number(productWholesalePrice) > 0
+  const affiliateAvailable = data.affiliateAvailable === true ||
+    data.affiliateAvailable === undefined && Number(productWholesalePrice) > 0;
+  const wholesalePrice = approvedAffiliate && affiliateAvailable && Number(productWholesalePrice) > 0
     ? Number(productWholesalePrice)
     : null;
   const price = wholesalePrice ?? (onSale ? Number(salePrice) : regularPrice);
@@ -221,9 +302,12 @@ function normalizeProduct(
   const purchasable = visible && !comingSoon;
 
   const normalizedVariants = variants.map((variant) => {
+    const variantId = variant.variantId || variant.id;
+    const variantInventory = inventoryForProduct(doc.id, variantId, architecture);
     const variantPrice = activePriceForVariant(doc.id, variant.variantId || variant.id, architecture);
     const variantMedia = mediaForProductVariant(doc.id, data, variant, architecture, media);
     const sold = ticketSales.get(`${doc.id}:${variant.variantId || variant.id || ""}`) || 0;
+    const reserved = reservations.get(`${doc.id}:${variant.variantId || variant.id || ""}`) || 0;
     const capacity = Number(variant.seatCapacity || 0);
     const variantMode = normalizeStatus(variant.marketplaceMode || "inherit");
     const variantStartsMs = dateMillis(variant.marketplaceStartsAt);
@@ -247,12 +331,100 @@ function normalizeProduct(
       : regularPrice;
     const variantWholesaleValue = variant.wholesalePrice ?? variantPrice?.wholesalePrice ??
       variantPrice?.affiliatePrice;
-    const variantWholesalePrice = approvedAffiliate && Number(variantWholesaleValue) > 0
+    const variantWholesalePrice = approvedAffiliate && affiliateAvailable && Number(variantWholesaleValue) > 0
       ? Number(variantWholesaleValue)
       : wholesalePrice;
     const instructorId = variant.instructorId || variant.instructor || "";
+    const bundleComponents = bundleComponentsForProduct(doc.id, variantId, architecture);
+    const deductedBundleComponents = bundleComponents.filter((component) =>
+      component.inventoryAction !== "none");
+    const bundleProductVariants = bundleComponents.map((component) => {
+      const componentProduct = productsById.get(component.componentProductId) || {};
+      const componentVariants = variantsForProduct(
+        component.componentProductId,
+        componentProduct.itemId || componentProduct.legacyItemId || "",
+        architecture,
+        true,
+      );
+      const componentVariant = componentVariants.find((candidate) =>
+        (candidate.variantId || candidate.id) === component.componentProductVariantId) || {};
+      const componentContent = primaryContentForProduct(
+        component.componentProductId,
+        componentProduct,
+        architecture,
+      );
+      const componentPrice = activePriceForVariant(
+        component.componentProductId,
+        component.componentProductVariantId,
+        architecture,
+      );
+      const componentRetailPrice = positiveNumber(
+        componentVariant.priceOverride,
+        componentPrice?.retailPrice,
+        componentProduct.retailPrice,
+        componentProduct.price,
+      );
+      const componentSaleStartsMs = dateMillis(componentVariant.saleStartsAt);
+      const componentSaleEndsMs = dateMillis(componentVariant.saleEndsAt);
+      const componentOnSale = componentVariant.salePrice !== null &&
+        componentVariant.salePrice !== undefined && componentVariant.salePrice !== "" &&
+        (!componentSaleStartsMs || componentSaleStartsMs <= nowMs) &&
+        (!componentSaleEndsMs || componentSaleEndsMs > nowMs);
+      const componentWholesaleValue = componentVariant.wholesalePrice ??
+        componentPrice?.wholesalePrice ?? componentPrice?.affiliatePrice ??
+        componentProduct.wholesalePrice;
+      const componentMedia = mediaForProductVariant(
+        component.componentProductId,
+        componentProduct,
+        componentVariant,
+        architecture,
+        mediaForProduct(component.componentProductId, componentProduct, architecture),
+      );
+      return {
+        ...component,
+        productName: productDisplayName(componentProduct, component.componentProductId),
+        productSlug: componentProduct.slug || component.componentProductId,
+        productVariantName: componentVariant.name || component.componentProductVariantId,
+        shortDescription: componentVariant.shortDescription || componentProduct.shortDescription ||
+          componentContent?.shortDescription || componentProduct.description ||
+          componentContent?.description || "",
+        image: componentMedia.find((asset) => normalizeStatus(asset.type) === "image")?.url || "",
+        retailPrice: componentRetailPrice,
+        salePrice: componentOnSale ? Number(componentVariant.salePrice) : null,
+        wholesalePrice: approvedAffiliate &&
+          (componentProduct.affiliateAvailable === true ||
+            componentProduct.affiliateAvailable === undefined && Number(componentWholesaleValue) > 0) &&
+          Number(componentWholesaleValue) > 0
+          ? Number(componentWholesaleValue)
+          : null,
+      };
+    });
+    const bundleAvailable = deductedBundleComponents.length
+      ? Math.min(...deductedBundleComponents.map((component) => {
+        const componentVariant = (architecture.canonicalVariantsByProductId
+          .get(component.componentProductId) || []).find((candidate) =>
+          (candidate.productVariantId || candidate.variantId || candidate.id) ===
+            component.componentProductVariantId);
+        const componentInventory = inventoryForProduct(
+          component.componentProductId,
+          component.componentProductVariantId,
+          architecture,
+        );
+        const componentKey = `${component.componentProductId}:${component.componentProductVariantId}`;
+        const componentReserved = reservations.get(componentKey) || 0;
+        const componentCapacity = Number(componentVariant?.seatCapacity || 0);
+        const available = componentCapacity > 0
+          ? Math.max(componentCapacity - (ticketSales.get(componentKey) || 0) - componentReserved, 0)
+          : componentInventory || componentVariant
+            ? Math.max(Number(componentInventory?.stockQty ?? componentVariant?.stockQuantity ??
+              componentVariant?.stock ?? 0) - componentReserved, 0)
+            : Number.POSITIVE_INFINITY;
+        return Math.floor(available / component.quantity);
+      }))
+      : null;
     return {
       ...variant,
+      inventoryTracked: deductedBundleComponents.length ? true : variant.inventoryTracked,
       instructorId,
       instructor: instructorsById.get(instructorId) || variant.instructor || "",
       visible: variantVisible,
@@ -261,6 +433,7 @@ function normalizeProduct(
       retailPriceOverride: variantRetailPrice,
       priceOverride: variantWholesalePrice ?? (variantOnSale ? Number(variant.salePrice) : variantRetailPrice),
       onSale: !variantWholesalePrice && variantOnSale,
+      retailOnSale: variantOnSale,
       wholesalePrice: variantWholesalePrice,
       pricingTier: variantWholesalePrice ? "affiliate-wholesale" : "retail",
       wholesaleMinQuantity: Math.max(Number(
@@ -268,19 +441,75 @@ function normalizeProduct(
           data.wholesaleMinQuantity || activePrice?.wholesaleMinQuantity || 1,
       ), 1),
       ticketsSold: sold,
-      ticketsRemaining: capacity > 0 ? Math.max(capacity - sold, 0) : null,
+      ticketsReserved: reserved,
+      ticketsRemaining: capacity > 0 ? Math.max(capacity - sold - reserved, 0) : null,
+      stock: bundleAvailable === null
+        ? Math.max(Number(variantInventory?.stockQty ?? variant.stock ?? 0) - reserved, 0)
+        : bundleAvailable,
+      bundleAvailable,
+      bundleProductVariants,
+      prerequisiteProductVariants: (variant.prerequisiteProductVariants || []).map((required) => {
+        if (required.requirementType === "item" || required.itemId) {
+          const requiredItem = architecture.itemsById.get(required.itemId) || {};
+          return {
+            requirementType: "item",
+            itemId: required.itemId,
+            name: requiredItem.name || requiredItem.itemName || required.itemId,
+            shortDescription: requiredItem.shortDescription || requiredItem.description || "",
+            satisfied: true,
+            manualVerificationRequired: true,
+          };
+        }
+        const requiredProduct = productsById.get(required.productId) || {};
+        const requiredContent = primaryContentForProduct(required.productId, requiredProduct, architecture);
+        const requiredVariant = variantsForProduct(
+          required.productId,
+          requiredProduct.itemId || requiredProduct.legacyItemId || "",
+          architecture,
+          true,
+        )
+          .find((candidate) => (candidate.variantId || candidate.id) === required.productVariantId);
+        const matchingAccess = (architecture.accessGrantsByProductId.get(required.productId) || [])
+          .filter((grant) => !grant.productVariantId || grant.productVariantId === required.productVariantId)
+          .some((grant) => ownedVariants.has(`ACCESS:${grant.accessEntityType || grant.accessType}:` +
+            `${grant.accessEntityId || grant.accessId}:${grant.accessEntityVariantId || ""}`));
+        return {
+          productId: required.productId,
+          productVariantId: required.productVariantId,
+          productName: productDisplayName(requiredProduct, required.productId),
+          productSlug: requiredProduct.slug || required.productId,
+          name: requiredVariant?.name || required.productVariantId,
+          shortDescription: requiredVariant?.shortDescription || requiredProduct.shortDescription ||
+            requiredContent?.shortDescription || requiredProduct.description ||
+            requiredContent?.description || "",
+          satisfied: ownedVariants.has(variantKey(required.productId, required.productVariantId)) || matchingAccess,
+        };
+      }),
       media: variantMedia,
       images: variantMedia
         .filter((asset) => normalizeStatus(asset.type) === "image")
         .map((asset) => asset.url),
     };
-  }).filter((variant) => variant.visible !== false);
+  }).filter((variant) => includeHiddenVariants || variant.visible !== false);
   if (variants.length && !normalizedVariants.length) visible = false;
-  const shortDescription = data.shortDescription || data.description ||
-    linkedContent?.shortDescription || linkedContent?.description || "";
-  const longDescription = data.longDescription ||
-    linkedContent?.longDescription || linkedContent?.notes ||
-    data.description || linkedContent?.description || shortDescription;
+  // Product descriptions are inherited from the primary linked entity. Product-variant
+  // descriptions remain the explicit sellable overrides handled above.
+  const shortDescription = linkedContent?.shortDescription || linkedContent?.description ||
+    data.shortDescription || data.description || "";
+  const longDescription = linkedContent?.longDescription || linkedContent?.notes ||
+    linkedContent?.description || data.longDescription || data.description || shortDescription;
+  const tileImageVariant = data.marketplaceTileImageSource === "product-variant"
+    ? normalizedVariants.find((variant) =>
+      (variant.variantId || variant.id) === data.marketplaceTileImageVariantId)
+    : null;
+  const tileDescriptionVariant = data.marketplaceTileDescriptionSource === "product-variant"
+    ? normalizedVariants.find((variant) =>
+      (variant.variantId || variant.id) === data.marketplaceTileDescriptionVariantId)
+    : null;
+  const marketplaceTileImage = tileImageVariant?.images?.[0] ||
+    tileImageVariant?.media?.find((asset) => normalizeStatus(asset.type) === "image")?.url ||
+    normalizedVariants.find((variant) => variant.images?.[0])?.images?.[0] || image;
+  const marketplaceTileShortDescription = tileDescriptionVariant?.shortDescription || shortDescription;
   const displayType = productDisplayType(data, linkedContent?.type || "tool");
   const isCourse = normalizeStatus(displayType).includes("course") ||
     normalizeStatus(data.type).includes("course") ||
@@ -300,12 +529,19 @@ function normalizeProduct(
     saleStartsAt,
     saleEndsAt,
     onSale: !wholesalePrice && onSale,
+    retailOnSale: onSale,
     wholesalePrice,
     wholesaleMinQuantity: Math.max(Number(
       data.wholesaleMinQuantity || activePrice?.wholesaleMinQuantity || 1,
     ), 1),
     pricingTier: wholesalePrice ? "affiliate-wholesale" : "retail",
-    stock: Number(data.stock ?? 0),
+    stock: normalizedVariants.length
+      ? normalizedVariants.reduce((total, variant) => total + Number(variant.stock || 0), 0)
+      : Math.max(
+        Number(productInventory?.stockQty ?? data.stock ?? 0) -
+          Number(reservations.get(`${doc.id}:`) || 0),
+        0,
+      ),
     requiresShipping,
     physicalFulfilment,
     inventoryTracked,
@@ -318,6 +554,8 @@ function normalizeProduct(
     purchasable,
     comingSoon,
     marketplaceMode,
+    marketplaceAudience: normalizeStatus(data.marketplaceAudience || "public") === "affiliates"
+      ? "affiliates" : "public",
     marketplaceStartsAt,
     marketplaceEndsAt,
     archived: data.archived === true,
@@ -337,6 +575,8 @@ function normalizeProduct(
     variants: normalizedVariants,
     shortDescription,
     longDescription,
+    marketplaceTileImage,
+    marketplaceTileShortDescription,
     courseModules: isCourse ? courseModules(linkedContent, architecture) : [],
     coursePreviewVideo: isCourse ? coursePreviewVideo(linkedContent, architecture) : null,
     connectedEntityType: primaryLink?.linkedEntityType || "",
@@ -365,17 +605,24 @@ export const getFirestoreProducts = onCall(
         query = query.where("type", "==", normalizeStatus(type));
       }
 
-      const [snapshot, architecture, ordersSnapshot, instructorsSnapshot] = await Promise.all([
+      const [snapshot, architecture, ordersSnapshot, instructorsSnapshot, reservationsSnapshot, accessSnapshot] = await Promise.all([
         query.get(),
         loadProductArchitecture(admin.firestore()),
         admin.firestore().collection("orders").get(),
         admin.firestore().collection("instructors").get(),
+        admin.firestore().collection("inventoryReservations").where("status", "==", "active").get(),
+        request.auth?.uid
+          ? admin.firestore().collection("userAccess").where("userId", "==", request.auth.uid).get()
+          : Promise.resolve(null),
       ]);
       const ticketSales = ticketSalesFromOrders(ordersSnapshot);
+      const reservations = activeReservationQuantities(reservationsSnapshot);
+      const ownedVariants = ownedProductVariants(request.auth?.uid, ordersSnapshot, accessSnapshot);
       const instructorsById = new Map(instructorsSnapshot.docs.map((doc) => [
         doc.id,
         doc.data()?.name || doc.data()?.instructorName || doc.data()?.displayName || doc.id,
       ]));
+      const productsById = new Map(snapshot.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }]));
 
       const products = snapshot.docs
         .map((doc) => normalizeProduct(
@@ -384,7 +631,12 @@ export const getFirestoreProducts = onCall(
           ticketSales,
           approvedAffiliate,
           instructorsById,
+          reservations,
+          ownedVariants,
+          productsById,
+          includeHidden && isAdmin,
         ))
+        .filter((product) => product.marketplaceAudience !== "affiliates" || approvedAffiliate || isAdmin)
         .filter((product) => includeHidden && isAdmin ? true : product.visible !== false)
         .filter((product) => tag ? product.searchTags.includes(tag) : true)
         .sort((a, b) => (a.name || a.title || "").localeCompare(b.name || b.title || ""));

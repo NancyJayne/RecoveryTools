@@ -1,8 +1,31 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 
 const discoveryTimeout = process.env.FUNCTIONS_DISCOVERY_TIMEOUT || "60";
-const command = process.platform === "win32" ? "firebase.cmd" : "firebase";
-const child = spawn(command, ["emulators:start", "--project", "recovery-tools"], {
+const windowsFirebase = resolve(process.env.APPDATA || "", "npm", "firebase.cmd");
+const command = process.platform === "win32" && existsSync(windowsFirebase)
+  ? windowsFirebase
+  : process.platform === "win32" ? "firebase.cmd" : "firebase";
+const emulatorDataArgument = ".firebase-emulator-data";
+const emulatorDataDirectory = resolve(emulatorDataArgument);
+const emulatorExportMetadata = resolve(emulatorDataDirectory, "firebase-export-metadata.json");
+const args = [
+  "emulators:start",
+  "--project",
+  "recovery-tools",
+  "--export-on-exit",
+  emulatorDataArgument,
+];
+
+if (existsSync(emulatorExportMetadata)) {
+  args.push("--import", emulatorDataArgument);
+  console.log(`Loading saved emulator data from ${emulatorDataDirectory}`);
+} else {
+  console.log(`No saved emulator data found. Data will be saved to ${emulatorDataDirectory} on exit.`);
+}
+
+const child = spawn(command, args, {
   env: {
     ...process.env,
     FUNCTIONS_DISCOVERY_TIMEOUT: discoveryTimeout,

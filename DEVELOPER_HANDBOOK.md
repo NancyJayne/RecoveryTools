@@ -59,7 +59,9 @@ npm run emulators
 npm run dev
 ```
 
-Run `npm run seed:all` only when the active task explicitly requires the emulator seed data. Never seed production as part of routine development.
+The emulator command automatically imports the last snapshot from `.firebase-emulator-data` when one exists and exports Auth, Firestore, and Storage data back to that folder on a clean shutdown. Stop it with `Ctrl+C` once, then wait for the export-complete message before closing the terminal or restarting it. The first run starts empty when no snapshot exists and creates one when stopped.
+
+Run `npm run seed:all` only when the active task explicitly requires the emulator seed data or after starting with a genuinely empty emulator snapshot. Never seed production as part of routine development.
 
 ## Tailwind Watch Mode
 

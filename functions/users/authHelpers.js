@@ -48,6 +48,7 @@ export const adminCreateUser = onCall(
       const normalizedRoles = {
         admin: !!roles?.admin,
         affiliate: !!roles?.affiliate,
+        instructor: !!roles?.instructor,
         therapist: !!roles?.therapist,
       };
 

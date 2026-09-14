@@ -11,19 +11,19 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return signedIn() && request.auth.token.admin == true;
+      return signedIn() && request.auth.token.get('admin', false) == true;
     }
 
     function isTherapist() {
-      return signedIn() && request.auth.token.therapist == true;
+      return signedIn() && request.auth.token.get('therapist', false) == true;
     }
 
     function isAffiliate() {
-      return signedIn() && request.auth.token.affiliate == true;
+      return signedIn() && request.auth.token.get('affiliate', false) == true;
     }
 
     function isInstructor() {
-      return signedIn() && request.auth.token.instructor == true;
+      return signedIn() && request.auth.token.get('instructor', false) == true;
     }
 
     function isPrivilegedContentEditor() {

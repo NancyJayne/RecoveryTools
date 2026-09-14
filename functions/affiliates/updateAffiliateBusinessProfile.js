@@ -54,6 +54,7 @@ export const updateAffiliateBusinessProfile = onCall(
           pickupEnabled: profile.pickupEnabled === true,
           pickupApprovalStatus: clean(profile.pickupApprovalStatus || "draft", 30),
           pickupLocation: {
+            businessName: clean(location.businessName || profile.businessName, 200),
             locationName: clean(location.locationName, 200),
             addressLine1: clean(location.addressLine1, 200),
             addressLine2: clean(location.addressLine2, 200),
@@ -66,6 +67,7 @@ export const updateAffiliateBusinessProfile = onCall(
       };
     }
     const pickupEnabled = data.pickupEnabled === true;
+    const pickupBusinessName = clean(data.locationName, 200);
     const address = pickupAddress(data.pickupLocation);
     const hasCompletePickupAddress = Boolean(
       address.addressLine1 && address.suburb && address.state && address.postcode,
@@ -74,6 +76,12 @@ export const updateAffiliateBusinessProfile = onCall(
       throw new HttpsError(
         "invalid-argument",
         "Complete the pickup street address, suburb, state and postcode.",
+      );
+    }
+    if (pickupEnabled && !pickupBusinessName) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Enter the business name customers will see with the pickup address.",
       );
     }
 
@@ -102,8 +110,8 @@ export const updateAffiliateBusinessProfile = onCall(
       ...address,
       affiliateId: affiliateSnap.id,
       locationType: "affiliate",
-      locationName: clean(data.locationName, 200) ||
-        clean(data.businessName, 200) || "Affiliate pickup",
+      businessName: pickupBusinessName,
+      locationName: pickupBusinessName,
       active: pickupEnabled,
       approvalStatus: pickupEnabled ? "pending" : "draft",
       updatedAt: stamp(),

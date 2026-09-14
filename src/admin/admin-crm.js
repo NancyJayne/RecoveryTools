@@ -75,7 +75,8 @@ function currentFilteredUsers() {
     if (status === "active" && archived) return false;
     if (status === "archived" && !archived) return false;
     if (term && !searchableText(user).includes(term)) return false;
-    if (role === "customer" && ["admin", "affiliate", "therapist"].some((entry) => roleEnabled(user, entry))) {
+    if (role === "customer" && ["admin", "affiliate", "instructor", "therapist"]
+      .some((entry) => roleEnabled(user, entry))) {
       return false;
     }
     if (role !== "all" && role !== "customer" && !roleEnabled(user, role)) return false;
@@ -105,8 +106,30 @@ function selectedProductIds() {
 function selectedProductRows() {
   return [...document.querySelectorAll("#crmProductRows > div")].map((row) => ({
     productId: row.querySelector(".crm-product-select")?.value || "",
+    productVariantId: row.querySelector(".crm-product-variant-select")?.value || "",
     quantity: Math.max(1, Number(row.querySelector(".crm-product-quantity")?.value || 1)),
   })).filter((row) => row.productId);
+}
+
+function refreshProductVariantOptions(row, selectedVariantId = "") {
+  const productId = row.querySelector(".crm-product-select")?.value || "";
+  const select = row.querySelector(".crm-product-variant-select");
+  if (!select) return;
+  const product = accessProducts.find((entry) => entry.id === productId);
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  select.disabled = !productId || !variants.length;
+  select.innerHTML = !productId
+    ? "<option value=''>Choose a Product first</option>"
+    : variants.length
+      ? [
+        "<option value=''>Choose an exact variant...</option>",
+        "<option value='__all__'>Whole Product - all configured unlocks</option>",
+        ...variants.map((variant) => (
+          `<option value="${escapeHTML(variant.id)}">${escapeHTML(variant.name)}</option>`
+        )),
+      ].join("")
+      : "<option value='__all__'>Whole Product - no variants</option>";
+  select.value = variants.length ? selectedVariantId : "__all__";
 }
 
 function refreshProductRowOptions() {
@@ -130,9 +153,12 @@ function addProductRow(value = "") {
   if (!container) return;
   container.querySelector("[data-loading-products]")?.remove();
   const row = document.createElement("div");
-  row.className = "flex gap-2";
+  row.className = "grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_6rem_auto]";
   row.innerHTML = `
     <select class="crm-product-select input min-w-0 flex-1" aria-label="Access Product"></select>
+    <select class="crm-product-variant-select input min-w-0" aria-label="Exact Product variant" disabled>
+      <option value="">Choose a Product first</option>
+    </select>
     <label class="flex w-24 items-center gap-2 text-sm text-gray-300">
       <span>Qty</span>
       <input type="number" min="1" step="1" value="1" class="crm-product-quantity input min-w-0 w-full"
@@ -143,7 +169,10 @@ function addProductRow(value = "") {
   `;
   container.appendChild(row);
   const select = row.querySelector("select");
-  select.addEventListener("change", refreshProductRowOptions);
+  select.addEventListener("change", () => {
+    refreshProductRowOptions();
+    refreshProductVariantOptions(row);
+  });
   row.querySelector("button").addEventListener("click", () => {
     row.remove();
     if (!container.querySelector(".crm-product-select")) addProductRow();
@@ -151,6 +180,7 @@ function addProductRow(value = "") {
   });
   refreshProductRowOptions();
   select.value = value;
+  refreshProductVariantOptions(row);
 }
 
 function showProductAction(action) {
@@ -354,6 +384,10 @@ async function saveCrmProfile() {
     },
   };
   if (!profile.name || !profile.email) return showToast("Name and email are required.", "error");
+  if (profile.affiliatePickup.enabled && !profile.affiliatePickup.locationName) {
+    document.getElementById("crmAffiliatePickupName")?.focus();
+    return showToast("Enter the business name customers will see with the pickup address.", "error");
+  }
   if (creatingCrmUser) {
     const password = document.getElementById("crmCreatePassword")?.value || "";
     if (password.length < 8) return showToast("Enter a temporary password of at least 8 characters.", "error");
@@ -361,6 +395,7 @@ async function saveCrmProfile() {
     profile.roles = {
       admin: document.getElementById("roleAdmin").checked,
       affiliate: document.getElementById("roleAffiliate").checked,
+      instructor: document.getElementById("roleInstructor").checked,
       therapist: document.getElementById("roleTherapist").checked,
     };
     const createUser = httpsCallable(functions, "adminCreateUser");
@@ -400,7 +435,7 @@ function startCreateCrmUser() {
   document.getElementById("selectedUserName").textContent = "New active user";
   document.getElementById("selectedUserMeta").textContent = "Complete the profile and choose roles before saving.";
   document.getElementById("roleUid").value = "";
-  ["roleAdmin", "roleAffiliate", "roleTherapist"].forEach((id) => {
+  ["roleAdmin", "roleAffiliate", "roleInstructor", "roleTherapist"].forEach((id) => {
     document.getElementById(id).checked = false;
   });
   [
@@ -463,6 +498,7 @@ async function loadUsers() {
           roles: {
             ...(user.roles || {}),
             affiliate: roleEnabled(user, "affiliate") || affiliateUids.has(userDoc.id),
+            instructor: roleEnabled(user, "instructor"),
             therapist: roleEnabled(user, "therapist") || therapistUids.has(userDoc.id),
           },
         };
@@ -507,6 +543,11 @@ async function loadAccessCatalog() {
       accessCatalog[catalogType].push({
         id: record.id,
         name: content.name || content.title || record.id,
+        variants: (Array.isArray(content.entityVariants) ? content.entityVariants : []).map((variant) => ({
+          id: variant.entityVariantId || variant.variantId || variant.id || "",
+          name: variant.name || variant.variantName || variant.sizeLabel ||
+            variant.entityVariantId || variant.variantId || variant.id || "Variant",
+        })).filter((variant) => variant.id),
       });
     });
   }));
@@ -514,11 +555,25 @@ async function loadAccessCatalog() {
     entries.sort((a, b) => a.name.localeCompare(b.name));
   });
   try {
-    const [productsSnap, grantsSnap, pricesSnap] = await Promise.all([
+    const [productsSnap, variantsSnap, grantsSnap, pricesSnap] = await Promise.all([
       getDocs(collection(db, "products")),
+      getDocs(collection(db, "productVariants")),
       getDocs(collection(db, "productAccessGrants")),
       getDocs(collection(db, "productPrices")),
     ]);
+    const variantsByProduct = new Map();
+    variantsSnap.docs.forEach((variantDoc) => {
+      const variant = variantDoc.data() || {};
+      const productId = variant.productId || variant.ProductID || "";
+      if (!productId) return;
+      if (!variantsByProduct.has(productId)) variantsByProduct.set(productId, []);
+      variantsByProduct.get(productId).push({
+        id: variant.productVariantId || variant.variantId || variantDoc.id,
+        name: variant.variantName || variant.name || variant.sku || variantDoc.id,
+        price: Number(variant.priceOverride ?? variant.price ?? 0),
+      });
+    });
+    variantsByProduct.forEach((variants) => variants.sort((a, b) => a.name.localeCompare(b.name)));
     const grants = grantsSnap.docs.map((grantDoc) => ({ id: grantDoc.id, ...grantDoc.data() }));
     const prices = new Map(pricesSnap.docs.map((priceDoc) => {
       const price = priceDoc.data();
@@ -538,6 +593,7 @@ async function loadAccessCatalog() {
         image: product.image || product.imageUrl || "/images/product-placeholder.png",
         unlocksAccess: product.unlocksAccess === true || productGrants.length > 0,
         accessGrants: productGrants,
+        variants: variantsByProduct.get(productDoc.id) || [],
       };
     }).sort((a, b) => a.name.localeCompare(b.name));
     accessProducts = allProducts.filter((product) => product.unlocksAccess);
@@ -551,15 +607,18 @@ async function loadAccessCatalog() {
   }
 }
 
-function sharedCartItem(product, quantity = 1) {
+function sharedCartItem(product, quantity = 1, productVariantId = "") {
+  const variant = product.variants?.find((entry) => entry.id === productVariantId);
   return {
     id: product.id,
-    name: product.name,
-    price: product.price,
+    name: variant ? `${product.name} - ${variant.name}` : product.name,
+    price: variant?.price || product.price,
     quantity,
     type: product.type,
     requiresShipping: product.requiresShipping,
     image: product.image,
+    variantId: variant?.id || "",
+    variantName: variant?.name || "",
   };
 }
 
@@ -580,7 +639,11 @@ async function createSharedCart({ email = false } = {}) {
     recipientEmail: recipientEmail || null,
     items: products.map((product) => {
       const row = productRows.find((entry) => entry.productId === product.id);
-      return sharedCartItem(product, row?.quantity || 1);
+      return sharedCartItem(
+        product,
+        row?.quantity || 1,
+        row?.productVariantId === "__all__" ? "" : row?.productVariantId,
+      );
     }),
     active: true,
     createdAt: serverTimestamp(),
@@ -617,28 +680,51 @@ async function grantManualProductAccess() {
   if (!selectedUserId || !products.length || !reason || !reasonNote) {
     return showToast("Select Products, a reason, and explain why access is being granted.", "error");
   }
-  const productsWithoutGrants = products.filter((product) => !product.accessGrants.length);
-  if (productsWithoutGrants.length) {
-    return showToast("One or more selected Products have no canonical access targets.", "error");
+  const missingVariant = productRows.find((row) => {
+    const product = products.find((entry) => entry.id === row.productId);
+    return product?.variants?.length && !row.productVariantId;
+  });
+  if (missingVariant) {
+    return showToast("Choose an exact Product variant or explicitly choose Whole Product.", "error");
   }
-  await Promise.all(products.flatMap((product) => product.accessGrants.map(async (grant) => {
+  const selectedGrants = productRows.flatMap((row) => {
+    const product = products.find((entry) => entry.id === row.productId);
+    if (!product) return [];
+    const wholeProduct = row.productVariantId === "__all__";
+    const grants = product.accessGrants.filter((grant) => {
+      const grantVariantId = grant.productVariantId || grant.ProductVariantID || "";
+      return wholeProduct || !grantVariantId || grantVariantId === row.productVariantId;
+    });
+    return grants.map((grant) => ({ product, row, grant }));
+  });
+  if (!selectedGrants.length || productRows.some((row) => !selectedGrants.some((entry) =>
+    entry.row === row))) {
+    return showToast("One or more selected Product variants have no configured access targets.", "error");
+  }
+  await Promise.all(selectedGrants.map(async ({ product, row, grant }) => {
     const accessType = grant.accessEntityType || grant.accessType;
     const accessId = grant.accessEntityId || grant.accessId;
+    const accessVariantId = grant.accessEntityVariantId || "";
     if (!accessType || !accessId) return;
-    const userAccessId = `${selectedUserId}_${accessType}_${accessId}`;
-    const quantity = productRows.find((row) => row.productId === product.id)?.quantity || 1;
+    const userAccessId = `${selectedUserId}_${accessType}_${accessId}` +
+      (accessVariantId ? `_${accessVariantId}` : "");
+    const sourceProductVariantId = row.productVariantId === "__all__" ? "" : row.productVariantId;
+    const sourceVariant = product.variants?.find((variant) => variant.id === sourceProductVariantId);
     await setDoc(doc(db, "userAccess", userAccessId), {
       userAccessId, userId: selectedUserId, accessType, accessId,
+      accessVariantId,
       sourceProductId: product.id,
-      quantity,
+      sourceProductVariantId,
+      sourceProductVariantName: sourceVariant?.name || "",
+      quantity: row.quantity,
       productAccessGrantId: grant.productAccessGrantId || grant.id,
       source: "admin-manual", manualGrantReason: reason, manualGrantNote: reasonNote,
       grantedAt: serverTimestamp(), grantedBy: auth?.currentUser?.uid || "admin",
       active: true, revokedAt: null, revokedBy: null, revocationReason: null,
       revocable: true, updatedAt: serverTimestamp(),
     }, { merge: true });
-  })));
-  showToast(`${products.length} Product${products.length === 1 ? "" : "s"} unlocked`, "success");
+  }));
+  showToast(`${productRows.length} Product selection${productRows.length === 1 ? "" : "s"} unlocked`, "success");
   await Promise.all(["Course", "Workshop", "Program"].map((type) => (
     renderUserAccess(selectedUserId, type)
   )));
@@ -678,6 +764,7 @@ export function setupRoleManager() {
     const roles = {
       admin: document.getElementById("roleAdmin").checked,
       affiliate: document.getElementById("roleAffiliate").checked,
+      instructor: document.getElementById("roleInstructor").checked,
       therapist: document.getElementById("roleTherapist").checked,
     };
     if (!uid) return showToast("Select a user first.", "error");
@@ -687,7 +774,12 @@ export function setupRoleManager() {
       await setUserRoles({ uid, roles });
       const selected = crmUsers.find((user) => user.id === uid);
       if (selected) selected.roles = roles;
-      showToast("Roles updated", "success");
+      showToast(
+        roles.affiliate
+          ? "Roles updated. Ask the affiliate to sign out and back in before checking wholesale pricing."
+          : "Roles updated. The user must sign out and back in to refresh access.",
+        "success",
+      );
     } catch (err) {
       console.error("Failed to update roles:", err);
       showToast("Error assigning roles", "error");
@@ -797,6 +889,7 @@ async function selectUser(uid) {
     roles: {
       admin: roleEnabled(user, "admin") || authoritativeRoles.admin === true,
       affiliate: roleEnabled(user, "affiliate") || authoritativeRoles.affiliate === true,
+      instructor: roleEnabled(user, "instructor") || authoritativeRoles.instructor === true,
       therapist: roleEnabled(user, "therapist") || authoritativeRoles.therapist === true,
     },
   };
@@ -804,6 +897,7 @@ async function selectUser(uid) {
   document.getElementById("roleUid").value = resolvedUid;
   document.getElementById("roleAdmin").checked = userWithRoles.roles.admin;
   document.getElementById("roleAffiliate").checked = userWithRoles.roles.affiliate;
+  document.getElementById("roleInstructor").checked = userWithRoles.roles.instructor;
   document.getElementById("roleTherapist").checked = userWithRoles.roles.therapist;
   document.getElementById(SELECTED_USER_PANEL_ID).classList.remove("hidden");
   document.getElementById("crmNoUserSelected")?.classList.add("hidden");
@@ -859,7 +953,7 @@ async function selectUser(uid) {
   );
   document.getElementById("crmBusinessFields")?.classList.toggle(
     "hidden",
-    !userWithRoles.roles.affiliate && !userWithRoles.roles.therapist,
+    !userWithRoles.roles.affiliate && !userWithRoles.roles.instructor && !userWithRoles.roles.therapist,
   );
   const cartEmail = document.getElementById("crmCartRecipientEmail");
   if (cartEmail) cartEmail.value = user.email || "";
@@ -964,6 +1058,7 @@ async function renderUserAccess(uid, accessType) {
     where("userId", "==", uid),
   );
   const accessSnapshot = await getDocs(q);
+  const catalogById = new Map(accessCatalog[accessType].map((entry) => [entry.id, entry]));
   const names = new Map(accessCatalog[accessType].map((entry) => [entry.id, entry.name]));
   const records = accessSnapshot.docs.filter((accessDoc) => {
     const data = accessDoc.data();
@@ -977,11 +1072,21 @@ async function renderUserAccess(uid, accessType) {
       const data = accessDoc.data();
       const accessId = data.accessId || data.accessEntityId;
       const name = escapeHTML(names.get(accessId) || accessId);
+      const accessVariantId = data.accessVariantId || data.accessEntityVariantId || "";
+      const accessVariant = catalogById.get(accessId)?.variants?.find((variant) =>
+        variant.id === accessVariantId);
+      const sourceProduct = allProducts.find((product) => product.id === data.sourceProductId);
+      const sourceVariant = sourceProduct?.variants?.find((variant) =>
+        variant.id === data.sourceProductVariantId);
       const revoked = data.active === false || Boolean(data.revokedAt);
       const status = revoked ? "Removed" : "Unlocked";
       return `<div class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded
         bg-gray-700 p-2">
-        <span><strong>${name}</strong> (${status})</span>
+        <span class="min-w-0">
+          <strong>${name}</strong> (${status})
+          ${accessVariantId ? `<span class="mt-1 block text-xs text-[#9edbd7]">Entity variant: ${escapeHTML(accessVariant?.name || accessVariantId)}</span>` : ""}
+          ${data.sourceProductVariantId ? `<span class="block text-xs text-gray-300">Granted through: ${escapeHTML(sourceProduct?.name || data.sourceProductId || "Product")} / ${escapeHTML(sourceVariant?.name || data.sourceProductVariantName || data.sourceProductVariantId)}</span>` : ""}
+        </span>
         <button type="button"
           class="crm-access-action rounded border border-purple-400 px-2 py-1 text-xs
             text-purple-100 hover:bg-purple-900/40"
