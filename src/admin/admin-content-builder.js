@@ -1177,23 +1177,35 @@ function applyLifecycleStatusHighlight(control, value = control?.value) {
   control.classList.add(...lifecycleStatusClasses(value).split(" "));
 }
 
-function workshopOperationsSourceOptions(sourceType, selectedId = "") {
+function workshopOperationsSourceChoices(sourceType) {
   const records = sourceType === "Product" ? state.records.products || [] : state.records.items || [];
-  return [`<option value="">Choose ${sourceType}</option>`, ...records.map((record) => {
-    const selected = record.id === selectedId ? " selected" : "";
-    return `<option value="${escapeHTML(record.id)}"${selected}>${escapeHTML(record.name || record.id)}</option>`;
-  })].join("");
+  return [{ value: "", label: `Choose ${sourceType}` }, ...records.map((record) => ({
+    value: record.id,
+    label: record.name || record.id,
+  }))];
 }
 
-function workshopOperationsVariantOptions(sourceType, sourceId, selectedId = "") {
+function workshopOperationsSourceOptions(sourceType, selectedId = "") {
+  return workshopOperationsSourceChoices(sourceType).map((option) =>
+    `<option value="${escapeHTML(option.value)}"${option.value === selectedId ? " selected" : ""}>` +
+      `${escapeHTML(option.label)}</option>`).join("");
+}
+
+function workshopOperationsVariantChoices(sourceType, sourceId) {
   const record = (sourceType === "Product" ? state.records.products || [] : state.records.items || [])
     .find((candidate) => candidate.id === sourceId);
   const variants = sourceType === "Product" ? record?.variants || [] : record?.entityVariants || [];
-  return [`<option value="">Default ${sourceType} stock</option>`, ...(variants || []).map((variant) => {
+  return [{ value: "", label: `Default ${sourceType} stock` }, ...(variants || []).map((variant) => {
     const id = sourceType === "Product"
       ? variant.variantId || variant.id : variant.entityVariantId || variant.id;
-    return `<option value="${escapeHTML(id)}"${id === selectedId ? " selected" : ""}>${escapeHTML(variant.name || id)}</option>`;
-  })].join("");
+    return { value: id, label: variant.name || id };
+  })];
+}
+
+function workshopOperationsVariantOptions(sourceType, sourceId, selectedId = "") {
+  return workshopOperationsVariantChoices(sourceType, sourceId).map((option) =>
+    `<option value="${escapeHTML(option.value)}"${option.value === selectedId ? " selected" : ""}>` +
+      `${escapeHTML(option.label)}</option>`).join("");
 }
 
 function itemVariantsForRecipe(itemId) {
@@ -1201,17 +1213,22 @@ function itemVariantsForRecipe(itemId) {
   return Array.isArray(item?.entityVariants) ? item.entityVariants : [];
 }
 
-function blueprintRecipeVariantOptions(itemId, selectedId = "") {
+function blueprintRecipeVariantChoices(itemId) {
   const variants = itemVariantsForRecipe(itemId);
-  if (!variants.length) return "<option value=\"\">Default Item stock</option>";
+  if (!variants.length) return [{ value: "", label: "Default Item stock" }];
   return [
-    `<option value="">${variants.length > 1 ? "Choose Item variant" : "Default Item variant"}</option>`,
+    { value: "", label: variants.length > 1 ? "Choose Item variant" : "Default Item variant" },
     ...variants.map((variant) => {
       const variantId = variant.entityVariantId || "";
-      return `<option value="${escapeHTML(variantId)}"${variantId === selectedId ? " selected" : ""}>` +
-        `${escapeHTML(variant.name || variantId)}</option>`;
+      return { value: variantId, label: variant.name || variantId };
     }),
-  ].join("");
+  ];
+}
+
+function blueprintRecipeVariantOptions(itemId, selectedId = "") {
+  return blueprintRecipeVariantChoices(itemId).map((option) =>
+    `<option value="${escapeHTML(option.value)}"${option.value === selectedId ? " selected" : ""}>` +
+      `${escapeHTML(option.label)}</option>`).join("");
 }
 
 function recipeComponentUnitCost(itemId, itemVariantId = "") {
@@ -1508,6 +1525,15 @@ function generatedProductVariantId(entityVariantId) {
     .replace(/[^A-Z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return `PV-${cleanToken(productToken)}-${cleanToken(entityVariantId)}`;
+}
+
+function replaceSelectOptions(select, choices, selectedId = "") {
+  if (!select) return;
+  select.replaceChildren(...choices.map((choice) => {
+    const option = new Option(String(choice.label || ""), String(choice.value || ""));
+    option.selected = String(choice.value || "") === String(selectedId || "");
+    return option;
+  }));
 }
 
 function primaryImageAssetIdForEntityVariant(entityVariant) {
@@ -10899,8 +10925,8 @@ export async function setupContentBuilder() {
       const recipeRow = event.target.closest(".blueprint-variant-recipe-row");
       const sourceSelect = recipeRow?.querySelector(".blueprint-variant-recipe-item");
       const variantSelect = recipeRow?.querySelector(".blueprint-variant-recipe-item-variant");
-      if (sourceSelect) sourceSelect.innerHTML = workshopOperationsSourceOptions(event.target.value);
-      if (variantSelect) variantSelect.innerHTML = workshopOperationsVariantOptions(event.target.value, "");
+      replaceSelectOptions(sourceSelect, workshopOperationsSourceChoices(event.target.value));
+      replaceSelectOptions(variantSelect, workshopOperationsVariantChoices(event.target.value, ""));
     }
     if (event.target.classList.contains("blueprint-variant-recipe-item")) {
       const recipeRow = event.target.closest(".blueprint-variant-recipe-row");
@@ -10908,9 +10934,12 @@ export async function setupContentBuilder() {
       if (variantSelect) {
         const sourceType = recipeRow?.querySelector(".blueprint-variant-recipe-source-type")?.value;
         if (sourceType) {
-          variantSelect.innerHTML = workshopOperationsVariantOptions(sourceType, event.target.value);
+          replaceSelectOptions(
+            variantSelect,
+            workshopOperationsVariantChoices(sourceType, event.target.value),
+          );
         } else {
-          variantSelect.innerHTML = blueprintRecipeVariantOptions(event.target.value);
+          replaceSelectOptions(variantSelect, blueprintRecipeVariantChoices(event.target.value));
           const variants = itemVariantsForRecipe(event.target.value);
           if (variants.length === 1) variantSelect.value = variants[0].entityVariantId || "";
         }
