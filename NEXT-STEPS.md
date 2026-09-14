@@ -151,10 +151,12 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
   - [x] Show active PDF/document/download Assets linked directly to the Workshop Plan, independently of Blueprint modules.
   - [x] Add exact Product-variant purchase prerequisites. The Marketplace identifies missing prior variants and disables Add to Cart; Checkout authoritatively accepts an existing paid purchase, active unlock, another cart line, or an exact component included in the same bundle. Configure Advanced to require Foundations, and Strategic to require Foundations plus Advanced.
   - [x] Emulator-test the normal prerequisite chain: Advanced remains blocked without Foundations, an exact CRM Foundations grant makes Advanced purchasable, Strategic remains blocked without Advanced, and purchasing Advanced makes Strategic purchasable.
-  - [ ] Complete the remaining prerequisite abuse/lifecycle cases: direct checkout bypass attempts, refunds/revocations, same-checkout prerequisites, and the all-three Workshop bundle.
+  - [x] Confirm direct-checkout attempts cannot bypass exact Workshop prerequisites.
+  - [ ] Complete the remaining prerequisite lifecycle cases: prerequisite refunds/revocations, same-checkout prerequisites, and the all-three Workshop bundle.
   - [x] Confirm an abandoned Stripe Checkout expires, releases its reserved Workshop seat, and restores normal availability.
   - [x] Confirm refunding a Workshop bundle restores both underlying session ticket allocations, marks the bundle-provided CRM access as removed, retains the Admin Order refund reason/amount/status, and leaves separately purchased Workshop access active.
-  - [ ] Confirm the purchased Workshop page, booking information, direct downloads, and checkout flow on mobile.
+  - [x] Confirm Marketplace, Workshop messaging, cart, and checkout presentation remain usable across tested mobile, tablet, and desktop widths.
+  - [ ] Confirm the purchased Workshop page, booking information, and direct downloads on a physical mobile device.
   - [ ] Complete end-to-end emulator and mobile acceptance testing for discovery through confirmation/Profile, including sold-out, cancellation, and refund cases.
 - [ ] Add instructor/session operating information and equipment/material checklists; direct Workshop PDF/download display is implemented, but the final “what to bring/wear” document still needs to be created, attached, and acceptance-tested.
   - [x] Add `Workshop Operations` as a separate Blueprint type beside manufacturing and connect its exact Blueprint variant to an exact Workshop Product variant/session with `OperatedWith`. It reuses Blueprint variants, Assets, notes, and requirements without creating finished stock or inheriting manufacturing deductions.
