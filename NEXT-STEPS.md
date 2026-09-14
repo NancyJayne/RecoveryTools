@@ -150,8 +150,9 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
   - [x] Hide the empty-module notice for purchased Workshops that do not use Blueprint modules.
   - [x] Show active PDF/document/download Assets linked directly to the Workshop Plan, independently of Blueprint modules.
   - [x] Add exact Product-variant purchase prerequisites. The Marketplace identifies missing prior variants and disables Add to Cart; Checkout authoritatively accepts an existing paid purchase, active unlock, another cart line, or an exact component included in the same bundle. Configure Advanced to require Foundations, and Strategic to require Foundations plus Advanced.
-  - [ ] Emulator-test prerequisite enforcement for existing purchases, admin-granted unlocks, direct bypass attempts, refunds/revocations, same-checkout prerequisites, and the all-three Workshop bundle.
-  - [ ] Confirm an abandoned Stripe Checkout expires and releases its reserved Workshop seat.
+  - [x] Emulator-test the normal prerequisite chain: Advanced remains blocked without Foundations, an exact CRM Foundations grant makes Advanced purchasable, Strategic remains blocked without Advanced, and purchasing Advanced makes Strategic purchasable.
+  - [ ] Complete the remaining prerequisite abuse/lifecycle cases: direct checkout bypass attempts, refunds/revocations, same-checkout prerequisites, and the all-three Workshop bundle.
+  - [x] Confirm an abandoned Stripe Checkout expires, releases its reserved Workshop seat, and restores normal availability.
   - [ ] Confirm cancellation/refund removes Workshop access and attendee capacity is recalculated correctly.
   - [ ] Confirm the purchased Workshop page, booking information, direct downloads, and checkout flow on mobile.
   - [ ] Complete end-to-end emulator and mobile acceptance testing for discovery through confirmation/Profile, including sold-out, cancellation, and refund cases.
