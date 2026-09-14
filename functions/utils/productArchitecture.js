@@ -261,7 +261,33 @@ function assetUrl(asset, rendition) {
   return rendition?.fileUrl || asset?.fileUrl || asset?.url || "";
 }
 
+function assetIdsFromTemplateValues(values) {
+  const ids = [];
+  const visit = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (value && typeof value === "object") {
+      Object.values(value).forEach(visit);
+      return;
+    }
+    const id = cleanString(value);
+    if (id && id.toUpperCase().startsWith("ASSET-")) ids.push(id);
+  };
+  visit(values);
+  return [...new Set(ids)];
+}
+
 export function mediaForProduct(productId, product, architecture) {
+  const content = primaryContentForProduct(productId, product, architecture);
+  const contentId = cleanString(
+    content?.itemId || content?.blueprintId || content?.planId || content?.id ||
+    product.itemId || product.legacyItemId,
+  );
+  const contentType = content?.planId
+    ? "plan"
+    : content?.blueprintId ? "blueprint" : "item";
   const links = (architecture.entityAssetsByEntityId.get(productId) || [])
     .filter((link) =>
       cleanString(link.entityType).toLowerCase() === "product" &&
@@ -294,6 +320,24 @@ export function mediaForProduct(productId, product, architecture) {
     .sort((left, right) => left.sortOrder - right.sortOrder);
 
   if (canonicalMedia.length) return canonicalMedia;
+  // Existing Products may inherit their public tile image from the linked entity.
+  // Only images are inherited here so private PDFs and teaching videos never leak
+  // into the public Marketplace response.
+  const contentLinks = (architecture.entityAssetsByEntityId.get(contentId) || [])
+    .filter((link) => cleanString(link.entityType).toLowerCase() === contentType)
+    .filter((link) => status(link.status, "active") === "active")
+    .map((link, index) => assetMedia(link.assetId, architecture, Number(link.sortOrder ?? index + 1)))
+    .filter((asset) => asset?.type === "image");
+  if (contentLinks.length) return contentLinks;
+  const templateAssetIds = [
+    ...assetIdsFromTemplateValues(content?.templateFieldValues),
+    ...(Array.isArray(content?.entityVariants) ? content.entityVariants : [])
+      .flatMap((variant) => assetIdsFromTemplateValues(variant?.templateFieldValues)),
+  ];
+  const templateImages = [...new Set(templateAssetIds)]
+    .map((assetId, index) => assetMedia(assetId, architecture, index + 1))
+    .filter((asset) => asset?.type === "image");
+  if (templateImages.length) return templateImages;
   if (Array.isArray(product.media) && product.media.length) return product.media;
   const images = Array.isArray(product.images) ? product.images : [];
   return images.map((url, index) => ({
@@ -335,6 +379,7 @@ function assetMedia(assetId, architecture, sortOrder = 1) {
 export function mediaForProductVariant(productId, product, variant, architecture, fallback = []) {
   if (!variant) return fallback;
   const variantId = cleanString(variant.variantId || variant.id);
+  const contentVariantId = cleanString(variant.contentVariantId);
   const directLinks = [
     ...(architecture.entityAssetsByEntityId.get(variantId) || []),
     ...(architecture.entityAssetsByEntityId.get(productId) || []),
@@ -342,21 +387,28 @@ export function mediaForProductVariant(productId, product, variant, architecture
     status(link.status, "active") === "active" &&
     (
       cleanString(link.entityType).toLowerCase() === "productvariant" ||
-      cleanString(link.productVariantId) === variantId
+      cleanString(link.productVariantId) === variantId ||
+      cleanString(link.entityVariantId) === contentVariantId
     ));
   const directMedia = directLinks
     .map((link, index) => assetMedia(link.assetId, architecture, Number(link.sortOrder ?? index + 1)))
     .filter(Boolean)
     .sort((left, right) => left.sortOrder - right.sortOrder);
-  const assetIds = [
+  const explicitAssetIds = [
     cleanString(variant.primaryAssetId),
     ...(Array.isArray(variant.promotionAssetIds) ? variant.promotionAssetIds.map(cleanString) : []),
   ].filter(Boolean);
-  const inferredMedia = [...new Set(assetIds)]
+  const content = primaryContentForProduct(productId, product, architecture);
+  const contentVariant = (content?.entityVariants || []).find((candidate) =>
+    cleanString(candidate.entityVariantId) === contentVariantId);
+  const explicitMedia = [...new Set(explicitAssetIds)]
     .map((assetId, index) => assetMedia(assetId, architecture, index + 1))
     .filter(Boolean);
+  const inheritedImages = assetIdsFromTemplateValues(contentVariant?.templateFieldValues)
+    .map((assetId, index) => assetMedia(assetId, architecture, explicitMedia.length + index + 1))
+    .filter((asset) => asset?.type === "image");
   const seen = new Set();
-  const combinedMedia = [...directMedia, ...inferredMedia].filter((asset) => {
+  const combinedMedia = [...directMedia, ...explicitMedia, ...inheritedImages].filter((asset) => {
     const key = asset.assetId || asset.url;
     if (!key || seen.has(key)) return false;
     seen.add(key);

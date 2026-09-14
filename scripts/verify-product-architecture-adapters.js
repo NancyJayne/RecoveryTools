@@ -44,6 +44,9 @@ const architecture = {
   ]]]),
   entityAssetsByEntityId: new Map([["PROD-1", [
     { id: "EA-1", entityId: "PROD-1", entityType: "Product", assetId: "ASSET-1", status: "active" },
+  ]], ["PLAN-IMAGE", [
+    { id: "EA-IMAGE", entityId: "PLAN-IMAGE", entityType: "Plan",
+      assetId: "ASSET-ENTITY-IMAGE", status: "active" },
   ]]]),
   renditionsByAssetId: new Map([["ASSET-1", [
     { id: "REN-1", purpose: "thumbnail", fileUrl: "https://example.test/thumb.jpg", status: "active" },
@@ -60,13 +63,20 @@ const architecture = {
     id: "ASSET-PRIVATE", assetType: "video", fileUrl: "https://example.test/private.mp4", status: "active",
   }], ["ASSET-PUBLIC", {
     id: "ASSET-PUBLIC", assetType: "video", fileUrl: "https://example.test/public.mp4", status: "active",
+  }], ["ASSET-ENTITY-IMAGE", {
+    id: "ASSET-ENTITY-IMAGE", assetType: "image",
+    fileUrl: "https://example.test/entity-image.jpg", status: "active",
   }]]),
   productLinksByProductId: new Map([["PROD-PRIVATE", [{
     entityType: "Plan", linkedEntityType: "Plan", linkedEntityId: "PLAN-PRIVATE", status: "active",
+  }]], ["PROD-IMAGE", [{
+    entityType: "Plan", linkedEntityType: "Plan", linkedEntityId: "PLAN-IMAGE", status: "active",
   }]]]),
   plansById: new Map([["PLAN-PRIVATE", {
     id: "PLAN-PRIVATE", planId: "PLAN-PRIVATE", templateFieldValues: { teachingVideo: "ASSET-PRIVATE" },
     entityVariants: [{ entityVariantId: "PLAN-V1", templateFieldValues: { preparation: "ASSET-PRIVATE" } }],
+  }], ["PLAN-IMAGE", {
+    id: "PLAN-IMAGE", planId: "PLAN-IMAGE", status: "active",
   }]]),
   itemsById: new Map(),
   blueprintsById: new Map(),
@@ -114,6 +124,8 @@ assert.equal(embeddedMedia[0].url, "https://example.test/fallback.jpg");
 
 const privateBoundary = mediaForProduct("PROD-PRIVATE", {}, architecture);
 assert.deepEqual(privateBoundary, []);
+const inheritedEntityImage = mediaForProduct("PROD-IMAGE", {}, architecture);
+assert.deepEqual(inheritedEntityImage.map((asset) => asset.assetId), ["ASSET-ENTITY-IMAGE"]);
 const explicitVariantMedia = mediaForProductVariant("PROD-PRIVATE", {}, {
   variantId: "PV-PUBLIC", contentVariantId: "PLAN-V1", primaryAssetId: "ASSET-PUBLIC",
 }, architecture);
