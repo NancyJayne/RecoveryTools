@@ -153,7 +153,7 @@ Sell and safely operate Workshop tickets before waiting for the complete automat
   - [x] Emulator-test the normal prerequisite chain: Advanced remains blocked without Foundations, an exact CRM Foundations grant makes Advanced purchasable, Strategic remains blocked without Advanced, and purchasing Advanced makes Strategic purchasable.
   - [ ] Complete the remaining prerequisite abuse/lifecycle cases: direct checkout bypass attempts, refunds/revocations, same-checkout prerequisites, and the all-three Workshop bundle.
   - [x] Confirm an abandoned Stripe Checkout expires, releases its reserved Workshop seat, and restores normal availability.
-  - [ ] Confirm cancellation/refund removes Workshop access and attendee capacity is recalculated correctly.
+  - [x] Confirm refunding a Workshop bundle restores both underlying session ticket allocations, marks the bundle-provided CRM access as removed, retains the Admin Order refund reason/amount/status, and leaves separately purchased Workshop access active.
   - [ ] Confirm the purchased Workshop page, booking information, direct downloads, and checkout flow on mobile.
   - [ ] Complete end-to-end emulator and mobile acceptance testing for discovery through confirmation/Profile, including sold-out, cancellation, and refund cases.
 - [ ] Add instructor/session operating information and equipment/material checklists; direct Workshop PDF/download display is implemented, but the final “what to bring/wear” document still needs to be created, attached, and acceptance-tested.
